@@ -9,8 +9,10 @@ vi.mock('$lib/stores/dashboard', async () => {
 	const { readable } = await import('svelte/store');
 	return {
 		dashboard: readable({
-			drive_names: { drv_1: 'Front Drive' },
-			drive_source_kinds: { drv_iso: 'iso' }
+			drives: {
+				drv_1: { name: 'Front Drive', kind: 'optical', source: null, retired: false },
+				drv_iso: { name: 'a.iso', kind: 'virtual', source: 'iso', retired: true }
+			}
 		})
 	};
 });

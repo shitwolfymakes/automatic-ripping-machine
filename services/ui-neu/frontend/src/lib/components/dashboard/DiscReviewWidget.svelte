@@ -28,16 +28,15 @@
 	import { EpisodeMatching, watchEpisodeMatching } from '$lib/stores/episode-matching.svelte';
 	import { isAdmin } from '$lib/stores/auth';
 	import { ReviewSections } from '$lib/stores/review-sections.svelte';
+	import type { DriveSummary } from '$lib/api/dashboard';
+	import { liveSource } from '$lib/drives/summary';
 
 	interface Props {
 		job?: JobView;
-		driveNames?: Record<string, string> | null;
-		/** drive id -> ISO file name, for the dashboard's currently-enrolled
-		 *  virtual drives. Presence of `job.drive_id` here swaps the drive pill
-		 *  for an ISO source chip and reroutes Cancel through cancelIsoRip. */
-		isoSources?: Record<string, string> | null;
-		/** drive id -> 'iso' / 'folder' for the same drives. */
-		isoSourceKinds?: Record<string, 'iso' | 'folder'> | null;
+		/** The dashboard record for the job's drive. A virtual drive still
+		 *  reading its source swaps the drive pill for an ISO source chip and
+		 *  reroutes Cancel through cancelIsoRip. */
+		drive?: DriveSummary | null;
 		paused?: boolean;
 		/** Review countdown duration (config manual_wait_seconds). Cosmetic — the
 		 *  ripper owns the authoritative clock; this only drives the UI timer. */
@@ -46,16 +45,7 @@
 		ondismiss?: () => void;
 	}
 
-	let {
-		job,
-		driveNames,
-		isoSources,
-		isoSourceKinds,
-		paused = false,
-		manualWaitSeconds = 60,
-		onrefresh,
-		ondismiss
-	}: Props = $props();
+	let { job, drive, paused = false, manualWaitSeconds = 60, onrefresh, ondismiss }: Props = $props();
 
 	// awaiting_review = the timed review gate (Start / countdown); other waiting
 	// statuses (awaiting_user_id / ripped_awaiting_identify) are identify-only.
@@ -105,10 +95,10 @@
 	let isTv = $derived(isVideo && displayJob.media_type === 'tv');
 	// The ripper holds the countdown while the episode placement is a guess; the card only says so.
 	let countdownHeld = $derived(isTv && !!displayJob.episodes_unsure ? 'Held: episodes are a guess' : null);
-	// An ISO rip's drive_id is a still-enrolled virtual drive; once the rip
-	// completes that drive retires and drops out of isoSources, matching the
+	// An ISO rip's drive is a still-enrolled virtual drive; once the rip
+	// completes that drive retires and reads as a plain drive, matching the
 	// card leaving the dashboard.
-	let isoName = $derived(displayJob.drive_id ? (isoSources?.[displayJob.drive_id] ?? null) : null);
+	let fromIso = $derived(liveSource(drive) !== null);
 
 	let jobMeta = $derived(readJobMetadata(displayJob.metadata_json, displayJob));
 
@@ -130,7 +120,7 @@
 	let episodeRow = $derived(
 		isTv ? episodeStatus(displayJob, reviewData.detail ? tracks : null, matching.active) : null
 	);
-	let sourceRow = $derived(reviewSourceRow(displayJob, isoName, isoSourceKinds, driveNames));
+	let sourceRow = $derived(reviewSourceRow(displayJob, drive));
 	let parkedLine = $derived(parkedSessionLine(displayJob, reviewData.sessionNames));
 	let appliedSession = $derived(appliedSessionName(parkedLine, jobMeta.pending_session_id, reviewData.sessionNames));
 
@@ -200,7 +190,7 @@
 {#if !job}
 	<SkeletonCard lines={4} />
 {:else}
-	<div class="disc-review-widget" data-source={isoName ? 'iso' : 'disc'}>
+	<div class="disc-review-widget" data-source={fromIso ? 'iso' : 'disc'}>
 		<!-- Status bar -->
 		<DiscReviewStatusBar
 			label={statusLabel}
@@ -298,9 +288,9 @@
 			{canStart}
 			{episodeRow}
 			previouslyRipped={!!previousId}
-			fromIso={!!isoName}
+			{fromIso}
 			onapplysession={() => (showApplySession = true)}
-			oncancel={() => actions.cancel(job, isoName)}
+			oncancel={() => actions.cancel(job, fromIso)}
 			onstartrip={() => actions.startRip(job, reviewData.detail?.job, () => isReviewGate)}
 		/>
 
