@@ -4,8 +4,8 @@
 // `(...) ?? ''`. One is the component's own: `($resources.cpu_temp ?? 0)` in
 // the temperature text sits inside `{#if ($resources.cpu_temp ?? 0) > 0}`, so
 // cpu_temp is always set where it is read.
-import { afterEach, describe, expect, it, vi } from 'vitest';
-import { renderComponent, screen, cleanup } from '$lib/testing/render';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { renderComponent, screen, waitFor, cleanup } from '$lib/testing/render';
 import { flushSync } from 'svelte';
 
 const h = vi.hoisted(() => ({ store: null as unknown as Record<string, unknown> }));
@@ -22,28 +22,74 @@ vi.mock('$lib/stores/resources.svelte', async () => {
 	return { resources: Object.assign(snapshot, { initialized }) };
 });
 
+let respond: () => Promise<unknown> = () => Promise.resolve({ version: '0' });
+let calls = 0;
+vi.mock('$lib/api/system', () => ({
+	fetchSystemVersion: () => {
+		calls += 1;
+		return respond();
+	}
+}));
+
 import SidebarStats from '../SidebarStats.svelte';
+import { VERSION_CHIP_TIMEOUT_MS } from '$lib/layout/version-chip';
 import type { Writable } from 'svelte/store';
 
 const initialized = () => h.store.initialized as Writable<boolean>;
 const snapshot = () => h.store.snapshot as Writable<Record<string, unknown>>;
 
 describe('SidebarStats', () => {
+	beforeEach(() => {
+		calls = 0;
+	});
 	afterEach(() => {
 		cleanup();
 		initialized().set(false);
 	});
 
-	it('draws nothing until the first resources poll lands', () => {
+	it('draws nothing until the first resources poll lands', async () => {
+		respond = () => Promise.resolve({ version: '1' });
 		const { container } = renderComponent(SidebarStats);
+		flushSync();
 		expect(container.querySelector('[data-sidebar-stats]')).toBeNull();
+		// The chip mounts with the panel, so nothing asks for the version yet.
+		expect(calls).toBe(0);
 		initialized().set(true);
 		flushSync();
 		expect(container.querySelector('[data-sidebar-stats]')).not.toBeNull();
 		expect(screen.getByText('12%')).toBeInTheDocument();
+		await waitFor(() => expect(calls).toBe(1));
 	});
 
-	it('shows the CPU temperature and the storage rows once ready', () => {
+	it('keeps the panel hidden until the version chip settles, so the chip cannot push the bars up', async () => {
+		let release: (v: unknown) => void = () => {};
+		respond = () => new Promise((resolve) => (release = resolve));
+		initialized().set(true);
+		const { container } = renderComponent(SidebarStats);
+		const panel = () => container.querySelector('[data-sidebar-stats]') as HTMLElement;
+		expect(panel().hasAttribute('data-pending')).toBe(true);
+		await waitFor(() => expect(calls).toBe(1));
+		release({ version: '1' });
+		expect(await screen.findByText('v1')).toBeInTheDocument();
+		expect(panel().hasAttribute('data-pending')).toBe(false);
+		expect(panel().querySelector('[data-version-chip]')).not.toBeNull();
+	});
+
+	it('shows the bars without a chip once a version read that never answers times out', async () => {
+		vi.useFakeTimers();
+		respond = () => new Promise(() => {});
+		initialized().set(true);
+		const { container } = renderComponent(SidebarStats);
+		const panel = () => container.querySelector('[data-sidebar-stats]') as HTMLElement;
+		expect(panel().hasAttribute('data-pending')).toBe(true);
+		await vi.advanceTimersByTimeAsync(VERSION_CHIP_TIMEOUT_MS);
+		expect(panel().hasAttribute('data-pending')).toBe(false);
+		expect(panel().querySelector('[data-version-chip]')).toBeNull();
+		vi.useRealTimers();
+	});
+
+	it('shows the CPU temperature and the storage rows once ready', async () => {
+		respond = () => Promise.resolve({ version: '1' });
 		snapshot().update((s) => ({
 			...s,
 			cpu_temp: 61,
@@ -51,8 +97,8 @@ describe('SidebarStats', () => {
 		}));
 		initialized().set(true);
 		renderComponent(SidebarStats);
+		expect(await screen.findByText('60 GB free')).toBeInTheDocument();
 		expect(screen.getByText(/61/)).toBeInTheDocument();
 		expect(screen.getByText('Raw')).toBeInTheDocument();
-		expect(screen.getByText('60 GB free')).toBeInTheDocument();
 	});
 });

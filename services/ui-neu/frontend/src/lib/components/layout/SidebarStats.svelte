@@ -5,16 +5,18 @@
 	// initial snapshot.
 	import { resources } from '$lib/stores/resources.svelte';
 	import { barColor, filesHref } from '$lib/dashboard/resource-bars';
-	import { fade } from 'svelte/transition';
-	import { fadeIn } from '$lib/ui/transitions';
+	import VersionChip from './VersionChip.svelte';
 
-	// The panel is bottom-anchored, so the Storage rows arriving with the first
-	// poll would shove CPU and Mem upward. Draw it once that poll has landed.
+	// The panel is bottom-anchored, so anything arriving late at its foot (the
+	// Storage rows with the first poll, the version chip) would shove CPU and
+	// Mem upward. It is drawn once the poll has landed, and stays hidden (but
+	// laid out) until the version chip's read is over, then fades in.
 	const ready = resources.initialized;
+	let chipSettled = $state(false);
 </script>
 
 {#if $ready}
-	<div data-sidebar-stats class="stats-bar-side" in:fade={fadeIn}>
+	<div data-sidebar-stats class="stats-bar-side" data-pending={chipSettled ? undefined : ''}>
 		<div class="stack stack-sm">
 			<!-- CPU -->
 			<div>
@@ -79,14 +81,21 @@
 				{/each}
 			</div>
 		{/if}
+
+		<VersionChip onsettled={() => (chipSettled = true)} />
 	</div>
 {/if}
 
 <style>
 	.stats-bar-side {
+		transition: opacity var(--motion-fast) var(--ease);
 		font-variant-numeric: tabular-nums;
 		border-top: 1px solid var(--color-border);
 		padding: 0.75rem;
+	}
+	.stats-bar-side[data-pending] {
+		visibility: hidden;
+		opacity: 0;
 	}
 	.stats-bar-side-label {
 		margin-bottom: 0.125rem;
