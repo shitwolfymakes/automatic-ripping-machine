@@ -48,7 +48,9 @@
 		const newValue = !$dashboard.ripping_enabled;
 		dashboard.update((d) => ({ ...d, ripping_enabled: newValue }));
 		try {
-			await setRippingEnabled(newValue);
+			const config = await setRippingEnabled(newValue);
+			// The reply is the saved state, newer than any poll in flight.
+			dashboard.update((d) => ({ ...d, ripping_enabled: !config.ripping_paused }));
 		} catch {
 			// Revert on failure — next poll will also reconcile
 			dashboard.update((d) => ({ ...d, ripping_enabled: !newValue }));
