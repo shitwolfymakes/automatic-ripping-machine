@@ -5,6 +5,7 @@
 	import { isRipped } from '$lib/jobs/status-groups';
 	import { onDestroy } from 'svelte';
 	import { TimedFeedback } from '$lib/stores/timed-feedback.svelte';
+	import ConfirmDialog from '$lib/components/shared/ConfirmDialog.svelte';
 
 	interface Props {
 		job: JobView;
@@ -18,6 +19,8 @@
 	let loading = $state<string | null>(null);
 	const feedback = new TimedFeedback(3000);
 	onDestroy(() => feedback.dispose());
+	// The destructive action waiting on its confirm dialog, if any.
+	let confirming = $state<'abandon' | 'delete' | null>(null);
 
 	let canAbandon = $derived(job.actions.can_abandon);
 	let canDelete = $derived(job.actions.can_delete);
@@ -47,8 +50,7 @@
 		}
 	}
 
-	async function handleAbandon() {
-		if (!confirm(`Abandon job "${jobLabel()}"?`)) return;
+	async function abandon() {
 		await runAction('abandon', 'Failed to abandon', async () => {
 			await abandonJob(job.id);
 			return 'Job abandoned';
@@ -64,8 +66,7 @@
 		});
 	}
 
-	async function handleDelete() {
-		if (!confirm(`Delete job "${jobLabel()}"? This cannot be undone.`)) return;
+	async function remove() {
 		await runAction('delete', 'Failed to delete', async () => {
 			await deleteJob(job.id);
 			if (ondelete) {
@@ -74,6 +75,27 @@
 			}
 			return 'Job deleted';
 		});
+	}
+
+	// The confirm dialog's wording and the action it runs, per action.
+	const CONFIRMS = {
+		abandon: {
+			title: 'Abandon job',
+			message: (label: string) => `Abandon job "${label}"?`,
+			confirmLabel: 'Abandon',
+			run: abandon
+		},
+		delete: {
+			title: 'Delete job',
+			message: (label: string) => `Delete job "${label}"? This cannot be undone.`,
+			confirmLabel: 'Delete',
+			run: remove
+		}
+	};
+
+	function confirmPending(kind: 'abandon' | 'delete') {
+		confirming = null;
+		CONFIRMS[kind].run();
 	}
 </script>
 
@@ -94,7 +116,7 @@
 		{#if canAbandon}
 			<button
 				type="button"
-				onclick={handleAbandon}
+				onclick={() => (confirming = 'abandon')}
 				disabled={loading !== null}
 				data-compact={compact}
 				class="job-actions-pill job-actions-pill-warning"
@@ -105,7 +127,7 @@
 		{#if canDelete}
 			<button
 				type="button"
-				onclick={handleDelete}
+				onclick={() => (confirming = 'delete')}
 				disabled={loading !== null}
 				data-compact={compact}
 				class="job-actions-pill job-actions-pill-danger"
@@ -119,6 +141,19 @@
 			</span>
 		{/if}
 	</div>
+{/if}
+
+{#if confirming}
+	{@const kind = confirming}
+	<ConfirmDialog
+		open
+		title={CONFIRMS[kind].title}
+		message={CONFIRMS[kind].message(jobLabel())}
+		confirmLabel={CONFIRMS[kind].confirmLabel}
+		variant="danger"
+		onconfirm={() => confirmPending(kind)}
+		oncancel={() => (confirming = null)}
+	/>
 {/if}
 
 <style>

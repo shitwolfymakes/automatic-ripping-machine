@@ -12,6 +12,8 @@ describe('IsoSourceChip', () => {
 		const root = container.querySelector('.chip')!;
 		expect(root).toHaveAttribute('title', LONG_NAME);
 		expect(root).toHaveAttribute('aria-label', `ISO file ${LONG_NAME}`);
+		// A label needs a role: a plain span may not carry aria-label.
+		expect(root).toHaveAttribute('role', 'img');
 	});
 
 	it('renders the chip-info chip-sm block classes', () => {

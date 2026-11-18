@@ -3,12 +3,21 @@
 	import { colorScheme, schemeLocksMode, allSchemes } from '$lib/stores/color-scheme';
 	import type { UserThemes } from '$lib/stores/user-themes.svelte';
 	import Glyph from '$lib/components/shared/Glyph.svelte';
+	import ConfirmDialog from '$lib/components/shared/ConfirmDialog.svelte';
 
 	interface Props {
 		themes: UserThemes;
 	}
 
 	let { themes }: Props = $props();
+
+	// The user theme whose delete waits on its confirm dialog, if any.
+	let pendingDelete = $state<{ id: string; label: string } | null>(null);
+
+	function confirmDelete(target: { id: string; label: string }) {
+		pendingDelete = null;
+		themes.deleteTheme(target.id, target.label);
+	}
 </script>
 
 <div class="stack stack-lg" data-page-section>
@@ -70,7 +79,7 @@
 							<div class="absolute -right-1 -top-1 flex gap-0.5">
 								<button
 									type="button"
-									onclick={() => themes.deleteTheme(scheme.id, scheme.label)}
+									onclick={() => (pendingDelete = { id: scheme.id, label: scheme.label })}
 									class="btn btn-icon scheme-swatch-delete"
 									title="Delete"
 								>
@@ -115,6 +124,19 @@
 		</div>
 	</section>
 </div>
+
+{#if pendingDelete}
+	{@const target = pendingDelete}
+	<ConfirmDialog
+		open
+		title="Delete user theme"
+		message={`Delete user theme "${target.label}"?`}
+		confirmLabel="Delete"
+		variant="danger"
+		onconfirm={() => confirmDelete(target)}
+		oncancel={() => (pendingDelete = null)}
+	/>
+{/if}
 
 <style>
 	.settings-page-section-title {

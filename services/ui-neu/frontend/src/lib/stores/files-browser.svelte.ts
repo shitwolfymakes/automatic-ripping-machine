@@ -14,6 +14,8 @@ export class FilesBrowser {
 	loading = $state(true);
 	error = $state<string | null>(null);
 	filesError = $derived<Error | null>(this.error ? new Error(this.error) : null);
+	/** The roots have loaded and none is configured, so there is no listing to load. */
+	noRootsConfigured = $derived(!this.loading && !this.error && this.roots.length === 0);
 
 	// Sort state
 	sortKey = $state<SortKey>('name');

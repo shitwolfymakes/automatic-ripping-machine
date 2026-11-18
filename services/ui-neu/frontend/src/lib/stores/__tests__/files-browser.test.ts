@@ -245,3 +245,33 @@ describe('FilesBrowser selection', () => {
 		expect(b.selectedKeys.size).toBe(0);
 	});
 });
+
+describe('noRootsConfigured', () => {
+	it('is false while the roots are still loading', () => {
+		expect(new FilesBrowser().noRootsConfigured).toBe(false);
+	});
+
+	it('is true once loading settles with no roots', async () => {
+		const b = new FilesBrowser();
+		mockRoots.mockResolvedValueOnce([]);
+		await b.loadRoots();
+		b.loading = false;
+		expect(b.noRootsConfigured).toBe(true);
+	});
+
+	it('is false when a root is configured', async () => {
+		const b = new FilesBrowser();
+		mockRoots.mockResolvedValueOnce([root('raw')]);
+		await b.loadRoots();
+		b.loading = false;
+		expect(b.noRootsConfigured).toBe(false);
+	});
+
+	it('is false when the roots could not be read, so the error shows instead', async () => {
+		const b = new FilesBrowser();
+		mockRoots.mockRejectedValueOnce(new Error('roots down'));
+		await b.loadRoots();
+		b.loading = false;
+		expect(b.noRootsConfigured).toBe(false);
+	});
+});

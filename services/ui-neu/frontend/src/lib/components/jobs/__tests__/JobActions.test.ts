@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { renderComponent, screen, fireEvent, cleanup, waitFor } from '$lib/testing/render';
+import { renderComponent, screen, fireEvent, cleanup, waitFor, within } from '$lib/testing/render';
 import JobActions from '../JobActions.svelte';
 import { createJob } from '../../../__fixtures__/job';
 
@@ -16,17 +16,15 @@ const mockAbandon = vi.mocked(abandonJob);
 const mockDelete = vi.mocked(deleteJob);
 const mockRipAgain = vi.mocked(ripAgain);
 
-// Mock window.confirm
-vi.stubGlobal(
-	'confirm',
-	vi.fn(() => true)
-);
+// Clicks the confirm dialog's button with this name.
+async function clickInDialog(name: string) {
+	await fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name }));
+}
 
 describe('JobActions', () => {
 	afterEach(() => {
 		cleanup();
 		vi.clearAllMocks();
-		vi.mocked(confirm).mockReturnValue(true);
 	});
 
 	describe('rip again', () => {
@@ -121,6 +119,7 @@ describe('JobActions', () => {
 				props: { job: createJob({ status: 'ripping' }), onaction }
 			});
 			await fireEvent.click(screen.getByText('Abandon'));
+			await clickInDialog('Abandon');
 			await waitFor(() => {
 				expect(mockAbandon).toHaveBeenCalledWith('job_1');
 				expect(onaction).toHaveBeenCalled();
@@ -133,6 +132,7 @@ describe('JobActions', () => {
 				props: { job: createJob({ status: 'ripped' }), onaction }
 			});
 			await fireEvent.click(screen.getByText('Delete'));
+			await clickInDialog('Delete');
 			await waitFor(() => {
 				expect(mockDelete).toHaveBeenCalledWith('job_1');
 			});
@@ -143,6 +143,7 @@ describe('JobActions', () => {
 				props: { job: createJob({ status: 'ripping' }) }
 			});
 			await fireEvent.click(screen.getByText('Abandon'));
+			await clickInDialog('Abandon');
 			await waitFor(() => {
 				expect(screen.getByText('Job abandoned')).toBeInTheDocument();
 			});
@@ -154,17 +155,19 @@ describe('JobActions', () => {
 				props: { job: createJob({ status: 'ripping' }) }
 			});
 			await fireEvent.click(screen.getByText('Abandon'));
+			await clickInDialog('Abandon');
 			await waitFor(() => {
 				expect(screen.getByText('Server error')).toBeInTheDocument();
 			});
 		});
 
-		it('does not call API when confirm is cancelled', async () => {
-			vi.mocked(confirm).mockReturnValueOnce(false);
+		it('does not call API when the confirm dialog is cancelled', async () => {
 			renderComponent(JobActions, {
 				props: { job: createJob({ status: 'ripping' }) }
 			});
 			await fireEvent.click(screen.getByText('Abandon'));
+			await clickInDialog('Cancel');
+			expect(screen.queryByRole('dialog')).toBeNull();
 			expect(mockAbandon).not.toHaveBeenCalled();
 		});
 
@@ -182,6 +185,7 @@ describe('JobActions', () => {
 				props: { job: createJob({ status: 'ripped' }), ondelete, onaction }
 			});
 			await fireEvent.click(screen.getByText('Delete'));
+			await clickInDialog('Delete');
 			await waitFor(() => {
 				expect(ondelete).toHaveBeenCalled();
 				expect(onaction).not.toHaveBeenCalled();
