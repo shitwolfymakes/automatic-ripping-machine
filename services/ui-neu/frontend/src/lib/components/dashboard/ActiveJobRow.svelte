@@ -19,16 +19,19 @@
 	import { isAdmin } from '$lib/stores/auth';
 	import { cancelIsoRip } from '$lib/api/iso';
 	import { addToast } from '$lib/stores/toast.svelte';
+	import type { DriveSummary } from '$lib/api/dashboard';
+	import { liveSource } from '$lib/drives/summary';
 
 	interface Props {
 		job?: JobView;
-		/** ISO file name for this job's (virtual) drive, when it's an ISO rip. */
-		isoSource?: string | null;
-		/** Whether that virtual drive rips an .iso file or a disc folder. */
-		isoKind?: 'iso' | 'folder';
+		/** The dashboard record for this job's drive. */
+		drive?: DriveSummary | null;
 	}
 
-	let { job, isoSource = null, isoKind = 'iso' }: Props = $props();
+	let { job, drive = null }: Props = $props();
+	// Set while a virtual drive is reading its ISO or folder: the row shows
+	// the source chip and the admin Cancel.
+	let isoDrive = $derived(liveSource(drive));
 
 	// Re-watch exactly when the id or status changes, not on other field updates.
 	let watchId = $derived(job?.id);
@@ -82,7 +85,7 @@
 	<div
 		class="card card-status job-active-row"
 		data-status={effectiveJobStatus(job)}
-		data-source={isoSource ? 'iso' : undefined}
+		data-source={isoDrive ? 'iso' : undefined}
 		style:--jt-accent={typeConfig.accent}
 		onclick={toggle}
 		role="button"
@@ -109,9 +112,9 @@
 				{/if}
 
 				<!-- ISO source chip (replaces the absent drive pill for a virtual drive) -->
-				{#if isoSource}
+				{#if isoDrive}
 					<span class="shrink-0">
-						<IsoSourceChip name={isoSource} kind={isoKind} />
+						<IsoSourceChip name={isoDrive.name} kind={isoDrive.source} />
 					</span>
 				{/if}
 
@@ -149,7 +152,7 @@
 				<a href="/jobs/{job.id}" class="shrink-0 job-active-row-details">Details</a>
 
 				<!-- ISO rip: admin-only Cancel (removes the virtual drive too) -->
-				{#if isoSource && $isAdmin}
+				{#if isoDrive && $isAdmin}
 					<button
 						onclick={handleCancelIso}
 						disabled={cancelling}

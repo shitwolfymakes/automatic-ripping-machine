@@ -88,7 +88,7 @@ vi.mock('$lib/stores/dashboard', async () => {
 		arm_online: true,
 		active_jobs: [],
 		drives_online: 1,
-		drive_names: {},
+		drives: {},
 		notification_count: 0,
 		ripping_enabled: true,
 		transcoder_online: false,

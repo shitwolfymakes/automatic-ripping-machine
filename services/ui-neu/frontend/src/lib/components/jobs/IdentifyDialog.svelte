@@ -6,18 +6,19 @@
 	import IdentifyCdForm from './identify/IdentifyCdForm.svelte';
 	import IdentifyVideoForm from './identify/IdentifyVideoForm.svelte';
 	import { driveLabel } from '$lib/drives/name';
+	import type { DriveSummary } from '$lib/api/dashboard';
 	import { isAwaitingIdentity } from '$lib/jobs/status-groups';
 	import { readJobMetadata } from '$lib/jobs/metadata';
 	import { cdIdentifyBody, videoIdentifyBody } from '$lib/jobs/resolve';
 
 	let {
 		job,
-		driveNames,
+		drives,
 		onclose,
 		onidentified
 	}: {
 		job: JobView;
-		driveNames?: Record<string, string> | null;
+		drives?: Record<string, DriveSummary> | null;
 		onclose: () => void;
 		onidentified: (resp: ResolveResponse) => void;
 	} = $props();
@@ -109,7 +110,7 @@
 			</p>
 		{:else}
 			<p class="modal-body">
-				The disc on drive <code class="mono">{driveLabel(job.drive_id, driveNames)}</code> couldn't be identified automatically.
+				The disc on drive <code class="mono">{driveLabel(job.drive_id, drives)}</code> couldn't be identified automatically.
 				Fill in the details so ARM can proceed. Any session you've already applied will pick up the resolved metadata and
 				queue its transcode tasks.
 			</p>

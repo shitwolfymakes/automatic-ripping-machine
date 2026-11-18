@@ -3,7 +3,8 @@ import type { JobView } from '$lib/types/api.gen';
 import type { EpisodeStatus } from '$lib/episodes/status';
 import { videoTypeLabel } from '$lib/jobs/fields';
 import { providerLabel } from '$lib/settings/provider-labels';
-import { driveLabel } from '$lib/drives/name';
+import type { DriveSummary } from '$lib/api/dashboard';
+import { liveSource } from '$lib/drives/summary';
 import { discTypeLabel } from '$lib/jobs/type';
 import { sessionDisplayName } from '$lib/sessions/parked-session';
 
@@ -110,17 +111,13 @@ const SOURCE_KIND_LABEL: Record<'iso' | 'folder', string> = { iso: 'ISO', folder
 
 /**
  * The source row names what the disc came from: a folder, an ISO, or a drive.
- * An ISO name needs a drive id to look its kind up; without one it is a drive.
+ * A virtual drive that has retired reads as a drive. With no record for the
+ * drive, the value falls back to the job's raw drive id.
  */
-export function reviewSourceRow(
-	job: Pick<JobView, 'drive_id'>,
-	isoName: string | null,
-	isoSourceKinds: Record<string, 'iso' | 'folder'> | null | undefined,
-	driveNames: Record<string, string> | null | undefined
-): SourceRow {
-	const value = isoName ?? driveLabel(job.drive_id, driveNames);
-	if (!isoName || !job.drive_id) return { label: 'Drive', value };
-	return { label: SOURCE_KIND_LABEL[isoSourceKinds?.[job.drive_id] ?? 'iso'], value };
+export function reviewSourceRow(job: Pick<JobView, 'drive_id'>, drive: DriveSummary | null | undefined): SourceRow {
+	const live = liveSource(drive);
+	if (live) return { label: SOURCE_KIND_LABEL[live.source], value: live.name };
+	return { label: 'Drive', value: drive?.name ?? (job.drive_id || '') };
 }
 
 /** The applied session's text: the parked line, else the pending session's name. */

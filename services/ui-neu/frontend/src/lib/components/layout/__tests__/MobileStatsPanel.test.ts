@@ -12,7 +12,7 @@ vi.mock('$lib/stores/dashboard', async () => {
 			{ job_id: 2, status: 'transcoding', title: 'Movie B' }
 		],
 		drives_online: 2,
-		drive_names: {},
+		drives: {},
 		notification_count: 3,
 		ripping_enabled: true,
 		makemkv_key_valid: true,

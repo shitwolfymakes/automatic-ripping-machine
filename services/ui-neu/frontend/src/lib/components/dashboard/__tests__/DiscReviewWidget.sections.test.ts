@@ -103,7 +103,7 @@ function renderCard(overrides: Partial<JobView> = {}, options: CardOptions = {})
 	const onrefresh = vi.fn();
 	const ondismiss = vi.fn();
 	renderComponent(DiscReviewWidget, {
-		props: { job, driveNames: {}, paused: false, onrefresh, ondismiss, ...options.props }
+		props: { job, paused: false, onrefresh, ondismiss, ...options.props }
 	});
 	return { onrefresh, ondismiss };
 }
@@ -316,7 +316,7 @@ describe('DiscReviewWidget sections', () => {
 		it('hands the switch no hand-set tracks when the detail fails to load', async () => {
 			mockFetchJob.mockRejectedValue(new Error('offline'));
 			renderComponent(DiscReviewWidget, {
-				props: { job: createJob({ status: 'awaiting_review' }), driveNames: {}, paused: false }
+				props: { job: createJob({ status: 'awaiting_review' }), paused: false }
 			});
 			await waitFor(() => expect(mockFetchJob).toHaveBeenCalled());
 			await new Promise((r) => setTimeout(r, 0));
