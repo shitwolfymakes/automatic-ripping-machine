@@ -1,6 +1,13 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderComponent, cleanup } from '$lib/testing/render';
 
+// Every branch of HeaderStatus's own code is covered. The coverage tool still
+// reports six open arms that are Svelte's: each text `{...}` below compiles to
+// `(...) ?? ''`, and none of these values is null where it renders. The
+// drive-count plural (a string), the ripping and transcoding counts (numbers),
+// the queued count (inside an #if that needs it above 0), and the notification
+// count and its plural (inside an #if that needs the count above 0).
+
 // vi.mock factories are hoisted: all values must be inline (no top-level vars).
 vi.mock('$lib/stores/dashboard', async () => {
 	const { writable } = await import('svelte/store');
