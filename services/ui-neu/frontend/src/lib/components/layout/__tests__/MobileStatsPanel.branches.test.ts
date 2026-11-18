@@ -191,11 +191,37 @@ describe('MobileStatsPanel activity', () => {
 	});
 
 	it('links the transcoding line to the transcoder', () => {
-		setDashboard({ active_transcodes: [{ id: 't1' }, { id: 't2' }] });
+		setDashboard({
+			active_transcodes: [
+				{ id: 't1', status: 'in_progress' },
+				{ id: 't2', status: 'in_progress' }
+			]
+		});
 		renderComponent(MobileStatsPanel);
 		const el = screen.getByText(/2 transcoding/);
 		expect(el.tagName).toBe('A');
 		expect(el).toHaveAttribute('href', '/transcoder');
+	});
+
+	it('counts a queued task once, as queued and not as transcoding', () => {
+		setDashboard({
+			active_transcodes: [
+				{ id: 't1', status: 'in_progress' },
+				{ id: 't2', status: 'queued' },
+				{ id: 't3', status: 'queued' }
+			],
+			transcoder_online: true,
+			transcoder_stats: { pending: 2 }
+		});
+		renderComponent(MobileStatsPanel);
+		expect(screen.getByText(/1 transcoding/)).toBeInTheDocument();
+		expect(screen.getByText(/2 queued/)).toBeInTheDocument();
+	});
+
+	it('shows no transcoding line while every task is queued', () => {
+		setDashboard({ active_transcodes: [{ id: 't1', status: 'queued' }] });
+		renderComponent(MobileStatsPanel);
+		expect(screen.queryByText(/transcoding/)).toBeNull();
 	});
 
 	it.each([

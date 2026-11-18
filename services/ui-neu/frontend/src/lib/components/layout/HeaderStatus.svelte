@@ -4,9 +4,10 @@
 	import { dashboard } from '$lib/stores/dashboard';
 	import { isGuest } from '$lib/stores/auth';
 	import { countRipping } from '$lib/jobs/status';
-	import { transcoderDotStatus, makemkvKeyTitle } from '$lib/dashboard/header-status';
+	import { transcoderDotStatus, makemkvKeyTitle, transcodingCount } from '$lib/dashboard/header-status';
 
 	const rippingCount = $derived(countRipping($dashboard.active_jobs ?? []));
+	const transcoding = $derived(transcodingCount($dashboard));
 </script>
 
 {#snippet guestLink(href: string, cls: string, content: Snippet, title?: string)}
@@ -59,8 +60,8 @@
 		{#if rippingCount > 0}
 			<span class="layout-activity-ripping">{rippingCount} ripping</span>
 		{/if}
-		{#if $dashboard.active_transcodes.length > 0}
-			<a href="/transcoder" class="layout-activity-transcoding">{$dashboard.active_transcodes.length} transcoding</a>
+		{#if transcoding > 0}
+			<a href="/transcoder" class="layout-activity-transcoding">{transcoding} transcoding</a>
 		{/if}
 		{#if $dashboard.transcoder_online && (Number($dashboard.transcoder_stats?.pending) || 0) > 0}
 			<span class="layout-activity-queued">{$dashboard.transcoder_stats?.pending} queued</span>

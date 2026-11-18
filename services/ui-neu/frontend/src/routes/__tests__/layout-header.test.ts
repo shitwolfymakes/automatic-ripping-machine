@@ -291,7 +291,7 @@ describe('Layout header activity counts', () => {
 	});
 
 	it('shows the transcoding count as a link to /transcoder', () => {
-		setDash({ active_transcodes: [{}, {}] });
+		setDash({ active_transcodes: [{ status: 'in_progress' }, { status: 'in_progress' }] });
 		renderLayout();
 		const el = document.querySelector('.layout-activity-transcoding')!;
 		expect(el.textContent).toBe('2 transcoding');

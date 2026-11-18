@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { transcoderDotStatus, serviceRows, makemkvKeyTitle } from '../header-status';
+import type { TranscodeTaskView } from '$lib/types/api.gen';
+import { transcoderDotStatus, serviceRows, makemkvKeyTitle, transcodingCount } from '../header-status';
 
 describe('transcoderDotStatus', () => {
 	it('is ok when online', () => {
@@ -69,5 +70,13 @@ describe('makemkvKeyTitle', () => {
 
 	it('says not checked when validity is unknown', () => {
 		expect(makemkvKeyTitle(null, null)).toBe('MakeMKV key not checked yet');
+	});
+});
+
+describe('transcodingCount', () => {
+	it('counts in-progress tasks only, leaving queued ones to the queued count', () => {
+		const tasks = [{ status: 'in_progress' }, { status: 'queued' }, { status: 'queued' }] as TranscodeTaskView[];
+		expect(transcodingCount({ active_transcodes: tasks })).toBe(1);
+		expect(transcodingCount({ active_transcodes: [] })).toBe(0);
 	});
 });

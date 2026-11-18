@@ -19,7 +19,7 @@ vi.mock('$lib/stores/dashboard', async () => {
 		makemkv_key_checked_at: null,
 		transcoder_online: true,
 		transcoder_stats: { pending: 4 },
-		active_transcodes: [{ id: 't1' }]
+		active_transcodes: [{ id: 't1', status: 'in_progress' }]
 	});
 	return {
 		dashboard: { ...store, start: vi.fn(), stop: vi.fn(), error: writable(null) }

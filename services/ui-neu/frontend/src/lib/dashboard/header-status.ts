@@ -6,6 +6,11 @@ export function transcoderDotStatus(d: Pick<DashboardData, 'transcoder_online'>)
 	return d.transcoder_online ? 'ok' : 'off';
 }
 
+/** The "N transcoding" count: in-progress tasks only, since queued ones have their own "N queued" count. */
+export function transcodingCount(d: Pick<DashboardData, 'active_transcodes'>): number {
+	return d.active_transcodes.filter((t) => t.status === 'in_progress').length;
+}
+
 /** One row of the mobile stats panel's service list. */
 interface ServiceRow {
 	label: string;

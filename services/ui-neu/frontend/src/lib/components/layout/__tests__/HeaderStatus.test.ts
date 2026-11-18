@@ -143,11 +143,37 @@ describe('HeaderStatus', () => {
 	});
 
 	it('links the transcoding count to /transcoder', () => {
-		setDashboard({ active_transcodes: [{ id: 't1' }, { id: 't2' }, { id: 't3' }] });
+		setDashboard({
+			active_transcodes: [
+				{ id: 't1', status: 'in_progress' },
+				{ id: 't2', status: 'in_progress' },
+				{ id: 't3', status: 'in_progress' }
+			]
+		});
 		const { container } = render();
 		const el = container.querySelector('.layout-activity-transcoding');
 		expect(el).toHaveTextContent('3 transcoding');
 		expect(el).toHaveAttribute('href', '/transcoder');
+	});
+
+	it('counts a queued task once, as queued and not as transcoding', () => {
+		setDashboard({
+			active_transcodes: [
+				{ id: 't1', status: 'in_progress' },
+				{ id: 't2', status: 'queued' },
+				{ id: 't3', status: 'queued' }
+			],
+			transcoder_stats: { pending: 2 }
+		});
+		const { container } = render();
+		expect(text(container, '.layout-activity-transcoding')).toBe('1 transcoding');
+		expect(text(container, '.layout-activity-queued')).toBe('2 queued');
+	});
+
+	it('shows no transcoding count while every task is queued', () => {
+		setDashboard({ active_transcodes: [{ id: 't1', status: 'queued' }], transcoder_stats: { pending: 1 } });
+		const { container } = render();
+		expect(container.querySelector('.layout-activity-transcoding')).toBeNull();
 	});
 
 	it('shows the queued count only while the transcoder is online with pending work', () => {
