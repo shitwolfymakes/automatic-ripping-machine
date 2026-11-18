@@ -639,7 +639,7 @@ describe('the inline dialog and the transcode preset sidebar', () => {
 	it('a preset created from the builder is not forced into another session opened for edit', async () => {
 		await createTranscodePresetFromBuilder();
 		await fireEvent.click(screen.getByRole('button', { name: /^edit$/i }));
-		expect((screen.getByLabelText(/transcode preset/i) as HTMLSelectElement).value).toBe('');
+		expect((screen.getByLabelText(/transcode preset/i, { selector: 'select' }) as HTMLSelectElement).value).toBe('');
 	});
 
 	it('saving an edited transcode preset closes it and preselects nothing in the builder', async () => {

@@ -319,7 +319,7 @@ describe('roots', () => {
 		mockFetchRoots.mockResolvedValue([]);
 		renderComponent(FilesPage);
 		await waitFor(() => expect(mockFetchRoots).toHaveBeenCalled());
-		await waitFor(() => expect(document.querySelectorAll('tr[aria-busy="true"]').length).toBe(8));
+		expect(await screen.findByText('No media directories configured')).toBeInTheDocument();
 		expect(screen.queryByRole('group', { name: 'File root tabs' })).not.toBeInTheDocument();
 		expect(mockFetchDirectory).not.toHaveBeenCalled();
 	});
