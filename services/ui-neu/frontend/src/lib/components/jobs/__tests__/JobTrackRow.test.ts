@@ -1,3 +1,8 @@
+// Open arms the coverage tool reports that are Svelte's, not the component's:
+// each text or attribute `{...}` below compiles to `(...) ?? ''`, and each sits
+// inside an #if on the same value. The track's year, the job's year, the
+// track's IMDb link, the attempt count (inside `attempts > 1`) and the failed
+// track's last error.
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderComponent, screen, cleanup, waitFor, fireEvent, within } from '$lib/testing/render';
 import JobTrackRowHarness from './JobTrackRowHarness.svelte';
@@ -146,11 +151,12 @@ describe('JobTrackRow', () => {
 			expect(within(title).getByText('episode')).toBeInTheDocument();
 		});
 
-		it('swaps a broken track poster for the placeholder', async () => {
+		it('swaps a broken track poster for the poster fallback', async () => {
 			renderRow(pilot());
 			const img = cell('Title').querySelector('img[data-poster]') as HTMLImageElement;
 			await fireEvent.error(img);
-			expect(img.src).toContain('poster-placeholder.svg');
+			expect(cell('Title').querySelector('img[data-poster]')).toBeNull();
+			expect(cell('Title').querySelector('.poster-image-fallback.job-detail-track-poster')).not.toBeNull();
 		});
 
 		it('shows an untitled track under the job title and year', () => {

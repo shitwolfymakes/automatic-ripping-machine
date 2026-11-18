@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { posterSrc, posterFallback } from '$lib/match/poster';
+	import PosterImage from '$lib/components/shared/PosterImage.svelte';
 	import StatusBadge from '$lib/components/shared/StatusBadge.svelte';
 	import TrackTitleSearch from '$lib/components/match/TrackTitleSearch.svelte';
 	import { formatFps } from '$lib/transcode/fps';
@@ -44,13 +44,7 @@
 		{#if track.title}
 			<div class="flex items-center gap-1.5">
 				{#if track.poster_url}
-					<img
-						data-poster
-						src={posterSrc(track.poster_url)}
-						alt=""
-						class="job-detail-track-poster"
-						onerror={posterFallback}
-					/>
+					<PosterImage url={track.poster_url} class="job-detail-track-poster" />
 				{/if}
 				<div>
 					<span class="job-detail-track-title job-detail-track-title-strong">{track.title}</span>
@@ -190,7 +184,8 @@
 	.job-detail-track-title-cell:hover {
 		background: var(--color-primary-tint-1);
 	}
-	.job-detail-track-poster {
+	/* :global: passed as PosterImage's class prop, landing on its own <img> */
+	:global(.job-detail-track-poster) {
 		height: 2rem;
 		width: 1.25rem;
 		border-radius: var(--radius-sm);
