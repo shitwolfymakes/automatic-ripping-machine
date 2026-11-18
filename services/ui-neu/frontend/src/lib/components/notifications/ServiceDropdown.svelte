@@ -1,7 +1,7 @@
 <script lang="ts">
 	import type { Catalog, CatalogService } from '$lib/types/notifications';
 	import ServiceGlyph from './ServiceGlyph.svelte';
-	import { serviceGroups, matchingServices } from './serviceCatalog';
+	import { serviceGroups, matchingServices } from '../../notifications/service-catalog';
 	import { onOutsideClick } from '$lib/utils/outside-click';
 
 	let { catalog, selectedId, onpick }: { catalog: Catalog; selectedId: string | null; onpick?: (id: string) => void } =

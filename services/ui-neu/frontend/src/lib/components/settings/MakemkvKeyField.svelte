@@ -1,13 +1,13 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import type { ConfigFieldMeta, ConfigView, DriveView } from '$lib/types/api.gen';
-	import ChoiceCard from '$lib/components/ChoiceCard.svelte';
-	import StatusStrip from '$lib/components/StatusStrip.svelte';
+	import ChoiceCard from '$lib/components/settings/ChoiceCard.svelte';
+	import StatusStrip from '$lib/components/shared/StatusStrip.svelte';
 	import SecretInput from './SecretInput.svelte';
 	import { fetchConfigView, HIDDEN_SECRET } from '$lib/api/config';
 	import { fetchDrives } from '$lib/api/drives';
 	import { usePoll } from '$lib/utils/poll';
-	import { makemkvKeyStatus } from '$lib/utils/makemkv';
+	import { makemkvKeyStatus } from '$lib/drives/makemkv';
 
 	// MakeMKV key: the free monthly beta key (value null) or a purchased key.
 	// ARM can't test a key on demand; a drive's ripper verifies it and reports

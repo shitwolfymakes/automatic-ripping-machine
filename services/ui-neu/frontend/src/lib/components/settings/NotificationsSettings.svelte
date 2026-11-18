@@ -1,6 +1,6 @@
 <script lang="ts">
 	import NotificationsTab from '$lib/components/notifications/NotificationsTab.svelte';
-	import Toggle from '$lib/components/notifications/Toggle.svelte';
+	import Toggle from '$lib/components/shared/Toggle.svelte';
 
 	interface Props {
 		enabled: boolean;

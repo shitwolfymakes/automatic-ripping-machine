@@ -2,7 +2,7 @@
 // loading skeleton, the empty state, or the data.
 
 /** What LoadState renders. */
-export type LoadPhase = 'error' | 'waiting' | 'loading' | 'empty' | 'ready';
+type LoadPhase = 'error' | 'waiting' | 'loading' | 'empty' | 'ready';
 
 /** The inputs that pick the phase. */
 export interface LoadInputs<T> {

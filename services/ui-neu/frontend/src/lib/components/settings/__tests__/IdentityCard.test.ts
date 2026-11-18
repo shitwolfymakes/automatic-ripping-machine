@@ -1,7 +1,7 @@
 import { describe, it, expect, afterEach } from 'vitest';
-import { renderComponent, screen, cleanup, fireEvent, within } from '$lib/test-utils';
+import { renderComponent, screen, cleanup, fireEvent, within } from '$lib/testing/render';
 import IdentityCardHarness from './IdentityCardHarness.svelte';
-import { IDENTITY_METAS, IDENTITY_DEFAULTS } from '$lib/utils/__tests__/fixtures/identity-metas';
+import { IDENTITY_METAS, IDENTITY_DEFAULTS } from '$lib/__fixtures__/identity-metas';
 
 afterEach(() => cleanup());
 

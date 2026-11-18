@@ -1,21 +1,21 @@
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
-import { renderComponent, screen, cleanup, waitFor, fireEvent, within } from '$lib/test-utils';
+import { renderComponent, screen, cleanup, waitFor, fireEvent, within } from '$lib/testing/render';
 import DashboardPage from '../+page.svelte';
-import { createJob } from '$lib/components/__fixtures__/job';
+import { createJob } from '$lib/__fixtures__/job';
 import { fetchDashboard } from '$lib/api/dashboard';
 import { fetchJobsPage, bulkDeleteJobs, abandonJob, deleteJob } from '$lib/api/jobs';
 import { setTranscoderEnabled } from '$lib/stores/config';
 import type { JobView } from '$lib/types/api.gen';
+import { createDriveSummary, createIsoDrive } from '$lib/__fixtures__/drive';
 
 // Hoisted so the module mocks below can share them with the tests.
 const h = vi.hoisted(() => ({
 	ripperListeners: [] as Array<(ids: Set<string>, types: Map<string, Set<string>>) => void>,
 	offRipperEvents: vi.fn(),
 	startRipperEvents: vi.fn(),
-	startWS: vi.fn(),
-	stopWS: vi.fn(),
-	reconcileSubscriptions: vi.fn(),
-	ripProgress: { value: {} as Record<string, unknown> }
+	wsStart: vi.fn(),
+	jobLiveWatch: vi.fn(() => () => {}),
+	live: {} as Record<string, unknown>
 }));
 
 vi.mock('$lib/stores/auth', async () => {
@@ -35,14 +35,19 @@ vi.mock('svelte/transition', () => ({
 	slide: () => ({ duration: 0 })
 }));
 
-vi.mock('$lib/stores/rips.svelte', () => ({
-	ripProgress: h.ripProgress,
-	startWS: h.startWS,
-	stopWS: h.stopWS,
-	reconcileSubscriptions: h.reconcileSubscriptions
+vi.mock('$lib/api/ws', async (importOriginal) => {
+	const actual = await importOriginal<typeof import('$lib/api/ws')>();
+	return { ...actual, wsClient: Object.assign(Object.create(actual.wsClient), { start: h.wsStart }) };
+});
+
+vi.mock('$lib/stores/job-live.svelte', () => ({
+	jobLive: {
+		watch: h.jobLiveWatch,
+		get: (id: string) => h.live[id] ?? { rip: null, transcode: null }
+	}
 }));
 
-vi.mock('$lib/stores/ripperEvents.svelte', () => ({
+vi.mock('$lib/stores/ripper-events.svelte', () => ({
 	startRipperEvents: h.startRipperEvents,
 	// The review cards register listeners of their own besides the page's.
 	onRipperEvent: (cb: (ids: Set<string>, types: Map<string, Set<string>>) => void) => {
@@ -84,9 +89,7 @@ function dash(overrides: DashOverrides = {}) {
 		arm_online: true,
 		active_jobs: [] as JobView[],
 		drives_online: 1,
-		drive_names: { drv_1: 'Main Drive' },
-		iso_sources: {},
-		iso_source_kinds: {},
+		drives: { drv_1: createDriveSummary({ name: 'Main Drive' }) },
 		preparing: [],
 		notification_count: 0,
 		ripping_enabled: true,
@@ -95,6 +98,7 @@ function dash(overrides: DashOverrides = {}) {
 		transcoder_online: true,
 		transcoder_stats: null,
 		active_transcodes: [],
+		review_wait_seconds: 60,
 		...overrides
 	};
 }
@@ -108,7 +112,7 @@ function listed(id: string, title = `Listed ${id}`): JobView {
 }
 
 function prepare(driveId: string, isoName: string) {
-	return { drive_id: driveId, phase: 'scanning', updated_at: AT, iso_name: isoName, iso_kind: 'iso' };
+	return { drive_id: driveId, phase: 'scanning', updated_at: AT, drive: createIsoDrive(isoName) };
 }
 
 function transcode(id: string, name: string) {
@@ -166,7 +170,7 @@ async function deleteFirstReviewCard() {
 beforeEach(() => {
 	vi.clearAllMocks();
 	h.ripperListeners = [];
-	h.ripProgress.value = {};
+	h.live = {};
 	setDashboard(dash());
 	setJobs([listed('l1')]);
 	vi.mocked(bulkDeleteJobs).mockResolvedValue({ deleted_ids: [], skipped_non_terminal: [] });
@@ -181,6 +185,15 @@ afterEach(async () => {
 });
 
 describe('Dashboard sections', () => {
+	it('passes the configured countdown length to the review card', async () => {
+		const waitStart = new Date(Date.now() - 10_000).toISOString();
+		setDashboard(
+			dash({ review_wait_seconds: 300, active_jobs: [job('r1', 'awaiting_review', { wait_start_time: waitStart })] })
+		);
+		await renderPage();
+		await waitFor(() => expect(screen.getByText(/^4m 5\ds$/)).toBeInTheDocument());
+	});
+
 	describe('labels', () => {
 		it.each([
 			['one disc', 1, 'WAITING FOR REVIEW - 1 DISC'],
@@ -417,8 +430,11 @@ describe('Dashboard sections', () => {
 
 	describe('ISO sources and live progress', () => {
 		const sources = {
-			iso_sources: { drv_iso: 'Movie.iso', drv_folder: 'Disc One' },
-			iso_source_kinds: { drv_folder: 'folder' }
+			drives: {
+				drv_1: createDriveSummary({ name: 'Main Drive' }),
+				drv_iso: createIsoDrive('Movie.iso'),
+				drv_folder: createIsoDrive('Disc One', 'folder')
+			}
 		};
 
 		it.each([
@@ -442,7 +458,7 @@ describe('Dashboard sections', () => {
 			expect(screen.getAllByLabelText(/^(ISO file|Disc folder) /)).toHaveLength(2);
 		});
 
-		it('hands the ISO sources and kinds to a waiting review card', async () => {
+		it('hands the drive record to a waiting review card', async () => {
 			setDashboard(
 				dash({
 					...sources,
@@ -458,23 +474,22 @@ describe('Dashboard sections', () => {
 			expect(screen.getByText('Folder')).toBeInTheDocument();
 		});
 
-		it('falls back to an ISO chip when the drive has a source but no kind', async () => {
+		it('shows no chip once the virtual drive has retired', async () => {
 			setDashboard(
 				dash({
-					iso_sources: { drv_iso: 'Movie.iso' },
-					iso_source_kinds: undefined,
+					drives: { drv_iso: createIsoDrive('Movie.iso', 'iso', { retired: true }) },
 					active_jobs: [job('a', 'ripping', { drive_id: 'drv_iso' })]
 				})
 			);
 			await renderPage();
-			await waitFor(() => expect(screen.getByLabelText('ISO file Movie.iso')).toBeInTheDocument());
+			await waitFor(() => expect(screen.getByText('ACTIVE RIPS - 1 IN PROGRESS')).toBeInTheDocument());
+			expect(screen.queryByLabelText(/^(ISO file|Disc folder) /)).toBeNull();
 		});
 
-		it('shows no chip when the dashboard has no ISO sources at all', async () => {
+		it('shows no chip when the dashboard has no drives at all', async () => {
 			setDashboard(
 				dash({
-					iso_sources: undefined,
-					iso_source_kinds: undefined,
+					drives: undefined,
 					active_jobs: [job('c', 'created', { drive_id: 'drv_1' }), job('a', 'ripping', { drive_id: 'drv_1' })]
 				})
 			);
@@ -483,29 +498,32 @@ describe('Dashboard sections', () => {
 			expect(screen.queryByLabelText(/^(ISO file|Disc folder) /)).toBeNull();
 		});
 
-		it('passes the live rip progress to an active row', async () => {
-			h.ripProgress.value = {
+		it('renders an active row from the job-live store without progress props', async () => {
+			h.live = {
 				live_job: {
-					track_id: 't1',
-					progress_pct: 42,
-					eta_seconds: 600,
-					bytes_done: 1024 * 1024 * 512,
-					bytes_total: 1024 * 1024 * 1024,
-					rate_bps: 1024 * 1024
+					rip: {
+						pct: 42,
+						etaSeconds: 600,
+						bytesDone: 1024 * 1024 * 512,
+						bytesTotal: 1024 * 1024 * 1024,
+						rateBps: 1024 * 1024
+					},
+					transcode: null
 				}
 			};
 			setDashboard(dash({ active_jobs: [job('live_job', 'ripping'), job('quiet_job', 'ripping')] }));
 			await renderPage();
 			await waitFor(() => expect(screen.getByText('42%')).toBeInTheDocument());
 			expect(screen.getByText('10m left')).toBeInTheDocument();
-			expect(screen.getByText('512 MB of 1 GB · 1 MB/s')).toBeInTheDocument();
+			expect(screen.getByText('512 MB of 1 GB \u00b7 1 MB/s')).toBeInTheDocument();
 			expect(screen.getAllByText('42%')).toHaveLength(1);
 		});
 
-		it('subscribes the live progress to the ripping jobs only', async () => {
+		it('lets each row watch its own job instead of the page subscribing', async () => {
 			setDashboard(dash({ active_jobs: [job('r1', 'ripping'), job('c1', 'created')] }));
 			await renderPage();
-			await waitFor(() => expect(h.reconcileSubscriptions).toHaveBeenLastCalledWith(['r1']));
+			await waitFor(() => expect(h.jobLiveWatch).toHaveBeenCalledWith({ id: 'r1', status: 'ripping' }));
+			expect(h.jobLiveWatch).toHaveBeenCalledWith({ id: 'c1', status: 'created' });
 		});
 
 		it('lists preparing ISO rows with their file name', async () => {
@@ -921,9 +939,9 @@ describe('Dashboard All Jobs list', () => {
 });
 
 describe('Dashboard lifecycle', () => {
-	it('starts the WebSocket and ripper events on mount', async () => {
+	it('starts the WebSocket client and ripper events on mount', async () => {
 		await renderPage();
-		expect(h.startWS).toHaveBeenCalledTimes(1);
+		expect(h.wsStart).toHaveBeenCalledTimes(1);
 		expect(h.startRipperEvents).toHaveBeenCalledTimes(1);
 		expect(h.ripperListeners.length).toBeGreaterThan(0);
 	});
@@ -955,7 +973,6 @@ describe('Dashboard lifecycle', () => {
 
 		unmount();
 		expect(h.offRipperEvents).toHaveBeenCalledTimes(1);
-		expect(h.stopWS).toHaveBeenCalledTimes(1);
 		await vi.advanceTimersByTimeAsync(30000);
 		expect(fetchDashboard).toHaveBeenCalledTimes(3);
 		expect(fetchJobsPage).toHaveBeenCalledTimes(2);

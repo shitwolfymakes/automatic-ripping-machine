@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { renderComponent, screen, fireEvent, cleanup, waitFor } from '$lib/test-utils';
+import { renderComponent, screen, fireEvent, cleanup, waitFor } from '$lib/testing/render';
 
 const params = vi.hoisted(() => ({ slug: '' }));
 
@@ -8,8 +8,8 @@ vi.mock('$app/stores', async () => {
 	return { page: readable({ params, url: new URL('http://localhost/help') }) };
 });
 
-vi.mock('$lib/docs/api', async () => {
-	const actual = await vi.importActual<typeof import('$lib/docs/api')>('$lib/docs/api');
+vi.mock('$lib/help/api', async () => {
+	const actual = await vi.importActual<typeof import('$lib/help/api')>('$lib/help/api');
 	return {
 		...actual,
 		fetchDocsNav: vi.fn(),
@@ -19,7 +19,7 @@ vi.mock('$lib/docs/api', async () => {
 });
 
 import HelpPage from '../[...slug]/+page.svelte';
-import { fetchDocsNav, fetchDocsPage, loadDocsSearch, DocsNotFoundError } from '$lib/docs/api';
+import { fetchDocsNav, fetchDocsPage, loadDocsSearch, DocsNotFoundError } from '$lib/help/api';
 import MiniSearch from 'minisearch';
 
 const NAV = [

@@ -24,10 +24,12 @@ import logging
 import os
 import ssl
 import sys
+import tempfile
 from pathlib import Path
 
 from arm_common import configure_service_logging, with_log_context
 from arm_common.encoders import EncoderSpec
+from arm_common.schemas.handbrake import HandbrakeSettings
 from arm_common.schemas import (
     HardwareCaps,
     RegisterTranscoderResponse,
@@ -45,7 +47,9 @@ from arm_transcode.engines.ffmpeg_vaapi import transcode_ffmpeg_vaapi
 from arm_transcode.engines.handbrake_engine import encoder_args as handbrake_encoder_args
 from arm_transcode.ffmpeg_audio import transcode_audio
 from arm_transcode.handbrake import ProgressCallback, transcode_handbrake
+from arm_transcode.handbrake_preset_file import materialise_for_encode, settings_of, write_preset_file
 from arm_transcode.heartbeat import HeartbeatPump, ProgressState
+from arm_transcode.schema_file import dump_schema
 from arm_transcode.ws_client import EnvelopeHandler, WSClient
 
 
@@ -140,24 +144,78 @@ async def _encode_ffmpeg_vaapi(
         )
 
 
+async def _encode_handbrake_builtin(
+    *,
+    preset: TranscodePresetView,
+    spec: EncoderSpec | None,
+    raw_input: Path,
+    final_output: Path,
+    progress_callback: ProgressCallback,
+) -> int:
+    """Today's run for a preset without settings: `--preset <preset_ref> --encoder X` (M11)."""
+    with atomic_output(final_output) as tmp:
+        return await transcode_handbrake(
+            input_path=raw_input,
+            output_path=tmp,
+            preset_ref=preset.preset_ref,
+            extra_args=preset.extra_args,
+            encoder_args=handbrake_encoder_args(spec),
+            progress_callback=progress_callback,
+        )
+
+
+async def _encode_handbrake_settings(
+    *,
+    preset: TranscodePresetView,
+    settings: HandbrakeSettings,
+    spec: EncoderSpec | None,
+    raw_input: Path,
+    final_output: Path,
+    progress_callback: ProgressCallback,
+) -> int:
+    """Run HandBrakeCLI from the preset's materialised settings, validated before launch (M5)."""
+    materialised = materialise_for_encode(preset, settings, spec)
+    # The transcoder has no per-task work directory; this one lives for the encode.
+    with tempfile.TemporaryDirectory(prefix="arm-hb-") as work_dir:
+        preset_file = write_preset_file(Path(work_dir), materialised.preset_file)
+        with atomic_output(final_output) as tmp:
+            return await transcode_handbrake(
+                input_path=raw_input,
+                output_path=tmp,
+                preset_ref=preset.preset_ref,
+                extra_args=preset.extra_args,
+                encoder_args=materialised.flags,
+                preset_file=preset_file,
+                progress_callback=progress_callback,
+            )
+
+
 async def _encode_handbrake(
     *,
-    preset_ref: str,
-    extra_args: str | None,
+    preset: TranscodePresetView,
+    spec: EncoderSpec | None,
     raw_input: Path,
     final_output: Path,
     progress_callback: ProgressCallback,
 ) -> int:
     """Run HandBrakeCLI into an atomic output and return the size written."""
-    with atomic_output(final_output) as tmp:
-        return await transcode_handbrake(
-            input_path=raw_input,
-            output_path=tmp,
-            preset_ref=preset_ref,
-            extra_args=extra_args,
-            encoder_args=handbrake_encoder_args(selected_encoder()),
+    settings = settings_of(preset)
+    if settings is None:
+        return await _encode_handbrake_builtin(
+            preset=preset,
+            spec=spec,
+            raw_input=raw_input,
+            final_output=final_output,
             progress_callback=progress_callback,
         )
+    return await _encode_handbrake_settings(
+        preset=preset,
+        settings=settings,
+        spec=spec,
+        raw_input=raw_input,
+        final_output=final_output,
+        progress_callback=progress_callback,
+    )
 
 
 async def _encode_audio(
@@ -180,6 +238,12 @@ async def _encode_audio(
             duration_seconds=duration_seconds,
             progress_callback=progress_callback,
         )
+
+
+def _lacks_base(tool: TranscodeTool, preset: TranscodePresetView) -> bool:
+    """True when the preset has no `preset_ref` and needs one: every preset except HandBrake with settings."""
+    settings_run = tool == TranscodeTool.HANDBRAKE and settings_of(preset) is not None
+    return preset.preset_ref is None and not settings_run
 
 
 async def _encode(
@@ -209,13 +273,13 @@ async def _encode(
             progress_callback=progress_callback,
         )
 
-    if preset is None or preset.preset_ref is None:
+    if preset is None or _lacks_base(tool, preset):
         raise RuntimeError(f"transcode tool={tool.value} requires a preset_ref")
 
     if tool == TranscodeTool.HANDBRAKE:
         return await _encode_handbrake(
-            preset_ref=preset.preset_ref,
-            extra_args=preset.extra_args,
+            preset=preset,
+            spec=spec,
             raw_input=raw_input,
             final_output=final_output,
             progress_callback=progress_callback,
@@ -387,6 +451,8 @@ async def run() -> int:
 
 
 def main() -> int:
+    if "--dump-schema" in sys.argv[1:]:
+        return dump_schema()
     if "--probe-encoders" in sys.argv[1:]:
         # Deprecated compatibility mode. The install-time HandBrakeCLI --help
         # scrape this used to run is gone; an installer or drill script that

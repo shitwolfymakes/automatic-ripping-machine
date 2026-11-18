@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { renderComponent, screen, fireEvent, cleanup, waitFor } from '$lib/test-utils';
+import { renderComponent, screen, fireEvent, cleanup, waitFor } from '$lib/testing/render';
 import TranscodingSettings from '../TranscodingSettings.svelte';
 import { saveArmConfig } from '$lib/api/settings';
 import { setTranscoderEnabled } from '$lib/stores/config';

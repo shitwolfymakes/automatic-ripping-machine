@@ -112,7 +112,7 @@ function deferred<T>() {
 
 async function harness() {
 	vi.resetModules();
-	const utils = await import('$lib/test-utils');
+	const utils = await import('$lib/testing/render');
 	const Page = (await import('../+page.svelte')).default;
 	const api = await import('$lib/api/transcoder');
 	const gpus = await import('$lib/api/gpus');

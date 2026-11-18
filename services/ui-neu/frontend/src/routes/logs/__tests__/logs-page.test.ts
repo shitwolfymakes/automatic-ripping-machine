@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { renderComponent, screen, fireEvent, cleanup, waitFor, within } from '$lib/test-utils';
+import { renderComponent, screen, fireEvent, cleanup, waitFor, within } from '$lib/testing/render';
 import LogsPage from '../+page.svelte';
 
 const minutesAgo = (m: number) => new Date(Date.now() - m * 60_000).toISOString();
@@ -54,8 +54,14 @@ vi.mock('$lib/stores/dashboard', async () => {
 	const { readable } = await import('svelte/store');
 	return {
 		dashboard: readable({
-			drive_names: {},
-			drive_source_kinds: { drv_iso_with_a_long_name: 'iso' }
+			drives: {
+				drv_iso_with_a_long_name: {
+					name: 'drv_iso_with_a_long_name',
+					kind: 'virtual',
+					source: 'iso',
+					retired: true
+				}
+			}
 		})
 	};
 });

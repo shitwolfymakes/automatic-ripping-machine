@@ -1,8 +1,9 @@
 <script lang="ts">
+	import { errorMessage } from '$lib/utils/errors';
 	import type { Snippet } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { theme, toggleTheme } from '$lib/stores/theme';
-	import Glyph from '$lib/components/Glyph.svelte';
+	import Glyph from '$lib/components/shared/Glyph.svelte';
 	import { finishLater } from '$lib/stores/setup.svelte';
 
 	// The walkthrough's focused shell: no sidebar, header status strip or
@@ -26,7 +27,7 @@
 			await finishLater();
 			goto('/');
 		} catch (e) {
-			deferError = e instanceof Error ? e.message : 'Could not save Finish later.';
+			deferError = errorMessage(e, 'Could not save Finish later.');
 		} finally {
 			deferring = false;
 		}

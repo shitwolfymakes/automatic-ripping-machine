@@ -18,6 +18,8 @@ from arm_backend.crash_recovery import sweep_in_flight_jobs
 from arm_backend.db import SessionLocal
 from arm_backend.gpu_inventory import refresh_gpu_inventory
 from arm_backend.gpu_probe_runner import GpuProbeRunner
+from arm_backend.handbrake_schema_runner import HandbrakeSchemaRunner
+from arm_backend.handbrake_schema_store import SchemaStore
 from arm_backend.identity.stage_runner import EpisodeStageRunner
 from arm_backend import image_cache
 from arm_backend.disk_refresh import DiskRefresher
@@ -36,6 +38,7 @@ from arm_backend.ripper_reconcile import reconcile_enrolled_rippers
 from arm_backend.routers import (
     gpus as gpus_router,
     encoders as encoders_router,
+    handbrake_schema as handbrake_schema_router,
     auth,
     config as config_router,
     diagnostics,
@@ -183,6 +186,7 @@ class _BackendServices:
             "startup episode-stage sweep failed: %s",
         )
 
+        await self._load_handbrake_schema_store()
         self._transcode_dispatcher = self._build_transcode_dispatcher()
         # One-shot sweeps run in every mode (they are DB/file-side, not
         # docker-side): a ripper-only deployment still needs orphaned
@@ -200,6 +204,7 @@ class _BackendServices:
         )
         self._start_transcode_dispatcher()
         gpu_probe_runner = self._start_gpu_probe_runner()
+        handbrake_schema_runner = self._start_handbrake_schema_runner()
 
         await self._start_ripper_manager()
 
@@ -221,6 +226,7 @@ class _BackendServices:
             # Cancels the boot pass and any re-probe, waiting briefly so each
             # cancelled probe removes its container.
             ("gpu probe runner", gpu_probe_runner.shutdown),
+            ("handbrake schema runner", handbrake_schema_runner.shutdown),
             ("transcode dispatcher", self._stop_transcode_dispatcher),
             ("episode stage runner", self._app.state.episode_stage.shutdown),
             ("metadata dispatcher", self._app.state.dispatcher.aclose),
@@ -278,6 +284,7 @@ class _BackendServices:
             docker_client=docker_client,
             hub=self._app.state.ws_hub,
             docker_client_factory=_make_docker_client if capable else None,
+            schema_store=self._app.state.handbrake_schema_store,
         )
 
     def _start_transcode_dispatcher(self) -> None:
@@ -286,6 +293,23 @@ class _BackendServices:
         self._dispatcher_task = asyncio.create_task(self._transcode_dispatcher.run())
         self._app.state.transcode_dispatcher = self._transcode_dispatcher
         set_active_dispatcher(self._transcode_dispatcher)
+
+    async def _load_handbrake_schema_store(self) -> None:
+        """Publish the schema store with the newest stored dump loaded, so claim and register have a schema
+        before the boot run finishes."""
+        store = SchemaStore()
+        async with SessionLocal() as db:
+            await store.load_latest(db)
+        self._app.state.handbrake_schema_store = store
+
+    def _start_handbrake_schema_runner(self) -> HandbrakeSchemaRunner:
+        """Start the boot dump of the transcode image's HandBrake schema; returns the runner for shutdown."""
+        runner = HandbrakeSchemaRunner(
+            settings, SessionLocal, self._transcode_dispatcher, self._app.state.handbrake_schema_store
+        )
+        self._app.state.handbrake_schema_runner = runner
+        runner.start_boot_run()
+        return runner
 
     def _start_gpu_probe_runner(self) -> GpuProbeRunner:
         """Start the boot pass of per-device GPU probes; returns the runner for
@@ -477,6 +501,7 @@ app.include_router(transcoder.router)
 app.include_router(transcodes.router)
 app.include_router(gpus_router.router)
 app.include_router(encoders_router.router)
+app.include_router(handbrake_schema_router.router)
 app.include_router(config_router.router)
 app.include_router(diagnostics.router)
 app.include_router(metadata_router.router)

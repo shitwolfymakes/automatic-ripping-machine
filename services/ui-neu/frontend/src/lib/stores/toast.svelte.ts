@@ -1,11 +1,11 @@
 export type ToastTone = 'success' | 'error' | 'info';
 
-export interface ToastLink {
+interface ToastLink {
 	href: string;
 	label: string;
 }
 
-export interface Toast {
+interface Toast {
 	id: number;
 	tone: ToastTone;
 	title: string;

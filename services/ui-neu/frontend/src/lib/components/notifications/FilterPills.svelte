@@ -1,5 +1,5 @@
 <script lang="ts">
-	import type { ChannelFilter } from './channelFilters';
+	import type { ChannelFilter } from '../../notifications/channel-filters';
 	let {
 		active,
 		counts,

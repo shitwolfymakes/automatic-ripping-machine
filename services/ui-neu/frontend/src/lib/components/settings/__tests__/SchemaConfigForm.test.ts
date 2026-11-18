@@ -1,11 +1,11 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { createRawSnippet } from 'svelte';
-import { renderComponent, screen, fireEvent, cleanup, waitFor, within } from '$lib/test-utils';
+import { renderComponent, screen, fireEvent, cleanup, waitFor, within } from '$lib/testing/render';
 import SchemaConfigForm from '../SchemaConfigForm.svelte';
 import { ApiError } from '$lib/api/client';
-import { sectionFields } from '$lib/utils/settings-sections';
+import { sectionFields } from '$lib/settings/sections';
 import type { SettingsGroup, KeyCheckResponse, ConfigFieldMeta } from '$lib/types/api.gen';
-import { IDENTITY_METAS, IDENTITY_DEFAULTS } from '$lib/utils/__tests__/fixtures/identity-metas';
+import { IDENTITY_METAS, IDENTITY_DEFAULTS } from '$lib/__fixtures__/identity-metas';
 
 const saveArmConfig = vi.fn((_config: Record<string, unknown>) => Promise.resolve({ success: true }));
 const checkApiKey = vi.fn((_name: string, _value?: string): Promise<KeyCheckResponse> =>
@@ -20,8 +20,8 @@ vi.mock('$lib/api/settings', () => ({
 // here it's a spy over the real implementation so most tests see the real
 // Metadata sections while the layout-hints test below can swap in a fixed
 // shape without depending on the production section map.
-vi.mock('$lib/utils/settings-sections', async () => {
-	const actual = await vi.importActual<typeof import('$lib/utils/settings-sections')>('$lib/utils/settings-sections');
+vi.mock('$lib/settings/sections', async () => {
+	const actual = await vi.importActual<typeof import('$lib/settings/sections')>('$lib/settings/sections');
 	return { ...actual, sectionFields: vi.fn(actual.sectionFields) };
 });
 

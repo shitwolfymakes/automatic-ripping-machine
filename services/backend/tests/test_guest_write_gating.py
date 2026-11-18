@@ -24,6 +24,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from arm_backend.db import get_session
+from arm_backend.handbrake_schema_store import SchemaStore
 from arm_backend.jwt_utils import issue_access_token
 from arm_backend.constants import CONFIG_SINGLETON_ID
 from arm_backend.routers import (
@@ -100,6 +101,7 @@ def _app() -> tuple[FastAPI, FakeSession]:
     app.state.ws_hub = None
     app.state.dispatcher = None
     app.state.notifier = None
+    app.state.handbrake_schema_store = SchemaStore()
     for m in _ALL_ROUTERS:
         app.include_router(m.router)
 

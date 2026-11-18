@@ -1,9 +1,9 @@
 <script lang="ts">
 	import { getContext, tick } from 'svelte';
-	import Glyph from '$lib/components/Glyph.svelte';
+	import Glyph from '$lib/components/shared/Glyph.svelte';
 	import type { ConfigFieldMeta, SettingsGroup } from '$lib/types/api.gen';
 	import { missingKey, rankedRows, rankedSelected, swapRank, type RankDirection } from '$lib/utils/ranked-list';
-	import { SETTINGS_SCHEMA_CONTEXT, settingsFieldHref } from '$lib/utils/settings-sections';
+	import { SETTINGS_SCHEMA_CONTEXT, settingsFieldHref } from '$lib/settings/sections';
 
 	let {
 		field,

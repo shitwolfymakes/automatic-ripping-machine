@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { errorMessage } from '$lib/utils/errors';
 	import type { Channel, Catalog } from '$lib/types/notifications';
 	import {
 		fetchChannels,
@@ -13,7 +14,7 @@
 	import { addToast } from '$lib/stores/toast.svelte';
 	import StatStrip from './StatStrip.svelte';
 	import FilterPills from './FilterPills.svelte';
-	import { filterCounts, matchesFilter, summaryCounts, type ChannelFilter } from './channelFilters';
+	import { filterCounts, matchesFilter, summaryCounts, type ChannelFilter } from '../../notifications/channel-filters';
 	import ChannelList from './ChannelList.svelte';
 	import AddChannelForm from './AddChannelForm.svelte';
 	import {
@@ -22,9 +23,9 @@
 		testUnsavedBody,
 		type AddChannelBody,
 		type TestOutcome
-	} from './channelActions';
-	import { editorPatch, editorTestPayload, type EditorBody } from './channelEdits';
-	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
+	} from '../../notifications/channel-actions';
+	import { editorPatch, editorTestPayload, type EditorBody } from '../../notifications/channel-edits';
+	import ConfirmDialog from '$lib/components/shared/ConfirmDialog.svelte';
 
 	let channels = $state<Channel[]>([]);
 	let catalog = $state<Catalog>({ featured: [], services: [] });
@@ -56,7 +57,7 @@
 			eventTypes = evts;
 			loaded = true;
 		} catch (e) {
-			loadError = e instanceof Error ? e.message : 'Failed to load channels';
+			loadError = errorMessage(e, 'Failed to load channels');
 		}
 	}
 
@@ -75,7 +76,7 @@
 			addOpen = false;
 			addToast({ tone: 'success', title: 'Channel added', body: `${created.name} is now listening for events.` });
 		} catch (e) {
-			addToast({ tone: 'error', title: 'Add failed', body: e instanceof Error ? e.message : 'Unknown error' });
+			addToast({ tone: 'error', title: 'Add failed', body: errorMessage(e, 'Unknown error') });
 		}
 	}
 
@@ -97,7 +98,7 @@
 			channels = channels.map((x) => (x.id === c.id ? updated : x));
 			addToast({ tone: 'success', title: 'Saved.' });
 		} catch (e) {
-			addToast({ tone: 'error', title: 'Save failed', body: e instanceof Error ? e.message : '' });
+			addToast({ tone: 'error', title: 'Save failed', body: errorMessage(e, '') });
 		}
 	}
 
@@ -142,7 +143,7 @@
 			if (expandedId === c.id) expandedId = null;
 			addToast({ tone: 'info', title: `Deleted ${c.name}` });
 		} catch (e) {
-			addToast({ tone: 'error', title: 'Delete failed', body: e instanceof Error ? e.message : '' });
+			addToast({ tone: 'error', title: 'Delete failed', body: errorMessage(e, '') });
 		}
 	}
 

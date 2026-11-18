@@ -1,25 +1,26 @@
 <script lang="ts">
+	import { plural } from '$lib/utils/plural';
 	import SetupChecklistCard from '$lib/components/setup/SetupChecklistCard.svelte';
 	import { onMount } from 'svelte';
 	import { fetchDashboard } from '$lib/api/dashboard';
-	import { DashboardJobs } from '$lib/stores/dashboardJobs.svelte';
+	import { DashboardJobs } from '$lib/stores/dashboard-jobs.svelte';
 	import type { DashboardData } from '$lib/api/dashboard';
-	import DiscReviewWidget from '$lib/components/DiscReviewWidget.svelte';
-	import ActiveJobRow from '$lib/components/ActiveJobRow.svelte';
-	import IsoPreparingRow from '$lib/components/IsoPreparingRow.svelte';
-	import { ripProgress, startWS, stopWS, reconcileSubscriptions } from '$lib/stores/rips.svelte';
-	import TranscodeCard from '$lib/components/TranscodeCard.svelte';
-	import DashboardSection from '$lib/components/DashboardSection.svelte';
-	import AllJobsPanel from '$lib/components/AllJobsPanel.svelte';
-	import EmptyDashboardPanel from '$lib/components/EmptyDashboardPanel.svelte';
-	import { fadeIn } from '$lib/transitions';
+	import DiscReviewWidget from '$lib/components/dashboard/DiscReviewWidget.svelte';
+	import ActiveJobRow from '$lib/components/dashboard/ActiveJobRow.svelte';
+	import IsoPreparingRow from '$lib/components/dashboard/IsoPreparingRow.svelte';
+	import { wsClient } from '$lib/api/ws';
+	import TranscodeCard from '$lib/components/dashboard/TranscodeCard.svelte';
+	import DashboardSection from '$lib/components/dashboard/DashboardSection.svelte';
+	import AllJobsPanel from '$lib/components/dashboard/AllJobsPanel.svelte';
+	import EmptyDashboardPanel from '$lib/components/dashboard/EmptyDashboardPanel.svelte';
+	import { fadeIn } from '$lib/ui/transitions';
 	import { fade } from 'svelte/transition';
-	import { groupActiveJobs } from '$lib/utils/dashboard-groups';
-	import { isoSourceFor, isoKindFor } from '$lib/utils/iso-source';
+	import { groupActiveJobs } from '$lib/dashboard/groups';
+	import { driveSummary } from '$lib/drives/summary';
 	import { transcoderEnabled } from '$lib/stores/config';
 	import { dashboard } from '$lib/stores/dashboard';
 	import { get } from 'svelte/store';
-	import { startRipperEvents, onRipperEvent } from '$lib/stores/ripperEvents.svelte';
+	import { startRipperEvents, onRipperEvent } from '$lib/stores/ripper-events.svelte';
 
 	// --- Dashboard state ---
 	// Seed from the persistent singleton store the layout already polls, so
@@ -60,16 +61,9 @@
 	const jobsList = new DashboardJobs();
 	let pageReady = $derived(!dashLoading && !jobsList.loading);
 
-	// Live rip-progress: open the WS once, then keep the per-job
-	// `ripper.progress.{id}` subscriptions in sync with the set of jobs
-	// currently ripping. The $effect re-runs whenever that set changes.
-	$effect(() => {
-		reconcileSubscriptions(nonWaitingActiveJobs.map((j) => j.id));
-	});
-
 	onMount(() => {
 		let stopped = false;
-		startWS();
+		wsClient.start();
 		// Instant status: any ripper.events burst -> immediate refresh of both
 		// surfaces (sections/cards AND the jobs table). Polls below stay as
 		// reconciliation. Unregister only our listener on unmount — the topic
@@ -94,7 +88,6 @@
 		return () => {
 			stopped = true;
 			offRipperEvents();
-			stopWS();
 		};
 	});
 </script>
@@ -139,10 +132,9 @@
 		{#snippet row(job)}
 			<DiscReviewWidget
 				{job}
-				driveNames={dash.drive_names}
-				isoSources={dash.iso_sources}
-				isoSourceKinds={dash.iso_source_kinds}
+				drive={driveSummary(dash.drives, job.drive_id)}
 				paused={!dash.ripping_enabled}
+				manualWaitSeconds={dash.review_wait_seconds}
 				onrefresh={refreshDashboard}
 				ondismiss={() => dismissJob(job.id)}
 			/>
@@ -154,7 +146,7 @@
 		items={preparingRips}
 		key={(prepare) => prepare.drive_id}
 		accent="var(--color-accent-4)"
-		label="PREPARING - {preparingRips.length} {preparingRips.length === 1 ? 'ISO' : 'ISOS'}"
+		label="PREPARING - {preparingRips.length} {plural(preparingRips.length, 'ISO', 'ISOS')}"
 	>
 		{#snippet row(prepare)}
 			<IsoPreparingRow {prepare} />
@@ -166,14 +158,10 @@
 		items={scanningJobs}
 		key={(job) => job.id}
 		accent="var(--color-accent-4)"
-		label="SCANNING - {scanningJobs.length} {scanningJobs.length === 1 ? 'DISC' : 'DISCS'}"
+		label="SCANNING - {scanningJobs.length} {plural(scanningJobs.length, 'DISC', 'DISCS')}"
 	>
 		{#snippet row(job)}
-			<ActiveJobRow
-				{job}
-				isoSource={isoSourceFor(job.drive_id, dash.iso_sources)}
-				isoKind={isoKindFor(job.drive_id, dash.iso_source_kinds)}
-			/>
+			<ActiveJobRow {job} drive={driveSummary(dash.drives, job.drive_id)} />
 		{/snippet}
 	</DashboardSection>
 
@@ -185,14 +173,7 @@
 		label="ACTIVE RIPS - {nonWaitingActiveJobs.length} IN PROGRESS"
 	>
 		{#snippet row(job)}
-			<ActiveJobRow
-				{job}
-				progress={ripProgress.value[job.id]?.progress_pct ?? null}
-				eta={ripProgress.value[job.id]?.eta_seconds ?? null}
-				live={ripProgress.value[job.id] ?? null}
-				isoSource={isoSourceFor(job.drive_id, dash.iso_sources)}
-				isoKind={isoKindFor(job.drive_id, dash.iso_source_kinds)}
-			/>
+			<ActiveJobRow {job} drive={driveSummary(dash.drives, job.drive_id)} />
 		{/snippet}
 	</DashboardSection>
 
@@ -201,7 +182,7 @@
 		items={finishingJobs}
 		key={(job) => job.id}
 		accent="var(--color-accent-1)"
-		label="FINISHING - {finishingJobs.length} {finishingJobs.length === 1 ? 'JOB' : 'JOBS'}"
+		label="FINISHING - {finishingJobs.length} {plural(finishingJobs.length, 'JOB', 'JOBS')}"
 	>
 		{#snippet row(job)}
 			<ActiveJobRow {job} />

@@ -8,6 +8,7 @@ import pytest
 
 from arm_common import ContainerFormat, MediaType, TranscodeTool
 from arm_common.schemas import TranscodePresetView
+from arm_common.schemas.handbrake import HandbrakeSettings
 from arm_transcode.heartbeat import ProgressState
 from arm_transcode.main import _MAX_ERROR_CHARS, _clip_error
 
@@ -116,7 +117,7 @@ def _handbrake_preset(*, preset_ref: str | None, extra_args: str | None = None) 
         is_builtin=True,
         tool=TranscodeTool.HANDBRAKE,
         preset_ref=preset_ref,
-        preset_json=None,
+        handbrake_settings=None,
         container=ContainerFormat.MKV,
         encoder="vaapi_h265",
         extra_args=extra_args,
@@ -317,6 +318,23 @@ async def test_run_encoder_handbrake_requires_preset_ref(monkeypatch, tmp_path) 
 
 
 @pytest.mark.asyncio
+async def test_run_encoder_handbrake_with_empty_settings_still_requires_preset_ref(monkeypatch, tmp_path) -> None:
+    _clear_encoder_env(monkeypatch)
+    preset = _handbrake_preset(preset_ref=None).model_copy(update={"handbrake_settings": HandbrakeSettings()})
+    with pytest.raises(RuntimeError, match="transcode tool=handbrake requires a preset_ref"):
+        await _call_run_encoder(tmp_path, tool=TranscodeTool.HANDBRAKE, preset=preset)
+
+
+@pytest.mark.asyncio
+async def test_run_encoder_abcde_with_settings_still_requires_preset_ref(monkeypatch, tmp_path) -> None:
+    _clear_encoder_env(monkeypatch)
+    settings = HandbrakeSettings(common={"PictureWidth": 1280})
+    preset = _audio_preset(preset_ref=None).model_copy(update={"handbrake_settings": settings})
+    with pytest.raises(RuntimeError, match="transcode tool=abcde requires a preset_ref"):
+        await _call_run_encoder(tmp_path, tool=TranscodeTool.ABCDE, preset=preset)
+
+
+@pytest.mark.asyncio
 async def test_run_encoder_abcde_requires_a_preset(monkeypatch, tmp_path) -> None:
     _clear_encoder_env(monkeypatch)
     with pytest.raises(RuntimeError, match="transcode tool=abcde requires a preset_ref"):
@@ -490,3 +508,25 @@ def test_require_gpu_device_raises_when_empty(monkeypatch: pytest.MonkeyPatch) -
 
     with pytest.raises(RuntimeError, match="ffmpeg_vaapi encoder requires ARM_GPU_DEVICE"):
         m._require_gpu_device()
+
+
+def test_main_runs_the_task_when_no_mode_flag_is_given(monkeypatch: pytest.MonkeyPatch) -> None:
+    from arm_transcode import main as m
+
+    async def fake_run() -> int:
+        return 7
+
+    monkeypatch.setattr(m.sys, "argv", ["arm_transcode.main"])
+    monkeypatch.setattr(m, "run", fake_run)
+    assert m.main() == 7
+
+
+def test_dump_schema_mode_needs_no_backend_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    from arm_transcode import main as m
+
+    calls: list[str] = []
+    monkeypatch.setattr(m.sys, "argv", ["arm_transcode.main", "--dump-schema"])
+    monkeypatch.setattr(m, "dump_schema", lambda: calls.append("dump") or 0)
+    monkeypatch.setattr(m, "run", lambda: pytest.fail("must not start the task"))
+    assert m.main() == 0
+    assert calls == ["dump"]

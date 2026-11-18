@@ -17,8 +17,10 @@ The caller (`main._run_encoder`) resolves the encoder via the engine seam
 (`arm_transcode.engines.selected_encoder` + `.engines.handbrake_engine.
 encoder_args`) and passes the resulting `--encoder <id>` pair in as
 `encoder_args`, appended *after* `--preset` so HandBrake's preset-driven
-encoder is overridden. `extra_args` from the user-defined preset still
-appends last (escape hatch).
+encoder is overridden. A preset with HandBrake settings instead imports a
+materialised one-preset file (`--preset-import-file <file> --preset arm`)
+and its `encoder_args` come from `materialise` (spec 4.7). `extra_args`
+from the user-defined preset still appends last (escape hatch).
 """
 
 from __future__ import annotations
@@ -60,23 +62,33 @@ _PROGRESS_LINE_RE = re.compile(
 )
 
 
+def _preset_args(preset_ref: str | None, preset_file: Path | None) -> list[str]:
+    """`--preset-import-file <file> --preset arm` for a settings run; today's `--preset <ref>` otherwise."""
+    if preset_file is not None:
+        return ["--preset-import-file", str(preset_file), "--preset", "arm"]
+    # Only a settings run may lack a base preset; `main._encode` refuses the rest.
+    if preset_ref is None:
+        raise RuntimeError("a HandBrake encode without settings needs a preset_ref")
+    return ["--preset", preset_ref]
+
+
 def build_handbrake_command(
-    *, input_path: Path, output_path: Path, preset_ref: str, extra_args: str | None, encoder_args: list[str]
+    *,
+    input_path: Path,
+    output_path: Path,
+    preset_ref: str | None,
+    extra_args: str | None,
+    encoder_args: list[str],
+    preset_file: Path | None = None,
 ) -> list[str]:
     """The HandBrakeCLI argv for one encode.
 
-    Input, output and preset come first, then the encoder args, then any
-    extra args split on whitespace.
+    Input, output and preset come first (the imported `arm` preset when
+    `preset_file` is given, else the built-in `preset_ref`), then the
+    encoder args, then any extra args split on whitespace.
     """
-    cmd: list[str] = [
-        "HandBrakeCLI",
-        "-i",
-        str(input_path),
-        "-o",
-        str(output_path),
-        "--preset",
-        preset_ref,
-    ]
+    cmd: list[str] = ["HandBrakeCLI", "-i", str(input_path), "-o", str(output_path)]
+    cmd.extend(_preset_args(preset_ref, preset_file))
     cmd.extend(encoder_args)
     if extra_args:
         cmd.extend(extra_args.split())
@@ -87,10 +99,11 @@ async def transcode_handbrake(
     *,
     input_path: Path,
     output_path: Path,
-    preset_ref: str,
+    preset_ref: str | None,
     extra_args: str | None,
     encoder_args: list[str],
     progress_callback: ProgressCallback,
+    preset_file: Path | None = None,
 ) -> int:
     """Run HandBrakeCLI; stream text progress; return final file size in bytes.
 
@@ -103,6 +116,7 @@ async def transcode_handbrake(
         preset_ref=preset_ref,
         extra_args=extra_args,
         encoder_args=encoder_args,
+        preset_file=preset_file,
     )
 
     logger.info("HandBrakeCLI launching: %s", " ".join(cmd))

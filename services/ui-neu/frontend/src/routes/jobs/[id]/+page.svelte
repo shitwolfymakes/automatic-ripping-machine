@@ -2,41 +2,42 @@
 	import { goto } from '$app/navigation';
 	import { page } from '$app/stores';
 	import { onMount } from 'svelte';
-	import { jobPoster } from '$lib/utils/poster';
-	import PosterImage from '$lib/components/PosterImage.svelte';
+	import { jobPoster } from '$lib/match/poster';
+	import PosterImage from '$lib/components/shared/PosterImage.svelte';
 	import type { ResolveResponse, ApplySessionResponse } from '$lib/types/api.gen';
-	import JobFactsGrid from '$lib/components/JobFactsGrid.svelte';
-	import type { EditableJobField } from '$lib/utils/job-fields';
-	import JobHeaderActions from '$lib/components/JobHeaderActions.svelte';
-	import JobTitleBar from '$lib/components/JobTitleBar.svelte';
-	import JobPanelTabs from '$lib/components/JobPanelTabs.svelte';
-	import TitleSearch from '$lib/components/TitleSearch.svelte';
-	import JobTracksTable from '$lib/components/JobTracksTable.svelte';
-	import JobFingerprints from '$lib/components/JobFingerprints.svelte';
-	import JobMusicTracklist from '$lib/components/JobMusicTracklist.svelte';
-	import MusicSearch from '$lib/components/MusicSearch.svelte';
+	import JobFactsGrid from '$lib/components/jobs/JobFactsGrid.svelte';
+	import type { EditableJobField } from '$lib/jobs/fields';
+	import JobHeaderActions from '$lib/components/jobs/JobHeaderActions.svelte';
+	import JobTitleBar from '$lib/components/jobs/JobTitleBar.svelte';
+	import JobPanelTabs from '$lib/components/jobs/JobPanelTabs.svelte';
+	import TitleSearch from '$lib/components/match/TitleSearch.svelte';
+	import JobTracksTable from '$lib/components/jobs/JobTracksTable.svelte';
+	import JobFingerprints from '$lib/components/jobs/JobFingerprints.svelte';
+	import JobMusicTracklist from '$lib/components/jobs/JobMusicTracklist.svelte';
+	import MusicSearch from '$lib/components/music/MusicSearch.svelte';
 	import EpisodeMatchPanel from '$lib/components/episodes/EpisodeMatchPanel.svelte';
-	import IdentifyDialog from '$lib/components/IdentifyDialog.svelte';
-	import ApplySessionDialog from '$lib/components/ApplySessionDialog.svelte';
-	import JobLifecycle from '$lib/components/JobLifecycle.svelte';
-	import { identitySuggestionOf } from '$lib/utils/job-review';
-	import { effectiveJobStatus, isPartialComplete } from '$lib/utils/job-status';
-	import IdentitySuggestionBanner from '$lib/components/IdentitySuggestionBanner.svelte';
-	import { isLive } from '$lib/utils/job-status-groups';
-	import { applyNote, identifyNote } from '$lib/utils/job-action-notes';
+	import IdentifyDialog from '$lib/components/jobs/IdentifyDialog.svelte';
+	import ApplySessionDialog from '$lib/components/jobs/ApplySessionDialog.svelte';
+	import StageRail from '$lib/components/jobs/StageRail.svelte';
+	import LiveProgressLine from '$lib/components/jobs/LiveProgressLine.svelte';
+	import { railRipProgress } from '$lib/jobs/rip-progress';
+	import { jobLive } from '$lib/stores/job-live.svelte';
+	import { wsClient } from '$lib/api/ws';
+	import { identitySuggestionOf } from '$lib/jobs/review';
+	import IdentitySuggestionBanner from '$lib/components/jobs/IdentitySuggestionBanner.svelte';
+	import { isLive } from '$lib/jobs/status-groups';
+	import { applyNote, identifyNote } from '$lib/jobs/action-notes';
 	import { fetchSessions } from '$lib/api/sessions';
-	import { buildMetadataFields } from '$lib/utils/job-fields';
-	import LoadState from '$lib/components/LoadState.svelte';
-	import SkeletonCard from '$lib/components/SkeletonCard.svelte';
-	import JobRawMetadata from '$lib/components/JobRawMetadata.svelte';
-	import JobLogPanel from '$lib/components/JobLogPanel.svelte';
-	import { EpisodeMatching, watchEpisodeMatching } from '$lib/stores/episodeMatching.svelte';
-	import { reconcileSubscriptions, startWS } from '$lib/stores/rips.svelte';
-	import JobRipProgress from '$lib/components/JobRipProgress.svelte';
+	import { buildMetadataFields } from '$lib/jobs/fields';
+	import LoadState from '$lib/components/shared/LoadState.svelte';
+	import SkeletonCard from '$lib/components/shared/SkeletonCard.svelte';
+	import JobRawMetadata from '$lib/components/jobs/JobRawMetadata.svelte';
+	import JobLogPanel from '$lib/components/jobs/JobLogPanel.svelte';
+	import { EpisodeMatching, watchEpisodeMatching } from '$lib/stores/episode-matching.svelte';
 	import { isAdmin } from '$lib/stores/auth';
 	import { dashboard } from '$lib/stores/dashboard';
-	import { JobDetail } from '$lib/stores/jobDetail.svelte';
-	import { JobPanels } from '$lib/stores/jobPanels.svelte';
+	import { JobDetail } from '$lib/stores/job-detail.svelte';
+	import { JobPanels } from '$lib/stores/job-panels.svelte';
 
 	const jobDetail = new JobDetail(() => $page.params.id ?? '');
 	let detail = $derived(jobDetail.detail);
@@ -75,7 +76,7 @@
 	}
 
 	let sessionNames = $state(new Map<string, string>());
-	let metadataFields = $derived(detail ? buildMetadataFields(detail.job, $dashboard.drive_names, sessionNames) : []);
+	let metadataFields = $derived(detail ? buildMetadataFields(detail.job, $dashboard.drives, sessionNames) : []);
 
 	function handleTitleApply() {
 		panels.active = null;
@@ -116,17 +117,9 @@
 		}
 	});
 
-	// Live rip progress for this job (the same ripper.progress feed the
-	// dashboard uses): subscribed only while the job is ripping.
-	let ripping = $derived(detail?.job.status === 'ripping');
-	$effect(() => {
-		const id = detail?.job.id;
-		reconcileSubscriptions(ripping && id ? [id] : []);
-	});
-
 	onMount(() => {
 		let stopped = false;
-		startWS();
+		wsClient.start();
 		fetchSessions()
 			.then((s) => (sessionNames = new Map(s.map((x) => [x.id, x.name]))))
 			.catch(() => {});
@@ -155,7 +148,6 @@
 		return () => {
 			stopped = true;
 			offRipperEvents();
-			reconcileSubscriptions([]);
 			matching.stop();
 		};
 	});
@@ -259,11 +251,18 @@
 
 			<!-- Lifecycle widget: visual stage progression below header, above status bars -->
 			<div class="job-detail-lifecycle-card">
-				<JobLifecycle status={effectiveJobStatus(job)} sourceType={null} size="md" partial={isPartialComplete(job)} />
+				<StageRail job={{ ...job, rip_progress: railRipProgress(job, tracks) }} size="md" />
 			</div>
 
-			{#if ripping}
-				<JobRipProgress jobId={job.id} />
+			{#if job.status === 'ripping'}
+				{@const sample = jobLive.get(job.id).rip}
+				<!-- StageRail above holds the watch on this job, so the card only reads. -->
+				<section class="job-detail-lifecycle-card stack" data-testid="job-rip-progress">
+					<h2 class="job-detail-section-title">
+						{sample?.phase === 'verifying' ? 'Verifying ripped files' : 'Ripping'}
+					</h2>
+					<LiveProgressLine {sample} />
+				</section>
 			{/if}
 
 			<!-- Tracks -->
@@ -303,7 +302,7 @@
 		{#if showIdentify}
 			<IdentifyDialog
 				{job}
-				driveNames={$dashboard.drive_names}
+				drives={$dashboard.drives}
 				onclose={() => (showIdentify = false)}
 				onidentified={handleIdentified}
 			/>
@@ -377,6 +376,12 @@
 	.job-detail-panel-content {
 		border-top: 1px solid var(--color-border);
 		padding: 1.25rem;
+	}
+	.job-detail-section-title {
+		font-size: 1.125rem;
+		line-height: 1.75rem;
+		font-weight: 600;
+		color: var(--color-text);
 	}
 	.job-detail-lifecycle-card {
 		border: 1px solid var(--color-border);

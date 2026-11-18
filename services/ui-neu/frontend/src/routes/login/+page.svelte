@@ -1,11 +1,12 @@
 <script lang="ts">
+	import { errorMessage } from '$lib/utils/errors';
 	import { onMount } from 'svelte';
 	import { probeFirstRun, probeGuestAccess } from '$lib/api/probes';
 	import { goto } from '$app/navigation';
-	import { reveal } from '$lib/transitions';
+	import { reveal } from '$lib/ui/transitions';
 	import { login } from '$lib/api/auth';
 	import { applyLogin, isGuest } from '$lib/stores/auth';
-	import CopyBlock from '$lib/components/CopyBlock.svelte';
+	import CopyBlock from '$lib/components/shared/CopyBlock.svelte';
 
 	const FIRST_BOOT_COMMAND = 'docker exec armv3-backend cat /logs/first-boot.log';
 
@@ -39,7 +40,7 @@
 			if (firstRun && result.role === 'admin') goto('/setup');
 			else goto(result.password_must_change ? '/change-password' : '/');
 		} catch (err) {
-			error = err instanceof Error ? err.message : 'Login failed';
+			error = errorMessage(err, 'Login failed');
 		} finally {
 			submitting = false;
 		}
