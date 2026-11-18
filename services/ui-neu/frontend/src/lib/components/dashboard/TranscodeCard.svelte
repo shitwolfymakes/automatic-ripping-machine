@@ -134,7 +134,11 @@
 							<tr>
 								<td class="transcode-card-detail-label whitespace-nowrap">Task ID</td>
 								<td class="transcode-card-detail-value">
-									<a href="/jobs/{job.job_id}" class="transcode-card-detail-link">#{job.id}</a>
+									{#if job.job_id}
+										<a href="/jobs/{job.job_id}" class="transcode-card-detail-link">#{job.id}</a>
+									{:else}
+										#{job.id}
+									{/if}
 								</td>
 								<td class="transcode-card-detail-label whitespace-nowrap transcode-card-detail-col2">Status</td>
 								<td class="transcode-card-detail-value"><StatusBadge status={job.status} /></td>
@@ -181,9 +185,11 @@
 						</div>
 					{/if}
 
-					<!-- Link to the owning job via job.job_id. -->
+					<!-- Link to the owning job via job.job_id, when the task has one. -->
 					<div class="cluster transcode-card-detail-actions">
-						<a href="/jobs/{job.job_id}" class="transcode-card-open-job">Open job</a>
+						{#if job.job_id}
+							<a href="/jobs/{job.job_id}" class="transcode-card-open-job">Open job</a>
+						{/if}
 						<a href="/transcoder#task-{job.id}" class="btn btn-sm transcode-card-open-transcoder">Open transcoder</a>
 					</div>
 				</div>

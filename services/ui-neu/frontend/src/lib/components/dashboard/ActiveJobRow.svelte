@@ -58,11 +58,6 @@
 	let expanded = $state(false);
 
 	let typeConfig = $derived(getVideoTypeConfig(null, job?.disc_type ?? null));
-	// Gate the progress row on isInProgress: isLive minus the idle post-rip
-	// statuses (ripped, ripped_partial, ripped_awaiting_identify). A job
-	// waiting on the operator shows no progress bar, a transcoding job
-	// (effective 'transcoding') does, and a terminal one (complete/failed)
-	// does not.
 	let accentVar = $derived(statusAccentVar(job?.status));
 
 	function toggle(e: MouseEvent) {
@@ -76,6 +71,9 @@
 	<SkeletonCard lines={3} />
 {:else}
 	{@const live = jobLive.get(job.id)}
+	<!-- The progress row shows while the job is in progress: live minus the
+	     idle post-rip statuses, so a transcoding job shows it and a terminal
+	     one does not. -->
 	{@const active = isInProgress(job)}
 	{@const sample = progressSample(job, live)}
 	{@const ripped = job.rip_progress?.tracks_done ?? 0}

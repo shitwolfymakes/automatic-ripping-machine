@@ -1,6 +1,9 @@
 // Open arms the coverage tool reports that are Svelte's, not the component's:
-// the job and task ids in the links and the detail table's progress percent
-// each compile to `(...) ?? ''`; ids are strings and the percent a number.
+// each `{...}` below compiles to `(...) ?? ''` on a value that is never null
+// where it renders. The task's `{job.id}` (a string) in the Task ID cell, both
+// with and without a job link, and in the transcoder link; `{job.job_id}` in
+// the two job links, which render only inside `{#if job.job_id}`; and the
+// detail table's progress percent (a number).
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderComponent, screen, fireEvent, cleanup, waitFor } from '$lib/testing/render';
 import TranscodeCard from '../TranscodeCard.svelte';
@@ -112,6 +115,15 @@ describe('TranscodeCard', () => {
 	describe('expanded state', () => {
 		beforeEach(() => {
 			vi.useRealTimers(); // slide transition needs real timers
+		});
+
+		it('links no job when the task has none, and still shows its id and the transcoder link', async () => {
+			const { container } = renderComponent(TranscodeCard, { props: { job: createTranscodeTask({ job_id: null }) } });
+			await fireEvent.click(screen.getByText('my_movie.mkv'));
+			await waitFor(() => expect(screen.getByText('Open transcoder')).toBeInTheDocument());
+			expect(screen.queryByText('Open job')).toBeNull();
+			expect(container.querySelector('a[href^="/jobs/"]')).toBeNull();
+			expect(screen.getByText(/#t-1/)).toBeInTheDocument();
 		});
 
 		it('shows Open job + Open transcoder buttons when expanded', async () => {
