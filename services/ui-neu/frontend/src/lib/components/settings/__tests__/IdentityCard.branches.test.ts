@@ -3,8 +3,14 @@ import { renderComponent, screen, cleanup, fireEvent } from '$lib/testing/render
 import IdentityCardHarness from './IdentityCardHarness.svelte';
 import { IDENTITY_METAS, IDENTITY_DEFAULTS } from '$lib/__fixtures__/identity-metas';
 
-// Branch pins for IdentityCard, beside IdentityCard.test.ts. No branch is
-// left open.
+// Branch pins for IdentityCard, beside IdentityCard.test.ts. Every branch of
+// IdentityCard's own code is covered. The coverage tool still reports arms and
+// functions that are Svelte's:
+// - each `id`, `data-testid` and `describedby` built from a key, and each help
+//   text `{...}`, compiles to `(...) ?? ''`; keys and help texts are strings.
+// - each `bind:value={values[...]}` compiles to a getter, a setter and one more
+//   generated function that never runs. The setters do run: the tolerance test
+//   below and the source toggles in IdentityCard.test.ts write through them.
 
 afterEach(() => cleanup());
 
