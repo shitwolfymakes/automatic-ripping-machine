@@ -1,3 +1,6 @@
+// Open arm the coverage tool reports that is Svelte's, not the component's:
+// the error text `{error!.message}` compiles to `(...) ?? ''`, and an Error's
+// message is always a string.
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import { renderComponent, screen, cleanup } from '$lib/testing/render';
 import { createRawSnippet } from 'svelte';

@@ -1,11 +1,8 @@
 <script lang="ts">
-	// SidebarStats reads from the resources store.
-	// BottomStatsBar owns the lifecycle (startResources/stopResources);
-	// SidebarStats is a pure reader — calling startResources() here is safe
-	// because start() resets any prior timer (idempotent), but to keep things
-	// simple we only read $resources. If SidebarStats renders without
-	// BottomStatsBar mounted, resources will show the initial empty snapshot
-	// until BottomStatsBar mounts and starts the poll.
+	// SidebarStats reads from the resources store; BottomStatsBar owns the
+	// poll's lifecycle (startResources/stopResources). The panel is drawn only
+	// once the first poll has landed ($ready), so it never shows the empty
+	// initial snapshot.
 	import { resources } from '$lib/stores/resources.svelte';
 	import { barColor, filesHref } from '$lib/dashboard/resource-bars';
 	import { fade } from 'svelte/transition';

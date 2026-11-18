@@ -1,3 +1,9 @@
+// Open arms the coverage tool reports, none of which can run. Four are
+// Svelte's: the memory used and total and a disk's free space are numbers, and
+// the CPU temperature text is a string, each interpolated through a compiled
+// `(...) ?? ''`. One is the component's own: `($resources.cpu_temp ?? 0)` in
+// the temperature text sits inside `{#if ($resources.cpu_temp ?? 0) > 0}`, so
+// cpu_temp is always set where it is read.
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { renderComponent, screen, cleanup } from '$lib/testing/render';
 import { flushSync } from 'svelte';

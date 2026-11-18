@@ -1,3 +1,6 @@
+// Open arm the coverage tool reports that is Svelte's, not the component's:
+// the fallback's class attribute interpolates `{className}`, which compiles to
+// `(...) ?? ''`, and `className` defaults to an empty string.
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { renderComponent, cleanup, fireEvent } from '$lib/testing/render';
 import PosterImage from '../PosterImage.svelte';

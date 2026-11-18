@@ -1,3 +1,6 @@
+// Open arms the coverage tool reports that are Svelte's, not the component's:
+// the memory used and total and a disk's free space each compile to
+// `(...) ?? ''`, and all three are numbers.
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import { flushSync } from 'svelte';
 import type { Writable } from 'svelte/store';
