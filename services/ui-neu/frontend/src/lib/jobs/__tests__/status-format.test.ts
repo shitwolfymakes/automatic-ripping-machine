@@ -56,6 +56,8 @@ describe('statusLabel', () => {
 		['done_partial', 'Done (partial)'],
 		// Unmapped statuses humanize
 		['video_ripping', 'Video Ripping'],
+		// A doubled underscore leaves an empty word, kept as is
+		['some__state', 'Some  State'],
 		[null, 'Unknown']
 	])('statusLabel(%s) = %s', (input, expected) => {
 		expect(statusLabel(input)).toBe(expected);
@@ -68,6 +70,7 @@ describe('statusAccentVar', () => {
 		['ripping', 'var(--color-status-ripping)'],
 		['identified', 'var(--color-status-ripping)'],
 		['transcoding', 'var(--color-status-transcoding)'],
+		['awaiting_user_id', 'var(--color-status-waiting)'],
 		['awaiting_review', 'var(--color-status-waiting)'],
 		['waiting_identify', 'var(--color-status-waiting)'],
 		['complete', 'var(--color-status-success)'],
