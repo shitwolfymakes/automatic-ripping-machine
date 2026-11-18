@@ -1,3 +1,6 @@
+// Open arm the coverage tool reports that is Svelte's, not the page's: the
+// `<title>` text `{detail?.job.title || 'Job Detail'}` compiles to
+// `(...) ?? ''`, and the expression is always a string.
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import { renderComponent, screen, cleanup, waitFor, fireEvent } from '$lib/testing/render';
 import JobDetailPage from '../[id]/+page.svelte';
@@ -171,7 +174,8 @@ describe('Job Detail Page', () => {
 		it('redirects to home on 404', async () => {
 			const { fetchJob } = await import('$lib/api/jobs');
 			const { goto } = await import('$app/navigation');
-			vi.mocked(fetchJob).mockRejectedValueOnce(new Error('404 Not Found'));
+			const { ApiError } = await import('$lib/api/client');
+			vi.mocked(fetchJob).mockRejectedValueOnce(new ApiError(404, 'unknown job_id: job_1', null));
 
 			renderComponent(JobDetailPage);
 			await waitFor(() => {

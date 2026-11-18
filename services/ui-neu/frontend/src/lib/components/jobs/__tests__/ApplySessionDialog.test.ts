@@ -1,3 +1,7 @@
+// Open arms the coverage tool reports that are Svelte's, not the component's:
+// each session `<option value={s.id}>{s.name} ({s.media_type})` compiles to
+// `(...) ?? ''` arms plus a select-sync `if`; ids, names and media types are
+// strings.
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import { renderComponent, screen, fireEvent, cleanup, waitFor } from '$lib/testing/render';
 import ApplySessionDialog from '../ApplySessionDialog.svelte';
@@ -114,7 +118,15 @@ describe('ApplySessionDialog', () => {
 		});
 	});
 
-	it('fetches sessions on mount and lists only media-type-matching (+ tv) sessions', async () => {
+	it('closes on Cancel', async () => {
+		fetchSessionsMock.mockResolvedValue([]);
+		const onclose = vi.fn();
+		renderComponent(ApplySessionDialog, { props: { job: createJob({ id: 'job_1' }), onclose, onapplied: vi.fn() } });
+		await fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+		expect(onclose).toHaveBeenCalledTimes(1);
+	});
+
+	it('fetches sessions on mount and lists only the sessions the job is compatible with', async () => {
 		fetchSessionsMock.mockResolvedValue([
 			createSession({ id: 'ses_movie', name: 'Movie MKV', media_type: 'movie' }),
 			createSession({ id: 'ses_tv', name: 'TV Episodes', media_type: 'tv' }),
@@ -131,8 +143,8 @@ describe('ApplySessionDialog', () => {
 			expect(screen.getByText(/Movie MKV/)).toBeInTheDocument();
 		});
 		expect(screen.getByText(/TV Episodes/)).toBeInTheDocument();
+		expect(screen.getByText(/Data ISO/)).toBeInTheDocument();
 		expect(screen.queryByText(/Music FLAC/)).not.toBeInTheDocument();
-		expect(screen.queryByText(/Data ISO/)).not.toBeInTheDocument();
 	});
 
 	it('shows all sessions when the disc type maps to no media type (unknown)', async () => {

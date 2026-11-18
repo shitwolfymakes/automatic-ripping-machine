@@ -4,7 +4,7 @@ import {
 	defaultSessionChoices,
 	manualRipSessionChoices,
 	mediaTypesCompatible,
-	sessionsForDisc
+	sessionsForJob
 } from '../sessions';
 
 const presets = [
@@ -69,35 +69,40 @@ describe('mediaTypesCompatible (mirrors auto_session._media_types_compatible)', 
 	});
 });
 
-describe('sessionsForDisc', () => {
+describe('sessionsForJob', () => {
 	const movie = { id: 'movie', media_type: 'movie' };
 	const tv = { id: 'tv', media_type: 'tv' };
 	const music = { id: 'music', media_type: 'music' };
 	const data = { id: 'data', media_type: 'data' };
-	const mixed = [movie, tv, music, data];
+	const iso = { id: 'iso', media_type: 'iso' };
+	const mixed = [movie, tv, music, data, iso];
 
 	it.each([
-		['bluray', [movie, tv]],
-		['dvd', [movie, tv]],
-		['cd', [tv, music]],
-		['data', [tv, data]]
-	] as const)('a %s disc takes its media type plus tv', (discType, expected) => {
-		expect(sessionsForDisc(mixed, discType)).toEqual(expected);
+		['bluray', [movie, tv, data, iso]],
+		['dvd', [movie, tv, data, iso]],
+		['cd', [music]],
+		['data', [data, iso]]
+	] as const)('an unidentified %s disc takes the sessions its disc type is compatible with', (discType, expected) => {
+		expect(sessionsForJob(mixed, { disc_type: discType, media_type: null })).toEqual(expected);
 	});
 
-	it('offers every session for an unknown disc', () => {
-		expect(sessionsForDisc(mixed, 'unknown')).toEqual(mixed);
+	it('offers every session for an unknown disc with no media type', () => {
+		expect(sessionsForJob(mixed, { disc_type: 'unknown' })).toEqual(mixed);
 	});
 
-	it.each(['bluray', 'dvd', 'cd', 'data', 'unknown'] as const)('keeps a tv session for a %s disc', (discType) => {
-		expect(sessionsForDisc([tv], discType)).toEqual([tv]);
+	it.each([
+		['tv', 'dvd', [movie, tv, data, iso]],
+		['music', 'unknown', [music]],
+		['data', 'bluray', [data, iso]]
+	] as const)('a %s job on a %s disc goes by its media type', (mediaType, discType, expected) => {
+		expect(sessionsForJob(mixed, { disc_type: discType, media_type: mediaType })).toEqual(expected);
 	});
 
 	it('keeps the input order', () => {
 		const first = { id: 'a', media_type: 'movie' };
 		const second = { id: 'b', media_type: 'tv' };
 		const third = { id: 'c', media_type: 'movie' };
-		expect(sessionsForDisc([third, second, first], 'dvd')).toEqual([third, second, first]);
+		expect(sessionsForJob([third, second, first], { disc_type: 'dvd' })).toEqual([third, second, first]);
 	});
 });
 
