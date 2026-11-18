@@ -214,7 +214,7 @@
 	   in rather than cutting from the blank page. The motion tokens drop to
 	   0ms under reduced motion. */
 	.layout-shell-enter {
-		animation: layout-shell-enter var(--motion-fast) var(--ease) both;
+		animation: layout-shell-enter var(--motion-fast) var(--ease) backwards;
 	}
 	@keyframes layout-shell-enter {
 		from {
