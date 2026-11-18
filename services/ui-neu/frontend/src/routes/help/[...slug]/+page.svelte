@@ -53,7 +53,9 @@
 			<!-- eslint-disable-next-line svelte/no-at-html-tags -- trusted build-time HTML, see above -->
 			<article class="docs-prose">{@html helpDoc.doc.html}</article>
 			<p class="help-footer">
-				<a class="btn btn-link" href={helpDoc.doc.editUrl} target="_blank" rel="noopener">Edit this page on GitHub</a>
+				<a class="btn btn-link" href={helpDoc.doc.editUrl} target="_blank" rel="noopener noreferrer"
+					>Edit this page on GitHub</a
+				>
 			</p>
 		{:else}
 			<div class="alert alert-warning alert-lg">

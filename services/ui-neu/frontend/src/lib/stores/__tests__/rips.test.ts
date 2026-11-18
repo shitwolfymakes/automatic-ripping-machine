@@ -162,6 +162,6 @@ describe('rips store: byte copies', () => {
 
 	it('formats the transfer line', () => {
 		onProgress('job_iso', copyEnv(5 * 1024 ** 3, 20 * 1024 ** 3, 50 * 1024 ** 2));
-		expect(formatTransfer(ripProgress.value['job_iso'])).toBe('5 GB of 20 GB · 50 MB/s');
+		expect(formatTransfer(ripProgress.value['job_iso'])).toBe('5 GB of 20 GB | 50 MB/s');
 	});
 });

@@ -19,7 +19,7 @@ describe('match utils', () => {
 	});
 
 	it('formatYears', () => {
-		expect(formatYears(1974, 1975, 'tv')).toBe('1974–1975');
+		expect(formatYears(1974, 1975, 'tv')).toBe('1974-1975');
 		expect(formatYears(1974, 1974, 'tv')).toBe('1974');
 		expect(formatYears(2005, null, 'tv')).toBe('2005');
 		expect(formatYears(1972, 1999, 'movie')).toBe('1972');
@@ -82,12 +82,12 @@ describe('match utils', () => {
 
 describe('candidateSubtitle', () => {
 	it('joins the year and kind of a movie', () => {
-		expect(candidateSubtitle(cand({ kind: 'movie', year: 1999 }))).toBe('1999 · Movie');
+		expect(candidateSubtitle(cand({ kind: 'movie', year: 1999 }))).toBe('1999 | Movie');
 	});
 
 	it('shows the span of a finished series', () => {
 		const c = cand({ year: 1974, facts: { genres: [], cast: [], creators: [], end_year: 1975 } });
-		expect(candidateSubtitle(c)).toBe('1974–1975 · TV Series');
+		expect(candidateSubtitle(c)).toBe('1974-1975 | TV Series');
 	});
 
 	it('leaves out the years when there is no year', () => {
@@ -95,10 +95,10 @@ describe('candidateSubtitle', () => {
 	});
 
 	it('adds an extra part at the end', () => {
-		expect(candidateSubtitle(cand({ year: 2005 }), '20 episodes')).toBe('2005 · TV Series · 20 episodes');
+		expect(candidateSubtitle(cand({ year: 2005 }), '20 episodes')).toBe('2005 | TV Series | 20 episodes');
 	});
 
 	it('leaves out an empty extra part', () => {
-		expect(candidateSubtitle(cand({ year: 2005 }), '')).toBe('2005 · TV Series');
+		expect(candidateSubtitle(cand({ year: 2005 }), '')).toBe('2005 | TV Series');
 	});
 });

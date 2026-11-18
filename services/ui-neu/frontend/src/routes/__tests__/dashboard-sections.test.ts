@@ -498,7 +498,7 @@ describe('Dashboard sections', () => {
 			await renderPage();
 			await waitFor(() => expect(screen.getByText('42%')).toBeInTheDocument());
 			expect(screen.getByText('10m left')).toBeInTheDocument();
-			expect(screen.getByText('512 MB of 1 GB · 1 MB/s')).toBeInTheDocument();
+			expect(screen.getByText('512 MB of 1 GB | 1 MB/s')).toBeInTheDocument();
 			expect(screen.getAllByText('42%')).toHaveLength(1);
 		});
 
@@ -676,7 +676,7 @@ describe('Dashboard All Jobs list', () => {
 		it('asks for the page the pager picks', async () => {
 			setJobs([listed('l1')], 100);
 			await renderPage();
-			await waitFor(() => expect(screen.getByTestId('jobs-pagination')).toHaveTextContent('Showing 1–48 of 100'));
+			await waitFor(() => expect(screen.getByTestId('jobs-pagination')).toHaveTextContent('Showing 1-48 of 100'));
 			await fireEvent.click(screen.getByText('3'));
 			await waitFor(() => expect(fetchJobsPage).toHaveBeenLastCalledWith({ status: undefined, limit: 48, offset: 96 }));
 		});
@@ -692,9 +692,9 @@ describe('Dashboard All Jobs list', () => {
 				return Promise.resolve({ jobs: [listed('l1')], total });
 			});
 			await renderPage();
-			await waitFor(() => expect(screen.getByTestId('jobs-pagination')).toHaveTextContent('Showing 1–48 of 100'));
+			await waitFor(() => expect(screen.getByTestId('jobs-pagination')).toHaveTextContent('Showing 1-48 of 100'));
 			await fireEvent.click(screen.getByText('2'));
-			await waitFor(() => expect(screen.getByTestId('jobs-pagination')).toHaveTextContent('Showing 1–48 of 48'));
+			await waitFor(() => expect(screen.getByTestId('jobs-pagination')).toHaveTextContent('Showing 1-48 of 48'));
 			expect(fetchJobsPage).toHaveBeenLastCalledWith({ status: undefined, limit: 48, offset: 0 });
 			expect(screen.getByText('Listed l1')).toBeInTheDocument();
 		});

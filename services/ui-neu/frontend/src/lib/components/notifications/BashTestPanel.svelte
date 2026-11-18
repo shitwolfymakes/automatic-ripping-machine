@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { ChevronRight } from 'lucide-svelte';
+	import Glyph from '$lib/components/shared/Glyph.svelte';
 	import type { EventTypeInfo, ScriptInput } from '$lib/api/channels';
 	import type { ChannelTemplate } from '$lib/types/notifications';
 	import { BashPreview } from '../../stores/notification-bash-preview.svelte';
@@ -62,7 +62,7 @@
 
 <div class="bash-test-panel">
 	<button type="button" class="panel-title bash-test-panel-toggle" aria-expanded={open} onclick={() => (open = !open)}>
-		<ChevronRight class="chevron" />
+		<Glyph name="chevron-right" class="chevron" />
 		Test
 		{#if bash.lastRun}
 			<span class="bash-test-panel-last-run" data-ok={bash.lastRun.ok}

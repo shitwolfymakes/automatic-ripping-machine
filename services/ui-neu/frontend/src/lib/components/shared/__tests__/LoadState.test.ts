@@ -1,3 +1,6 @@
+// Every branch of LoadState's own code is covered. The coverage tool still
+// reports one open arm that is Svelte's: `{view.error.message}` compiles to
+// `(...) ?? ''`, and an Error's message is always a string.
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import { renderComponent, screen, cleanup } from '$lib/testing/render';
 import { createRawSnippet } from 'svelte';

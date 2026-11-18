@@ -81,12 +81,13 @@
 					</thead>
 					<tbody>
 						{#each rows as row (row.trackId ?? `scan-${row.index}`)}
+							{@const trackId = row.trackId}
 							<tr class="table-row" data-disabled={row.excluded}>
 								<td class="table-cell mono">{row.index}</td>
 								<td
-									class="table-cell {isVideo && row.trackId ? 'review-tracks-table-clickable' : ''}"
+									class="table-cell {isVideo && trackId ? 'review-tracks-table-clickable' : ''}"
 									onclick={() => {
-										if (isVideo && row.trackId) toggleTrackSearch(row.trackId!);
+										if (isVideo && trackId) toggleTrackSearch(trackId);
 									}}
 								>
 									{#if row.title}
@@ -96,7 +97,7 @@
 												<span class="review-tracks-table-faint">({row.year})</span>
 											{/if}
 										</div>
-									{:else if row.trackId}
+									{:else if trackId}
 										<span class="review-tracks-table-faint"
 											>{job.title || 'Untitled'}{#if job.year}
 												({job.year}){/if}</span
@@ -107,19 +108,19 @@
 								</td>
 								{#if isVideo}
 									<td class="table-cell">
-										{#if row.trackId && fileNames.get(row.trackId)}
+										{#if trackId && fileNames.get(trackId)}
 											<!-- A session names the track: the generated name is the episode. -->
 											<span class="mono review-tracks-table-generated" data-testid="track-generated-name"
-												>{fileNames.get(row.trackId)}</span
+												>{fileNames.get(trackId)}</span
 											>
-										{:else if row.trackId && nonEpisode(row)}
+										{:else if trackId && nonEpisode(row)}
 											<span class="chip chip-sm" data-testid="track-role">{nonEpisode(row)}</span>
-										{:else if row.trackId}
+										{:else if trackId}
 											<div class="review-tracks-table-episode">
 												<input
 													type="text"
 													value={row.episodeNumber ?? ''}
-													onchange={(e) => handleEpisodeNumberInput(row.trackId!, e.currentTarget.value)}
+													onchange={(e) => handleEpisodeNumberInput(trackId, e.currentTarget.value)}
 													placeholder="--"
 													disabled={row.excluded}
 													class="field-control review-tracks-table-episode-input"
@@ -137,15 +138,15 @@
 								{/if}
 								<td class="table-cell review-tracks-table-secondary">{formatTrackDuration(row.durationSeconds)}</td>
 								<td class="table-cell">
-									{#if row.trackId && $isAdmin}
+									{#if trackId && $isAdmin}
 										<input
 											type="checkbox"
 											aria-label="Include track {row.index}"
 											checked={!row.excluded}
-											onchange={(e) => handleTrackFieldUpdate(row.trackId!, 'excluded', !e.currentTarget.checked)}
+											onchange={(e) => handleTrackFieldUpdate(trackId, 'excluded', !e.currentTarget.checked)}
 											title="Include this track in transcode output (the disc still rips in full)"
 										/>
-									{:else if row.trackId}
+									{:else if trackId}
 										<span class="review-tracks-table-faint">{row.excluded ? 'Excluded' : 'Included'}</span>
 									{:else}
 										<span class="review-tracks-table-faint">-</span>
@@ -154,12 +155,13 @@
 								<td class="table-cell mono review-tracks-table-muted">{row.sourceLabel}</td>
 								{#if isVideo}
 									<td class="table-cell">
-										{#if row.trackId}
+										{#if trackId}
 											<button
-												onclick={() => toggleTrackSearch(row.trackId!)}
+												type="button"
+												onclick={() => toggleTrackSearch(trackId)}
 												class="btn btn-icon review-tracks-table-search-btn"
-												aria-pressed={openSearchTrackIds.has(row.trackId)}
-												title={openSearchTrackIds.has(row.trackId) ? 'Close search' : 'Search title'}
+												aria-pressed={openSearchTrackIds.has(trackId)}
+												title={openSearchTrackIds.has(trackId) ? 'Close search' : 'Search title'}
 											>
 												<svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
 													<circle cx="11" cy="11" r="8" /><path d="m21 21-4.35-4.35" />
@@ -169,16 +171,17 @@
 									</td>
 								{/if}
 							</tr>
-							{#if isVideo && row.trackId && openSearchTrackIds.has(row.trackId)}
+							{@const track = tracks.find((t) => t.id === trackId)}
+							{#if isVideo && trackId && track && openSearchTrackIds.has(trackId)}
 								<tr>
 									<td colspan="99" class="px-3 py-2">
 										<TrackTitleSearch
 											jobId={job.id}
-											track={tracks.find((t) => t.id === row.trackId)!}
+											{track}
 											mediaType={job.media_type}
-											onapply={() => handleTrackTitleApply(row.trackId!)}
+											onapply={() => handleTrackTitleApply(trackId)}
 											onclear={() => onrefresh?.()}
-											onclose={() => toggleTrackSearch(row.trackId!)}
+											onclose={() => toggleTrackSearch(trackId)}
 										/>
 									</td>
 								</tr>

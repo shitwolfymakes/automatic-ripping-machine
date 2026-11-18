@@ -57,6 +57,7 @@
 
 	{#if ignored.length > 0}
 		<button
+			type="button"
 			data-testid="ignored-toggle"
 			aria-expanded={ignoredOpen}
 			onclick={() => {

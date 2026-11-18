@@ -19,7 +19,12 @@
 
 <div class="tabs transcoder-page-tabs">
 	{#each tabs as tab (tab)}
-		<button onclick={() => onselect(tab)} data-selected={active === tab} class="tabs-tab transcoder-page-tab">
+		<button
+			type="button"
+			onclick={() => onselect(tab)}
+			data-selected={active === tab}
+			class="tabs-tab transcoder-page-tab"
+		>
 			{TAB_LABELS[tab]}
 		</button>
 	{/each}

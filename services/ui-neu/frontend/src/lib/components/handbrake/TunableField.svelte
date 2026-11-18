@@ -175,7 +175,7 @@
 		{#each options ?? [] as name (name)}
 			<option value={String(name)}>{optionLabel(key, name)}</option>
 		{/each}
-		<option value={PAD_CUSTOM}>Custom&hellip;</option>
+		<option value={PAD_CUSTOM}>Custom...</option>
 	</select>
 	{#if pad.custom}
 		<!-- With Custom chosen the rejected value sits here, so an issue marks this input too. -->

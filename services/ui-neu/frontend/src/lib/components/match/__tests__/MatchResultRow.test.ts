@@ -23,17 +23,17 @@ describe('MatchResultRow', () => {
 	it('shows title, years and type, two cast names and the rating', () => {
 		renderComponent(MatchResultRow, { props: { candidate: kolchak, selected: false, onselect: vi.fn() } });
 		expect(screen.getByText('Kolchak: The Night Stalker')).toBeInTheDocument();
-		expect(screen.getByText('1974–1975 · TV Series')).toBeInTheDocument();
+		expect(screen.getByText('1974-1975 | TV Series')).toBeInTheDocument();
 		expect(screen.getByText('Darren McGavin, Simon Oakland')).toBeInTheDocument();
-		expect(screen.getByText('★ 7.9')).toBeInTheDocument();
+		expect(screen.getByText('7.9')).toBeInTheDocument();
 	});
 
 	it('omits cast and rating when absent', () => {
 		renderComponent(MatchResultRow, {
 			props: { candidate: { title: 'X', year: 1972, kind: 'movie', facts: null }, selected: false, onselect: vi.fn() }
 		});
-		expect(screen.getByText('1972 · Movie')).toBeInTheDocument();
-		expect(screen.queryByText(/★/)).toBeNull();
+		expect(screen.getByText('1972 | Movie')).toBeInTheDocument();
+		expect(screen.queryByText(/^\d+\.\d$/)).toBeNull();
 	});
 
 	it('reports selection and click', async () => {

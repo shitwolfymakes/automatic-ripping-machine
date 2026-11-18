@@ -1,4 +1,5 @@
 <script lang="ts">
+	import CloseButton from '$lib/components/shared/CloseButton.svelte';
 	import { onMount } from 'svelte';
 	import ConfirmDialog from '$lib/components/shared/ConfirmDialog.svelte';
 	import LoadState from '$lib/components/shared/LoadState.svelte';
@@ -33,7 +34,7 @@
 			class="alert notifications-page-feedback {inbox.feedback.type === 'success' ? 'alert-success' : 'alert-danger'}"
 		>
 			{inbox.feedback.message}
-			<button onclick={inbox.clearFeedback} class="notifications-page-feedback-close">&times;</button>
+			<CloseButton onclick={inbox.clearFeedback} label="Dismiss message" class="notifications-page-feedback-close" />
 		</div>
 	{/if}
 
@@ -91,11 +92,13 @@
 		border-radius: var(--radius-lg);
 		padding: 0.625rem 1rem;
 	}
-	.notifications-page-feedback-close {
+	/* :global: forwarded through CloseButton's class prop */
+	:global(.notifications-page-feedback-close) {
 		margin-left: 0.5rem;
 		opacity: 0.6;
 	}
-	.notifications-page-feedback-close:hover {
+	/* :global: set on CloseButton through its class prop */
+	:global(.notifications-page-feedback-close:hover) {
 		opacity: 1;
 	}
 	/* 0.75rem per-card gap. */

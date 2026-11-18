@@ -1,4 +1,5 @@
 <script lang="ts">
+	import Glyph from '$lib/components/shared/Glyph.svelte';
 	import type { FileEntry } from '$lib/api/files';
 	import { formatBytes, formatDateTime } from '$lib/utils/format';
 	import FileIcon from './FileIcon.svelte';
@@ -91,14 +92,10 @@
 						class="field-control flex-1 file-row-edit-input"
 					/>
 					<button type="button" onclick={confirmRename} class="btn btn-icon file-row-confirm-btn" title="Confirm">
-						<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
-						</svg>
+						<Glyph name="check" class="h-4 w-4" />
 					</button>
 					<button type="button" onclick={cancelRename} class="btn btn-icon" title="Cancel">
-						<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-						</svg>
+						<Glyph name="x" class="h-4 w-4" />
 					</button>
 				</div>
 			{:else}
@@ -143,14 +140,7 @@
 						class="btn btn-icon file-row-action-btn file-row-action-btn-info"
 						title={ro ? 'Read-only mount' : 'Fix permissions'}
 					>
-						<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-							<path
-								stroke-linecap="round"
-								stroke-linejoin="round"
-								stroke-width="2"
-								d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"
-							/>
-						</svg>
+						<Glyph name="lock" class="h-4 w-4" />
 					</button>
 					<!-- Rename -->
 					<button
@@ -177,14 +167,7 @@
 						class="btn btn-icon file-row-action-btn file-row-action-btn-danger"
 						title={ro ? 'Read-only mount' : 'Delete'}
 					>
-						<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-							<path
-								stroke-linecap="round"
-								stroke-linejoin="round"
-								stroke-width="2"
-								d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-							/>
-						</svg>
+						<Glyph name="trash" class="h-4 w-4" />
 					</button>
 				</div>
 			{/if}

@@ -140,6 +140,7 @@
 			{/each}
 		</select>
 		<button
+			type="button"
 			onclick={() => actions.startManualRip(drive.id)}
 			disabled={actions.triggering || startRipBlocked !== null}
 			data-testid="drive-start-rip"
@@ -152,6 +153,7 @@
 		<div class="drive-card-action-divider"></div>
 
 		<button
+			type="button"
 			onclick={() => (showSettings = true)}
 			class="btn btn-icon drive-card-gear-btn"
 			aria-pressed={showSettings}
@@ -161,6 +163,7 @@
 		</button>
 
 		<button
+			type="button"
 			data-testid="drive-unenroll"
 			onclick={actions.requestUnenroll}
 			disabled={actions.unenrolling || hasLiveJob(drive)}

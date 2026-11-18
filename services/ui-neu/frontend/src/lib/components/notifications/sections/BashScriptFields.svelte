@@ -1,7 +1,7 @@
 <script lang="ts">
+	import Glyph from '$lib/components/shared/Glyph.svelte';
 	import { errorMessage } from '$lib/utils/errors';
 	import { onMount } from 'svelte';
-	import { ChevronRight } from 'lucide-svelte';
 	import { fetchScript, fetchScripts, type BashScriptInfo, type BashScriptSummary } from '$lib/api/channels';
 	import SchemaField from '../SchemaField.svelte';
 	import FieldLabel from '../../shared/FieldLabel.svelte';
@@ -157,7 +157,7 @@
 			aria-expanded={viewerOpen}
 			onclick={() => (viewerOpen = !viewerOpen)}
 		>
-			<ChevronRight class="chevron" />
+			<Glyph name="chevron-right" class="chevron" />
 			View script
 			<span class="bash-script-fields-viewer-meta"
 				>{info.name}, {info.size_bytes} B{info.executable ? '' : ', not executable'}</span

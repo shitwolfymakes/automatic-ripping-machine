@@ -29,9 +29,7 @@
 	}
 
 	export async function commit(): Promise<StepCommitResult> {
-		if (view.admin_default_password) {
-			if (!pw || !(await pw.submit())) return false;
-		}
+		if (view.admin_default_password && !(await pw?.submit())) return false;
 		return 'done';
 	}
 </script>
