@@ -252,13 +252,14 @@ is solved by DOM order or a portal, not a bigger number.
 
 ### Iconography
 
-Icons are `lucide-svelte`, colouring via `currentColor` - never a fill
-token of their own. **Size is owned by the containing block**, not the
-call site: `nav-item svg` 20px, `glyph svg` 16px, `btn-icon svg` 14px,
-`btn .chevron` 14px (and it rotates on `[aria-expanded="true"]`). A
-scoped rule targeting a lucide component instance needs `:global(` (Svelte
-scoping cannot see into the instance) - which the lint allows only with an
-explanatory comment on or before the line.
+Icons go through `Glyph` (names in `ui/glyph-names.ts`); the lint bans the
+`lucide-svelte` icons it already draws. Icons colour via `currentColor`,
+never a fill token of their own. `Glyph` is `h-4 w-4` (16px) unless the call site passes an `h-`
+or `w-` class. `.btn[aria-expanded="true"] .chevron` turns 90deg, which
+suits `chevron-right`; a `chevron-down` in a `.btn` overrides it to 180deg.
+A scoped rule targeting a `Glyph` instance needs `:global(` (Svelte scoping
+cannot see into it), which the lint allows only with an explanatory comment
+on or before the line.
 
 ### Responsive structure
 
