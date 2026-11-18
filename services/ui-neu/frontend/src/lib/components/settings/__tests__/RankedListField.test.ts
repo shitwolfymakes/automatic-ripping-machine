@@ -41,9 +41,8 @@ describe('RankedListField', () => {
 
 	it('keeps the announcer inside one wrapper with the list, so it is anchored to the field', () => {
 		const { container } = renderComponent(RankedListField, { props: { field: f(), value: ['tmdb'] } });
-		const root = container.querySelector('.ranked-list-field');
-		expect(root?.querySelector(':scope > [role="list"]')).not.toBeNull();
-		expect(root?.querySelector(':scope > [aria-live="polite"]')).not.toBeNull();
+		expect(container.querySelector('.ranked-list-field > [role="list"]')).not.toBeNull();
+		expect(container.querySelector('.ranked-list-field > [aria-live="polite"]')).not.toBeNull();
 	});
 
 	it('announces a rank on check and keeps focus on that row, then announces "not used" and keeps focus on uncheck', async () => {
