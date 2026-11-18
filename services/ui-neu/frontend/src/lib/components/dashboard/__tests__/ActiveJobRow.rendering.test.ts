@@ -60,9 +60,10 @@ describe('ActiveJobRow', () => {
 	});
 
 	describe('live progress', () => {
-		it('shows the waiting line when active with no live sample', () => {
-			renderComponent(ActiveJobRow, { props: { job: createJob({ status: 'ripping' }) } });
-			expect(screen.getByText('Waiting for the first progress report')).toBeInTheDocument();
+		it('shows the indeterminate bar when active with no live sample', () => {
+			const { container } = renderComponent(ActiveJobRow, { props: { job: createJob({ status: 'ripping' }) } });
+			expect(container.querySelector('[data-indeterminate="true"]')).not.toBeNull();
+			expect(screen.queryByText('Waiting for the first progress report')).toBeNull();
 		});
 
 		it('renders a determinate bar from the rip sample', () => {
