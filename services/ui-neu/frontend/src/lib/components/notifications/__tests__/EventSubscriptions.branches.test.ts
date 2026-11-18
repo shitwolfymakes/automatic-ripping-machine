@@ -320,14 +320,13 @@ describe('EventSubscriptions branches', () => {
 			expect(props.templates['rip.completed']).toEqual({ title: '{job_title}', body: 'B' });
 		});
 
-		// #539 tracks this: the insert rebuilds the template from title and body only.
-		it('an insert drops the input overrides of the event template', async () => {
+		it('an insert keeps the input overrides of the event template', async () => {
 			const props = makeProps(['rip.completed'], {}, [recipient]);
 			renderComponent(EventSubscriptions, { props });
 			await fireEvent.input(screen.getByLabelText('rip.completed Recipient'), { target: { value: 'a@x' } });
 			expect(props.templates['rip.completed'].inputs).toEqual({ TO: 'a@x' });
 			await fireEvent.click(screen.getByRole('button', { name: 'Insert {job_title}' }));
-			expect(props.templates['rip.completed']).not.toHaveProperty('inputs');
+			expect(props.templates['rip.completed'].inputs).toEqual({ TO: 'a@x' });
 			expect(props.templates['rip.completed'].title).toBe('{job_title}');
 		});
 	});

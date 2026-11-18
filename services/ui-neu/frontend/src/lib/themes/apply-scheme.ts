@@ -1,14 +1,15 @@
 // Writes a resolved color scheme onto the document: the inline token
 // properties, the dark class, the dataset and the injected theme <style>.
 import type { ColorScheme } from '$lib/themes/builtin-schemes';
+import { readStorage } from '$lib/utils/safe-storage';
 
 /**
- * `--color-primary` keeps the same value in light and dark mode, and tokens.css's own `.dark {}`
- * block never redefines it. `--color-primary-dark` in a scheme's `tokens` is
- * a distinct legacy alias role (a fixed darker shade), not "what primary
- * becomes in dark mode" - so it must not be treated as `--color-primary`'s
- * effective-mode twin the way `--color-page-dark`/`--color-surface-dark`/
- * `--color-primary-text-dark`/`--color-primary-light-bg-dark` are.
+ * `--color-primary` keeps the same value in light and dark mode, and
+ * tokens.css's own `.dark {}` block never redefines it. A
+ * `--color-primary-dark` token in a scheme (an older theme may still carry
+ * one) is not "what primary becomes in dark mode", so it is never used as
+ * `--color-primary`'s effective-mode twin the way `--color-page-dark`/
+ * `--color-surface-dark`/`--color-primary-text-dark` are.
  */
 const MODE_INVARIANT_ROLES = new Set(['--color-primary']);
 
@@ -31,10 +32,10 @@ let appliedTokenProps: string[] = [];
  * (`--color-surface-dark`). Without this, the inline style always won the
  * base (light) value regardless of dark mode. So for any base role that has
  * a `-dark` twin in this scheme (and is not mode-invariant, see above), write
- * whichever value matches the `effectiveDark` mode; every other token
- * (including the `-dark`-suffixed names themselves, and roles the scheme
- * does not pair, e.g. tones and `--color-border`) is written unchanged, so
- * `.dark {}` keeps handling those.
+ * whichever value matches the `effectiveDark` mode. The `-dark`-suffixed
+ * names are lookup data only and are not written. Every other token (roles
+ * the scheme does not pair, e.g. tones and `--color-border`) is written
+ * unchanged, so `.dark {}` keeps handling those.
  */
 function applyTokens(root: HTMLElement, scheme: ColorScheme, effectiveDark: boolean) {
 	for (const prop of appliedTokenProps) {
@@ -42,12 +43,8 @@ function applyTokens(root: HTMLElement, scheme: ColorScheme, effectiveDark: bool
 	}
 	const written: string[] = [];
 	for (const [prop, value] of Object.entries(scheme.tokens)) {
-		if (prop.endsWith('-dark')) {
-			// Legacy paired name: keep writing it unchanged.
-			root.style.setProperty(prop, value);
-			written.push(prop);
-			continue;
-		}
+		// A -dark twin is read below as its base role's dark value.
+		if (prop.endsWith('-dark')) continue;
 		const darkTwin = MODE_INVARIANT_ROLES.has(prop) ? undefined : scheme.tokens[`${prop}-dark`];
 		const effectiveValue = effectiveDark && darkTwin !== undefined ? darkTwin : value;
 		root.style.setProperty(prop, effectiveValue);
@@ -74,7 +71,7 @@ function applyTokens(root: HTMLElement, scheme: ColorScheme, effectiveDark: bool
 function resolveEffectiveDark(scheme: ColorScheme): boolean {
 	if (scheme.mode === 'dark') return true;
 	if (scheme.mode === 'light') return false;
-	const saved = localStorage.getItem('theme');
+	const saved = readStorage('theme');
 	if (saved === 'dark') return true;
 	if (saved === 'light') return false;
 	return window.matchMedia('(prefers-color-scheme: dark)').matches;

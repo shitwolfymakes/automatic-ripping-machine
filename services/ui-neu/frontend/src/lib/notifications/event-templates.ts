@@ -34,12 +34,12 @@ export function spliceToken(text: string, start: number, end: number, token: str
 }
 
 /**
- * The template with the field's text set, null when blank. It keeps
- * only the title and the body, so the event's input overrides are
- * dropped; #539 tracks that.
+ * The template with the field's text set, null when blank. The other
+ * field and the event's input overrides are kept.
  */
 export function withText(template: ChannelTemplate, field: TemplateField, text: string): ChannelTemplate {
 	return {
+		...template,
 		title: field === 'title' ? text || null : (template.title ?? null),
 		body: field === 'body' ? text || null : (template.body ?? null)
 	};

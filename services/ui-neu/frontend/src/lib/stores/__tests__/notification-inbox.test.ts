@@ -66,6 +66,18 @@ describe('NotificationInbox', () => {
 			expect(inbox.rows).toEqual([row('a')]);
 			expect(inbox.clearedCount).toBe(4);
 			expect(inbox.loading).toBe(false);
+			expect(fetchNotificationsMock).toHaveBeenCalledWith(false);
+		});
+
+		it('asks for the cleared rows once includeCleared is set, and reloads', async () => {
+			fetchNotificationsMock.mockResolvedValue([row('a'), row('b', true, true)]);
+			fetchNotificationCountMock.mockResolvedValue({ cleared: 1 });
+			const inbox = new NotificationInbox();
+			expect(inbox.includeCleared).toBe(false);
+			await inbox.setIncludeCleared(true);
+			expect(inbox.includeCleared).toBe(true);
+			expect(fetchNotificationsMock).toHaveBeenCalledWith(true);
+			expect(inbox.rows).toEqual([row('a'), row('b', true, true)]);
 		});
 
 		it('is loading while the request runs', async () => {
