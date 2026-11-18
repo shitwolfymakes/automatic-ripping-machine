@@ -1,3 +1,6 @@
+// Open arms the coverage tool reports that are Svelte's, not the component's:
+// `{minutes}` and `{String(seconds).padStart(2, '0')}` each compile to
+// `(...) ?? ''`; one is a number and the other a string.
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderComponent, screen, fireEvent, cleanup } from '$lib/testing/render';
 import CountdownTimer from '../CountdownTimer.svelte';

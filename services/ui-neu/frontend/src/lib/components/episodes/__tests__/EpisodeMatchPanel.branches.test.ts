@@ -1,3 +1,8 @@
+// Open arms the coverage tool reports that are Svelte's, not the component's:
+// each text `{...}` below compiles to `(...) ?? ''`, and none of these values is
+// null where it renders. The own season's name and its match and total counts,
+// the "also fits" seasons and the hand-save error (each inside its own #if),
+// and a source's label and status word (each with a fallback).
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import { renderComponent, screen, cleanup, fireEvent, waitFor, within } from '$lib/testing/render';
 

@@ -1,3 +1,7 @@
+// Open arms the coverage tool reports that are Svelte's, not the component's:
+// each session `<option value={s.id}>{s.name} ({s.media_type})` compiles to
+// `(...) ?? ''` arms plus a select-sync `if`; ids, names and media types are
+// strings.
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import { renderComponent, screen, fireEvent, cleanup, waitFor } from '$lib/testing/render';
 import ApplySessionDialog from '../ApplySessionDialog.svelte';
@@ -112,6 +116,14 @@ describe('ApplySessionDialog', () => {
 				}
 			]
 		});
+	});
+
+	it('closes on Cancel', async () => {
+		fetchSessionsMock.mockResolvedValue([]);
+		const onclose = vi.fn();
+		renderComponent(ApplySessionDialog, { props: { job: createJob({ id: 'job_1' }), onclose, onapplied: vi.fn() } });
+		await fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+		expect(onclose).toHaveBeenCalledTimes(1);
 	});
 
 	it('fetches sessions on mount and lists only the sessions the job is compatible with', async () => {

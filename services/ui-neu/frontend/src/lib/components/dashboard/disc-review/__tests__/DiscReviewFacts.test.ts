@@ -1,3 +1,9 @@
+// Open arms the coverage tool reports that are Svelte's, not the component's:
+// each text or attribute `{...}` below compiles to `(...) ?? ''`, and none of
+// these values is null where it renders. The IMDb id in both links and the
+// match detail (each inside its own #if), the miss line (inside `#if isMusic &&
+// missLine`, and with a fallback text in the TV row), the season number, and
+// the unmatched and total title counts.
 // The review card's facts list, rendered with plain props.
 //
 // Branch not forced here: the Disc row's `{#if discLine}` never turns false,

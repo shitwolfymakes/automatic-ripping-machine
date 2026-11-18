@@ -1,3 +1,6 @@
+// Open arm the coverage tool reports that is Svelte's, not the component's:
+// `{tracks.length}` in the heading compiles to `(...) ?? ''`, and a length is
+// always a number.
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderComponent, screen, cleanup, waitFor, fireEvent, within } from '$lib/testing/render';
 import JobTracksTable from '../JobTracksTable.svelte';
