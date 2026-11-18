@@ -337,17 +337,22 @@ test('sleepReal waits for the given time', async () => {
   assert.ok(Date.now() - start >= 15);
 });
 
-test('runCli exits with what main returns', async () => {
-  const codes = [];
-  await runCli({
+test('runCli returns what main returns', async () => {
+  const code = await runCli({
     argv: ['--dry-run'],
     env: {},
     fetchFn: async () => res(200),
     sleep: noSleep(),
     log() {},
-    exit: (code) => codes.push(code),
   });
-  assert.deepEqual(codes, [0]);
+  assert.equal(code, 0);
+});
+
+test('runCli prints why main failed and returns 1', async () => {
+  const errors = [];
+  const code = await runCli({ argv: [], env: {}, log() {}, logError: (m) => errors.push(m) });
+  assert.equal(code, 1);
+  assert.deepEqual(errors, ['GITHUB_TOKEN and GITHUB_REPOSITORY must be set (or use --dry-run)']);
 });
 
 test('isEntry is true only for the script run directly', () => {
@@ -363,6 +368,6 @@ test('run directly without a token, the script fails before any request', () => 
   delete env.GITHUB_REPOSITORY;
   const script = fileURLToPath(new URL('./check-field-docs-links.mjs', import.meta.url));
   const run = spawnSync(process.execPath, [script], { env, encoding: 'utf8' });
-  assert.notEqual(run.status, 0);
-  assert.match(run.stderr, /GITHUB_TOKEN and GITHUB_REPOSITORY must be set/);
+  assert.equal(run.status, 1);
+  assert.equal(run.stderr.trim(), 'GITHUB_TOKEN and GITHUB_REPOSITORY must be set (or use --dry-run)');
 });

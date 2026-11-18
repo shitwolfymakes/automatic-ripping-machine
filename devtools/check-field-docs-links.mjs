@@ -211,9 +211,14 @@ export async function main({ argv, env, fetchFn = fetch, sleep = sleepReal, log 
   return 0;
 }
 
-/** Runs main and exits with its code; the command-line entry, injectable for tests. */
-export async function runCli({ argv, env, fetchFn, sleep, log, exit = process.exit }) {
-  exit(await main({ argv, env, fetchFn, sleep, log }));
+/** The command-line run: main's exit code, or 1 with the reason printed when it throws. */
+export async function runCli({ argv, env, fetchFn, sleep, log, logError = console.error }) {
+  try {
+    return await main({ argv, env, fetchFn, sleep, log });
+  } catch (error) {
+    logError(error.message);
+    return 1;
+  }
 }
 
 /** The script was started directly (`node devtools/check-field-docs-links.mjs`), not imported. */
@@ -222,5 +227,5 @@ export function isEntry(scriptPath, moduleUrl) {
 }
 
 if (isEntry(process.argv[1], import.meta.url)) {
-  await runCli({ argv: process.argv.slice(2), env: process.env });
+  process.exitCode = await runCli({ argv: process.argv.slice(2), env: process.env });
 }
