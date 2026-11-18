@@ -28,6 +28,7 @@
 	import OrphanFoldersModal from '$lib/components/files/OrphanFoldersModal.svelte';
 	import { features } from '$lib/features';
 	import NewFolderRow from '$lib/components/files/NewFolderRow.svelte';
+	import HoldUntil from '$lib/components/shared/HoldUntil.svelte';
 
 	const browser = new FilesBrowser();
 	const movePicker = new MovePicker(browser);
@@ -182,6 +183,11 @@
 		}
 	});
 
+	// The root tabs and breadcrumb row sit above the listing and only exist
+	// once the roots load. Hold the listing until then so its skeleton does not
+	// draw first and get pushed down when they arrive.
+	const rootsSettled = $derived(browser.roots.length > 0 || browser.error !== null || !browser.loading);
+
 	onMount(async () => {
 		await browser.loadRoots();
 		const paramRoot = $page.url.searchParams.get('root');
@@ -276,6 +282,7 @@
 			<p class="files-page-empty-panel-text">No media directories configured</p>
 		</div>
 	{:else}
+		<HoldUntil ready={rootsSettled}>
 		<LoadState
 			data={browser.listing}
 			loading={browser.loading && !browser.listing}
@@ -338,6 +345,7 @@
 				</div>
 			{/snippet}
 		</LoadState>
+		</HoldUntil>
 	{/if}
 </div>
 

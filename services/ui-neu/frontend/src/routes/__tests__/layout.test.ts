@@ -28,7 +28,8 @@ vi.mock('$lib/api/auth', () => ({
 
 const gotoMock = vi.fn();
 vi.mock('$app/navigation', () => ({
-	goto: (...args: unknown[]) => gotoMock(...args)
+	goto: (...args: unknown[]) => gotoMock(...args),
+	onNavigate: vi.fn()
 }));
 
 const logoutLocalMock = vi.fn();

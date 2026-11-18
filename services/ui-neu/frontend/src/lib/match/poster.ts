@@ -23,11 +23,3 @@ export function posterSrc(url: string | null | undefined): string {
 	if (!url.startsWith('http://') && !url.startsWith('https://')) return url;
 	return `/api/images/proxy?url=${encodeURIComponent(url)}`;
 }
-
-/** Use as onerror handler on <img> to swap broken images to placeholder */
-export function posterFallback(event: Event) {
-	const img = event.target as HTMLImageElement;
-	if (img.src !== POSTER_PLACEHOLDER && !img.src.endsWith('poster-placeholder.svg')) {
-		img.src = POSTER_PLACEHOLDER;
-	}
-}

@@ -1109,12 +1109,13 @@ describe('tracks table', () => {
 		expect(within(cell).getByText('episode')).toBeInTheDocument();
 	});
 
-	it('swaps a broken track poster for the placeholder', async () => {
+	it('swaps a broken track poster for the poster fallback', async () => {
 		loadJobPage(tvDetail({}, series()));
 		await screen.findByText('Tracks (3)');
-		const img = cellOf(trackRows()[0], 'Title').querySelector('img[data-poster]') as HTMLImageElement;
-		await fireEvent.error(img);
-		expect(img.src).toContain('poster-placeholder.svg');
+		const cell = cellOf(trackRows()[0], 'Title');
+		await fireEvent.error(cell.querySelector('img[data-poster]') as HTMLImageElement);
+		expect(cell.querySelector('img[data-poster]')).toBeNull();
+		expect(cell.querySelector('.poster-image-fallback')).not.toBeNull();
 	});
 
 	it('shows an untitled track under the job title and year', async () => {

@@ -7,12 +7,18 @@
 	import Glyph from '$lib/components/shared/Glyph.svelte';
 	import CloseButton from '$lib/components/shared/CloseButton.svelte';
 	import { REVIEWABLE_STEPS, STATE_BADGE, openSteps } from '../../setup/steps';
+	import { reveal } from '$lib/ui/transitions';
+	import { trackPending } from '$lib/stores/page-reveal.svelte';
 
 	// Dashboard card listing whatever setup left open: steps skipped or needing
 	// attention, or the whole walkthrough after "Finish later". Dismissal is
 	// stored on the server.
 	let view = $state<SetupView | null>(null);
 	let hidden = $state(false);
+	// Admins fetch the checklist on mount; hold the page reveal until it lands
+	// so the card arrives with the rest of the dashboard.
+	let fetching = $state($isAdmin);
+	trackPending(() => fetching);
 
 	const stateOf = (id: string) => view?.progress[id]?.state ?? null;
 	const open = $derived(openSteps(view?.progress));
@@ -26,6 +32,8 @@
 			view = await fetchSetup();
 		} catch {
 			view = null;
+		} finally {
+			fetching = false;
 		}
 	});
 
@@ -44,7 +52,12 @@
 </script>
 
 {#if visible && view}
-	<section class="panel setup-checklist" data-testid="setup-checklist" aria-labelledby="setup-checklist-title">
+	<section
+		in:reveal
+		class="panel setup-checklist"
+		data-testid="setup-checklist"
+		aria-labelledby="setup-checklist-title"
+	>
 		<div class="setup-checklist-head">
 			<div>
 				<h2 id="setup-checklist-title" class="setup-checklist-title">

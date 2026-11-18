@@ -1,3 +1,7 @@
+// Open arms the coverage tool reports that are Svelte's, not the page's, each a
+// text `{...}` compiled to `(...) ?? ''`: the backend error's message (inside an
+// #if on the error), and the counts in the ACTIVE RIPS and TRANSCODING section
+// labels (array lengths, always numbers).
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import { renderComponent, screen, cleanup, waitFor, fireEvent, within } from '$lib/testing/render';
 import DashboardPage from '../+page.svelte';
@@ -84,9 +88,11 @@ vi.mock('$lib/api/logs', () => ({
 }));
 
 /** Render dashboard and wait for initial data to load */
+// The body (sections, idle panel, All Jobs) draws once the first dashboard
+// load lands.
 async function renderDashboard() {
 	renderComponent(DashboardPage);
-	await waitFor(() => expect(screen.getByText('Dashboard')).toBeInTheDocument());
+	await waitFor(() => expect(screen.getByText('All Jobs')).toBeInTheDocument());
 }
 
 /** Render dashboard, wait for jobs, then switch to table view */
