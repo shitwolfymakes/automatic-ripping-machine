@@ -997,7 +997,7 @@ describe('Dashboard lifecycle', () => {
 		const first = deferred<Awaited<ReturnType<typeof fetchDashboardSnapshot>>>();
 		vi.mocked(fetchDashboardSnapshot).mockReturnValueOnce(first.promise);
 		void dashboard.refresh();
-		await renderPage();
+		await renderPage({ untilBody: false });
 		expect(fetchDashboardSnapshot).toHaveBeenCalledTimes(1);
 		first.resolve(
 			dash({ active_jobs: [job('rev', 'awaiting_review')] }) as unknown as Awaited<

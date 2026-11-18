@@ -142,9 +142,9 @@ describe('fetchDashboardSnapshot composition', () => {
 
 		const dash = await fetchDashboardSnapshot();
 
-		expect(dash.drives.drv_iso.source).toBe('iso');
-		expect(dash.drives.drv_dir.source).toBe('folder');
-		expect(dash.drives.drv_old.source).toBe('iso');
+		expect(dash.drives?.drv_iso.source).toBe('iso');
+		expect(dash.drives?.drv_dir.source).toBe('folder');
+		expect(dash.drives?.drv_old.source).toBe('iso');
 		expect(dash.preparing[0].drive.source).toBe('folder');
 	});
 
@@ -158,10 +158,10 @@ describe('fetchDashboardSnapshot composition', () => {
 
 		const dash = await fetchDashboardSnapshot();
 
-		expect(dash.drives.drv_live).toMatchObject({ source: 'iso', retired: false });
-		expect(dash.drives.drv_done).toMatchObject({ source: 'folder', retired: true });
-		expect(dash.drives.drv_gone).toMatchObject({ source: 'iso', retired: true });
-		expect(dash.drives.drv_opt).toMatchObject({ kind: 'optical', source: null });
+		expect(dash.drives?.drv_live).toMatchObject({ source: 'iso', retired: false });
+		expect(dash.drives?.drv_done).toMatchObject({ source: 'folder', retired: true });
+		expect(dash.drives?.drv_gone).toMatchObject({ source: 'iso', retired: true });
+		expect(dash.drives?.drv_opt).toMatchObject({ kind: 'optical', source: null });
 	});
 
 	it('treats a drive with no kind as optical', async () => {

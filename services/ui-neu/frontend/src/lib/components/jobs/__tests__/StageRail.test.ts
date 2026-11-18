@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, render, screen } from '@testing-library/svelte';
-import { writable } from 'svelte/store';
+import type { writable } from 'svelte/store';
 import { EMPTY_LIVE, type JobLive } from '$lib/stores/job-live.svelte';
 import type { ProgressJob } from '$lib/jobs/progress';
 

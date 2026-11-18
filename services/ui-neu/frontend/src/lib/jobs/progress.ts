@@ -79,7 +79,7 @@ const finite = (n: number | null | undefined): number | null => (n != null && Nu
 function pctFigure(pct: number | null, eta: number | null): string | null {
 	if (pct == null) return null;
 	const p = `${Math.round(pct)}%`;
-	return eta == null ? p : `${p} · ${formatDuration(eta, { coarse: true })} left`;
+	return eta == null ? p : `${p} | ${formatDuration(eta, { coarse: true })} left`;
 }
 
 const COPY_STAGE_WORDS: Record<string, string> = {
