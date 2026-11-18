@@ -1,5 +1,7 @@
 <script lang="ts">
 	import { uiPrefs, setUiPref } from '$lib/stores/ui-prefs';
+	import FieldDocsLink from '$lib/components/shared/FieldDocsLink.svelte';
+	import { FIELD_IDS } from '$lib/settings/interface-form';
 </script>
 
 <div class="flex flex-col gap-6">
@@ -14,7 +16,10 @@
 		<div class="panel interface-settings-panel">
 			<div class="flex items-start justify-between gap-4">
 				<div>
-					<h3 class="interface-settings-card-title">Resource stats</h3>
+					<div class="interface-settings-card-head">
+						<h3 class="interface-settings-card-title">Resource stats</h3>
+						<FieldDocsLink id={FIELD_IDS.show_stats} label="Resource stats" />
+					</div>
 					<p class="interface-settings-description">
 						CPU, memory and storage in the sidebar on wide screens and in the bar along the bottom on smaller ones. The
 						Stats view in the mobile menu is always available.
@@ -42,7 +47,10 @@
 		<div class="panel interface-settings-panel">
 			<div class="flex items-start justify-between gap-4">
 				<div>
-					<h3 class="interface-settings-card-title">Default dashboard layout</h3>
+					<div class="interface-settings-card-head">
+						<h3 class="interface-settings-card-title">Default dashboard layout</h3>
+						<FieldDocsLink id={FIELD_IDS.dashboard_view} label="Default dashboard layout" />
+					</div>
 					<p class="interface-settings-description">
 						How the job list opens. The Cards / Table buttons on the dashboard change it for that visit only.
 					</p>
@@ -88,6 +96,12 @@
 		font-size: 0.875rem;
 		line-height: 1.25rem;
 		color: var(--color-text-muted);
+	}
+	/* each card's title is its setting's name, with the docs link beside it */
+	.interface-settings-card-head {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
 	}
 	.interface-settings-card-title {
 		font-size: 1rem;

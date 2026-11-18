@@ -285,4 +285,23 @@ describe('RipPresetForm inside a sidebar (formId)', () => {
 		await waitFor(() => expect(onsaved).toHaveBeenCalledWith(resultPreset()));
 		external.remove();
 	});
+
+	it('labels each select by name and links the rip settings to the ARM help', () => {
+		renderComponent(RipPresetFormHarness, { props: { preset: null, onsaved: vi.fn() } });
+		for (const [label, testId] of [
+			['Media type', 'preset-media-type'],
+			['Track selection', 'preset-track-selection'],
+			['Identification mode', 'preset-identification-mode'],
+			['Output mode', 'preset-output-mode']
+		]) {
+			expect(screen.getByLabelText(label)).toBe(screen.getByTestId(testId));
+		}
+		for (const label of ['Track selection', 'Identification mode', 'Output mode']) {
+			expect(screen.getByRole('link', { name: `Docs for ${label} (opens in a new tab)` })).toHaveAttribute(
+				'href',
+				'/help/guide/configuring-arm#rip-presets-transcode-presets-and-sessions'
+			);
+		}
+		expect(screen.queryByRole('link', { name: 'Docs for Name (opens in a new tab)' })).toBeNull();
+	});
 });

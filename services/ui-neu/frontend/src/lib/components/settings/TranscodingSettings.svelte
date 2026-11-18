@@ -2,6 +2,7 @@
 	import SchemaConfigForm from '$lib/components/settings/SchemaConfigForm.svelte';
 	import GpusCard from '$lib/components/shared/GpusCard.svelte';
 	import Toggle from '$lib/components/shared/Toggle.svelte';
+	import FieldLabel from '$lib/components/shared/FieldLabel.svelte';
 	import { transcoderEnabled } from '$lib/stores/config';
 	import type { SettingsGroup } from '$lib/types/api.gen';
 
@@ -23,12 +24,12 @@
 		</SchemaConfigForm>
 	{:else}
 		<div class="stack" id="setting-transcode_enabled" data-testid="setting-transcode_enabled">
-			<label class="field field-row settings-page-notif-toggle-row">
+			<div class="field field-row settings-page-notif-toggle-row">
 				<!-- Always rendered off: on a ripper-only box the backend column
 				 still defaults to true, but it has no effect without capability. -->
-				<Toggle checked={false} label="Enable transcoding" disabled />
-				<span class="field-label">Enable transcoding</span>
-			</label>
+				<Toggle id="transcode-enabled" checked={false} label="Enable transcoding" disabled />
+				<FieldLabel for="transcode-enabled" label="Enable transcoding" docsId="config.transcode_enabled" />
+			</div>
 			<p class="field-help">This deployment is ripper-only; transcoding cannot be enabled here.</p>
 		</div>
 	{/if}

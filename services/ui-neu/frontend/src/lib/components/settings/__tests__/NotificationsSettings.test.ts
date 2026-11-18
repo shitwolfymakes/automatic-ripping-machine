@@ -57,4 +57,21 @@ describe('NotificationsSettings', () => {
 		await fireEvent.click(master());
 		expect(ontoggle).toHaveBeenCalledWith(false);
 	});
+
+	it('labels the switch and links it to the notifications settings help', () => {
+		renderComponent(NotificationsSettings, { enabled: false, ontoggle: vi.fn() });
+		expect(document.querySelector('label[for="notifications-enabled"]')).toHaveTextContent('Enable notifications');
+		expect(master()).toHaveAttribute('id', 'notifications-enabled');
+		expect(screen.getByRole('link', { name: 'Docs for Enable notifications (opens in a new tab)' })).toHaveAttribute(
+			'href',
+			'/help/guide/configuring-arm#notifications'
+		);
+	});
+
+	it('toggles the switch when its label is clicked', async () => {
+		const ontoggle = vi.fn();
+		renderComponent(NotificationsSettings, { enabled: false, ontoggle });
+		await fireEvent.click(document.querySelector('label[for="notifications-enabled"]') as HTMLElement);
+		expect(ontoggle).toHaveBeenCalledExactlyOnceWith(true);
+	});
 });

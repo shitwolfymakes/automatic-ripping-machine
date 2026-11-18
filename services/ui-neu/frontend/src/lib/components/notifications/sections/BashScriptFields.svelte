@@ -4,6 +4,8 @@
 	import { ChevronRight } from 'lucide-svelte';
 	import { fetchScript, fetchScripts, type BashScriptInfo, type BashScriptSummary } from '$lib/api/channels';
 	import SchemaField from '../SchemaField.svelte';
+	import FieldLabel from '../../shared/FieldLabel.svelte';
+	import { FIELD_IDS } from '$lib/notifications/channel-form';
 	import type { CatalogField } from '$lib/types/notifications';
 
 	let {
@@ -22,6 +24,7 @@
 	let info = $state<BashScriptInfo | null>(null);
 	let infoMissing = $state(false);
 	let viewerOpen = $state(false);
+	const uid = $props.id();
 
 	const current = $derived(typeof config.script === 'string' ? config.script : '');
 	const inputs = $derived((config.inputs as Record<string, string> | undefined) ?? {});
@@ -92,9 +95,10 @@
 </script>
 
 <div class="bash-script-fields-grid">
-	<label class="field">
-		<span class="field-label">Script *</span>
+	<div class="field">
+		<FieldLabel for="{uid}-script" label="Script" docsId={FIELD_IDS.script} required />
 		<select
+			id="{uid}-script"
 			aria-label="Script"
 			value={current}
 			onchange={(e) => pick((e.currentTarget as HTMLSelectElement).value)}
@@ -110,10 +114,13 @@
 				</option>
 			{/each}
 		</select>
-	</label>
-	<label class="field">
-		<span class="field-label">Timeout (s)</span>
+	</div>
+	<div class="field">
+		<FieldLabel for="{uid}-timeout" label="Timeout" docsId={FIELD_IDS.timeout}>
+			{#snippet marks()}<span class="bash-script-fields-unit">(s)</span>{/snippet}
+		</FieldLabel>
 		<input
+			id="{uid}-timeout"
 			type="number"
 			aria-label="Timeout (seconds)"
 			min="1"
@@ -121,7 +128,7 @@
 			step="1"
 			bind:value={config.timeout_seconds}
 		/>
-	</label>
+	</div>
 </div>
 
 <div class="cluster bash-script-fields-refresh">
@@ -198,6 +205,10 @@
 </p>
 
 <style>
+	.bash-script-fields-unit {
+		font-size: 0.75rem;
+		color: var(--color-text-faint);
+	}
 	.bash-script-fields-grid {
 		display: grid;
 		grid-template-columns: 1fr;

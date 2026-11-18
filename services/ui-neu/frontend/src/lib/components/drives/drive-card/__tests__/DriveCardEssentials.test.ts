@@ -21,7 +21,7 @@ function renderEssentials(overrides: Partial<Drive> = {}, props: Record<string, 
 }
 
 function nameInput() {
-	return screen.getByLabelText(/Friendly name/) as HTMLInputElement;
+	return screen.getByLabelText(/^Friendly name/) as HTMLInputElement;
 }
 
 function uhdCheckbox() {
@@ -249,5 +249,33 @@ describe('DriveCardEssentials 4K checkbox', () => {
 		await fireEvent.click(uhdCheckbox());
 		await waitFor(() => expect(screen.getByRole('alert').textContent).toBe('denied'));
 		expect(screen.queryByText('4K setting saved')).toBeNull();
+	});
+});
+
+describe('DriveCardEssentials docs link', () => {
+	it('links the friendly name to the drives step of the setup walkthrough', () => {
+		renderEssentials();
+		expect(screen.getByRole('link', { name: 'Docs for Friendly name (opens in a new tab)' })).toHaveAttribute(
+			'href',
+			'/help/guide/setup-walkthrough#3-drives'
+		);
+	});
+
+	it('keeps "(optional)" out of the label and the docs link name', () => {
+		renderEssentials();
+		expect(document.querySelector('label[for="drive-name-drv_1"]')).toHaveTextContent(/^Friendly name$/);
+		expect(screen.getByText('(optional)')).toBeInTheDocument();
+	});
+
+	it('labels the 4K checkbox and links it to the drives step, with its help text as the description', async () => {
+		renderEssentials({ uhd_capable: false });
+		const box = screen.getByLabelText('This drive can read 4K UHD discs') as HTMLInputElement;
+		expect(box).toBe(uhdCheckbox());
+		expect(box).toHaveAccessibleDescription("Only some drives can. Leave it off if you're not sure.");
+		expect(
+			screen.getByRole('link', { name: 'Docs for This drive can read 4K UHD discs (opens in a new tab)' })
+		).toHaveAttribute('href', '/help/guide/setup-walkthrough#3-drives');
+		await fireEvent.click(document.querySelector('label[for="drive-uhd-drv_1"]') as HTMLElement);
+		await waitFor(() => expect(updateDriveMock).toHaveBeenCalledExactlyOnceWith('drv_1', { uhd_capable: true }));
 	});
 });

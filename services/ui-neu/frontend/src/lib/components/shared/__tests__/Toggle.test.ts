@@ -16,4 +16,9 @@ describe('Toggle', () => {
 		await fireEvent.click(screen.getByRole('switch'));
 		expect(onchange).toHaveBeenCalledWith(true);
 	});
+
+	it('takes an id for a <label for> beside it', () => {
+		renderComponent(Toggle, { props: { id: 'my-switch', checked: false, label: 'Enabled' } });
+		expect(screen.getByRole('switch')).toHaveAttribute('id', 'my-switch');
+	});
 });

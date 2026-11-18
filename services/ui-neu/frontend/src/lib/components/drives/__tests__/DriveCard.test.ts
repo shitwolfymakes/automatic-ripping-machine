@@ -469,11 +469,11 @@ describe('DriveCard', () => {
 			expect(screen.getByText('VENDOR MODEL')).toBeInTheDocument();
 			expect(screen.getByText('USB')).toBeInTheDocument();
 			expect(screen.queryByLabelText(/rip mode/i)).toBeNull();
-			const name = screen.getByLabelText(/friendly name/i);
+			const name = screen.getByLabelText(/^friendly name/i);
 			await fireEvent.input(name, { target: { value: 'Living room' } });
 			await fireEvent.blur(name);
 			await waitFor(() => expect(updateDriveMock).toHaveBeenCalledWith('drv_1', { display_name: 'Living room' }));
-			await fireEvent.click(screen.getByLabelText(/4k uhd/i));
+			await fireEvent.click(screen.getByLabelText(/^this drive can read 4k uhd/i));
 			await waitFor(() => expect(updateDriveMock).toHaveBeenCalledWith('drv_1', { uhd_capable: true }));
 		});
 
@@ -514,7 +514,7 @@ describe('DriveCard', () => {
 
 		it('does not save an unchanged name', async () => {
 			renderComponent(DriveCard, { props: { drive: createDrive(), variant: 'essentials' } });
-			const name = screen.getByLabelText(/friendly name/i);
+			const name = screen.getByLabelText(/^friendly name/i);
 			await fireEvent.input(name, { target: { value: 'Main Drive' } });
 			await fireEvent.blur(name);
 			expect(updateDriveMock).not.toHaveBeenCalled();
