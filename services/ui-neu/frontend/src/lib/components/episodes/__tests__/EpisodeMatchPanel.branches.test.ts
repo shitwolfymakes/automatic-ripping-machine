@@ -341,7 +341,7 @@ describe('EpisodeMatchPanel Clear episodes branches', () => {
 		expect(screen.queryByRole('alert')).toBeNull();
 	});
 
-	it('Try again after a failed clear with no match run calls neither matchIdentity nor clearEpisodeMatch', async () => {
+	it('Try again after a failed clear with no match run retries the clear', async () => {
 		vi.mocked(clearEpisodeMatch).mockRejectedValue(new Error('HTTP 500'));
 		renderComponent(EpisodeMatchPanel, { props: panelProps() });
 		await fireEvent.click(await screen.findByRole('button', { name: 'Clear episodes' }));
@@ -350,11 +350,11 @@ describe('EpisodeMatchPanel Clear episodes branches', () => {
 		await fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
 		await settle();
 		expect(matchIdentity).not.toHaveBeenCalled();
-		expect(clearEpisodeMatch).toHaveBeenCalledTimes(1);
+		expect(clearEpisodeMatch).toHaveBeenCalledTimes(2);
 		expect(screen.getByRole('alert')).toHaveTextContent('Could not clear the episodes (HTTP 500).');
 	});
 
-	it('Try again after a failed preview and a failed clear reruns the preview request, not the clear', async () => {
+	it('Try again after a failed preview and a failed clear retries the clear, not the preview', async () => {
 		vi.mocked(matchIdentity).mockRejectedValueOnce(new Error('HTTP 502')).mockResolvedValueOnce(tvmazePreview);
 		vi.mocked(clearEpisodeMatch).mockRejectedValue(new Error('HTTP 500'));
 		renderComponent(EpisodeMatchPanel, { props: panelProps() });
@@ -365,10 +365,9 @@ describe('EpisodeMatchPanel Clear episodes branches', () => {
 		await screen.findByText('Could not clear the episodes (HTTP 500).');
 		expect(clearEpisodeMatch).toHaveBeenCalledTimes(1);
 		await fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
-		await screen.findByText(/1 track changes if you apply TMDb/);
-		expect(matchIdentity).toHaveBeenCalledTimes(2);
-		expect(vi.mocked(matchIdentity).mock.calls[1]).toEqual(['job_1', { source: 'tmdb', apply: false }]);
-		expect(clearEpisodeMatch).toHaveBeenCalledTimes(1);
+		await settle();
+		expect(matchIdentity).toHaveBeenCalledTimes(1);
+		expect(clearEpisodeMatch).toHaveBeenCalledTimes(2);
 	});
 });
 
@@ -654,23 +653,71 @@ describe('EpisodeMatchPanel by-hand saves', () => {
 		});
 	});
 
-	// Oddity pinned as it is: with no season anywhere, the only episode value the
-	// picker can send is the row's own placement, which reads `s0e<n>` for a
-	// seasonless one, so the save sends season 0.
-	it('saves season 0 and episode_name null when a seasonless placed row is picked with no season anywhere', async () => {
+	// With no season anywhere, the only episode value the picker can send is the
+	// row's own placement: a seasonless one is valued `e<n>`, never season 0.
+	it('keeps a seasonless placement seasonless, with its name, when it is picked back', async () => {
 		const id = structuredClone(applied);
 		id.tracks![3] = placedTrack(3, { season: null, episode_number: 3, episode_name: 'Three' }) as never;
 		fetchIdentity.mockResolvedValue(id);
 		renderComponent(EpisodeMatchPanel, { props: panelProps() });
 		const select = await screen.findByLabelText('Set placement for t03');
-		expect(optionValues(select as HTMLSelectElement)).toEqual(['', 's0e3', 'extra', 'trailer', 'other']);
-		await fireEvent.change(select, { target: { value: 's0e3' } });
+		expect(optionValues(select as HTMLSelectElement)).toEqual(['', 'e3', 'extra', 'trailer', 'other']);
+		await fireEvent.change(select, { target: { value: 'extra' } });
+		await fireEvent.change(select, { target: { value: 'e3' } });
+		expect(updateTrack).toHaveBeenLastCalledWith('job_1', 'trk_3', {
+			role: 'episode',
+			season: null,
+			episode_number: 3,
+			episode_name: 'Three'
+		});
+	});
+
+	it.each([
+		['t03', 'e99'],
+		['t05', 'e1']
+	])('saves nothing for a seasonless value that is not the row placement (%s, %s)', async (ref, value) => {
+		renderComponent(EpisodeMatchPanel, { props: panelProps() });
+		const select = await screen.findByLabelText(`Set placement for ${ref}`);
+		const odd = document.createElement('option');
+		odd.value = value;
+		select.appendChild(odd);
+		await fireEvent.change(select, { target: { value } });
+		expect(updateTrack).not.toHaveBeenCalled();
+	});
+
+	it('saves episode_name null for an episode pick on a row with no season anywhere', async () => {
+		const id = structuredClone(applied);
+		id.tracks![3] = placedTrack(3, { season: null, episode_number: 3, episode_name: 'Three' }) as never;
+		fetchIdentity.mockResolvedValue(id);
+		renderComponent(EpisodeMatchPanel, { props: panelProps() });
+		const select = await screen.findByLabelText('Set placement for t03');
+		const odd = document.createElement('option');
+		odd.value = 's2e5';
+		select.appendChild(odd);
+		await fireEvent.change(select, { target: { value: 's2e5' } });
 		expect(updateTrack).toHaveBeenCalledWith('job_1', 'trk_3', {
 			role: 'episode',
-			season: 0,
+			season: 2,
+			episode_number: 5,
+			episode_name: null
+		});
+	});
+
+	it('shows the failure and keeps the row when a seasonless placement picked back fails to save', async () => {
+		const id = structuredClone(applied);
+		id.tracks![3] = placedTrack(3, { season: null, episode_number: 3, episode_name: null }) as never;
+		fetchIdentity.mockResolvedValue(id);
+		vi.mocked(updateTrack).mockRejectedValue(new Error('HTTP 500'));
+		renderComponent(EpisodeMatchPanel, { props: panelProps() });
+		const select = await screen.findByLabelText('Set placement for t03');
+		await fireEvent.change(select, { target: { value: 'e3' } });
+		expect(updateTrack).toHaveBeenCalledWith('job_1', 'trk_3', {
+			role: 'episode',
+			season: null,
 			episode_number: 3,
 			episode_name: null
 		});
+		expect(await screen.findByRole('alert')).toHaveTextContent('Could not save the track: HTTP 500');
 	});
 
 	it('keeps the row picked season when its revert fails', async () => {

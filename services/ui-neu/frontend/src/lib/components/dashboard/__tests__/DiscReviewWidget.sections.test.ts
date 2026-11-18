@@ -211,7 +211,7 @@ describe('DiscReviewWidget sections', () => {
 				year: 1974,
 				metadata_json: { ...IMDB, identity: { ...IMDB.identity, facts: { end_year: 1975 } } } as never
 			});
-			expect(await screen.findByTestId('match-row')).toHaveTextContent('tt0071049 , TV Series, 1974-1975');
+			expect(await screen.findByTestId('match-row')).toHaveTextContent('tt0071049, TV Series, 1974-1975');
 		});
 
 		it('appends one year when the show ended the year it began', async () => {
@@ -220,14 +220,14 @@ describe('DiscReviewWidget sections', () => {
 				year: 1974,
 				metadata_json: { identity: { ...IMDB.identity, facts: { end_year: 1974 } } } as never
 			});
-			expect(await screen.findByTestId('match-row')).toHaveTextContent('tt0071049 , TV Series, 1974');
+			expect(await screen.findByTestId('match-row')).toHaveTextContent('tt0071049, TV Series, 1974');
 			expect(screen.getByTestId('match-row')).not.toHaveTextContent('1974-');
 		});
 
 		it('appends no year when a series has none', async () => {
 			renderCard({ ...TV_SOURCE_OK, year: null, metadata_json: IMDB as never });
 			const row = await screen.findByTestId('match-row');
-			expect(row).toHaveTextContent('tt0071049 , TV Series');
+			expect(row).toHaveTextContent('tt0071049, TV Series');
 			expect(row).not.toHaveTextContent(/, \d{4}/);
 		});
 
@@ -519,25 +519,25 @@ describe('DiscReviewWidget sections', () => {
 			expect(await screen.findByText('Failed to update pause')).toBeInTheDocument();
 		});
 
-		it('does nothing for a guest', async () => {
+		it('shows no control for a guest', async () => {
 			await setRole('guest');
 			renderCard(counting);
-			await fireEvent.click(await screen.findByRole('button', { name: 'Pause timer' }));
-			expect(pauseWaitingJob).not.toHaveBeenCalled();
+			expect(await screen.findByText(/\d+m \d{2}s/)).toBeInTheDocument();
+			expect(screen.queryByRole('button', { name: /Pause timer|Resume timer/ })).not.toBeInTheDocument();
 		});
 
-		it('does nothing while the whole machine is paused', async () => {
+		it('shows no control while the whole machine is paused', async () => {
 			renderCard(counting, { props: { paused: true } });
-			await fireEvent.click(await screen.findByRole('button', { name: 'Resume timer' }));
-			expect(pauseWaitingJob).not.toHaveBeenCalled();
+			expect(await screen.findByText('Paused')).toBeInTheDocument();
+			expect(screen.queryByRole('button', { name: /Pause timer|Resume timer/ })).not.toBeInTheDocument();
 		});
 
-		it('does nothing while a toggle is in flight', async () => {
+		it('disables the control while a toggle is in flight', async () => {
 			vi.mocked(pauseWaitingJob).mockReturnValue(new Promise(() => {}));
 			renderCard(counting);
 			const button = await screen.findByRole('button', { name: 'Pause timer' });
 			await fireEvent.click(button);
-			await fireEvent.click(button);
+			expect(button).toBeDisabled();
 			expect(pauseWaitingJob).toHaveBeenCalledTimes(1);
 		});
 	});

@@ -431,7 +431,7 @@ describe('DiscReviewWidget', () => {
 			mockFetchJob.mockResolvedValueOnce(detail(over as never));
 			renderWidget(over as never);
 			await waitFor(() =>
-				expect(screen.getByTestId('match-row')).toHaveTextContent('Matched on ARM community database , Series, 1974')
+				expect(screen.getByTestId('match-row')).toHaveTextContent('Matched on ARM community database, Series, 1974')
 			);
 		});
 

@@ -3,6 +3,7 @@
 import { goto } from '$app/navigation';
 import { fetchJob, fetchNamingPreview, resolveJob, updateTrack } from '$lib/api/jobs';
 import { ApiError } from '$lib/api/client';
+import { errorMessage } from '$lib/utils/errors';
 import type { JobDetailView, NamingPreviewItem } from '$lib/types/api.gen';
 import type { EditableJobField } from '$lib/jobs/fields';
 import { readJobMetadata } from '$lib/jobs/metadata';
@@ -16,9 +17,9 @@ import { handSetTrackCount, isSeriesTrackList } from '$lib/jobs/track-fields';
 // so a route added elsewhere still shows up; explicit reloads always ask.
 const PREVIEW_UNROUTED_EVERY_N_POLLS = 6;
 
-// The check reads the error message for '404'; #536 covers it.
+// The job is gone (deleted, or an unknown id): the Backend answered 404.
 function isNotFound(e: unknown): boolean {
-	return e instanceof Error && e.message.includes('404');
+	return e instanceof ApiError && e.status === 404;
 }
 
 export class JobDetail {
@@ -26,6 +27,8 @@ export class JobDetail {
 	loading = $state(true);
 	error = $state<Error | null>(null);
 	previewItems = $state<NamingPreviewItem[]>([]);
+	// The last include/exclude toggle that failed: its track and why.
+	excludeError = $state<{ trackId: string; message: string } | null>(null);
 	#previewUnrouted = false;
 	#previewSkippedPolls = 0;
 	readonly #jobId: () => string;
@@ -51,8 +54,11 @@ export class JobDetail {
 	}
 
 	setExcluded = async (trackId: string, excluded: boolean): Promise<void> => {
+		this.excludeError = null;
 		try {
 			await updateTrack(this.#jobId(), trackId, { excluded });
+		} catch (e) {
+			this.excludeError = { trackId, message: errorMessage(e, 'Could not save') };
 		} finally {
 			// Refetch regardless: on success to pick up new naming/derived state,
 			// on failure to restore the last server-truth value in the checkbox.

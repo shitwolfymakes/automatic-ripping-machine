@@ -28,7 +28,7 @@ export interface EpisodeRow {
 	/** Left out of the transcode output (the disc still rips in full). */
 	excluded: boolean;
 	/** The picker option that is this row's current placement ('' when none): a
-	 * role value, or `s<season>e<episode>` as `pickerOptions` values them. */
+	 * role value, or the episode's `placementValue`. */
 	pickValue: string;
 }
 
@@ -122,7 +122,7 @@ export function buildRows(
 		const current = code ?? 'Not placed';
 		let pickValue = '';
 		if (t?.role && NON_EPISODE[t.role]) pickValue = t.role;
-		else if (t?.episode_number != null) pickValue = `s${t.season ?? 0}e${t.episode_number}`;
+		else if (t?.episode_number != null) pickValue = placementValue(t.season, t.episode_number);
 		return {
 			trackId: track.id,
 			ref: track.source_ref,
@@ -140,6 +140,13 @@ export function buildRows(
 			pickValue
 		};
 	});
+}
+
+/** The picker value of a saved episode placement: `s<season>e<episode>` as
+ * `pickerOptions` values them, or `e<episode>` for a seasonless one, which
+ * `parseHandPick` never reads as season 0. */
+export function placementValue(season: number | null | undefined, episode: number): string {
+	return season == null ? `e${episode}` : `s${season}e${episode}`;
 }
 
 export const ROLE_OPTIONS = Object.entries(NON_EPISODE).map(([value, label]) => ({ value, label }));

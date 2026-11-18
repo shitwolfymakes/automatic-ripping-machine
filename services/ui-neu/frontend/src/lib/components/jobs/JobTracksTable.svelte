@@ -8,10 +8,20 @@
 		tracksAreSeries: boolean;
 		previewByTrack: ReadonlyMap<string, NamingPreviewItem>;
 		onexcludedchange: (trackId: string, excluded: boolean) => void;
+		/** The last include toggle that failed, shown on its track's row. */
+		excludeError?: { trackId: string; message: string } | null;
 		ontitleapplied: () => void;
 	}
 
-	let { job, tracks, tracksAreSeries, previewByTrack, onexcludedchange, ontitleapplied }: Props = $props();
+	let {
+		job,
+		tracks,
+		tracksAreSeries,
+		previewByTrack,
+		onexcludedchange,
+		excludeError = null,
+		ontitleapplied
+	}: Props = $props();
 
 	let editingTrackId = $state<string | null>(null);
 
@@ -61,6 +71,7 @@
 							editingTrackId = null;
 						}}
 						{onexcludedchange}
+						excludeError={excludeError?.trackId === track.id ? excludeError.message : null}
 						ontitleapplied={handleTrackTitleApply}
 					/>
 				{/each}

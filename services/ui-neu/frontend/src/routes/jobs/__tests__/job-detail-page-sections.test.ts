@@ -170,6 +170,7 @@ function trackRows(): HTMLElement[] {
 function cellOf(row: HTMLElement, label: string): HTMLElement {
 	return row.querySelector(`[data-label="${label}"]`) as HTMLElement;
 }
+const titleButtonOf = (row: HTMLElement) => within(cellOf(row, 'Title')).getByRole('button');
 
 const text = (el: HTMLElement) => (el.textContent ?? '').replace(/\s+/g, ' ').trim();
 
@@ -254,10 +255,17 @@ describe('loading', () => {
 		expect(await screen.findByText('Failed to load: Failed to load job')).toBeInTheDocument();
 	});
 
-	it('redirects home for any Error whose message mentions 404', async () => {
-		mockFetchJob.mockRejectedValue(new Error('Request for job failed (404)'));
+	it('redirects home when the Backend answers 404 for the job', async () => {
+		mockFetchJob.mockRejectedValue(new ApiError(404, 'unknown job_id: job_1', null));
 		renderComponent(Page);
 		await waitFor(() => expect(mockGoto).toHaveBeenCalledWith('/'));
+	});
+
+	it('shows a plain Error whose message mentions 404 instead of redirecting', async () => {
+		mockFetchJob.mockRejectedValue(new Error('Request for job failed (404)'));
+		renderComponent(Page);
+		expect(await screen.findByText('Failed to load: Request for job failed (404)')).toBeInTheDocument();
+		expect(mockGoto).not.toHaveBeenCalled();
 	});
 
 	it('does not redirect for a 404 that is not an Error object', async () => {
@@ -1253,10 +1261,9 @@ describe('tracks table', () => {
 			await waitFor(() => expect(mockUpdateTrack).toHaveBeenCalledWith(JOB, 'trk_2', { excluded: false }));
 		});
 
-		// Pins today's behaviour: the failure escapes as an unhandled rejection
-		// (#543). The test swaps in its own listener so vitest does not fail the
-		// run on it, and puts vitest's back afterwards.
-		it('reloads the job even when the update fails, and leaves the failure unhandled', async () => {
+		// The test swaps in its own listener so a rejection that escaped would
+		// be counted instead of failing the run, and puts vitest's back afterwards.
+		it('reloads the job when the update fails and shows the failure on the row, handled', async () => {
 			const rejections: unknown[] = [];
 			const previous = process.listeners('unhandledRejection');
 			process.removeAllListeners('unhandledRejection');
@@ -1267,8 +1274,8 @@ describe('tracks table', () => {
 				await screen.findByText('Tracks (1)');
 				await fireEvent.click(screen.getByRole('checkbox'));
 				await waitFor(() => expect(mockFetchJob).toHaveBeenCalledTimes(2));
-				await waitFor(() => expect(rejections).toHaveLength(1));
-				expect((rejections[0] as Error).message).toBe('update failed');
+				expect(await screen.findByRole('alert')).toHaveTextContent('update failed');
+				expect(rejections).toEqual([]);
 			} finally {
 				process.removeAllListeners('unhandledRejection');
 				previous.forEach((l) => process.on('unhandledRejection', l));
@@ -1292,7 +1299,7 @@ describe('tracks table', () => {
 		it('opens under the row when an admin clicks the title cell and closes on the next click', async () => {
 			loadJobPage();
 			await screen.findByText('Tracks (1)');
-			const cell = cellOf(trackRows()[0], 'Title');
+			const cell = titleButtonOf(trackRows()[0]);
 			await fireEvent.click(cell);
 			expect(screen.getByRole('button', { name: 'Search' })).toBeInTheDocument();
 			await fireEvent.click(cell);
@@ -1303,15 +1310,15 @@ describe('tracks table', () => {
 			loadJobPage(detailOf({}, [createTrack({ id: 'trk_1', status: 'done' }), createTrack({ id: 'trk_2', index: 1 })]));
 			await screen.findByText('Tracks (2)');
 			const rows = trackRows();
-			await fireEvent.click(cellOf(rows[0], 'Title'));
-			await fireEvent.click(cellOf(rows[1], 'Title'));
+			await fireEvent.click(titleButtonOf(rows[0]));
+			await fireEvent.click(titleButtonOf(rows[1]));
 			expect(screen.getAllByRole('button', { name: 'Search' })).toHaveLength(1);
 		});
 
 		it('closes from its close button', async () => {
 			loadJobPage();
 			await screen.findByText('Tracks (1)');
-			await fireEvent.click(cellOf(trackRows()[0], 'Title'));
+			await fireEvent.click(titleButtonOf(trackRows()[0]));
 			await fireEvent.click(screen.getByTitle('Close'));
 			expect(screen.queryByRole('button', { name: 'Search' })).not.toBeInTheDocument();
 		});
@@ -1321,7 +1328,7 @@ describe('tracks table', () => {
 			mockUpdateTrack.mockResolvedValue(undefined as never);
 			loadJobPage();
 			await screen.findByText('Tracks (1)');
-			await fireEvent.click(cellOf(trackRows()[0], 'Title'));
+			await fireEvent.click(titleButtonOf(trackRows()[0]));
 			await fireEvent.click(screen.getByRole('button', { name: 'Search' }));
 			await fireEvent.click(await screen.findByText('Picked'));
 			await fireEvent.click(await screen.findByRole('button', { name: 'Apply' }));

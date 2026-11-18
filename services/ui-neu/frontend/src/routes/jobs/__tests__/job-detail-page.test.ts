@@ -171,7 +171,8 @@ describe('Job Detail Page', () => {
 		it('redirects to home on 404', async () => {
 			const { fetchJob } = await import('$lib/api/jobs');
 			const { goto } = await import('$app/navigation');
-			vi.mocked(fetchJob).mockRejectedValueOnce(new Error('404 Not Found'));
+			const { ApiError } = await import('$lib/api/client');
+			vi.mocked(fetchJob).mockRejectedValueOnce(new ApiError(404, 'unknown job_id: job_1', null));
 
 			renderComponent(JobDetailPage);
 			await waitFor(() => {
