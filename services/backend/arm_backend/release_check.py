@@ -23,6 +23,10 @@ DEFAULT_REPO = "automatic-ripping-machine/automatic-ripping-machine"
 REFRESH_INTERVAL_SECONDS = 6 * 3600
 _USER_AGENT = "arm-release-check"
 _CORE_RE = re.compile(r"^\d+(\.\d+)*$")
+# GitHub's owner/repo shape. The name goes into the API URL and the repo link.
+_REPO_RE = re.compile(r"^[A-Za-z0-9-]+/[A-Za-z0-9._-]+$")
+# The release URL becomes a link on the page, so only a GitHub page is accepted.
+_RELEASE_URL_PREFIX = "https://github.com/"
 _CHUNK_RE = re.compile(r"\d+|\D+")
 
 type VersionKey = tuple[tuple[int, int, str], ...]
@@ -49,8 +53,10 @@ cache = ReleaseCache()
 
 
 def release_repo() -> str:
-    """The GitHub repo to check: ARMCTL_RELEASE_REPO when set, else upstream."""
-    return os.environ.get("ARMCTL_RELEASE_REPO", "").strip() or DEFAULT_REPO
+    """The GitHub repo to check: ARMCTL_RELEASE_REPO when it is an owner/repo
+    name, else upstream."""
+    configured = os.environ.get("ARMCTL_RELEASE_REPO", "").strip()
+    return configured if _REPO_RE.match(configured) else DEFAULT_REPO
 
 
 def repo_url() -> str:
@@ -106,6 +112,8 @@ def _release_from_payload(payload: object) -> Release | None:
     tag, url = payload.get("tag_name"), payload.get("html_url")
     if not isinstance(tag, str) or not isinstance(url, str) or not tag or not url:
         raise ReleaseCheckError("release payload lacks tag_name or html_url")
+    if not url.startswith(_RELEASE_URL_PREFIX):
+        raise ReleaseCheckError("release html_url is not a GitHub page")
     return Release(tag=tag, url=url)
 
 

@@ -90,7 +90,10 @@ def test_parse_version(text: str, expected: object) -> None:
     ],
 )
 def test_update_available(running: str, tag: str, expected: bool) -> None:
-    assert release_check.update_available(running, Release(tag=tag, url="u")) is expected
+    assert (
+        release_check.update_available(running, Release(tag=tag, url="https://github.com/o/r/releases/tag/v3.1.0"))
+        is expected
+    )
 
 
 def test_release_repo_defaults_and_overrides(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -100,6 +103,18 @@ def test_release_repo_defaults_and_overrides(monkeypatch: pytest.MonkeyPatch) ->
     assert release_check.release_repo() == release_check.DEFAULT_REPO
     monkeypatch.setenv("ARMCTL_RELEASE_REPO", "me/fork")
     assert release_check.release_repo() == "me/fork"
+
+
+@pytest.mark.parametrize("value", ["me/fork; rm -rf /", "../etc", "a/b/c", "javascript:x", "me", "/fork", "me/"])
+def test_release_repo_ignores_a_value_that_is_not_owner_slash_repo(monkeypatch: pytest.MonkeyPatch, value: str) -> None:
+    # The name goes into the API URL and the repo link, so anything else falls back to upstream.
+    monkeypatch.setenv("ARMCTL_RELEASE_REPO", value)
+    assert release_check.release_repo() == release_check.DEFAULT_REPO
+
+
+def test_release_repo_accepts_dots_dashes_and_underscores(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("ARMCTL_RELEASE_REPO", "my-org/arm_fork.v3")
+    assert release_check.release_repo() == "my-org/arm_fork.v3"
 
 
 def test_repo_url_follows_the_release_repo(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -123,9 +138,11 @@ def test_latest_stable_release_success_sends_generic_headers() -> None:
 
     def handler(request: httpx.Request) -> httpx.Response:
         seen.append(request)
-        return httpx.Response(200, json={"tag_name": "v3.1.0", "html_url": "https://x/r", "prerelease": False})
+        return httpx.Response(
+            200, json={"tag_name": "v3.1.0", "html_url": "https://github.com/o/r/releases/tag/v1", "prerelease": False}
+        )
 
-    assert asyncio.run(_fetch(handler)) == Release(tag="v3.1.0", url="https://x/r")
+    assert asyncio.run(_fetch(handler)) == Release(tag="v3.1.0", url="https://github.com/o/r/releases/tag/v1")
     request = seen[0]
     assert request.url == "https://api.github.com/repos/o/r/releases/latest"
     assert request.headers["user-agent"] == "arm-release-check"
@@ -134,7 +151,7 @@ def test_latest_stable_release_success_sends_generic_headers() -> None:
 
 @pytest.mark.parametrize("flag", ["prerelease", "draft"])
 def test_latest_stable_release_ignores_prerelease_and_draft(flag: str) -> None:
-    body = {"tag_name": "v9.0.0-rc1", "html_url": "https://x/r", flag: True}
+    body = {"tag_name": "v9.0.0-rc1", "html_url": "https://github.com/o/r/releases/tag/v1", flag: True}
     assert asyncio.run(_fetch(lambda _: httpx.Response(200, json=body))) is None
 
 
@@ -157,8 +174,13 @@ def test_latest_stable_release_network_error_raises() -> None:
     [
         httpx.Response(200, content=b"not json"),
         httpx.Response(200, json=["a"]),
-        httpx.Response(200, json={"html_url": "https://x/r"}),
+        httpx.Response(200, json={"html_url": "https://github.com/o/r/releases/tag/v1"}),
         httpx.Response(200, json={"tag_name": "v1", "html_url": ""}),
+        # The URL becomes a link on the page, so only a GitHub page is accepted.
+        httpx.Response(200, json={"tag_name": "v1", "html_url": "javascript:alert(document.domain)"}),
+        httpx.Response(200, json={"tag_name": "v1", "html_url": "https://evil.example/r"}),
+        httpx.Response(200, json={"tag_name": "v1", "html_url": "https://github.com.evil.example/r"}),
+        httpx.Response(200, json={"tag_name": "v1", "html_url": "http://github.com/o/r"}),
     ],
 )
 def test_latest_stable_release_bad_payload_raises(response: httpx.Response) -> None:
@@ -189,13 +211,15 @@ def test_loop_checks_at_start_then_every_six_hours() -> None:
 
     def handler(request: httpx.Request) -> httpx.Response:
         calls.append(1)
-        return httpx.Response(200, json={"tag_name": f"v3.{len(calls)}.0", "html_url": "https://x/r"})
+        return httpx.Response(
+            200, json={"tag_name": f"v3.{len(calls)}.0", "html_url": "https://github.com/o/r/releases/tag/v1"}
+        )
 
     sleeps: list[float] = []
     _run_loop(handler, sleeps, stop_after=3)
     assert sleeps == [6 * 3600] * 3
     assert len(calls) == 3
-    assert release_check.cache.release == Release(tag="v3.3.0", url="https://x/r")
+    assert release_check.cache.release == Release(tag="v3.3.0", url="https://github.com/o/r/releases/tag/v1")
 
 
 def test_loop_warns_once_per_failure_streak_and_rearms_after_success(caplog: pytest.LogCaptureFixture) -> None:
@@ -204,7 +228,9 @@ def test_loop_warns_once_per_failure_streak_and_rearms_after_success(caplog: pyt
     def handler(request: httpx.Request) -> httpx.Response:
         status = next(statuses)
         if status == 200:
-            return httpx.Response(200, json={"tag_name": "v3.1.0", "html_url": "https://x/r"})
+            return httpx.Response(
+                200, json={"tag_name": "v3.1.0", "html_url": "https://github.com/o/r/releases/tag/v1"}
+            )
         return httpx.Response(status)
 
     with caplog.at_level(logging.WARNING, logger="arm_backend.release_check"):
@@ -219,17 +245,26 @@ def test_failure_keeps_the_last_good_release() -> None:
 
     def handler(request: httpx.Request) -> httpx.Response:
         if next(answers) == 200:
-            return httpx.Response(200, json={"tag_name": "v3.1.0", "html_url": "https://x/r"})
+            return httpx.Response(
+                200, json={"tag_name": "v3.1.0", "html_url": "https://github.com/o/r/releases/tag/v1"}
+            )
         return httpx.Response(500)
 
     _run_loop(handler, [], stop_after=2)
-    assert release_check.cache.release == Release(tag="v3.1.0", url="https://x/r")
+    assert release_check.cache.release == Release(tag="v3.1.0", url="https://github.com/o/r/releases/tag/v1")
 
 
 def test_prerelease_answer_clears_the_cache() -> None:
-    release_check.cache.release = Release(tag="v3.0.0", url="u")
+    release_check.cache.release = Release(tag="v3.0.0", url="https://github.com/o/r/releases/tag/v3.1.0")
     _run_loop(
-        lambda _: httpx.Response(200, json={"tag_name": "v4.0.0-rc1", "html_url": "u", "prerelease": True}),
+        lambda _: httpx.Response(
+            200,
+            json={
+                "tag_name": "v4.0.0-rc1",
+                "html_url": "https://github.com/o/r/releases/tag/v3.1.0",
+                "prerelease": True,
+            },
+        ),
         [],
         stop_after=1,
     )
@@ -242,7 +277,9 @@ def test_unexpected_exception_does_not_end_the_loop_and_warns_once(caplog: pytes
     def handler(request: httpx.Request) -> httpx.Response:
         calls.append(1)
         if len(calls) == 1:
-            return httpx.Response(200, json={"tag_name": "v3.1.0", "html_url": "u"})
+            return httpx.Response(
+                200, json={"tag_name": "v3.1.0", "html_url": "https://github.com/o/r/releases/tag/v3.1.0"}
+            )
         raise httpx.InvalidURL("bad repo")
 
     sleeps: list[float] = []
@@ -250,7 +287,7 @@ def test_unexpected_exception_does_not_end_the_loop_and_warns_once(caplog: pytes
         _run_loop(handler, sleeps, stop_after=4)
     assert sleeps == [6 * 3600] * 4
     assert len([r for r in caplog.records if r.levelno == logging.WARNING]) == 1
-    assert release_check.cache.release == Release(tag="v3.1.0", url="u")
+    assert release_check.cache.release == Release(tag="v3.1.0", url="https://github.com/o/r/releases/tag/v3.1.0")
 
 
 def test_cancellation_is_not_swallowed() -> None:
