@@ -2,7 +2,7 @@
 	import type { Snippet } from 'svelte';
 	import { fade } from 'svelte/transition';
 	import { fadeIn } from '$lib/ui/transitions';
-	import { loadPhase } from '$lib/utils/load-state';
+	import { loadView } from '$lib/utils/load-state';
 
 	interface Props {
 		data: T | null | undefined;
@@ -40,30 +40,29 @@
 		};
 	});
 
-	const phase = $derived(loadPhase({ data, loading, error, delayElapsed, isEmpty }));
+	const view = $derived(loadView({ data, loading, error, delayElapsed, isEmpty }));
 </script>
 
-<!-- loadPhase is 'error' exactly when error is set; testing error narrows it. -->
-{#if error}
+{#if view.phase === 'error'}
 	<div in:fade|local={fadeIn}>
 		{#if errorSlot}
-			{@render errorSlot(error)}
+			{@render errorSlot(view.error)}
 		{:else}
-			<p class="load-state-error">Failed to load: {error.message}</p>
+			<p class="load-state-error">Failed to load: {view.error.message}</p>
 		{/if}
 	</div>
-{:else if phase === 'waiting'}
+{:else if view.phase === 'waiting'}
 	<!-- Anti-flicker window: the skeleton is already in flow (space reserved)
          but invisible, so a fast load fades content in without a jump and a
          slow one reveals the skeleton without one either. -->
 	<div data-phase="waiting" aria-hidden="true">
 		{@render loadingSlot()}
 	</div>
-{:else if phase === 'loading'}
+{:else if view.phase === 'loading'}
 	<div in:fade|local={fadeIn}>
 		{@render loadingSlot()}
 	</div>
-{:else if phase === 'empty'}
+{:else if view.phase === 'empty'}
 	<div in:fade|local={fadeIn}>
 		{#if empty}
 			{@render empty()}
@@ -71,10 +70,10 @@
 			{@render loadingSlot()}
 		{/if}
 	</div>
-{:else if data != null}
-	<!-- 'ready' is only reached with data set. -->
+{:else}
+	<!-- 'ready': the view carries the data. -->
 	<div in:fade|local={fadeIn}>
-		{@render ready(data)}
+		{@render ready(view.data)}
 	</div>
 {/if}
 
