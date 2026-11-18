@@ -1,3 +1,5 @@
+// Open arm the coverage tool reports that is Svelte's, not the component's:
+// `{scheme.author}` compiles to `(...) ?? ''` and sits inside an #if on it.
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import { get } from 'svelte/store';
 import type { Writable } from 'svelte/store';

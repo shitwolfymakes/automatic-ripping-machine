@@ -1,3 +1,7 @@
+// Open arms the coverage tool reports that are Svelte's, not the panel's: the
+// job count and its plural, and the selection count, each compile to
+// `(...) ?? ''`. They are a number, a string and a number (the selection count
+// inside an #if that needs it above 0).
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderComponent, screen, cleanup, waitFor, fireEvent, within } from '$lib/testing/render';
 import AllJobsPanel from '../AllJobsPanel.svelte';

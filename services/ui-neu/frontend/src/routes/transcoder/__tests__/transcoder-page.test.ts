@@ -1,3 +1,7 @@
+// Every branch of the transcoder page's own code is covered across this file
+// and transcoder-page-sections.test.ts. The coverage tool still reports two
+// open arms that are Svelte's: `{$statsError}` and `{taskActions.error}` each
+// compile to `(...) ?? ''`, and both sit inside an #if on the same value.
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { renderComponent, screen, cleanup, waitFor, fireEvent, within } from '$lib/testing/render';
 import TranscoderPage from '../+page.svelte';
