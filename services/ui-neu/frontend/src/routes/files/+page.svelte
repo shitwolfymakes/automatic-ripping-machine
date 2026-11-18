@@ -284,9 +284,8 @@
 		</div>
 	{/if}
 
-	<!-- File listing. With no root to open (none configured) there is no listing
-	     to load, so the empty-roots message stands in for it. -->
-	{#if !browser.loading && !browser.current.root && !browser.error}
+	<!-- File listing; with no root configured the empty-roots message stands in for it. -->
+	{#if browser.noRootsConfigured}
 		<div class="panel files-page-empty-panel">
 			<p class="files-page-empty-panel-text">No media directories configured</p>
 		</div>
