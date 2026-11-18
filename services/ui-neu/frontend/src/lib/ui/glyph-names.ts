@@ -1,6 +1,7 @@
 export type GlyphName =
 	| 'check'
 	| 'check-circle'
+	| 'circle'
 	| 'x'
 	| 'x-circle'
 	| 'warning'
@@ -39,6 +40,7 @@ export type GlyphName =
 export const GLYPH_PATHS: Record<GlyphName, string> = {
 	check: 'M5 13l4 4L19 7',
 	'check-circle': 'M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z',
+	circle: 'M21 12a9 9 0 11-18 0 9 9 0 0118 0z',
 	x: 'M6 18L18 6M6 6l12 12',
 	'x-circle': 'M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z',
 	warning:

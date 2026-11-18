@@ -3,6 +3,7 @@
 	import { updateDrive } from '$lib/api/drives';
 	import { driveStatusLabel, isDriveDetached, isRipperOfflinePresent } from '$lib/drives/drives';
 	import StatusBadge from '../../shared/StatusBadge.svelte';
+	import Glyph from '../../shared/Glyph.svelte';
 
 	interface Props {
 		/** The drive this header shows. */
@@ -58,7 +59,9 @@
 		{#if isError}
 			<span class="flex-shrink-0 drive-card-status-error" title={statusText}>{statusText}</span>
 		{:else if isDetached}
-			<span class="flex-shrink-0 badge badge-warning badge-sm drive-card-status-pill">{statusText}</span>
+			<span class="flex-shrink-0 badge badge-warning badge-sm drive-card-status-pill inline-flex items-center gap-1"
+				><Glyph name="circle" class="h-3 w-3" />{statusText}</span
+			>
 		{:else if isOfflinePresent}
 			<span class="flex-shrink-0 badge badge-warning badge-sm drive-card-status-pill" data-testid="drive-status-label"
 				>{statusText}</span
