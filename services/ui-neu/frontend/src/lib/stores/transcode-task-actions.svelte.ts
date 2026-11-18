@@ -29,8 +29,8 @@ export class TranscodeTaskActions {
 		return this.#run(() => retryTranscoderJob(id), 'Retry');
 	};
 
-	remove = (id: string): Promise<void> | undefined => {
-		if (!confirm('Delete this transcode task?')) return;
+	// Deletes without asking: the page confirms first through ConfirmDialog.
+	remove = (id: string): Promise<void> => {
 		return this.#run(() => deleteTranscoderJob(id), 'Delete');
 	};
 

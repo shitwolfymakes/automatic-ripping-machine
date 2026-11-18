@@ -1,3 +1,5 @@
+// Open arm the coverage tool reports that is Svelte's, not the component's:
+// `{scheme.author}` compiles to `(...) ?? ''` and sits inside an #if on it.
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import { get } from 'svelte/store';
 import type { Writable } from 'svelte/store';
@@ -117,13 +119,30 @@ describe('ThemesSettings user themes', () => {
 		expect(get(colorScheme)).toBe('mine');
 	});
 
-	it('deletes a user theme by its id and label', async () => {
+	it('asks through the confirm dialog, then deletes a user theme by its id and label', async () => {
 		setSchemes([userTheme('mine', 'Mine')]);
 		const themes = new UserThemes();
 		const spy = vi.spyOn(themes, 'deleteTheme').mockResolvedValue();
 		renderThemes(themes);
 		await fireEvent.click(screen.getByTitle('Delete'));
+		const dialog = screen.getByRole('dialog');
+		expect(within(dialog).getByText('Delete user theme')).toBeInTheDocument();
+		expect(within(dialog).getByText('Delete user theme "Mine"?')).toBeInTheDocument();
+		expect(spy).not.toHaveBeenCalled();
+		await fireEvent.click(within(dialog).getByRole('button', { name: 'Delete' }));
 		expect(spy).toHaveBeenCalledWith('mine', 'Mine');
+		expect(screen.queryByRole('dialog')).toBeNull();
+	});
+
+	it('does not delete when the confirm dialog is cancelled', async () => {
+		setSchemes([userTheme('mine', 'Mine')]);
+		const themes = new UserThemes();
+		const spy = vi.spyOn(themes, 'deleteTheme').mockResolvedValue();
+		renderThemes(themes);
+		await fireEvent.click(screen.getByTitle('Delete'));
+		await fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Cancel' }));
+		expect(screen.queryByRole('dialog')).toBeNull();
+		expect(spy).not.toHaveBeenCalled();
 	});
 });
 
