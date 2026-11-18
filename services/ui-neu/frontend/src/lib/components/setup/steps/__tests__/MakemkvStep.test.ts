@@ -15,7 +15,7 @@ type Step = { commit(): Promise<string | false> };
 
 afterEach(() => cleanup());
 
-describe('MakemkvStep (D-109)', () => {
+describe('MakemkvStep', () => {
 	it('records attention when the key was rejected after the step opened', async () => {
 		stubState.atMount = cfg(null);
 		stubState.afterSave = cfg(false);

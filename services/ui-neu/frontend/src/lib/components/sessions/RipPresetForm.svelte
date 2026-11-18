@@ -1,8 +1,6 @@
 <script lang="ts">
-	// Ported from the removed Vue UI's RipPresetForm view. The Vue view was a
-	// routed page; this is an inline (no-route) form driven by props. Field
-	// wiring, the disabled rules, and the create / custom-edit / built-in
-	// submit-body shapes follow the Vue source faithfully.
+	// An inline (no-route) form driven by props: field wiring, the disabled rules, and the create /
+	// custom-edit / built-in submit-body shapes.
 	import { createRipPreset, updateRipPreset } from '$lib/api/rip-presets';
 	import { PresetSave } from '$lib/stores/preset-save.svelte';
 	import type { EditorStatus } from '../../ui/editor-status';
@@ -78,8 +76,7 @@
 		await save.run(savePreset, (p) => onsaved(p));
 	}
 
-	// the old shared input-class constants are gone: inputs live in .field
-	// wrappers now, styled by field.css's descendant rule.
+	// inputs live in .field wrappers, styled by field.css's descendant rule.
 </script>
 
 <form id={formId} class="stack rip-preset-form" onsubmit={submit}>

@@ -147,7 +147,7 @@ def _own_block(
 def _copy_depth(
     schema: HandbrakeSchema, reachable: list[str], family: str, depth: int
 ) -> tuple[dict[str, dict[str, Any]], list[str], list[str]]:
-    """Depth-only blocks for the other reachable families (R3), and the families lacking that depth."""
+    """Depth-only blocks for the other reachable families, and the families lacking that depth."""
     others = sorted(f for f in reachable if f != family)
     has_depth = [f for f in others if depth in schema.families[f].variants]
     lacking = [f for f in others if f not in has_depth]

@@ -53,10 +53,9 @@ function withConfig(patch: Record<string, unknown>) {
 	} as never);
 }
 
-// New schema-driven config shape. The page reads `settings.config` (values),
+// The schema-driven config shape. The page reads `settings.config` (values),
 // `settings.schema.groups` (structure → tabs + fields), and `settings.infra`
-// (System read-only values). The dead v2 ARM_* blob / abcde / transcoder-config
-// / systemInfo surface is gone.
+// (System read-only values).
 const mockSchema = {
 	groups: [
 		{

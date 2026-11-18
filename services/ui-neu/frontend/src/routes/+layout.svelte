@@ -64,7 +64,7 @@
 		// `goto('/login')` because the root layout persists across navigations —
 		// so it would keep firing requests that 401, re-entering this handler
 		// many times per tick and re-navigating to /login on each (which steals
-		// focus from the login inputs). Fix: stop the poll loop the moment the
+		// focus from the login inputs). So stop the poll loop the moment the
 		// session is known stale, and guard the redirect so repeated 401s from
 		// in-flight requests don't pile up redundant navigations.
 		setUnauthorizedHandler(() => {
@@ -191,7 +191,7 @@
 		</div>
 	</div>
 {/if}
-<!-- The setup walkthrough is a focused shell: no resource footer (setup spec §5.0). -->
+<!-- The setup walkthrough is a focused shell: no resource footer. -->
 {#if $uiPrefs.showStats && !isSetupPage}
 	<BottomStatsBar />
 {/if}
@@ -233,11 +233,9 @@
 	.layout-hr {
 		border-top: 1px solid var(--color-border);
 	}
-	/* original header icon buttons were p-2 (0.5rem/8px), not .btn-icon's
-	   default 0.375rem (6px) - that smaller value is right for the denser
-	   row icon buttons elsewhere (channel rows use p-1.5/6px), but shifts
-	   these four header buttons (sidebar toggle, quick actions, sign out,
-	   theme) ~2px narrower than the original. */
+	/* header icon buttons are 0.5rem/8px, not .btn-icon's default 0.375rem (6px) - that smaller value
+	   is right for the denser row icon buttons elsewhere (channel rows use 6px), but would make
+	   these four header buttons (sidebar toggle, quick actions, sign out, theme) ~2px narrower. */
 	.layout-header-icon {
 		padding: 0.5rem;
 	}

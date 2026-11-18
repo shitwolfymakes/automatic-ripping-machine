@@ -87,7 +87,7 @@ async def test_boot_reconcile_passes_only_enrolled_rows_and_writes_last_error() 
     assert ok.last_error is None  # success clears a stale error
     assert bad.last_error == "ImageNotFound: nope"
     assert detected.last_error == "untouched"
-    # B2: an ENROLLED row sitting in ERROR (e.g. a register-time identity
+    # An ENROLLED row sitting in ERROR (e.g. a register-time identity
     # mismatch) that reconcile successfully adopts keeps its diagnostic
     # reason — reconcile succeeding at the docker level doesn't mean the
     # identity problem is fixed; only a fresh register (or a fixed
@@ -122,7 +122,7 @@ async def test_boot_reconcile_passes_ripping_drives_as_busy() -> None:
 @pytest.mark.asyncio
 async def test_boot_sweep_runs_before_reconcile() -> None:
     """A finished ISO rip's drive is retired by the boot sweep, so reconcile
-    never sees it and never respawns its container (spec 6.2 ordering)."""
+    never sees it and never respawns its container."""
     db = FakeSession()
     optical = _row("drv_sr0", DriveLifecycle.ENROLLED)
     done = _row("drv_iso_done", DriveLifecycle.ENROLLED)

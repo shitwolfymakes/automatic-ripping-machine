@@ -27,7 +27,7 @@ class PathStatus(BaseModel):
     exists: bool
     writable: bool
     # Host-side bind source (ARM_HOST_*_PATH) and the backend's effective ids,
-    # so the UI can print the exact `chown` fix (setup spec §6.3).
+    # so the UI can print the exact `chown` fix.
     host_path: str | None = None
     uid: int | None = None
     gid: int | None = None

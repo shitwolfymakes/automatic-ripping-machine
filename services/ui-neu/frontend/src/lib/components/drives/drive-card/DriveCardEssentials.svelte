@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { errorMessage } from '$lib/utils/errors';
 	// The drive card's essentials variant: name and 4K only, for the setup
-	// walkthrough (setup spec §5.4).
+	// walkthrough.
 	import type { DriveView as Drive } from '$lib/types/api.gen';
 	import { updateDrive } from '$lib/api/drives';
 	import { connectionLabel, driveTitle, isRipping, mediaLabel } from '$lib/drives/drives';

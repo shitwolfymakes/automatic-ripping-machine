@@ -345,7 +345,7 @@ async def test_wait_timeout_removes_container_and_records_timeout() -> None:
     row = db.rows["gpus"][0]
     assert container.removed == [True]
     assert container.logs_calls == []
-    # D-070: the probe never got to test the device, so its verified
+    # The probe never got to test the device, so its verified
     # encoders stand; only the error is recorded.
     assert row.encoder_kinds == ["h264"]
     assert row.probe_error is not None
@@ -368,7 +368,7 @@ async def test_wait_failure_that_is_not_a_timeout_is_recorded() -> None:
 
 
 async def test_infra_failures_keep_the_verified_encoders() -> None:
-    """D-070: a container that cannot start or a docker wait error says
+    """A container that cannot start or a docker wait error says
     nothing about the device; wiping its list would fail pinned tasks."""
     container = _Container(wait_exc=RuntimeError("connection reset"))
     runner, db, *_ = _build([_gpu(encoder_kinds=["h264", "hevc"])], container)
@@ -408,7 +408,7 @@ async def test_container_created_but_not_started_is_removed() -> None:
 
 
 async def test_a_device_docker_refuses_verifies_nothing() -> None:
-    """D-070 follow-up: a start failure naming the device (node removed, driver
+    """A start failure naming the device (node removed, driver
     broken) is about the device, not the infrastructure, so the row must stop
     advertising its old encoders; tasks then fall back to the CPU."""
     runner, db, docker, *_ = _build([_gpu(encoder_kinds=["h264", "hevc"])])

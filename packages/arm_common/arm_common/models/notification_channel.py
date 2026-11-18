@@ -17,8 +17,8 @@ class NotificationChannel(SQLModel, table=True):
     __tablename__ = "notification_channels"
 
     id: str = Field(default_factory=_notification_channel_id, primary_key=True)
-    # Discriminator for the config union. Only "apprise" is implemented; the
-    # column is VARCHAR so webhook/bash can be added later without a migration.
+    # Discriminator for the config union. One of "apprise", "inapp" or "bash"; the
+    # column is VARCHAR so a new channel type needs no migration.
     type: str = Field(sa_column=Column(String, nullable=False))
     name: str = Field(sa_column=Column(String, nullable=False))
     enabled: bool = Field(default=True, sa_column=Column(Boolean, nullable=False, server_default="true"))

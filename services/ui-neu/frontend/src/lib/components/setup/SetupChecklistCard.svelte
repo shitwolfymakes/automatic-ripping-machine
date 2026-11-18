@@ -10,7 +10,7 @@
 
 	// Dashboard card listing whatever setup left open: steps skipped or needing
 	// attention, or the whole walkthrough after "Finish later". Dismissal is
-	// stored on the server (setup spec D3).
+	// stored on the server.
 	let view = $state<SetupView | null>(null);
 	let hidden = $state(false);
 

@@ -3,11 +3,9 @@
 import type { ColorScheme } from '$lib/themes/builtin-schemes';
 
 /**
- * `--color-primary` keeps the same value in light and dark mode (spec 5.1:
- * "Light default ... Dark default: same"), and tokens.css's own `.dark {}`
+ * `--color-primary` keeps the same value in light and dark mode, and tokens.css's own `.dark {}`
  * block never redefines it. `--color-primary-dark` in a scheme's `tokens` is
- * a distinct legacy alias role (a fixed darker shade some unmigrated
- * components read directly via `dark:text-primary-dark`), not "what primary
+ * a distinct legacy alias role (a fixed darker shade), not "what primary
  * becomes in dark mode" - so it must not be treated as `--color-primary`'s
  * effective-mode twin the way `--color-page-dark`/`--color-surface-dark`/
  * `--color-primary-text-dark`/`--color-primary-light-bg-dark` are.
@@ -36,8 +34,7 @@ let appliedTokenProps: string[] = [];
  * whichever value matches the `effectiveDark` mode; every other token
  * (including the `-dark`-suffixed names themselves, and roles the scheme
  * does not pair, e.g. tones and `--color-border`) is written unchanged, so
- * `.dark {}` keeps handling those and unmigrated `dark:bg-surface-dark`-style
- * utilities keep working.
+ * `.dark {}` keeps handling those.
  */
 function applyTokens(root: HTMLElement, scheme: ColorScheme, effectiveDark: boolean) {
 	for (const prop of appliedTokenProps) {
@@ -46,8 +43,7 @@ function applyTokens(root: HTMLElement, scheme: ColorScheme, effectiveDark: bool
 	const written: string[] = [];
 	for (const [prop, value] of Object.entries(scheme.tokens)) {
 		if (prop.endsWith('-dark')) {
-			// Legacy paired name: keep writing it unchanged for components
-			// that still use `dark:bg-surface-dark` etc.
+			// Legacy paired name: keep writing it unchanged.
 			root.style.setProperty(prop, value);
 			written.push(prop);
 			continue;

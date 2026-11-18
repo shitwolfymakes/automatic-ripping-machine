@@ -1,5 +1,5 @@
 /* layout helpers: names describe arrangement, the one exception to
-   role-based naming (spec 6.3). */
+   role-based naming. */
 @layer components {
 	.stack {
 		display: flex;

@@ -2,7 +2,7 @@
 
 Covers the three live providers (tmdb/omdb/tvdb) against respx-mocked upstream
 responses, the missing-key path, the makemkv stored-verdict mapping, and the
-guest -> 403 write gate. See the spec brief for exact status/detail mapping.
+guest -> 403 write gate.
 """
 
 from __future__ import annotations
@@ -470,7 +470,7 @@ def test_missing_singleton_is_500(signing_key: bytes) -> None:
 
 
 def test_saving_a_new_makemkv_key_clears_the_old_keys_verdict(signing_key: bytes) -> None:
-    """D-109 follow-up: the verdict belongs to the key a ripper checked. A new
+    """The verdict belongs to the key a ripper checked. A new
     key has none until a ripper checks it; re-saving the same key keeps it."""
     db = FakeSession()
     _seed(db, makemkv_key="M-old", makemkv_key_valid=False, makemkv_key_state="key_invalid")

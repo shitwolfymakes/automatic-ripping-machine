@@ -186,9 +186,8 @@
 {/if}
 
 <style>
-	/* card-status colours its left accent from data-status; the ORIGINAL
-	   TranscodeCard accent was always primary blue (border-l-primary), not
-	   status-driven - same precedent as JobCard's video-type accent
+	/* card-status colours its left accent from data-status; the TranscodeCard accent is always primary
+	   blue, not status-driven - same precedent as JobCard's video-type accent
 	   override: a style:--card-accent custom property set from the
 	   template, read here, no !important needed (this scoped rule already
 	   compiles unlayered, which beats card-status[data-status]'s own

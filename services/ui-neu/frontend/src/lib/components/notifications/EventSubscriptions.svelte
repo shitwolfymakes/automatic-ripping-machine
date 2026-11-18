@@ -161,7 +161,7 @@
 	.event-subscriptions {
 		position: relative;
 	}
-	/* the original per-event box was p-3 (0.75rem), tighter than panel-section's 1rem. */
+	/* the per-event box is 0.75rem, tighter than panel-section's 1rem. */
 	.event-subscriptions-item {
 		padding: 0.75rem;
 	}

@@ -200,7 +200,7 @@ describe('Transcoder Page', () => {
 		});
 	});
 
-	describe('done task duration (D-202)', () => {
+	describe('done task duration', () => {
 		const doneTask = {
 			id: 't-3',
 			session_application_id: 'sap_3',
@@ -230,7 +230,7 @@ describe('Transcoder Page', () => {
 		});
 	});
 
-	describe('action failures (D-195)', () => {
+	describe('action failures', () => {
 		afterEach(() => vi.restoreAllMocks());
 
 		it('shows a failed retry in the feedback banner and refreshes the list', async () => {
@@ -339,7 +339,7 @@ it('renders per-GPU inventory rows with status and a manage link', async () => {
 	expect(screen.getByText('Manage GPUs in Settings')).toHaveAttribute('href', '/settings#transcoding');
 });
 
-it('reloads the per-GPU rows on transcode events so they track claims (D-058)', async () => {
+it('reloads the per-GPU rows on transcode events so they track claims', async () => {
 	cleanup();
 	renderComponent(TranscoderPage);
 	await waitFor(() => expect(screen.getByTestId('gpu-rows').textContent).toContain('busy'));

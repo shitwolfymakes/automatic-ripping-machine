@@ -49,11 +49,11 @@ class Config(SQLModel, table=True):
     makemkv_sdf_enabled: bool = Field(sa_column=Column(Boolean, nullable=False, server_default="true"))
     makemkv_sdf_state: str | None = Field(sa_column=Column(String, nullable=True))
     makemkv_sdf_checked_at: datetime | None = Field(sa_column=Column(DateTime(timezone=True), nullable=True))
-    # TheDiscDB disc-map matching (docs/superpowers/specs/2026-08-06-thediscdb-design.md).
+    # TheDiscDB disc-map matching.
     thediscdb_enabled: bool = Field(sa_column=Column(Boolean, nullable=False, server_default="true"))
     thediscdb_refresh_days: int = Field(sa_column=Column(Integer, nullable=False, server_default="7"))
     thediscdb_refreshed_at: datetime | None = Field(sa_column=Column(DateTime(timezone=True), nullable=True))
-    # Identity settings (PR 4): ranked source lists for episode matching + disc
+    # Identity settings: ranked source lists for episode matching + disc
     # hints, the match-tolerance window, and the auto-apply gate.
     episode_sources: list[str] = Field(
         default_factory=lambda: ["tmdb", "tvmaze", "tvdb"],
@@ -67,9 +67,9 @@ class Config(SQLModel, table=True):
         default=300, sa_column=Column(Integer, nullable=False, server_default="300")
     )
     episode_auto_apply: bool = Field(default=True, sa_column=Column(Boolean, nullable=False, server_default="true"))
-    # Identification settings (spec 2026-10-14 D-7). Ranked online sources per
+    # Identification settings: ranked online sources per
     # media type, the job page's search provider per type, per-type auto-apply
-    # gates, and the ARM community CRC64 database switch (D-2). The TV list is
+    # gates, and the ARM community CRC64 database switch. The TV list is
     # `episode_sources` above.
     movie_sources: list[str] = Field(
         default_factory=lambda: ["tmdb", "omdb"],
@@ -110,11 +110,11 @@ class Config(SQLModel, table=True):
             server_default=PreviouslyRippedAction.HOLD.value,
         ),
     )
-    # Drive scanner (spec §2). Read on every tick, so edits apply live.
+    # Drive scanner. Read on every tick, so edits apply live.
     drive_scan_interval_seconds: int = Field(sa_column=Column(Integer, nullable=False, server_default="30"))
-    # Dispatcher parallelism cap - operator config (Settings > Transcoding),
-    # moved from the MAX_PARALLEL_TRANSCODES env var. NULL = not yet seeded;
-    # the backend's config seeder backfills it from the env value once, then
+    # Dispatcher parallelism cap - operator config (Settings > Transcoding).
+    # NULL = not yet seeded; the backend's config seeder backfills it from
+    # the MAX_PARALLEL_TRANSCODES env value once, then
     # this column is authoritative and the dispatcher reads it per tick.
     max_parallel_transcodes: int | None = Field(default=None, sa_column=Column(Integer, nullable=True))
     # ISO-source ripping (ephemeral per-ISO virtual drives, docs/developers/
@@ -144,14 +144,14 @@ class Config(SQLModel, table=True):
         sa_column=Column(Boolean, nullable=False, server_default="false"),
     )
     session_signing_key: bytes | None = Field(sa_column=Column(LargeBinary, nullable=True))
-    # One-shot marker (I1): built-in session_routes are seeded only when this
+    # One-shot marker: built-in session_routes are seeded only when this
     # is false AND the table is empty; seeding then flips it true. Without
     # this, "seed when table empty" would silently resurrect a route a user
     # deliberately deleted on every backend restart. See migration
     # 0035_session_routes_seed_marker for why it is set true only on a
     # deployed Postgres DB whose session_routes table already has rows.
     session_routes_seeded: bool = Field(sa_column=Column(Boolean, nullable=False, server_default="false"))
-    # First-run setup walkthrough (setup spec 2026-10-01 §6.1). NULL completed_at
+    # First-run setup walkthrough: NULL completed_at
     # = the walkthrough is active; migration 0042 backfills it for installs in use.
     setup_completed_at: datetime | None = Field(default=None, sa_column=Column(DateTime(timezone=True), nullable=True))
     # {step_id: {"state": "done"|"skipped"|"attention", "at": iso}}; ids and

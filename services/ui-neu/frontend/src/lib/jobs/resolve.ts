@@ -116,7 +116,7 @@ function externalIdsFrom(ids: ExternalIds | null | undefined): ExternalIds {
 
 /**
  * The title search's resolve body for a picked match. A picked match states
- * the whole show (spec 3.6): every show id, nulls included, plus provider,
+ * the whole show: every show id, nulls included, plus provider,
  * poster and facts in one call.
  */
 export function titleMatchBody(c: MetadataCandidate, values: TitleApplyValues, posterIsManual: boolean): ResolveBody {

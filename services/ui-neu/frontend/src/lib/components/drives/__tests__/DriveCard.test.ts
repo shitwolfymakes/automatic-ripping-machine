@@ -101,18 +101,14 @@ describe('DriveCard', () => {
 		it('renders the detached copy and dims the card when offline and absent', () => {
 			const { container } = renderDrive({ status: 'offline', present: false, media_status: 'detached' });
 			expect(screen.getByText('○ detached: reconnect the drive')).toBeInTheDocument();
-			// the original shell's only status-driven style was opacity-60 while
+			// the shell's only status-driven style is opacity-60 while
 			// detached, carried here as the data-detached state hook.
 			expect(container.querySelector('.drive-card')).toHaveAttribute('data-detached', 'true');
 		});
 
-		// The pre-migration card shell (git 441d35d2) was a fixed
-		// `border-primary/20` box: drive status coloured the inline header
-		// label only, never the card. So the shell stays a plain `card` -
-		// `card-status` would add a 4px left accent stripe the baseline has
-		// no counterpart for. DriveCard needs an enrolled drive to render, so
-		// the parity harness never exercises it on the local stack; assert the
-		// shell's classes here instead.
+		// The card shell is a fixed `border-primary/20` box: drive status colours the inline header label
+		// only, never the card. So the shell stays a plain `card` - `card-status` would add a 4px
+		// left accent stripe; assert the shell's classes here.
 		it.each(['online', 'offline', 'error'] as const)(
 			'keeps the card shell free of a status accent when status is %s',
 			(status) => {
@@ -303,15 +299,12 @@ describe('DriveCard', () => {
 			['an open tray', { media_status: 'tray_open' }, 'The tray is open'],
 			['a drive spinning up', { media_status: 'not_ready' }, 'not ready yet'],
 			['an unopenable drive', { media_status: 'unavailable' }, 'check its permissions']
-		] as [string, Partial<Drive>, string][])(
-			'disables Start rip with a reason for %s (D-208)',
-			(_l, overrides, reason) => {
-				renderDrive(overrides);
-				const btn = screen.getByTestId('drive-start-rip');
-				expect(btn).toBeDisabled();
-				expect(btn.getAttribute('title')).toContain(reason);
-			}
-		);
+		] as [string, Partial<Drive>, string][])('disables Start rip with a reason for %s', (_l, overrides, reason) => {
+			renderDrive(overrides);
+			const btn = screen.getByTestId('drive-start-rip');
+			expect(btn).toBeDisabled();
+			expect(btn.getAttribute('title')).toContain(reason);
+		});
 
 		it.each([null, 'loaded', 'unknown'] as const)('keeps Start rip enabled when media status is %s', (media) => {
 			renderDrive({ media_status: media });
@@ -447,7 +440,7 @@ describe('DriveCard', () => {
 		});
 	});
 
-	describe('rip mode (setup spec D1)', () => {
+	describe('rip mode', () => {
 		it('offers Default (follow the global switch), Auto and Manual; Default writes null', async () => {
 			renderComponent(DriveCard, { props: { drive: createDrive({ drive_mode: 'manual' }), globalAutoRip: true } });
 			const select = screen.getByLabelText(/rip mode/i) as HTMLSelectElement;

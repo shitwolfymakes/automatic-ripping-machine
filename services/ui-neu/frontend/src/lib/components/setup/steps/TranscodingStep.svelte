@@ -9,7 +9,7 @@
 	import type { StepCommitResult } from '../../../setup/steps';
 
 	// Step 7 (optional): graphics devices with a live encoder test, and the
-	// encode switches (setup spec §5.8). A ripper-only install has nothing to set.
+	// encode switches. A ripper-only install has nothing to set.
 	let { view }: { view: SetupView; setBlocked?: (reason: string | null) => void } = $props();
 	void view;
 	let fields: SetupConfigFields | undefined = $state();

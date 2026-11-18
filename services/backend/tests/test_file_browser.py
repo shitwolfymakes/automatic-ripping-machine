@@ -277,7 +277,7 @@ def test_fix_permissions_single_file(roots):
     assert oct(f.stat().st_mode & 0o777) == "0o644"
 
 
-# ── C1: fix_permissions must NOT chmod through symlinks ──────────────────────
+# ── fix_permissions must NOT chmod through symlinks ──────────────────────
 
 
 def test_fix_permissions_skips_symlink_target(tmp_path, roots):

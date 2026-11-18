@@ -1113,7 +1113,7 @@ def test_scripts_list_and_detail(signing_key: bytes, scripts_root: Path) -> None
 def test_unreadable_script_is_skipped_in_list_and_422_on_detail(
     signing_key: bytes, scripts_root: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """D-044: a root-owned 0700 file on the mount must not 500 the whole picker."""
+    """A root-owned 0700 file on the mount must not 500 the whole picker."""
     from arm_backend.notifications import script_meta
 
     _bash_script(scripts_root, "ok.sh", "exit 0\n")
@@ -1260,7 +1260,7 @@ def test_patch_bash_channel_rejects_hook_error(signing_key: bytes, scripts_root:
 
 
 def test_patch_bash_channel_cannot_unmask_a_secret_via_a_missing_script(signing_key: bytes, scripts_root: Path) -> None:
-    """D-038 / #160: a script name not on disk keeps the stored secret_keys, so the secret stays masked."""
+    """#160: a script name not on disk keeps the stored secret_keys, so the secret stays masked."""
     _bash_script(scripts_root, "ok.sh", "exit 0\n")
     ch = _bash_channel()
     db = FakeSession()
@@ -1289,7 +1289,7 @@ def test_patch_bash_channel_cannot_unmask_a_secret_via_a_missing_script(signing_
 def test_patch_bash_channel_keeps_a_carried_secret_under_a_script_that_drops_it(
     signing_key: bytes, scripts_root: Path
 ) -> None:
-    """D-038: a header that no longer declares the key secret cannot unmask the stored value, and the save works."""
+    """A header that no longer declares the key secret cannot unmask the stored value, and the save works."""
     _bash_script(scripts_root, "ok.sh", "exit 0\n")
     plain = scripts_root / "plain.sh"
     plain.write_text("#!/usr/bin/env bash\n# arm-input: SMTP_PASS\nexit 0\n")
@@ -1412,7 +1412,7 @@ def test_preview_fills_hidden_secret_from_channel_and_reports_hook_error(
 
 
 def test_preview_run_redacts_secrets_the_script_echoes(signing_key: bytes, scripts_root: Path) -> None:
-    """D-039: masking the inputs is not enough when the run echoes the secret back."""
+    """Masking the inputs is not enough when the run echoes the secret back."""
     _bash_script(scripts_root, "ok.sh", 'echo "pass=$SMTP_PASS"; echo "err $SMTP_PASS" >&2; exit 1\n')
     db = FakeSession()
     db.rows["notification_channels"] = [_bash_channel(config={"inputs": {"TO": "me@x", "SMTP_PASS": "s3cr3t-value"}})]
@@ -1437,7 +1437,7 @@ def test_preview_run_redacts_secrets_the_script_echoes(signing_key: bytes, scrip
 
 
 def test_preview_run_redacts_a_secret_cut_by_the_output_cap(signing_key: bytes, scripts_root: Path) -> None:
-    """D-039 follow-up: a secret straddling OUTPUT_CAP must not leak its first
+    """A secret straddling OUTPUT_CAP must not leak its first
     half; redaction runs before the output is cut."""
     from arm_backend.notifications.bash_runner import OUTPUT_CAP
 

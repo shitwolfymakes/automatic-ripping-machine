@@ -1,6 +1,5 @@
-// Whole-screen feature flags. Screens whose v3 backend is entirely MISSING are
-// disabled here so the app boots and hides them; they flip to true when their
-// backlog tier lands a v3 backend. (Per the verified BFF->v3 route inventory.)
+// Whole-screen feature flags. Screens with no v3 backend are
+// disabled here so the app boots and hides them; each flips to true once its backend exists.
 export const features = {
 	dashboard: true,
 	notifications: true,

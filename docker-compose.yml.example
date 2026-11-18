@@ -58,7 +58,7 @@ services:
       TLS_KEY_PATH: /etc/ssl/arm/tls.key
       PUID: ${PUID:-1000}
       PGID: ${PGID:-1000}
-      # Phase 7 — transcode dispatcher needs host paths (the docker daemon
+      # The transcode dispatcher needs host paths (the docker daemon
       # interprets these, NOT the Backend container's filesystem).
       MEDIA_ROOT: /media
       MAX_PARALLEL_TRANSCODES: ${MAX_PARALLEL_TRANSCODES:-1}
@@ -84,7 +84,7 @@ services:
       ARM_HOST_CERTS_PATH: ${ARM_HOST_CERTS_PATH:-${PWD}/arm/certs}
       ARM_DOCKER_NETWORK: ${ARM_DOCKER_NETWORK:-armv3_default}
       # Drive lifecycle — the backend creates one ripper container per
-      # enrolled drive (spec §3). Same PUID/PGID/CDROM_GID as every service.
+      # enrolled drive. Same PUID/PGID/CDROM_GID as every service.
       CDROM_GID: ${CDROM_GID:-44}
       ARM_RIPPER_IMAGE: ${ARM_RIPPER_IMAGE:-arm-ripper:latest}
       # Optional ripper tunables, forwarded verbatim into every ripper the
@@ -96,7 +96,7 @@ services:
       ARM_RIPPER_OPTICAL_SR_MAX: ${ARM_RIPPER_OPTICAL_SR_MAX:-}
       ARM_RIPPER_OPTICAL_SG_MAX: ${ARM_RIPPER_OPTICAL_SG_MAX:-}
       ARM_RIPPER_CERTS_PATH: ${ARM_RIPPER_CERTS_PATH:-}
-      # Phase 7b — GPUs detected host-side by setup-dev.sh into ARM_GPUS. The
+      # GPUs detected host-side by setup-dev.sh into ARM_GPUS. The
       # GPU-free backend reads this to fill the gpus table; the dispatcher
       # injects device access into each ephemeral transcoder. [] => CPU-only.
       ARM_GPUS: ${ARM_GPUS:-[]}
@@ -127,10 +127,10 @@ services:
       - ./arm/certs/arm-ca.crt:/etc/ssl/arm/arm-ca.crt:ro
       - ./arm/certs/arm-backend.crt:/etc/ssl/arm/tls.crt:ro
       - ./arm/certs/arm-backend.key:/etc/ssl/arm/tls.key:ro
-      # Phase 7 — Backend spawns arm-transcode-* containers via the socket.
+      # The Backend spawns arm-transcode-* containers via the socket.
       # Acceptable per docs/developers/architecture/06-deployment.md (root-equivalent on host).
       - /var/run/docker.sock:/var/run/docker.sock
-      # Drive detection (spec §2): the host's udev by-id symlink directory,
+      # Drive detection: the host's udev by-id symlink directory,
       # read-only. Symlinks only — no device nodes, no cgroup rule; the
       # backend can list drives but provably cannot open one.
       - /dev/disk:/host-disk:ro

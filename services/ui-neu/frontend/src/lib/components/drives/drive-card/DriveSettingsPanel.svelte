@@ -190,8 +190,8 @@
 		width: 6rem;
 		text-align: center;
 	}
-	/* the original was space-y-3 (0.75rem) - between stack-sm's 0.5rem and
-	   stack's own 1rem, so neither modifier matches exactly. */
+	/* the gap is 0.75rem - between stack-sm's 0.5rem and stack's own 1rem, so neither modifier matches
+	   exactly. */
 	.drive-card-prescan-section {
 		gap: 0.75rem;
 		border-top: 1px solid var(--color-border-strong);

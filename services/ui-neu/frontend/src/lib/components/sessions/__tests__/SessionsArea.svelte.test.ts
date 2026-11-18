@@ -155,7 +155,7 @@ it('builder cancel hides the builder', async () => {
 	expect(screen.queryByRole('heading', { name: 'New session' })).not.toBeInTheDocument();
 });
 
-// FIX 1: delete requires confirm dialog
+// delete requires confirm dialog
 describe('session delete — confirm flow', () => {
 	it('clicking Delete opens a confirm dialog; confirming calls deleteSession then reloads', async () => {
 		vi.mocked(deleteSession).mockResolvedValue(undefined);
@@ -218,11 +218,11 @@ it('inline rip create form opens over the builder', async () => {
 	// Choose + Create new rip preset from the select in the builder
 	const ripSel = screen.getByLabelText(/rip preset/i) as HTMLSelectElement;
 	await fireEvent.change(ripSel, { target: { value: '__create_rip__' } });
-	// RipPresetForm should now appear as stacked dialog
+	// RipPresetForm should appear as stacked dialog
 	await waitFor(() => expect(screen.getByRole('dialog', { name: /new rip preset|create rip/i })).toBeInTheDocument());
 });
 
-// FIX 3: rewritten inline-create save test — exercises the real save path
+// inline-create save test — exercises the real save path
 it('inline rip create: saving a new preset closes the form, reloads, and returns to builder', async () => {
 	const newRip = makeRip('r2', 'My New Rip');
 	vi.mocked(createRipPreset).mockResolvedValue(newRip as any);
@@ -263,7 +263,7 @@ it('inline rip create: saving a new preset closes the form, reloads, and returns
 	expect(screen.getByRole('heading', { name: 'New session' })).toBeInTheDocument();
 });
 
-// FIX 2: library Edit button opens the RipPresetForm with the existing preset
+// library Edit button opens the RipPresetForm with the existing preset
 it('Rip presets tab Edit button opens RipPresetForm with the existing preset', async () => {
 	// Only a rip preset (no transcode preset) to keep a single Edit button
 	vi.mocked(fetchTranscodePresets).mockResolvedValue([]);
@@ -274,7 +274,7 @@ it('Rip presets tab Edit button opens RipPresetForm with the existing preset', a
 	await fireEvent.click(screen.getByRole('tab', { name: /rip presets/i }));
 	await screen.findByRole('heading', { name: /rip presets/i });
 
-	// The rip preset row shows Edit (custom preset) — only one Edit button now
+	// The rip preset row shows Edit (custom preset) — only one Edit button
 	const editBtn = screen.getByRole('button', { name: /^edit$/i });
 	await fireEvent.click(editBtn);
 

@@ -154,7 +154,7 @@ describe('ConfigSchemaField', () => {
 	});
 });
 
-describe('ConfigSchemaField key rows (setup spec §7.3)', () => {
+describe('ConfigSchemaField key rows', () => {
 	it('links to the signup page and shows a saved secret as Saved', () => {
 		renderComponent(ConfigSchemaField, {
 			props: {

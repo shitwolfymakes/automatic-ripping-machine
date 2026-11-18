@@ -1,4 +1,4 @@
-// Display and merge helpers for the match picker (match picker spec 4.1).
+// Display and merge helpers for the match picker.
 import type { ExternalIds, IdentityFacts, MetadataCandidate } from '$lib/types/api.gen';
 import { plural } from '$lib/utils/plural';
 

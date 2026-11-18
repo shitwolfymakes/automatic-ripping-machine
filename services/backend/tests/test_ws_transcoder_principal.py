@@ -1,4 +1,4 @@
-"""Phase 7 WS principal + authz extensions for the transcoder kind.
+"""WS principal + authz extensions for the transcoder kind.
 
 Covers:
 - `resolve_principal` returns `kind="transcoder"` when the auth handshake
@@ -132,7 +132,7 @@ async def test_transcoder_can_subscribe_queued_task_before_claim(session: Any) -
 
 
 async def test_transcoder_cannot_subscribe_task_claimed_by_other_host(session: Any) -> None:
-    # D-231: X-ARM-Task-Id alone is not enough once another host holds the claim.
+    # X-ARM-Task-Id alone is not enough once another host holds the claim.
     p = ServicePrincipal(kind="transcoder", hostname=_HOSTNAME, task_id="txt_other")
     assert await can_subscribe(p, "transcoder.commands.txt_other", session) is False
 

@@ -36,9 +36,9 @@
 		font-weight: 600;
 		color: var(--color-text);
 	}
-	/* most "muted description under a heading" paragraphs on this page were
-	   text-sm (0.875rem/1.25rem), not panel-hint's 0.75rem - panel-hint is
-	   sized for a note under a form control, a visibly smaller role. */
+	/* most "muted description under a heading" paragraphs on this page are text-sm (0.875rem/1.25rem),
+	   not panel-hint's 0.75rem - panel-hint is sized for a note under a form control, a visibly
+	   smaller role. */
 	.settings-page-description {
 		font-size: 0.875rem;
 		line-height: 1.25rem;
@@ -59,7 +59,7 @@
 		line-height: 1rem;
 		color: var(--color-text-muted);
 	}
-	/* the original toggle row was gap-3 (0.75rem), not field-row's 0.5rem. */
+	/* the toggle row gap is 0.75rem, not field-row's 0.5rem. */
 	.settings-page-notif-toggle-row {
 		gap: 0.75rem;
 	}
