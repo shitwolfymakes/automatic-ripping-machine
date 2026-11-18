@@ -88,8 +88,26 @@
 	});
 
 	// --- Drives polling store ---
+	// Only the Drives tab shows drives, so it polls only while that tab is
+	// open. The first visit rescans first, to pick up hardware info (model,
+	// serial) that may not have been available at container startup.
 	const drives = createPollingStore(fetchDrives, [] as Drive[], 10000);
 	const driveError = drives.error;
+	let drivesRescanned = false;
+
+	function startDrivesTab() {
+		if (drivesRescanned) return drives.start();
+		drivesRescanned = true;
+		rescanDrives()
+			.catch(() => {})
+			.then(() => drives.start());
+	}
+
+	$effect(() => {
+		if (activeTab !== 'drives') return;
+		startDrivesTab();
+		return () => drives.stop();
+	});
 
 	const driveSessionOptions = new DriveSessionOptions();
 
@@ -125,11 +143,6 @@
 	const setupRestart = new SetupRestart();
 
 	onMount(() => {
-		// Rescan drives to pick up hardware info (model, serial) that
-		// may not have been available at container startup.
-		rescanDrives()
-			.catch(() => {})
-			.then(() => drives.start());
 		loaded.load();
 		// Handle initial hash tab (trigger side effects)
 		loadTabData(activeTab);
@@ -147,7 +160,6 @@
 		}
 		window.addEventListener('hashchange', onHashChange);
 		return () => {
-			drives.stop();
 			window.removeEventListener('hashchange', onHashChange);
 		};
 	});

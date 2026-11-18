@@ -33,7 +33,7 @@ function setDashboard(overrides: Record<string, unknown> = {}) {
 		makemkv_key_valid: true,
 		makemkv_key_checked_at: null,
 		transcoder_online: true,
-		transcoder_stats: { worker_running: true, pending: 0 },
+		transcoder_stats: { pending: 0 },
 		...overrides
 	});
 }
@@ -87,10 +87,9 @@ describe('HeaderStatus', () => {
 		expect(dots(container)).toEqual(['error', 'warn', 'ok', 'error']);
 	});
 
-	it('shows the transcoder dot as warn when online with a stopped worker, off when offline', () => {
-		setDashboard({ transcoder_stats: { worker_running: false } });
+	it('shows the transcoder dot as ok when online, off when offline', () => {
 		const { container, unmount } = render();
-		expect(dots(container)[2]).toBe('warn');
+		expect(dots(container)[2]).toBe('ok');
 		unmount();
 		setDashboard({ transcoder_online: false });
 		const second = render();
@@ -152,7 +151,7 @@ describe('HeaderStatus', () => {
 	});
 
 	it('shows the queued count only while the transcoder is online with pending work', () => {
-		setDashboard({ transcoder_stats: { worker_running: true, pending: 4 } });
+		setDashboard({ transcoder_stats: { pending: 4 } });
 		const { container, unmount } = render();
 		expect(text(container, '.layout-activity-queued')).toBe('4 queued');
 		unmount();

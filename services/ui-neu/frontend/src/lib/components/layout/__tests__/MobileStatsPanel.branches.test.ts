@@ -54,7 +54,7 @@ const BASE = {
 	makemkv_key_valid: true,
 	makemkv_key_checked_at: null,
 	transcoder_online: true,
-	transcoder_stats: { worker_running: true, pending: 0 },
+	transcoder_stats: { pending: 0 },
 	active_transcodes: []
 };
 
@@ -104,13 +104,9 @@ describe('MobileStatsPanel services', () => {
 	});
 
 	it.each([
-		['online, worker running', true, { worker_running: true }, 'ok'],
-		['online, worker_running missing', true, { pending: 0 }, 'ok'],
-		['online, worker_running null', true, { worker_running: null }, 'ok'],
+		['online, with stats', true, { pending: 0 }, 'ok'],
 		['online, no stats', true, undefined, 'ok'],
-		['online, worker stopped', true, { worker_running: false }, 'warn'],
-		['offline, worker running', false, { worker_running: true }, 'off'],
-		['offline, worker stopped', false, { worker_running: false }, 'off'],
+		['offline, with stats', false, { pending: 0 }, 'off'],
 		['offline, no stats', false, undefined, 'off']
 	])('Transcode %s shows status %s', (_name, online, stats, status) => {
 		setDashboard({ transcoder_online: online, transcoder_stats: stats });
@@ -206,7 +202,7 @@ describe('MobileStatsPanel activity', () => {
 		['the transcoder is online and pending is above 0', true, { pending: 3 }, true],
 		['pending is a numeric string above 0', true, { pending: '3' }, true],
 		['pending is 0', true, { pending: 0 }, false],
-		['pending is missing', true, { worker_running: true }, false],
+		['pending is missing', true, {}, false],
 		['pending is non-numeric', true, { pending: 'lots' }, false],
 		['there are no stats', true, undefined, false],
 		['the transcoder is offline', false, { pending: 3 }, false]

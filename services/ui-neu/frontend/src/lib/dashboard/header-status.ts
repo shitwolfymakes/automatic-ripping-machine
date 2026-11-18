@@ -2,11 +2,8 @@
 // mobile stats panel.
 import type { DashboardData } from '$lib/api/dashboard';
 
-export function transcoderDotStatus(
-	d: Pick<DashboardData, 'transcoder_online' | 'transcoder_stats'>
-): 'ok' | 'warn' | 'off' {
-	if (d.transcoder_online && (d.transcoder_stats?.worker_running ?? true)) return 'ok';
-	return d.transcoder_online ? 'warn' : 'off';
+export function transcoderDotStatus(d: Pick<DashboardData, 'transcoder_online'>): 'ok' | 'off' {
+	return d.transcoder_online ? 'ok' : 'off';
 }
 
 /** One row of the mobile stats panel's service list. */
@@ -21,7 +18,7 @@ interface ServiceRow {
  * status.
  */
 export function serviceRows(
-	d: Pick<DashboardData, 'arm_online' | 'db_available' | 'transcoder_online' | 'transcoder_stats' | 'makemkv_key_valid'>
+	d: Pick<DashboardData, 'arm_online' | 'db_available' | 'transcoder_online' | 'makemkv_key_valid'>
 ): ServiceRow[] {
 	return [
 		{

@@ -2,9 +2,7 @@
 	import { plural } from '$lib/utils/plural';
 	import SetupChecklistCard from '$lib/components/setup/SetupChecklistCard.svelte';
 	import { onMount } from 'svelte';
-	import { fetchDashboard } from '$lib/api/dashboard';
 	import { DashboardJobs } from '$lib/stores/dashboard-jobs.svelte';
-	import type { DashboardData } from '$lib/api/dashboard';
 	import DiscReviewWidget from '$lib/components/dashboard/DiscReviewWidget.svelte';
 	import ActiveJobRow from '$lib/components/dashboard/ActiveJobRow.svelte';
 	import IsoPreparingRow from '$lib/components/dashboard/IsoPreparingRow.svelte';
@@ -19,18 +17,18 @@
 	import { driveSummary } from '$lib/drives/summary';
 	import { transcoderEnabled } from '$lib/stores/config';
 	import { dashboard } from '$lib/stores/dashboard';
-	import { get } from 'svelte/store';
 	import { startRipperEvents, onRipperEvent } from '$lib/stores/ripper-events.svelte';
 
 	// --- Dashboard state ---
-	// Seed from the persistent singleton store the layout already polls, so
-	// navigating back to the dashboard paints the last-known data (transcoder
-	// section, drives, etc.) immediately instead of flashing empty and popping
-	// in once our own poll resolves. In tests the layout isn't mounted, so the
-	// store is still its empty default — same starting point as before.
-	let dash = $state<DashboardData>(get(dashboard));
-	let dashLoading = $state(!get(dashboard.initialized));
-	let dashError = $state<Error | null>(null);
+	// The page reads the dashboard store the layout already polls every 5 s,
+	// so it shows the same data as the header (the Paused banner follows the
+	// header switch at once) and does not fetch the same endpoints a second
+	// time. Navigating back paints the last-known data straight away.
+	const dashInitialized = dashboard.initialized;
+	const dashError = dashboard.error;
+	const dash = $derived($dashboard);
+	// Loading until the first read lands or fails.
+	const dashLoading = $derived(!$dashInitialized && $dashError === null);
 
 	let dismissedJobIds = $state(new Set<string>());
 	let activeJobs = $derived(dash.active_jobs ?? []);
@@ -46,16 +44,8 @@
 		dismissedJobIds = new Set([...dismissedJobIds, jobId]);
 	}
 
-	async function refreshDashboard() {
-		try {
-			dash = await fetchDashboard();
-			dashError = null;
-		} catch (e) {
-			dashError = e instanceof Error ? e : new Error('Unknown error');
-		} finally {
-			dashLoading = false;
-		}
-	}
+	// A card's action or a ripper event: fetch now rather than at the next tick.
+	const refreshDashboard = () => dashboard.refresh();
 
 	// --- Jobs section state ---
 	const jobsList = new DashboardJobs();
@@ -83,7 +73,9 @@
 			})();
 		}
 
-		poll(refreshDashboard, 5000);
+		// The store polls on its own; fetch once now so arriving here is fresh
+		// (unless the layout's first fetch is still running).
+		dashboard.refreshIfIdle();
 		poll(jobsList.load, 10000);
 		return () => {
 			stopped = true;
@@ -114,9 +106,9 @@
 	{/if}
 
 	<!-- API error (backend unreachable) -->
-	{#if dashError}
+	{#if $dashError}
 		<div class="alert alert-danger">
-			Failed to reach backend: {dashError.message}
+			Failed to reach backend: {$dashError}
 		</div>
 	{/if}
 

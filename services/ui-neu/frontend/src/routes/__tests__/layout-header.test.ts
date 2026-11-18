@@ -169,7 +169,7 @@ afterEach(async () => {
 	cleanup();
 	gotoMock.mockClear();
 	vi.mocked(setRippingEnabled).mockReset();
-	vi.mocked(setRippingEnabled).mockResolvedValue(undefined as never);
+	vi.mocked(setRippingEnabled).mockImplementation((enabled) => Promise.resolve({ ripping_paused: !enabled } as never));
 	vi.mocked(toggleTheme).mockClear();
 	startIsoRipMock.mockClear();
 	theme.set('dark');
@@ -204,18 +204,6 @@ describe('Layout header service dots', () => {
 		setDash({ transcoder_online: true, transcoder_stats: null });
 		renderLayout();
 		expect(dotStatus('Transcode')).toBe('ok');
-	});
-
-	it('shows the transcoder ok when online with a running worker', () => {
-		setDash({ transcoder_online: true, transcoder_stats: { worker_running: true } });
-		renderLayout();
-		expect(dotStatus('Transcode')).toBe('ok');
-	});
-
-	it('shows the transcoder warn when online but the worker is not running', () => {
-		setDash({ transcoder_online: true, transcoder_stats: { worker_running: false } });
-		renderLayout();
-		expect(dotStatus('Transcode')).toBe('warn');
 	});
 
 	it('shows the transcoder off when offline', () => {
@@ -382,8 +370,8 @@ describe('Layout Auto-Start toggle', () => {
 	it('ignores a click while a toggle is still in flight', async () => {
 		let release!: () => void;
 		vi.mocked(setRippingEnabled).mockReturnValueOnce(
-			new Promise<undefined>((resolve) => {
-				release = () => resolve(undefined);
+			new Promise((resolve) => {
+				release = () => resolve({ ripping_paused: true });
 			}) as never
 		);
 		renderLayout();

@@ -1,7 +1,7 @@
 import { createPollingStore } from './polling';
 import { fetchDashboardSnapshot, STICKY_FIELDS } from '$lib/api/dashboard';
 import type { DashboardData, DashboardSnapshot } from '$lib/api/dashboard';
-const emptyDashboard: DashboardData = {
+export const emptyDashboard: DashboardData = {
 	db_available: true,
 	arm_online: false,
 	active_jobs: [],
