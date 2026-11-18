@@ -1,6 +1,6 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
-	import { trackPending } from '$lib/ui/page-reveal.svelte';
+	import { trackPending } from '$lib/stores/page-reveal.svelte';
 
 	// Draws its content only once `ready`, and holds the page reveal until
 	// then. For a block whose late arrival would push content below it down

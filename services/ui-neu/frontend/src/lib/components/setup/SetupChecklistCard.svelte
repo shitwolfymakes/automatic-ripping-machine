@@ -8,7 +8,7 @@
 	import CloseButton from '$lib/components/shared/CloseButton.svelte';
 	import { REVIEWABLE_STEPS, STATE_BADGE, openSteps } from '../../setup/steps';
 	import { reveal } from '$lib/ui/transitions';
-	import { trackPending } from '$lib/ui/page-reveal.svelte';
+	import { trackPending } from '$lib/stores/page-reveal.svelte';
 
 	// Dashboard card listing whatever setup left open: steps skipped or needing
 	// attention, or the whole walkthrough after "Finish later". Dismissal is

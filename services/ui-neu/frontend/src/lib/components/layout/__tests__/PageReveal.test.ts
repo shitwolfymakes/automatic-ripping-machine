@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { renderComponent, cleanup } from '$lib/testing/render';
-import { REVEAL_CAP_MS, REVEAL_SETTLE_MS } from '$lib/ui/page-reveal.svelte';
+import { REVEAL_CAP_MS, REVEAL_SETTLE_MS } from '$lib/stores/page-reveal.svelte';
 
 type NavCallback = (nav: { from: { route: { id: string } } | null; to: { route: { id: string } } | null }) => void;
 const nav = vi.hoisted(() => ({ callback: null as NavCallback | null }));

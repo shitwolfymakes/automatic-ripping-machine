@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { renderComponent, screen, cleanup } from '$lib/testing/render';
-import { REVEAL_SETTLE_MS } from '$lib/ui/page-reveal.svelte';
+import { REVEAL_SETTLE_MS } from '$lib/stores/page-reveal.svelte';
 
 vi.mock('$app/navigation', () => ({ onNavigate: vi.fn() }));
 

@@ -3,8 +3,8 @@
 	import { fade } from 'svelte/transition';
 	import { fadeIn } from '$lib/ui/transitions';
 	import { isPending, loadPhase } from '$lib/utils/load-state';
-	import { SKELETON_DELAY_MS, SKELETON_MIN_SHOW_MS, SkeletonGate } from '$lib/ui/skeleton-gate.svelte';
-	import { trackPending } from '$lib/ui/page-reveal.svelte';
+	import { SKELETON_DELAY_MS, SKELETON_MIN_SHOW_MS, SkeletonGate } from '$lib/stores/skeleton-gate.svelte';
+	import { trackPending } from '$lib/stores/page-reveal.svelte';
 
 	interface Props {
 		data: T | null | undefined;

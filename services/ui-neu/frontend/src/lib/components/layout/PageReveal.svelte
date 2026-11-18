@@ -1,7 +1,7 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
 	import { onNavigate } from '$app/navigation';
-	import { PageRevealState, providePageReveal } from '$lib/ui/page-reveal.svelte';
+	import { PageRevealState, providePageReveal } from '$lib/stores/page-reveal.svelte';
 
 	// Wraps the routed page: hidden until its panels have data, then one fade
 	// in (see page-reveal.svelte.ts). A move to another route starts over; a

@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { trackPending } from '$lib/ui/page-reveal.svelte';
+	import { trackPending } from '$lib/stores/page-reveal.svelte';
 
 	// A panel that holds the page reveal while `pending` is true.
 	let { pending }: { pending: boolean } = $props();
