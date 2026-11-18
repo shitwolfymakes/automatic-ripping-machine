@@ -1152,6 +1152,19 @@ describe('leaving a release while its apply is pending', () => {
 	const back = () => screen.getByRole('button', { name: /Back to results/ });
 	const openTitle = () => document.querySelector('.music-search-detail-title')?.textContent;
 
+	it('keeps Search from replacing the open release until the apply settles', async () => {
+		const { pending } = await applyPending();
+		const searches = mockSearch.mock.calls.length;
+		// A browser fires no click on a disabled button; Enter in the query box is the other way in.
+		expect(searchBtn()).toBeDisabled();
+		await fireEvent.keyDown(queryInput(), { key: 'Enter' });
+		expect(mockSearch.mock.calls.length).toBe(searches);
+		expect(openTitle()).toBe('Alpha');
+		pending.resolve({ job: {}, fan_out: [] } as never);
+		expect(await screen.findByText('Release applied')).toBeInTheDocument();
+		await waitFor(() => expect(searchBtn()).toBeEnabled());
+	});
+
 	it('keeps Back to results disabled until the apply settles, so its outcome lands under the applied release', async () => {
 		const { onapply, pending } = await applyPending();
 		// A browser fires no click on a disabled button, so the user stays on Alpha.

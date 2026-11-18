@@ -43,6 +43,9 @@
 	let visibleTracks = $derived(visibleTracksFor(detail, job.disc_number));
 
 	async function handleSearch(q: string, opts: MusicSearchOpts) {
+		// A search clears the open release, so it waits for a running apply, whose
+		// outcome would otherwise show under whatever release is opened next.
+		if (release.applying) return;
 		searching = true;
 		results = [];
 		searchError = null;
@@ -100,7 +103,13 @@
 </script>
 
 <div class="stack">
-	<MusicSearchForm {job} discTrackCount={discTracks.length} {searching} onsearch={handleSearch} />
+	<MusicSearchForm
+		{job}
+		discTrackCount={discTracks.length}
+		{searching}
+		locked={release.applying}
+		onsearch={handleSearch}
+	/>
 
 	{#if searchError}
 		<p class="music-search-meta">{searchError}</p>
