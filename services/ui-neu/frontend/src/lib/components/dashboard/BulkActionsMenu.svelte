@@ -110,6 +110,12 @@
 	.bulk-actions-trigger {
 		padding-block: 0;
 	}
+	/* the chevron flips a full 180deg (open = pointing up); .btn's shared
+	   .chevron rule only rotates 90deg, tuned for a right-pointing chevron. */
+	/* :global: .chevron is rendered by the child Glyph component, outside this component's own scoped template */
+	.bulk-actions-trigger[aria-expanded='true'] :global(.chevron) {
+		transform: rotate(180deg);
+	}
 	.bulk-actions-trigger:disabled {
 		opacity: 0.5;
 		cursor: not-allowed;
