@@ -38,7 +38,14 @@
 </script>
 
 <div class="stack panel-section">
-	<button onclick={() => onback()} class="btn music-search-action-btn inline-flex items-center gap-1 self-start"
+	<!-- Disabled while an apply runs: the apply state and its feedback line are
+	     shared by every release, so opening another one mid-apply would show this
+	     apply's outcome under it. -->
+	<button
+		type="button"
+		onclick={() => onback()}
+		disabled={release.applying}
+		class="btn music-search-action-btn inline-flex items-center gap-1 self-start"
 		><Glyph name="arrow-left" /> Back to results</button
 	>
 	<div class="flex items-start gap-3">

@@ -1,3 +1,6 @@
+// Open arms the coverage tool reports that are Svelte's, not the component's:
+// `{detail.disc_count}`, `{detail.catalog_number}` and `{detail.barcode}` each
+// compile to `(...) ?? ''`, and each sits inside an #if on the same value.
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import { renderComponent, screen, fireEvent, cleanup } from '$lib/testing/render';
 import type { MetadataReleaseDetail } from '$lib/types/api.gen';
