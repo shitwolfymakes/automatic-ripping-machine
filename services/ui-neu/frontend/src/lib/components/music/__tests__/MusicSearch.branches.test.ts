@@ -1149,25 +1149,20 @@ describe('leaving a release while its apply is pending', () => {
 
 	const ALPHA_PATCH = { poster_url_manual: 'http://a.jpg', tracks: [{ track_id: 'trk_0', title: 'A-1' }] };
 
-	it("saves the applied release's cover and titles after Back to results", async () => {
-		const { onapply, pending } = await applyPending();
-		await backToResults();
-		pending.resolve({ job: {}, fan_out: [] } as never);
-		await waitFor(() => expect(onapply).toHaveBeenCalledTimes(1));
-		expect(mockPatchJob).toHaveBeenCalledWith('job_1', ALPHA_PATCH);
-	});
+	const back = () => screen.getByRole('button', { name: /Back to results/ });
+	const openTitle = () => document.querySelector('.music-search-detail-title')?.textContent;
 
-	it("saves the applied release's cover and titles after opening another release", async () => {
+	it('keeps Back to results disabled until the apply settles, so its outcome lands under the applied release', async () => {
 		const { onapply, pending } = await applyPending();
-		await backToResults();
-		mockDetail.mockResolvedValue(
-			rel({ release_id: 'rel-2', title: 'Beta', poster_url: 'http://b.jpg', tracks: [trk(1, 'B-1', null)] })
-		);
-		await openCard('Beta');
+		// A browser fires no click on a disabled button, so the user stays on Alpha.
+		expect(back()).toBeDisabled();
+		expect(openTitle()).toBe('Alpha');
 		pending.resolve({ job: {}, fan_out: [] } as never);
+		expect(await screen.findByText('Release applied')).toBeInTheDocument();
+		expect(openTitle()).toBe('Alpha');
 		await waitFor(() => expect(onapply).toHaveBeenCalledTimes(1));
-		expect(mockPatchJob).toHaveBeenCalledTimes(1);
 		expect(mockPatchJob).toHaveBeenCalledWith('job_1', ALPHA_PATCH);
+		expect(back()).toBeEnabled();
 	});
 });
 
