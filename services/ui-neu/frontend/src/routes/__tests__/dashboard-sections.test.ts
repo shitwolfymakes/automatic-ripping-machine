@@ -1,8 +1,15 @@
+// Every branch of the dashboard page's own code is covered across this file and
+// dashboard-page.test.ts. The coverage tool still reports three open arms that
+// are Svelte's, each a text `{...}` compiled to `(...) ?? ''`: `{$dashError}`
+// (inside an #if on the same value), and the counts in the ACTIVE RIPS and
+// TRANSCODING section labels (array lengths, always numbers).
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import { renderComponent, screen, cleanup, waitFor, fireEvent, within } from '$lib/testing/render';
 import DashboardPage from '../+page.svelte';
 import { createJob } from '$lib/__fixtures__/job';
-import { fetchDashboard } from '$lib/api/dashboard';
+import { fetchDashboardSnapshot } from '$lib/api/dashboard';
+import { dashboard } from '$lib/stores/dashboard';
+import type { ResettablePollingStore } from '$lib/testing/resettable-polling-store';
 import { fetchJobsPage, bulkDeleteJobs, abandonJob, deleteJob } from '$lib/api/jobs';
 import { setTranscoderEnabled } from '$lib/stores/config';
 import type { JobView } from '$lib/types/api.gen';
@@ -51,7 +58,19 @@ vi.mock('$lib/stores/ripper-events.svelte', () => ({
 	}
 }));
 
-vi.mock('$lib/api/dashboard', () => ({ fetchDashboard: vi.fn() }));
+vi.mock('$lib/api/dashboard', () => ({ fetchDashboardSnapshot: vi.fn() }));
+
+// The page reads the layout's dashboard store; here it is a fresh store per
+// test (reset in beforeEach) that reads the mocked fetchDashboardSnapshot.
+vi.mock('$lib/stores/dashboard', async (importActual) => {
+	const { emptyDashboard } = await importActual<typeof import('$lib/stores/dashboard')>();
+	const { fetchDashboardSnapshot } = await import('$lib/api/dashboard');
+	type DashboardData = import('$lib/api/dashboard').DashboardData;
+	const { resettablePollingStore } = await import('$lib/testing/resettable-polling-store');
+	return {
+		dashboard: resettablePollingStore(() => fetchDashboardSnapshot() as Promise<DashboardData>, emptyDashboard)
+	};
+});
 
 vi.mock('$lib/api/jobs', () => ({
 	fetchJobsPage: vi.fn(),
@@ -116,7 +135,7 @@ function transcode(id: string, name: string) {
 }
 
 function setDashboard(value: unknown) {
-	vi.mocked(fetchDashboard).mockResolvedValue(value as Awaited<ReturnType<typeof fetchDashboard>>);
+	vi.mocked(fetchDashboardSnapshot).mockResolvedValue(value as Awaited<ReturnType<typeof fetchDashboardSnapshot>>);
 }
 
 function setJobs(jobs: JobView[], total = jobs.length) {
@@ -165,6 +184,7 @@ async function deleteFirstReviewCard() {
 
 beforeEach(() => {
 	vi.clearAllMocks();
+	(dashboard as ResettablePollingStore<unknown>).reset();
 	h.ripperListeners = [];
 	h.ripProgress.value = {};
 	setDashboard(dash());
@@ -379,19 +399,19 @@ describe('Dashboard sections', () => {
 			await renderPage();
 			await waitFor(() => expect(screen.getByText('WAITING FOR REVIEW - 1 DISC')).toBeInTheDocument());
 
-			const polls = vi.mocked(fetchDashboard).mock.calls.length;
+			const polls = vi.mocked(fetchDashboardSnapshot).mock.calls.length;
 			setDashboard(dash({ active_jobs: [job('rev', 'identified')] }));
 			fireRipperEvent();
-			await waitFor(() => expect(fetchDashboard).toHaveBeenCalledTimes(polls + 1));
+			await waitFor(() => expect(fetchDashboardSnapshot).toHaveBeenCalledTimes(polls + 1));
 			expect(screen.getByText('WAITING FOR REVIEW - 1 DISC')).toBeInTheDocument();
 
 			await fireEvent.click(await screen.findByRole('button', { name: 'Cancel' }));
 			await waitFor(() => expect(abandonJob).toHaveBeenCalledWith('rev'));
 			await waitFor(() => expect(screen.queryByText(/WAITING FOR REVIEW/)).toBeNull());
 
-			const afterDismiss = vi.mocked(fetchDashboard).mock.calls.length;
+			const afterDismiss = vi.mocked(fetchDashboardSnapshot).mock.calls.length;
 			fireRipperEvent();
-			await waitFor(() => expect(vi.mocked(fetchDashboard).mock.calls.length).toBeGreaterThan(afterDismiss));
+			await waitFor(() => expect(vi.mocked(fetchDashboardSnapshot).mock.calls.length).toBeGreaterThan(afterDismiss));
 			await new Promise((r) => setTimeout(r, 0));
 			expect(screen.queryByText(/WAITING FOR REVIEW/)).toBeNull();
 		});
@@ -524,7 +544,7 @@ describe('Dashboard sections', () => {
 		});
 
 		it('waits for the dashboard load', async () => {
-			vi.mocked(fetchDashboard).mockReturnValue(new Promise(() => {}));
+			vi.mocked(fetchDashboardSnapshot).mockReturnValue(new Promise(() => {}));
 			await renderPage();
 			await waitFor(() => expect(screen.getByText('Listed l1')).toBeInTheDocument());
 			expect(screen.queryByText('No active rips or transcodes')).toBeNull();
@@ -533,7 +553,7 @@ describe('Dashboard sections', () => {
 		it('waits for the jobs load', async () => {
 			vi.mocked(fetchJobsPage).mockReturnValue(new Promise(() => {}));
 			await renderPage();
-			await waitFor(() => expect(fetchDashboard).toHaveBeenCalled());
+			await waitFor(() => expect(fetchDashboardSnapshot).toHaveBeenCalled());
 			await new Promise((r) => setTimeout(r, 20));
 			expect(screen.queryByText('No active rips or transcodes')).toBeNull();
 		});
@@ -575,26 +595,26 @@ describe('Dashboard sections', () => {
 		});
 
 		it('hides the pause banner while the dashboard is still loading', async () => {
-			vi.mocked(fetchDashboard).mockReturnValue(new Promise(() => {}));
+			vi.mocked(fetchDashboardSnapshot).mockReturnValue(new Promise(() => {}));
 			await renderPage();
 			await waitFor(() => expect(screen.getByText('1 job')).toBeInTheDocument());
 			expect(screen.queryByText('Ripping Paused')).toBeNull();
 		});
 
 		it('shows the backend error message from an Error', async () => {
-			vi.mocked(fetchDashboard).mockRejectedValue(new Error('connection refused'));
+			vi.mocked(fetchDashboardSnapshot).mockRejectedValue(new Error('connection refused'));
 			await renderPage();
 			await waitFor(() => expect(screen.getByText(/Failed to reach backend: connection refused/)).toBeInTheDocument());
 		});
 
 		it('shows "Unknown error" when the rejection is not an Error', async () => {
-			vi.mocked(fetchDashboard).mockRejectedValue('boom');
+			vi.mocked(fetchDashboardSnapshot).mockRejectedValue('boom');
 			await renderPage();
 			await waitFor(() => expect(screen.getByText(/Failed to reach backend: Unknown error/)).toBeInTheDocument());
 		});
 
 		it('clears the backend error once a later poll succeeds', async () => {
-			vi.mocked(fetchDashboard).mockRejectedValueOnce(new Error('blip'));
+			vi.mocked(fetchDashboardSnapshot).mockRejectedValueOnce(new Error('blip'));
 			await renderPage();
 			await waitFor(() => expect(screen.getByText(/Failed to reach backend: blip/)).toBeInTheDocument());
 			fireRipperEvent();
@@ -931,33 +951,60 @@ describe('Dashboard lifecycle', () => {
 	it('refreshes both the dashboard and the jobs on a ripper event', async () => {
 		await renderPage();
 		await waitFor(() => expect(screen.getByText('Listed l1')).toBeInTheDocument());
-		const dashCalls = vi.mocked(fetchDashboard).mock.calls.length;
+		const dashCalls = vi.mocked(fetchDashboardSnapshot).mock.calls.length;
 		const jobCalls = vi.mocked(fetchJobsPage).mock.calls.length;
 		fireRipperEvent();
-		await waitFor(() => expect(fetchDashboard).toHaveBeenCalledTimes(dashCalls + 1));
+		await waitFor(() => expect(fetchDashboardSnapshot).toHaveBeenCalledTimes(dashCalls + 1));
 		expect(fetchJobsPage).toHaveBeenCalledTimes(jobCalls + 1);
 	});
 
-	it('polls the dashboard every 5s and the jobs every 10s, and stops on unmount', async () => {
+	it('reads the dashboard once on arrival and leaves its timer to the layout; polls the jobs every 10s; stops on unmount', async () => {
 		vi.useFakeTimers();
 		const { unmount } = renderComponent(DashboardPage);
 		await vi.advanceTimersByTimeAsync(0);
-		expect(fetchDashboard).toHaveBeenCalledTimes(1);
+		expect(fetchDashboardSnapshot).toHaveBeenCalledTimes(1);
 		expect(fetchJobsPage).toHaveBeenCalledTimes(1);
 
-		await vi.advanceTimersByTimeAsync(5000);
-		expect(fetchDashboard).toHaveBeenCalledTimes(2);
-		expect(fetchJobsPage).toHaveBeenCalledTimes(1);
-
-		await vi.advanceTimersByTimeAsync(5000);
-		expect(fetchDashboard).toHaveBeenCalledTimes(3);
+		await vi.advanceTimersByTimeAsync(10000);
+		expect(fetchDashboardSnapshot).toHaveBeenCalledTimes(1);
 		expect(fetchJobsPage).toHaveBeenCalledTimes(2);
 
 		unmount();
 		expect(h.offRipperEvents).toHaveBeenCalledTimes(1);
 		expect(h.stopWS).toHaveBeenCalledTimes(1);
 		await vi.advanceTimersByTimeAsync(30000);
-		expect(fetchDashboard).toHaveBeenCalledTimes(3);
+		expect(fetchDashboardSnapshot).toHaveBeenCalledTimes(1);
 		expect(fetchJobsPage).toHaveBeenCalledTimes(2);
+	});
+
+	it('adds no read on arrival while the layout read is still in flight', async () => {
+		const first = deferred<Awaited<ReturnType<typeof fetchDashboardSnapshot>>>();
+		vi.mocked(fetchDashboardSnapshot).mockReturnValueOnce(first.promise);
+		void dashboard.refresh();
+		await renderPage();
+		expect(fetchDashboardSnapshot).toHaveBeenCalledTimes(1);
+		first.resolve(
+			dash({ active_jobs: [job('rev', 'awaiting_review')] }) as unknown as Awaited<
+				ReturnType<typeof fetchDashboardSnapshot>
+			>
+		);
+		await waitFor(() => expect(screen.getByText('WAITING FOR REVIEW - 1 DISC')).toBeInTheDocument());
+		expect(fetchDashboardSnapshot).toHaveBeenCalledTimes(1);
+	});
+
+	it('shows the read error from the store and stops waiting for the first load', async () => {
+		vi.mocked(fetchDashboardSnapshot).mockRejectedValue(new Error('backend down'));
+		await renderPage();
+		expect(await screen.findByText('Failed to reach backend: backend down')).toHaveClass('alert-danger');
+		await waitFor(() => expect(screen.getByText('No active rips or transcodes')).toBeInTheDocument());
+	});
+
+	it('shows the Paused banner as soon as the header writes the store, without a fetch', async () => {
+		await renderPage();
+		await waitFor(() => expect(fetchDashboardSnapshot).toHaveBeenCalledTimes(1));
+		expect(screen.queryByText('Ripping Paused')).toBeNull();
+		dashboard.update((d) => ({ ...d, ripping_enabled: false }));
+		expect(await screen.findByText('Ripping Paused')).toBeInTheDocument();
+		expect(fetchDashboardSnapshot).toHaveBeenCalledTimes(1);
 	});
 });
