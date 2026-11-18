@@ -1,3 +1,6 @@
+// Open arms the coverage tool reports that are Svelte's, not the component's:
+// the job and task ids in the links and the detail table's progress percent
+// each compile to `(...) ?? ''`; ids are strings and the percent a number.
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderComponent, screen, fireEvent, cleanup, waitFor } from '$lib/testing/render';
 import TranscodeCard from '../TranscodeCard.svelte';

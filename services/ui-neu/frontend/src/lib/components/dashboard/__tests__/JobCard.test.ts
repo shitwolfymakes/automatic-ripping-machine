@@ -1,3 +1,6 @@
+// Open arms the coverage tool reports that are Svelte's, not the component's:
+// the job link's `{job.id}` and the disc-type label each compile to
+// `(...) ?? ''`, and both are strings.
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderComponent, screen, cleanup } from '$lib/testing/render';
 import { EMPTY_LIVE } from '$lib/stores/job-live.svelte';

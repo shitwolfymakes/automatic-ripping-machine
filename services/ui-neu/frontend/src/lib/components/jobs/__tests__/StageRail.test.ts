@@ -1,3 +1,6 @@
+// Open arm the coverage tool reports that is Svelte's, not the component's:
+// the screen-reader `{seg.state}` compiles to `(...) ?? ''`, and a segment's
+// state is always a string.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, render, screen } from '@testing-library/svelte';
 import { writable } from 'svelte/store';

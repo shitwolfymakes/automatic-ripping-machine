@@ -42,7 +42,9 @@ vi.mock('$lib/api/ws', async (importOriginal) => {
 vi.mock('$lib/stores/job-live.svelte', () => ({
 	jobLive: {
 		watch: h.jobLiveWatch,
-		get: (id: string) => h.live[id] ?? { rip: null, transcode: null }
+		get: (id: string) => h.live[id] ?? { rip: null, transcode: null },
+		followTask: () => () => {},
+		task: () => null
 	}
 }));
 
