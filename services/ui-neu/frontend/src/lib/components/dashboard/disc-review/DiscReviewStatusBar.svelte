@@ -16,9 +16,11 @@
 		onpause?: () => void;
 		/** Called when the countdown's resume control is pressed. */
 		onresume?: () => void;
+		/** A pause or resume for this disc is in flight. */
+		busy?: boolean;
 	}
 
-	let { label, waitStartTime, waitSeconds, paused, held, onpause, onresume }: Props = $props();
+	let { label, waitStartTime, waitSeconds, paused, held, onpause, onresume, busy = false }: Props = $props();
 </script>
 
 <div class="disc-review-widget-status-bar">
@@ -34,7 +36,7 @@
 			     it's hidden while globally paused since one disc can't un-pause the
 			     whole machine. -->
 	{#if waitStartTime}
-		<CountdownTimer startTime={waitStartTime} {waitSeconds} {paused} {held} inverted {onpause} {onresume} />
+		<CountdownTimer startTime={waitStartTime} {waitSeconds} {paused} {held} inverted {onpause} {onresume} {busy} />
 	{/if}
 </div>
 

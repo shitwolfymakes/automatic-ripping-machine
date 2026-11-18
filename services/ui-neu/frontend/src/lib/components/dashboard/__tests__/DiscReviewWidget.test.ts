@@ -1,3 +1,6 @@
+// Open arms the coverage tool reports that are Svelte's, not the component's:
+// the title `{displayTitle}` (always a string) and `{displayJob.year}` (inside
+// an #if on it) each compile to `(...) ?? ''`.
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { renderComponent, screen, fireEvent, cleanup, waitFor } from '$lib/testing/render';
 import DiscReviewWidget from '../DiscReviewWidget.svelte';

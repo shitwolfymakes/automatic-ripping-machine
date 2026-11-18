@@ -99,9 +99,13 @@ function makePreview(path: string): JobNamingPreviewResponse {
 	};
 }
 
-function renderDialog(discType: 'dvd' | 'cd' | 'data' = 'dvd') {
+function renderDialog(discType: 'dvd' | 'cd' | 'data' = 'dvd', mediaType: 'movie' | 'tv' | null = null) {
 	return renderComponent(ApplySessionDialog, {
-		props: { job: createJob({ id: 'job_1', disc_type: discType }), onclose: vi.fn(), onapplied: vi.fn() }
+		props: {
+			job: createJob({ id: 'job_1', disc_type: discType, media_type: mediaType }),
+			onclose: vi.fn(),
+			onapplied: vi.fn()
+		}
 	});
 }
 
@@ -132,26 +136,40 @@ describe('ApplySessionDialog branches', () => {
 		vi.clearAllMocks();
 	});
 
-	describe('disc-type filter', () => {
+	describe('media-type filter', () => {
 		const sessions = [
 			createSession({ id: 'ses_movie', name: 'Movie MKV', media_type: 'movie' }),
 			createSession({ id: 'ses_tv', name: 'TV Episodes', media_type: 'tv' }),
 			createSession({ id: 'ses_music', name: 'Music FLAC', media_type: 'music' }),
-			createSession({ id: 'ses_data', name: 'Data ISO', media_type: 'data' })
+			createSession({ id: 'ses_data', name: 'Data ISO', media_type: 'data' }),
+			createSession({ id: 'ses_iso', name: 'Disc Image', media_type: 'iso' })
 		];
 
-		it('lists music and tv sessions only for a CD job', async () => {
+		it('lists music sessions only for a CD job', async () => {
 			fetchSessionsMock.mockResolvedValue(sessions);
 			renderDialog('cd');
 			await waitFor(() => expect(screen.getByText(/Music FLAC/)).toBeInTheDocument());
-			expect(optionTexts()).toEqual(['Choose...', 'TV Episodes (tv)', 'Music FLAC (music)']);
+			expect(optionTexts()).toEqual(['Choose...', 'Music FLAC (music)']);
 		});
 
-		it('lists data and tv sessions only for a data disc job', async () => {
+		it('lists data and iso sessions only for a data disc job', async () => {
 			fetchSessionsMock.mockResolvedValue(sessions);
 			renderDialog('data');
 			await waitFor(() => expect(screen.getByText(/Data ISO/)).toBeInTheDocument());
-			expect(optionTexts()).toEqual(['Choose...', 'TV Episodes (tv)', 'Data ISO (data)']);
+			expect(optionTexts()).toEqual(['Choose...', 'Data ISO (data)', 'Disc Image (iso)']);
+		});
+
+		it('lists the video, data and iso sessions for a DVD identified as tv', async () => {
+			fetchSessionsMock.mockResolvedValue(sessions);
+			renderDialog('dvd', 'tv');
+			await waitFor(() => expect(screen.getByText(/TV Episodes/)).toBeInTheDocument());
+			expect(optionTexts()).toEqual([
+				'Choose...',
+				'Movie MKV (movie)',
+				'TV Episodes (tv)',
+				'Data ISO (data)',
+				'Disc Image (iso)'
+			]);
 		});
 	});
 

@@ -275,6 +275,7 @@
 					tracksAreSeries={jobDetail.tracksAreSeries}
 					previewByTrack={jobDetail.previewByTrack}
 					onexcludedchange={jobDetail.setExcluded}
+					excludeError={jobDetail.excludeError}
 					ontitleapplied={() => jobDetail.load()}
 				/>
 			{/if}
