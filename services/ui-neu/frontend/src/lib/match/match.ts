@@ -21,7 +21,7 @@ export function kindLabel(kind: string): string {
 }
 
 /** A candidate's subtitle: its years and kind, then any extra parts,
- * leaving out each part that is empty, joined with " · ". */
+ * leaving out each part that is empty, joined with " | ". */
 export function candidateSubtitle(c: MetadataCandidate, ...extra: string[]): string {
 	return [formatYears(c.year, c.facts?.end_year, c.kind), kindLabel(c.kind), ...extra].filter(Boolean).join(' | ');
 }

@@ -11,7 +11,7 @@ type TypeFields = Pick<JobView, 'metadata_json' | 'disc_type'> &
 
 const CD_DISCTYPES = new Set(['cd']);
 
-/** `S1 · Disc 2/4`, leaving out the parts that are unknown; `-` when nothing is. */
+/** `S1 | Disc 2/4`, leaving out the parts that are unknown; `-` when nothing is. */
 export function discPosition(job: DiscFields): string {
 	const parts: string[] = [];
 	if (job.season != null) parts.push(`S${job.season}`);

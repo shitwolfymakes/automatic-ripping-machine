@@ -989,7 +989,7 @@ describe('rip progress', () => {
 		};
 		expect(await within(section).findByText('10m left')).toBeInTheDocument();
 		const transfer = section.querySelector('.mono') as HTMLElement;
-		expect(text(transfer)).toMatch(/ of .* | .*\/s$/);
+		expect(text(transfer)).toMatch(/ of .* \| .*\/s$/);
 	});
 
 	it('shows the byte transfer without a rate when none was reported', async () => {

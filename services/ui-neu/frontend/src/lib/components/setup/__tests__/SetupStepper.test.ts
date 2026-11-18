@@ -11,7 +11,7 @@ describe('SetupStepper', () => {
 		const current = screen.getAllByRole('button', { name: /^drives/i })[0];
 		expect(current).toHaveAttribute('aria-current', 'step');
 		expect(screen.getAllByText('Needs attention').length).toBeGreaterThan(0);
-		expect(screen.getAllByText(/Not started | Optional/).length).toBeGreaterThan(0);
+		expect(screen.getAllByText(/Not started \| Optional/).length).toBeGreaterThan(0);
 	});
 
 	it('lets you revisit recorded steps but not jump ahead', async () => {

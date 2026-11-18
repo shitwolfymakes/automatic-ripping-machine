@@ -136,7 +136,7 @@
 		background: var(--color-warning-soft);
 		color: var(--color-warning);
 	}
-	/* :global: this class is set on a Glyph component instance, which Svelte's scoping can't see. .btn-icon svg and .btn .chevron both force 0.875rem; this expand chevron is 16px (size=16), not 14px. */
+	/* :global: this class is set on a Glyph component instance, which Svelte's scoping can't see. .btn-icon svg and .btn .chevron both force 0.875rem; this expand chevron Glyph is 1rem (16px), not 14px. */
 	:global(.channel-row-chevron) {
 		width: 1rem;
 		height: 1rem;

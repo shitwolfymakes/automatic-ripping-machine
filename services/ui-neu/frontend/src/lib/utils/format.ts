@@ -126,7 +126,7 @@ interface ByteTransfer {
 	rate_bps: number | null;
 }
 
-/** "12.3 GB of 20.9 GB · 45.1 MB/s" for a byte copy, or null when none was reported. */
+/** "12.3 GB of 20.9 GB | 45.1 MB/s" for a byte copy, or null when none was reported. */
 export function formatTransfer(live: ByteTransfer | null | undefined): string | null {
 	if (!live || live.bytes_done == null) return null;
 	const parts = [

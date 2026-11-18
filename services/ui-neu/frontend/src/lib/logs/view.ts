@@ -45,7 +45,7 @@ export function matchLabel(count: number): string {
 	return `${count} ${plural(count, 'match', 'matches')}`;
 }
 
-/** "Following", "Paused", or "Paused · N new line(s)". */
+/** "Following", "Paused", or "Paused | N new line(s)". */
 export function followLabel(following: boolean, waiting: number): string {
 	return following ? 'Following' : waiting === 0 ? 'Paused' : `Paused | ${waiting} new ${plural(waiting, 'line')}`;
 }
