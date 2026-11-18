@@ -3,6 +3,11 @@ import { renderComponent, screen, fireEvent, cleanup, waitFor } from '$lib/testi
 import ActiveJobRow from '../ActiveJobRow.svelte';
 import { createJob } from '../../../__fixtures__/job';
 
+const live = vi.hoisted(() => ({ value: { rip: null, transcode: null } as Record<string, unknown> }));
+vi.mock('$lib/stores/job-live.svelte', () => ({
+	jobLive: { watch: vi.fn(() => () => {}), get: vi.fn(() => live.value) }
+}));
+
 vi.mock('$lib/stores/auth', async () => {
 	const { derived, writable } = await import('svelte/store');
 	const _role = writable<string | null>('admin');
@@ -141,5 +146,31 @@ describe('ActiveJobRow', () => {
 			);
 			expect(screen.getByText('Cancel')).not.toBeDisabled();
 		});
+	});
+});
+
+describe('progress row without a progress figure', () => {
+	afterEach(() => {
+		cleanup();
+		live.value = { rip: null, transcode: null };
+	});
+
+	it.each(['created', 'identified', 'awaiting_user_id', 'awaiting_review', 'ripping'])(
+		'shows the indeterminate bar, not the waiting sentence, for a %s job',
+		(status) => {
+			const { container } = renderComponent(ActiveJobRow, { props: { job: createJob({ status: status as never }) } });
+			expect(container.querySelector('[data-indeterminate="true"]')).not.toBeNull();
+			expect(screen.queryByText(/Waiting for the first progress report/)).toBeNull();
+		}
+	);
+
+	it('shows the live bar once a progress figure arrives', () => {
+		live.value = {
+			rip: { pct: 40, etaSeconds: null, bytesDone: null, bytesTotal: null, rateBps: null, phase: null, pass: null },
+			transcode: null
+		};
+		const { container } = renderComponent(ActiveJobRow, { props: { job: createJob({ status: 'ripping' }) } });
+		expect(screen.getByTestId('live-progress-line')).toBeInTheDocument();
+		expect(container.querySelector('[data-indeterminate="true"]')).toBeNull();
 	});
 });

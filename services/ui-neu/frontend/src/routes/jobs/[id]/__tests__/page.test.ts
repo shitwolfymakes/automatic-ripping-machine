@@ -611,7 +611,7 @@ describe('Job detail page (v3)', () => {
 		// The track's Transcode cell shows a dash (no transcode task yet).
 		// Scope to the Transcode <td> (data-label="Transcode") — other cells also
 		// render "-", so a global getByText('—') is ambiguous.
-		await waitFor(() => expect(screen.getByText('Done')).toBeInTheDocument());
+		await waitFor(() => expect(document.querySelector('td[data-label="Transcode"]')).not.toBeNull());
 		const transcodeCell = document.querySelector('td[data-label="Transcode"]');
 		expect(transcodeCell?.textContent?.trim()).toBe('-');
 	});

@@ -61,6 +61,8 @@ export interface DashboardData {
 	transcoder_online: boolean;
 	transcoder_stats: TranscoderStats | null;
 	active_transcodes: TranscodeTaskView[];
+	// Review countdown length (config manual_wait_seconds); 60 when unread.
+	review_wait_seconds: number;
 }
 
 // Fields whose endpoint can blip independently. A snapshot reports them as
@@ -74,7 +76,8 @@ export const STICKY_FIELDS = [
 	'iso_source_kinds',
 	'drive_source_kinds',
 	'notification_count',
-	'ripping_enabled'
+	'ripping_enabled',
+	'review_wait_seconds'
 ] as const satisfies readonly (keyof DashboardData)[];
 
 type StickyField = (typeof STICKY_FIELDS)[number];
@@ -202,6 +205,7 @@ export async function fetchDashboardSnapshot(): Promise<DashboardSnapshot> {
 		preparing,
 		notification_count: notifications === null ? null : (notifications.unseen ?? 0),
 		ripping_enabled: config === null ? null : !config.ripping_paused,
+		review_wait_seconds: config === null ? null : (config.manual_wait_seconds ?? 60),
 		makemkv_key_valid: config?.makemkv_key_valid ?? null,
 		makemkv_key_checked_at: config?.makemkv_key_checked_at ?? null,
 		transcoder_online: transcoderOnline,
