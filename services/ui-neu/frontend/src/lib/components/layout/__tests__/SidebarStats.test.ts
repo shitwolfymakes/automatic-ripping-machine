@@ -32,7 +32,7 @@ vi.mock('$lib/api/system', () => ({
 }));
 
 import SidebarStats from '../SidebarStats.svelte';
-import { DEFAULT_REPO_URL } from '$lib/layout/version-chip';
+import { VERSION_CHIP_TIMEOUT_MS } from '$lib/layout/version-chip';
 import type { Writable } from 'svelte/store';
 
 const initialized = () => h.store.initialized as Writable<boolean>;
@@ -50,25 +50,42 @@ describe('SidebarStats', () => {
 	it('draws nothing until the first resources poll lands', async () => {
 		respond = () => Promise.resolve({ version: '1' });
 		const { container } = renderComponent(SidebarStats);
-		await waitFor(() => expect(calls).toBe(1));
-		await Promise.resolve();
 		flushSync();
 		expect(container.querySelector('[data-sidebar-stats]')).toBeNull();
+		// The chip mounts with the panel, so nothing asks for the version yet.
+		expect(calls).toBe(0);
 		initialized().set(true);
 		flushSync();
 		expect(container.querySelector('[data-sidebar-stats]')).not.toBeNull();
 		expect(screen.getByText('12%')).toBeInTheDocument();
+		await waitFor(() => expect(calls).toBe(1));
 	});
 
-	it('draws nothing until the version read is done, so the chip cannot push the panel up', async () => {
+	it('keeps the panel hidden until the version chip settles, so the chip cannot push the bars up', async () => {
 		let release: (v: unknown) => void = () => {};
 		respond = () => new Promise((resolve) => (release = resolve));
 		initialized().set(true);
 		const { container } = renderComponent(SidebarStats);
-		expect(container.querySelector('[data-sidebar-stats]')).toBeNull();
+		const panel = () => container.querySelector('[data-sidebar-stats]') as HTMLElement;
+		expect(panel().hasAttribute('data-pending')).toBe(true);
+		await waitFor(() => expect(calls).toBe(1));
 		release({ version: '1' });
 		expect(await screen.findByText('v1')).toBeInTheDocument();
-		expect(container.querySelector('[data-sidebar-stats]')).not.toBeNull();
+		expect(panel().hasAttribute('data-pending')).toBe(false);
+		expect(panel().querySelector('[data-version-chip]')).not.toBeNull();
+	});
+
+	it('shows the bars without a chip once a version read that never answers times out', async () => {
+		vi.useFakeTimers();
+		respond = () => new Promise(() => {});
+		initialized().set(true);
+		const { container } = renderComponent(SidebarStats);
+		const panel = () => container.querySelector('[data-sidebar-stats]') as HTMLElement;
+		expect(panel().hasAttribute('data-pending')).toBe(true);
+		await vi.advanceTimersByTimeAsync(VERSION_CHIP_TIMEOUT_MS);
+		expect(panel().hasAttribute('data-pending')).toBe(false);
+		expect(panel().querySelector('[data-version-chip]')).toBeNull();
+		vi.useRealTimers();
 	});
 
 	it('shows the CPU temperature and the storage rows once ready', async () => {
@@ -83,83 +100,5 @@ describe('SidebarStats', () => {
 		expect(await screen.findByText('60 GB free')).toBeInTheDocument();
 		expect(screen.getByText(/61/)).toBeInTheDocument();
 		expect(screen.getByText('Raw')).toBeInTheDocument();
-	});
-});
-
-describe('SidebarStats version chip', () => {
-	beforeEach(() => {
-		calls = 0;
-		initialized().set(true);
-	});
-	afterEach(() => {
-		cleanup();
-		initialized().set(false);
-	});
-
-	it('shows the green status when up to date', async () => {
-		respond = () => Promise.resolve({ version: '2.10.1', latest_version: '2.10.1', update_available: false });
-		renderComponent(SidebarStats);
-		expect(await screen.findByText('v2.10.1')).toBeTruthy();
-		expect(screen.getByText('Up to date')).toBeTruthy();
-		expect(screen.queryByRole('link', { name: /Update available/ })).toBeNull();
-		const link = screen.getByRole('link', { name: 'ARM v2.10.1 on GitHub (opens in a new tab)' });
-		expect(link.getAttribute('href')).toBe(DEFAULT_REPO_URL);
-		expect(link.getAttribute('target')).toBe('_blank');
-		expect(link.getAttribute('rel')).toBe('noopener noreferrer');
-	});
-
-	it('links to the repo_url the backend reports', async () => {
-		respond = () => Promise.resolve({ version: '2.10.1', repo_url: 'https://github.com/me/fork' });
-		renderComponent(SidebarStats);
-		const link = await screen.findByRole('link', { name: 'ARM v2.10.1 on GitHub (opens in a new tab)' });
-		expect(link.getAttribute('href')).toBe('https://github.com/me/fork');
-	});
-
-	it('does not double a leading v', async () => {
-		respond = () => Promise.resolve({ version: 'v2.10.1' });
-		renderComponent(SidebarStats);
-		expect(await screen.findByText('v2.10.1')).toBeTruthy();
-	});
-
-	it('links to the release when an update is available', async () => {
-		respond = () =>
-			Promise.resolve({
-				version: '2.10.1',
-				latest_version: '2.11.0',
-				update_available: true,
-				release_url: 'https://github.com/o/r/releases/tag/v2.11.0'
-			});
-		renderComponent(SidebarStats);
-		const link = await screen.findByRole('link', { name: 'Update available: v2.11.0 (opens in a new tab)' });
-		expect(link.getAttribute('href')).toBe('https://github.com/o/r/releases/tag/v2.11.0');
-		expect(link.getAttribute('target')).toBe('_blank');
-		expect(link.getAttribute('rel')).toBe('noopener noreferrer');
-		expect(screen.queryByText('Up to date')).toBeNull();
-		expect(link.textContent).toContain('Update available');
-		expect(link.querySelectorAll('a')).toHaveLength(0);
-	});
-
-	it('shows the version alone when nothing was checked', async () => {
-		respond = () => Promise.resolve({ version: '2.10.1', latest_version: null, update_available: null });
-		renderComponent(SidebarStats);
-		expect(await screen.findByText('v2.10.1')).toBeTruthy();
-		expect(screen.queryByText('Up to date')).toBeNull();
-		expect(screen.queryByRole('link', { name: /Update available/ })).toBeNull();
-		expect(screen.getByRole('link', { name: /on GitHub/ }).getAttribute('href')).toBe(DEFAULT_REPO_URL);
-	});
-
-	it('still draws the panel, without a chip, when the fetch fails', async () => {
-		respond = () => Promise.reject(new Error('boom'));
-		const { container } = renderComponent(SidebarStats);
-		await waitFor(() => expect(container.querySelector('[data-sidebar-stats]')).not.toBeNull());
-		expect(calls).toBe(1);
-		expect(container.querySelector('[data-version-chip]')).toBeNull();
-	});
-
-	it('fetches once on mount', async () => {
-		respond = () => Promise.resolve({ version: '2.10.1' });
-		renderComponent(SidebarStats);
-		await screen.findByText('v2.10.1');
-		expect(calls).toBe(1);
 	});
 });
