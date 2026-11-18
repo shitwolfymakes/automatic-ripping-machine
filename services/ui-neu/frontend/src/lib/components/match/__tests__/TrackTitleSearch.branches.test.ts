@@ -5,8 +5,9 @@ import TrackTitleSearch from '../TrackTitleSearch.svelte';
 import { createTrack } from '../../../__fixtures__/job';
 
 // Branch pins for TrackTitleSearch, beside TrackTitleSearch.test.ts. Every
-// branch of the component is reachable from the rendered component, so
-// nothing is left unpinned.
+// branch of the component's own code is covered. The coverage tool still
+// reports one open arm that is Svelte's: the heading's `{track.index}` compiles
+// to `(...) ?? ''`, and a track's index is a required number.
 
 vi.mock('$lib/api/jobs', () => ({
 	searchMetadata: vi.fn(),
