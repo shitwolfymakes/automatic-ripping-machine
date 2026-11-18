@@ -4,4 +4,4 @@
 	let { status }: { status: ChannelStatus } = $props();
 </script>
 
-<span class="status-dot" data-status={status} title={status} aria-label={status}></span>
+<span class="status-dot" role="img" data-status={status} title={status} aria-label={status}></span>

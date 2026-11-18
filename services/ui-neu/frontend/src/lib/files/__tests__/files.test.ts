@@ -110,9 +110,9 @@ describe('selectionKey and parseSelectionKey', () => {
 		expect(parseSelectionKey(key)).toEqual({ root: 'raw', subpath: 'x/y' });
 	});
 
-	it('cuts a name containing :: at the second separator (bug #535)', () => {
-		// Pins today's split; the fix belongs to #535
-		expect(parseSelectionKey('raw::a::b')).toEqual({ root: 'raw', subpath: 'a' });
+	it('keeps a name containing :: whole, splitting on the first separator only', () => {
+		const key = selectionKey('raw', 'x/a::b.mkv');
+		expect(parseSelectionKey(key)).toEqual({ root: 'raw', subpath: 'x/a::b.mkv' });
 	});
 });
 

@@ -8,8 +8,9 @@ import { errorMessage } from '$lib/utils/errors';
 export class UserThemes {
 	feedback = $state<{ type: 'success' | 'error'; message: string } | null>(null);
 
+	// Deletes without asking: the Themes section confirms first through
+	// ConfirmDialog.
 	deleteTheme = async (id: string, label: string): Promise<void> => {
-		if (!confirm(`Delete user theme "${label}"?`)) return;
 		this.feedback = null;
 		try {
 			await deleteThemeApi(id);

@@ -451,10 +451,10 @@ describe('header', () => {
 
 describe('job actions', () => {
 	it('Delete sends the user home', async () => {
-		vi.spyOn(window, 'confirm').mockReturnValue(true);
 		vi.mocked(deleteJob).mockResolvedValue(undefined as never);
 		loadJobPage();
 		await fireEvent.click(await screen.findByRole('button', { name: 'Delete' }));
+		await fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Delete' }));
 		await waitFor(() => expect(mockGoto).toHaveBeenCalledWith('/'));
 		expect(deleteJob).toHaveBeenCalledWith(JOB);
 	});

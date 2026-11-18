@@ -276,8 +276,14 @@
 		</div>
 	{/if}
 
-	<!-- File listing -->
-	<HoldUntil ready={rootsSettled}>
+	<!-- File listing. With no root to open (none configured) there is no listing
+	     to load, so the empty-roots message stands in for it. -->
+	{#if !browser.loading && !browser.current.root && !browser.error}
+		<div class="panel files-page-empty-panel">
+			<p class="files-page-empty-panel-text">No media directories configured</p>
+		</div>
+	{:else}
+		<HoldUntil ready={rootsSettled}>
 		<LoadState
 			data={browser.listing}
 			loading={browser.loading && !browser.listing}
@@ -340,7 +346,8 @@
 				</div>
 			{/snippet}
 		</LoadState>
-	</HoldUntil>
+		</HoldUntil>
+	{/if}
 </div>
 
 <!-- Delete confirmation -->
@@ -442,6 +449,13 @@
 	}
 	.files-page-nav-row:hover {
 		background: var(--color-primary-tint-1);
+	}
+	.files-page-empty-panel {
+		padding: 2rem;
+		text-align: center;
+	}
+	.files-page-empty-panel-text {
+		color: var(--color-text-muted);
 	}
 	.files-page-empty {
 		padding: 2rem;
