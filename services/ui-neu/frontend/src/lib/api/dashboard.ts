@@ -20,7 +20,7 @@ import { fetchNotificationCount } from './notifications';
 // Transcoder summary as the sidebar reads it. v3's TranscodeStatsView has no
 // worker_running/pending fields, so those stay undefined; the dashboard badges
 // optional-chain them.
-export interface TranscoderStats {
+interface TranscoderStats {
 	worker_running?: boolean | null;
 	pending?: number | null;
 }

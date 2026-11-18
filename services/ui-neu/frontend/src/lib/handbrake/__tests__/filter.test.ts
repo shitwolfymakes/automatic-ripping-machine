@@ -2,8 +2,8 @@ import { describe, it, expect } from 'vitest';
 import type { HandbrakeSchemaSlimView, HandbrakeSettings, SlimFamily } from '$lib/types/api.gen';
 import fixture from './fixtures/slim-schema.json';
 import { firstTabWithMatch, tabVisibleCounts, visibleTab, type VisibleInput } from '../filter';
-import { toPayload } from '../settingsEdit';
-import type { EncoderCard } from '../encoderCards';
+import { toPayload } from '../settings-edit';
+import type { EncoderCard } from '../encoder-cards';
 import { TABS, type TabId } from '../fields';
 
 const schema = fixture as unknown as HandbrakeSchemaSlimView;

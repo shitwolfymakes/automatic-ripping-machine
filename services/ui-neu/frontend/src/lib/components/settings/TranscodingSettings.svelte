@@ -1,7 +1,7 @@
 <script lang="ts">
 	import SchemaConfigForm from '$lib/components/settings/SchemaConfigForm.svelte';
-	import GpusCard from '$lib/components/settings/GpusCard.svelte';
-	import Toggle from '$lib/components/notifications/Toggle.svelte';
+	import GpusCard from '$lib/components/shared/GpusCard.svelte';
+	import Toggle from '$lib/components/shared/Toggle.svelte';
 	import { transcoderEnabled } from '$lib/stores/config';
 	import type { SettingsGroup } from '$lib/types/api.gen';
 

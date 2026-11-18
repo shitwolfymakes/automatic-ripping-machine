@@ -3,8 +3,8 @@
 	import { ChevronRight, Send, Pencil } from 'lucide-svelte';
 	import StatusDot from './StatusDot.svelte';
 	import ServiceGlyph from './ServiceGlyph.svelte';
-	import Toggle from './Toggle.svelte';
-	import { channelStatus, relativeTime, typeLabel } from './channelHelpers';
+	import Toggle from '../shared/Toggle.svelte';
+	import { channelStatus, relativeTime, typeLabel } from '../../notifications/channel-helpers';
 
 	let {
 		channel,

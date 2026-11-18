@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from 'vitest';
-import { renderComponent, screen, fireEvent, cleanup, waitFor } from '$lib/test-utils';
+import { renderComponent, screen, fireEvent, cleanup, waitFor } from '$lib/testing/render';
 import { createSubscriber } from 'svelte/reactivity';
 import type { ChannelTemplate } from '$lib/types/notifications';
 import type { EventTypeInfo, ScriptInput } from '$lib/api/channels';

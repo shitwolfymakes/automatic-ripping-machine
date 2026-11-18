@@ -16,10 +16,10 @@
 		depthText,
 		VARIANT_LISTS,
 		type EncoderCard
-	} from '$lib/handbrake/encoderCards';
-	import { docUrlForFamily } from '$lib/handbrake/docLinks';
-	import { errorId, invalidAttrs } from '$lib/utils/formValidation';
-	import type { BaseValues } from '$lib/handbrake/sidebarModel';
+	} from '$lib/handbrake/encoder-cards';
+	import { docUrlForFamily } from '$lib/handbrake/doc-links';
+	import { errorId, invalidAttrs } from '$lib/ui/form-validation';
+	import type { BaseValues } from '$lib/handbrake/base-values';
 	import TunableField from './TunableField.svelte';
 
 	interface Props {

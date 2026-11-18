@@ -1,5 +1,5 @@
 <script lang="ts">
-	import Toggle from '../Toggle.svelte';
+	import Toggle from '../../shared/Toggle.svelte';
 
 	let { name = $bindable(), enabled = $bindable() }: { name: string; enabled: boolean } = $props();
 </script>

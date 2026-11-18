@@ -31,7 +31,7 @@ import { apiFetch, apiFetchResponse, post } from './client';
 // local param type so callers compile, mapping page→offset where we can and
 // silently dropping the unsupported filters (the screens that used them are
 // guarded off in Tier C).
-export interface FetchJobsParams {
+interface FetchJobsParams {
 	status?: string;
 	drive_id?: string;
 	limit?: number;
@@ -52,7 +52,7 @@ export function fetchJobs(params?: FetchJobsParams): Promise<JobView[]> {
 	return apiFetch<JobView[]>(jobsPath(params));
 }
 
-export interface JobsPage {
+interface JobsPage {
 	jobs: JobView[];
 	/** Jobs matching the filters across all pages (the `X-Total-Count` header). */
 	total: number;

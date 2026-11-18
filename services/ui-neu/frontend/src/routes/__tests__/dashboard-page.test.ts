@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { renderComponent, screen, cleanup, waitFor, fireEvent } from '$lib/test-utils';
+import { renderComponent, screen, cleanup, waitFor, fireEvent } from '$lib/testing/render';
 import DashboardPage from '../+page.svelte';
-import { createJob } from '$lib/components/__fixtures__/job';
+import { createJob } from '$lib/__fixtures__/job';
 
 vi.mock('$lib/stores/auth', async () => {
 	const { derived, writable } = await import('svelte/store');
@@ -169,7 +169,7 @@ describe('Dashboard Page', () => {
 		afterEach(() => cleanup());
 
 		it('opens in the default layout from Settings > Interface; toggling on the page does not change it', async () => {
-			const { setUiPref, uiPrefs } = await import('$lib/stores/uiPrefs');
+			const { setUiPref, uiPrefs } = await import('$lib/stores/ui-prefs');
 			const { get } = await import('svelte/store');
 			setUiPref('dashboardView', 'table');
 			await renderDashboard();

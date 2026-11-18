@@ -1,13 +1,13 @@
 import { describe, it, expect, vi, beforeEach, afterEach, type Mock } from 'vitest';
-import { renderComponent, screen, cleanup, waitFor } from '$lib/test-utils';
+import { renderComponent, screen, cleanup, waitFor } from '$lib/testing/render';
 
 vi.mock('$app/stores', async () => {
 	const { writable } = await import('svelte/store');
 	return { page: writable({ params: { slug: 'a' }, url: new URL('http://localhost/help') }) };
 });
 
-vi.mock('$lib/docs/api', async () => {
-	const actual = await vi.importActual<typeof import('$lib/docs/api')>('$lib/docs/api');
+vi.mock('$lib/help/api', async () => {
+	const actual = await vi.importActual<typeof import('$lib/help/api')>('$lib/help/api');
 	return {
 		...actual,
 		fetchDocsNav: vi.fn(),
@@ -18,7 +18,7 @@ vi.mock('$lib/docs/api', async () => {
 
 import HelpPage from '../[...slug]/+page.svelte';
 import { page } from '$app/stores';
-import { fetchDocsNav, fetchDocsPage } from '$lib/docs/api';
+import { fetchDocsNav, fetchDocsPage } from '$lib/help/api';
 
 type Deferred<T> = { promise: Promise<T>; resolve: (v: T) => void; reject: (e: unknown) => void };
 

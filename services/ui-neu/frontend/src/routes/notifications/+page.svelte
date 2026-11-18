@@ -1,12 +1,12 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
-	import LoadState from '$lib/components/LoadState.svelte';
-	import InboxEmptyState from '$lib/components/inbox/InboxEmptyState.svelte';
-	import InboxHeader from '$lib/components/inbox/InboxHeader.svelte';
-	import NotificationCard from '$lib/components/inbox/NotificationCard.svelte';
-	import SkeletonCard from '$lib/components/SkeletonCard.svelte';
-	import { NotificationInbox } from '$lib/stores/notificationInbox.svelte';
+	import ConfirmDialog from '$lib/components/shared/ConfirmDialog.svelte';
+	import LoadState from '$lib/components/shared/LoadState.svelte';
+	import InboxEmptyState from '$lib/components/notifications/inbox/InboxEmptyState.svelte';
+	import InboxHeader from '$lib/components/notifications/inbox/InboxHeader.svelte';
+	import NotificationCard from '$lib/components/notifications/inbox/NotificationCard.svelte';
+	import SkeletonCard from '$lib/components/shared/SkeletonCard.svelte';
+	import { NotificationInbox } from '$lib/stores/notification-inbox.svelte';
 
 	const inbox = new NotificationInbox();
 	let showCleared = $state(false);

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
-import { renderComponent, screen, fireEvent, cleanup, waitFor } from '$lib/test-utils';
+import { renderComponent, screen, fireEvent, cleanup, waitFor } from '$lib/testing/render';
 import MakemkvKeyField from '../MakemkvKeyField.svelte';
 import type { ConfigFieldMeta } from '$lib/types/api.gen';
 

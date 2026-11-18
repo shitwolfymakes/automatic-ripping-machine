@@ -1,14 +1,14 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { renderComponent, screen, cleanup, fireEvent, waitFor } from '$lib/test-utils';
+import { renderComponent, screen, cleanup, fireEvent, waitFor } from '$lib/testing/render';
 import Layout from '../+layout.svelte';
 import { createRawSnippet } from 'svelte';
 import type { Writable } from 'svelte/store';
 import { dashboard } from '$lib/stores/dashboard';
 import { theme, toggleTheme } from '$lib/stores/theme';
-import { schemeLocksMode } from '$lib/stores/colorScheme';
+import { schemeLocksMode } from '$lib/stores/color-scheme';
 import { setRippingEnabled } from '$lib/api/config';
-import { setUiPref } from '$lib/stores/uiPrefs';
-import { showIsoPicker, isoPickerMode } from '$lib/stores/isoPicker';
+import { setUiPref } from '$lib/stores/ui-prefs';
+import { showIsoPicker, isoPickerMode } from '$lib/stores/iso-picker';
 
 // Writable page store: the setup page and the nav highlight key off pathname.
 vi.mock('$app/stores', async () => {
@@ -63,7 +63,7 @@ vi.mock('$lib/stores/theme', async () => {
 	return { theme: writable('dark'), toggleTheme: vi.fn() };
 });
 
-vi.mock('$lib/stores/colorScheme', async () => {
+vi.mock('$lib/stores/color-scheme', async () => {
 	const { writable } = await import('svelte/store');
 	return {
 		colorScheme: writable('default'),

@@ -5,12 +5,12 @@
 	// unstored text or number field shows the inherited value as a placeholder.
 	import type { SettingIssue, SlimKey } from '$lib/types/api.gen';
 	import ChipPicker from './ChipPicker.svelte';
-	import Glyph from '$lib/components/Glyph.svelte';
-	import { docUrlFor } from '$lib/handbrake/docLinks';
-	import { errorId, invalidAttrs } from '$lib/utils/formValidation';
+	import Glyph from '$lib/components/shared/Glyph.svelte';
+	import { docUrlFor } from '$lib/handbrake/doc-links';
+	import { errorId, invalidAttrs } from '$lib/ui/form-validation';
 	import { fieldView, optionLabel, scalarText, type TabId } from '$lib/handbrake/fields';
 	import { languageChoices } from '$lib/handbrake/languages';
-	import { PAD_CUSTOM, padColorView } from '$lib/handbrake/padColor';
+	import { PAD_CUSTOM, padColorView } from '$lib/handbrake/pad-color';
 	import { formatRotate, parseRotate, ROTATE_ANGLES, type RotateAngle } from '$lib/handbrake/rotate';
 
 	interface Props {

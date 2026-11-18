@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
-import { renderComponent, screen, fireEvent, cleanup, waitFor, within } from '$lib/test-utils';
+import { renderComponent, screen, fireEvent, cleanup, waitFor, within } from '$lib/testing/render';
 import type { MediaType } from '$lib/types/api.gen';
 
 vi.mock('$lib/api/sessions', () => ({
@@ -10,24 +10,24 @@ vi.mock('$lib/api/sessions', () => ({
 	cloneSession: vi.fn(),
 	previewTemplate: vi.fn().mockResolvedValue({ resolved: 'p', error: null })
 }));
-vi.mock('$lib/api/sessionRoutes', () => ({
+vi.mock('$lib/api/session-routes', () => ({
 	fetchSessionRoutes: vi.fn().mockResolvedValue([]),
 	upsertSessionRoute: vi.fn(),
 	deleteSessionRoute: vi.fn()
 }));
-vi.mock('$lib/api/ripPresets', () => ({
+vi.mock('$lib/api/rip-presets', () => ({
 	fetchRipPresets: vi.fn(),
 	createRipPreset: vi.fn(),
 	updateRipPreset: vi.fn(),
 	deleteRipPreset: vi.fn()
 }));
-vi.mock('$lib/api/transcodePresets', () => ({
+vi.mock('$lib/api/transcode-presets', () => ({
 	fetchTranscodePresets: vi.fn(),
 	createTranscodePreset: vi.fn(),
 	updateTranscodePreset: vi.fn(),
 	deleteTranscodePreset: vi.fn()
 }));
-vi.mock('$lib/api/handbrakeSchema', () => ({
+vi.mock('$lib/api/handbrake-schema', () => ({
 	fetchHandbrakeSchema: vi.fn().mockRejectedValue(new Error('No HandBrake schema loaded yet')),
 	fetchBuiltinPreset: vi.fn(),
 	refreshHandbrakeSchema: vi.fn()
@@ -38,9 +38,9 @@ vi.mock('$lib/api/ws', () => ({
 }));
 
 import { fetchSessions } from '$lib/api/sessions';
-import { fetchSessionRoutes } from '$lib/api/sessionRoutes';
-import { fetchRipPresets, createRipPreset } from '$lib/api/ripPresets';
-import { fetchTranscodePresets, createTranscodePreset } from '$lib/api/transcodePresets';
+import { fetchSessionRoutes } from '$lib/api/session-routes';
+import { fetchRipPresets, createRipPreset } from '$lib/api/rip-presets';
+import { fetchTranscodePresets, createTranscodePreset } from '$lib/api/transcode-presets';
 import { deleteSession, cloneSession } from '$lib/api/sessions';
 import SessionsArea from '../SessionsArea.svelte';
 import { setTranscoderEnabled } from '$lib/stores/config';
