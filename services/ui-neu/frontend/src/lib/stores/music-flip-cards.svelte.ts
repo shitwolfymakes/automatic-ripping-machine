@@ -28,10 +28,16 @@ export class MusicFlipCards {
 		}
 		this.#set(id, 'loading');
 		try {
-			this.#set(id, await fetchMusicDetail(id));
+			this.#settle(id, await fetchMusicDetail(id));
 		} catch {
-			this.#set(id, fallbackDetail(c));
+			this.#settle(id, fallbackDetail(c));
 		}
+	};
+
+	// Stores the fetched back face only while the card still waits for it, so a
+	// card flipped back (or cleared) during the fetch stays unflipped.
+	readonly #settle = (id: string, value: MetadataReleaseDetail): void => {
+		if (this.#cards.get(id) === 'loading') this.#set(id, value);
 	};
 
 	readonly #set = (id: string, value: MetadataReleaseDetail | 'loading'): void => {

@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
+import { tick } from 'svelte';
 import { renderComponent, screen, fireEvent, cleanup, waitFor } from '$lib/testing/render';
 import type { JobView, MetadataCandidate, MetadataReleaseDetail, TrackView } from '$lib/types/api.gen';
 import MusicSearch from '../MusicSearch.svelte';
@@ -544,7 +545,7 @@ describe('card flip', () => {
 		expect(mockDetail).toHaveBeenCalledTimes(2);
 	});
 
-	it('flips again when the fetch resolves after a flip back (today)', async () => {
+	it('stays flipped back when the fetch resolves after a flip back', async () => {
 		mount();
 		await searchFor([cand({ track_count: 2 })]);
 		const d = deferred<MetadataReleaseDetail>();
@@ -553,8 +554,10 @@ describe('card flip', () => {
 		await fireEvent.click(backBtn());
 		expect(isFlipped()).toBe(false);
 		d.resolve(rel());
-		await waitFor(() => expect(isFlipped()).toBe(true));
-		await waitFor(() => expect(backRows()).toHaveLength(2));
+		await d.promise;
+		await tick();
+		expect(isFlipped()).toBe(false);
+		expect(backRows()).toHaveLength(0);
 	});
 });
 
@@ -576,16 +579,31 @@ describe('opening a release', () => {
 	it.each([
 		['an Error', new Error('Detail exploded'), 'Detail exploded'],
 		['a non-Error', 'nope', 'Load failed']
-	])('keeps the results and shows no message when the fetch rejects with %s (today)', async (_n, err, text) => {
+	])('keeps the results and shows the message when the fetch rejects with %s', async (_n, err, text) => {
 		mount();
 		await searchFor([cand()]);
 		mockDetail.mockRejectedValue(err);
 		await fireEvent.click(screen.getByText('Abbey Road'));
-		await waitFor(() => expect(mockDetail).toHaveBeenCalledTimes(1));
-		await waitFor(() => expect(screen.queryByText('Loading...')).not.toBeInTheDocument());
+		expect(await screen.findByText(text)).toHaveClass('music-search-meta');
+		expect(screen.queryByText('Loading...')).not.toBeInTheDocument();
 		expect(cards()).toHaveLength(1);
-		expect(screen.queryByText(text)).not.toBeInTheDocument();
 		expect(screen.queryByRole('button', { name: /Back to results/ })).not.toBeInTheDocument();
+	});
+
+	it('clears a failed load message when the next load starts and when a search runs', async () => {
+		mount();
+		await searchFor([cand()]);
+		mockDetail.mockRejectedValue(new Error('Detail exploded'));
+		await fireEvent.click(screen.getByText('Abbey Road'));
+		await screen.findByText('Detail exploded');
+		const d = deferred<MetadataReleaseDetail>();
+		mockDetail.mockReturnValue(d.promise);
+		await fireEvent.click(screen.getByText('Abbey Road'));
+		expect(screen.queryByText('Detail exploded')).not.toBeInTheDocument();
+		d.reject(new Error('Again'));
+		await screen.findByText('Again');
+		await searchFor([cand()]);
+		expect(screen.queryByText('Again')).not.toBeInTheDocument();
 	});
 
 	it('shows the full header', async () => {
@@ -781,22 +799,22 @@ describe('edit fields', () => {
 		expect(discTotalInput()).toHaveValue('7');
 	});
 
-	it('resets Album, Artist and Year when Disc total is typed on a multi-disc release (today)', async () => {
+	it('keeps Album, Artist and Year when Disc total is typed on a multi-disc release', async () => {
 		await openRelease(rel({ disc_count: 2 }));
 		await typeInto(albumInput(), 'Edited');
 		await typeInto(editArtist(), 'Someone');
 		await typeInto(yearInput(), '2001');
 		await typeInto(discTotalInput(), '4');
-		expect(albumInput()).toHaveValue('Abbey Road');
-		expect(editArtist()).toHaveValue('The Beatles');
-		expect(yearInput()).toHaveValue('1969');
+		expect(albumInput()).toHaveValue('Edited');
+		expect(editArtist()).toHaveValue('Someone');
+		expect(yearInput()).toHaveValue('2001');
 		expect(discTotalInput()).toHaveValue('4');
 	});
 
-	it('refills Disc total with the disc count when it is cleared (today)', async () => {
+	it('leaves Disc total blank when it is cleared on a multi-disc release', async () => {
 		await openRelease(rel({ disc_count: 2 }), { job: { disc_total: 5 } });
 		await typeInto(discTotalInput(), '');
-		expect(discTotalInput()).toHaveValue('2');
+		expect(discTotalInput()).toHaveValue('');
 	});
 
 	it('keeps edits when Disc total is typed on a single-disc release', async () => {
@@ -1113,6 +1131,43 @@ describe('PATCH after resolve', () => {
 		await fireEvent.click(applyBtn());
 		await screen.findByText('Release applied');
 		expect(mockPatchJob).not.toHaveBeenCalled();
+	});
+});
+
+describe('leaving a release while its apply is pending', () => {
+	async function applyPending(onapply = vi.fn()) {
+		mount({ onapply, discTracks: [disc(0, null, { kind: 'audio_track' })] });
+		await searchFor([cand({ title: 'Alpha' }), cand({ title: 'Beta', provider_id: 'rel-2' })]);
+		mockDetail.mockResolvedValue(rel({ title: 'Alpha', poster_url: 'http://a.jpg', tracks: [trk(1, 'A-1', null)] }));
+		await openCard('Alpha');
+		const pending = deferred<never>();
+		mockResolve.mockReturnValue(pending.promise);
+		await fireEvent.click(applyBtn());
+		await fireEvent.click(applyTitles());
+		return { onapply, pending };
+	}
+
+	const ALPHA_PATCH = { poster_url_manual: 'http://a.jpg', tracks: [{ track_id: 'trk_0', title: 'A-1' }] };
+
+	it("saves the applied release's cover and titles after Back to results", async () => {
+		const { onapply, pending } = await applyPending();
+		await backToResults();
+		pending.resolve({ job: {}, fan_out: [] } as never);
+		await waitFor(() => expect(onapply).toHaveBeenCalledTimes(1));
+		expect(mockPatchJob).toHaveBeenCalledWith('job_1', ALPHA_PATCH);
+	});
+
+	it("saves the applied release's cover and titles after opening another release", async () => {
+		const { onapply, pending } = await applyPending();
+		await backToResults();
+		mockDetail.mockResolvedValue(
+			rel({ release_id: 'rel-2', title: 'Beta', poster_url: 'http://b.jpg', tracks: [trk(1, 'B-1', null)] })
+		);
+		await openCard('Beta');
+		pending.resolve({ job: {}, fan_out: [] } as never);
+		await waitFor(() => expect(onapply).toHaveBeenCalledTimes(1));
+		expect(mockPatchJob).toHaveBeenCalledTimes(1);
+		expect(mockPatchJob).toHaveBeenCalledWith('job_1', ALPHA_PATCH);
 	});
 });
 
