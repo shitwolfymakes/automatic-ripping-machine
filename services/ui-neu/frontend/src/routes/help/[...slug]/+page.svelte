@@ -91,6 +91,8 @@
 		   gap above the bottom edge */
 		max-height: calc(100dvh - var(--shell-header-height, 3.5rem) - var(--shell-footer-height, 0px) - 3rem);
 		overflow-y: auto;
+		/* keeps the column's scrollbar off the topic links */
+		padding-right: 0.75rem;
 	}
 	.help-status {
 		font-size: 0.875rem;
@@ -123,6 +125,7 @@
 			position: static;
 			max-height: none;
 			overflow-y: visible;
+			padding-right: 0;
 		}
 	}
 </style>
