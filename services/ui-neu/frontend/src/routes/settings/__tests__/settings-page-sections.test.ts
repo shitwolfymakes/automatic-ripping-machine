@@ -471,18 +471,18 @@ describe('Settings page sections', () => {
 			expect(tab('API Keys')).toHaveAttribute('aria-selected', 'true');
 		});
 
-		it('falls back to Identification for an unknown hash', async () => {
+		it('falls back to the first tab, API Keys, for an unknown hash', async () => {
 			window.location.hash = '#bogus';
 			await renderReady();
-			expect(tab('Identification')).toHaveAttribute('aria-selected', 'true');
+			expect(tab('API Keys')).toHaveAttribute('aria-selected', 'true');
 		});
 
-		it('falls back to Identification when an external hash change names an unknown tab', async () => {
+		it('falls back to the first tab, API Keys, when an external hash change names an unknown tab', async () => {
 			await renderReady();
 			await fireEvent.click(tab('Themes'));
 			await settle();
 			window.location.hash = '#bogus';
-			await waitFor(() => expect(tab('Identification')).toHaveAttribute('aria-selected', 'true'));
+			await waitFor(() => expect(tab('API Keys')).toHaveAttribute('aria-selected', 'true'));
 		});
 
 		it('maps the legacy #appearance and #Metadata hashes to Themes and Identification', async () => {
