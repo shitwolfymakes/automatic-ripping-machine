@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
-import { renderComponent, screen, cleanup, fireEvent, waitFor, within } from '$lib/test-utils';
+import { renderComponent, screen, cleanup, fireEvent, waitFor, within } from '$lib/testing/render';
 
 // Branch pins for EpisodeMatchPanel, beside EpisodeMatchPanel.test.ts: the
 // loading, the match actions, the season and episode lists, and the by-hand

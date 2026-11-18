@@ -1,9 +1,9 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
 	import type { ConfigFieldMeta } from '$lib/types/api.gen';
-	import Glyph from '$lib/components/Glyph.svelte';
+	import Glyph from '$lib/components/shared/Glyph.svelte';
 	import { HIDDEN_SECRET } from '$lib/api/config';
-	import { readOnlyValue } from '$lib/utils/config-field';
+	import { readOnlyValue } from '$lib/settings/config-field';
 	import RankedListField from './RankedListField.svelte';
 	import MakemkvKeyField from './MakemkvKeyField.svelte';
 	import DiscHandlingField from './DiscHandlingField.svelte';

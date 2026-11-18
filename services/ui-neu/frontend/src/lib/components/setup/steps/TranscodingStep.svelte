@@ -1,12 +1,12 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import type { SetupView } from '$lib/types/api.gen';
-	import GpusCard from '$lib/components/settings/GpusCard.svelte';
+	import GpusCard from '$lib/components/shared/GpusCard.svelte';
 	import { fetchSystemDiagnostics } from '$lib/api/system';
 	import { transcoderEnabled } from '$lib/stores/config';
-	import { serviceHost } from '$lib/utils/system-health';
+	import { serviceHost } from '$lib/dashboard/system-health';
 	import SetupConfigFields from '../SetupConfigFields.svelte';
-	import type { StepCommitResult } from '../steps';
+	import type { StepCommitResult } from '../../../setup/steps';
 
 	// Step 7 (optional): graphics devices with a live encoder test, and the
 	// encode switches (setup spec §5.8). A ripper-only install has nothing to set.

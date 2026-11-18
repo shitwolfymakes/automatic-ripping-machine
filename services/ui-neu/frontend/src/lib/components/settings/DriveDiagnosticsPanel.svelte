@@ -1,8 +1,9 @@
 <script lang="ts">
+	import { plural } from '$lib/utils/plural';
 	import { slide } from 'svelte/transition';
-	import Glyph from '$lib/components/Glyph.svelte';
+	import Glyph from '$lib/components/shared/Glyph.svelte';
 	import { formatDateTime } from '$lib/utils/format';
-	import type { DriveDiagnostics } from '$lib/stores/driveDiagnostics.svelte';
+	import type { DriveDiagnostics } from '$lib/stores/drive-diagnostics.svelte';
 
 	interface Props {
 		diagnostics: DriveDiagnostics;
@@ -58,7 +59,8 @@
 						: 'alert-success'} mb-2 flex flex-wrap items-center gap-3"
 				>
 					<span class="settings-page-diag-count">
-						{diagnostics.result.drives.length} drive{diagnostics.result.drives.length !== 1 ? 's' : ''}
+						{diagnostics.result.drives.length}
+						{plural(diagnostics.result.drives.length, 'drive')}
 					</span>
 					<span class="alert-title">
 						{unhealthy.length > 0 || system.length > 0 ? 'Issues Found' : 'All OK'}

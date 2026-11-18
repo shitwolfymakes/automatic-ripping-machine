@@ -1,25 +1,26 @@
 <script lang="ts">
+	import { plural } from '$lib/utils/plural';
 	import SetupChecklistCard from '$lib/components/setup/SetupChecklistCard.svelte';
 	import { onMount } from 'svelte';
 	import { fetchDashboard } from '$lib/api/dashboard';
-	import { DashboardJobs } from '$lib/stores/dashboardJobs.svelte';
+	import { DashboardJobs } from '$lib/stores/dashboard-jobs.svelte';
 	import type { DashboardData } from '$lib/api/dashboard';
-	import DiscReviewWidget from '$lib/components/DiscReviewWidget.svelte';
-	import ActiveJobRow from '$lib/components/ActiveJobRow.svelte';
-	import IsoPreparingRow from '$lib/components/IsoPreparingRow.svelte';
+	import DiscReviewWidget from '$lib/components/dashboard/DiscReviewWidget.svelte';
+	import ActiveJobRow from '$lib/components/dashboard/ActiveJobRow.svelte';
+	import IsoPreparingRow from '$lib/components/dashboard/IsoPreparingRow.svelte';
 	import { ripProgress, startWS, stopWS, reconcileSubscriptions } from '$lib/stores/rips.svelte';
-	import TranscodeCard from '$lib/components/TranscodeCard.svelte';
-	import DashboardSection from '$lib/components/DashboardSection.svelte';
-	import AllJobsPanel from '$lib/components/AllJobsPanel.svelte';
-	import EmptyDashboardPanel from '$lib/components/EmptyDashboardPanel.svelte';
-	import { fadeIn } from '$lib/transitions';
+	import TranscodeCard from '$lib/components/dashboard/TranscodeCard.svelte';
+	import DashboardSection from '$lib/components/dashboard/DashboardSection.svelte';
+	import AllJobsPanel from '$lib/components/dashboard/AllJobsPanel.svelte';
+	import EmptyDashboardPanel from '$lib/components/dashboard/EmptyDashboardPanel.svelte';
+	import { fadeIn } from '$lib/ui/transitions';
 	import { fade } from 'svelte/transition';
-	import { groupActiveJobs } from '$lib/utils/dashboard-groups';
-	import { isoSourceFor, isoKindFor } from '$lib/utils/iso-source';
+	import { groupActiveJobs } from '$lib/dashboard/groups';
+	import { isoSourceFor, isoKindFor } from '$lib/drives/iso-source';
 	import { transcoderEnabled } from '$lib/stores/config';
 	import { dashboard } from '$lib/stores/dashboard';
 	import { get } from 'svelte/store';
-	import { startRipperEvents, onRipperEvent } from '$lib/stores/ripperEvents.svelte';
+	import { startRipperEvents, onRipperEvent } from '$lib/stores/ripper-events.svelte';
 
 	// --- Dashboard state ---
 	// Seed from the persistent singleton store the layout already polls, so
@@ -154,7 +155,7 @@
 		items={preparingRips}
 		key={(prepare) => prepare.drive_id}
 		accent="var(--color-accent-4)"
-		label="PREPARING - {preparingRips.length} {preparingRips.length === 1 ? 'ISO' : 'ISOS'}"
+		label="PREPARING - {preparingRips.length} {plural(preparingRips.length, 'ISO', 'ISOS')}"
 	>
 		{#snippet row(prepare)}
 			<IsoPreparingRow {prepare} />
@@ -166,7 +167,7 @@
 		items={scanningJobs}
 		key={(job) => job.id}
 		accent="var(--color-accent-4)"
-		label="SCANNING - {scanningJobs.length} {scanningJobs.length === 1 ? 'DISC' : 'DISCS'}"
+		label="SCANNING - {scanningJobs.length} {plural(scanningJobs.length, 'DISC', 'DISCS')}"
 	>
 		{#snippet row(job)}
 			<ActiveJobRow
@@ -201,7 +202,7 @@
 		items={finishingJobs}
 		key={(job) => job.id}
 		accent="var(--color-accent-1)"
-		label="FINISHING - {finishingJobs.length} {finishingJobs.length === 1 ? 'JOB' : 'JOBS'}"
+		label="FINISHING - {finishingJobs.length} {plural(finishingJobs.length, 'JOB', 'JOBS')}"
 	>
 		{#snippet row(job)}
 			<ActiveJobRow {job} />

@@ -1,14 +1,9 @@
-import type { DiscRouteSummary, SetupStatusPublic, SetupStep, SetupStepState, SetupView } from '$lib/types/api.gen';
+import type { DiscRouteSummary, SetupStep, SetupStepState, SetupView } from '$lib/types/api.gen';
 import { get, post, put } from './client';
 
 // First-run setup walkthrough state (setup spec 2026-10-01 §6.1). The
 // walkthrough writes settings through each feature's own API; these calls only
 // record progress.
-
-/** Public: readable before sign-in. The backend fails closed to first_run=false. */
-export function fetchSetupStatus(): Promise<SetupStatusPublic> {
-	return get<SetupStatusPublic>('/api/setup/status');
-}
 
 export function fetchSetup(): Promise<SetupView> {
 	return get<SetupView>('/api/setup');

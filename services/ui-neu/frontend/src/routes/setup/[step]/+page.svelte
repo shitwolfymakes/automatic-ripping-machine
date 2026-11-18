@@ -1,11 +1,12 @@
 <script lang="ts">
+	import { errorMessage } from '$lib/utils/errors';
 	import { onMount, tick, type Component } from 'svelte';
 	import { goto } from '$app/navigation';
 	import type { SetupStep, SetupStepState, SetupView } from '$lib/types/api.gen';
 	import SetupShell from '$lib/components/setup/SetupShell.svelte';
 	import SetupStepper from '$lib/components/setup/SetupStepper.svelte';
 	import SetupFooter from '$lib/components/setup/SetupFooter.svelte';
-	import { STEPS, nextStep, prevStep, stepIndex, stepMeta, type SetupStepComponent } from '$lib/components/setup/steps';
+	import { STEPS, nextStep, prevStep, stepIndex, stepMeta, type SetupStepComponent } from '$lib/setup/steps';
 	import AccountStep from '$lib/components/setup/steps/AccountStep.svelte';
 	import SystemStep from '$lib/components/setup/steps/SystemStep.svelte';
 	import DrivesStep from '$lib/components/setup/steps/DrivesStep.svelte';
@@ -72,7 +73,7 @@
 		try {
 			await action();
 		} catch (e) {
-			error = e instanceof Error ? e.message : failure;
+			error = errorMessage(e, failure);
 		} finally {
 			busy = false;
 		}

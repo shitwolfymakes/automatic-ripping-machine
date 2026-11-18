@@ -30,7 +30,7 @@ const CLOSE_FORBIDDEN = 4403;
 // 'offline' only after OFFLINE_AFTER_FAILURES consecutive failed attempts, so
 // a single blip reconnecting within a second never flashes the banner; once
 // shown it stays until a connection actually authenticates.
-export type WSStatus = 'idle' | 'connecting' | 'online' | 'offline';
+type WSStatus = 'idle' | 'connecting' | 'online' | 'offline';
 const OFFLINE_AFTER_FAILURES = 2;
 
 const statusStore = writable<WSStatus>('idle');

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { renderComponent, screen, cleanup, within } from '$lib/test-utils';
+import { renderComponent, screen, cleanup, within } from '$lib/testing/render';
 import LogJobRowHarness from './LogJobRowHarness.svelte';
 
 const NOW = new Date('2026-06-15T12:00:00Z');

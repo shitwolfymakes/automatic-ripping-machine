@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { renderComponent, screen, fireEvent, cleanup, waitFor, within } from '$lib/test-utils';
+import { renderComponent, screen, fireEvent, cleanup, waitFor, within } from '$lib/testing/render';
 import LogsPage from '../+page.svelte';
 
 const minutesAgo = (m: number) => new Date(Date.now() - m * 60_000).toISOString();

@@ -4,7 +4,7 @@
 	// placeholder saying that a blank keeps it.
 	import type { HTMLInputAttributes } from 'svelte/elements';
 	import { HIDDEN_SECRET } from '$lib/api/config';
-	import Glyph from '$lib/components/Glyph.svelte';
+	import Glyph from '$lib/components/shared/Glyph.svelte';
 
 	interface Props extends Omit<HTMLInputAttributes, 'type' | 'value' | 'placeholder' | 'oninput'> {
 		/** The secret, bound: the mask while a saved one is kept. */

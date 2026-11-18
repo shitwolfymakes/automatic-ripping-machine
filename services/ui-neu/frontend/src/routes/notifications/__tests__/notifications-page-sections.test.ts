@@ -3,7 +3,7 @@
 // here: the Dismiss All button only shows while a row is unseen. The guard
 // now lives in NotificationInbox, whose own tests cover it.
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { renderComponent, screen, fireEvent, cleanup, waitFor } from '$lib/test-utils';
+import { renderComponent, screen, fireEvent, cleanup, waitFor } from '$lib/testing/render';
 import NotificationsPage from '../+page.svelte';
 
 vi.mock('$lib/stores/auth', async () => {

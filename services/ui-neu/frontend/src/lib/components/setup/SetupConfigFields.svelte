@@ -1,9 +1,10 @@
 <script lang="ts">
+	import { errorMessage } from '$lib/utils/errors';
 	import { onMount, type Snippet } from 'svelte';
 	import type { ConfigView, SettingsGroup } from '$lib/types/api.gen';
 	import SchemaConfigForm from '$lib/components/settings/SchemaConfigForm.svelte';
 	import { fetchSettings } from '$lib/api/settings';
-	import { stepGroup } from '$lib/utils/settings-sections';
+	import { stepGroup } from '$lib/settings/sections';
 
 	// The config fields a step owns, picked from CONFIG_FIELD_META by their
 	// setup_step tag and rendered by the same SchemaConfigForm Settings uses
@@ -21,7 +22,7 @@
 			group = stepGroup(s.schema.groups, step);
 			config = s.config;
 		} catch (e) {
-			loadError = e instanceof Error ? e.message : 'Could not load settings';
+			loadError = errorMessage(e, 'Could not load settings');
 		}
 	});
 

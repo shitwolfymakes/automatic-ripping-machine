@@ -234,3 +234,4 @@ services/ui-neu/nginx.http.conf
 # Local gh CLI response cache — accidentally committed; must stay untracked.
 /gh-cli-cache/
 .screenshots/
+node-compile-cache/

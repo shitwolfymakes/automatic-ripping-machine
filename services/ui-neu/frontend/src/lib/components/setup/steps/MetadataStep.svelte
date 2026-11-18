@@ -1,8 +1,8 @@
 <script lang="ts">
 	import type { SetupView } from '$lib/types/api.gen';
-	import Glyph from '$lib/components/Glyph.svelte';
+	import Glyph from '$lib/components/shared/Glyph.svelte';
 	import SetupConfigFields from '../SetupConfigFields.svelte';
-	import type { StepCommitResult } from '../steps';
+	import type { StepCommitResult } from '../../../setup/steps';
 
 	// Step 5 (optional): identification keys, tested in place (setup spec §5.6).
 	let { view }: { view: SetupView; setBlocked?: (reason: string | null) => void } = $props();

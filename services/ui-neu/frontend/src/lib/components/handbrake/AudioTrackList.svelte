@@ -4,7 +4,7 @@
 	// Each track renders the fields `visibleKeys` holds for it, and a track with none stays out.
 	// A whole-list issue marks the list itself, which takes focus (tabindex -1) when Save sends it there.
 	import type { HandbrakeSchemaSlimView, SettingIssue, SlimKey } from '$lib/types/api.gen';
-	import { errorId, invalidAttrs } from '$lib/utils/formValidation';
+	import { errorId, invalidAttrs } from '$lib/ui/form-validation';
 	import {
 		AUDIO_LIST_ID,
 		addTrack,
@@ -16,7 +16,7 @@
 		rowOptions,
 		setTrackField,
 		type AudioItem
-	} from '$lib/handbrake/audioTracks';
+	} from '$lib/handbrake/audio-tracks';
 	import TunableField from './TunableField.svelte';
 
 	interface Props {

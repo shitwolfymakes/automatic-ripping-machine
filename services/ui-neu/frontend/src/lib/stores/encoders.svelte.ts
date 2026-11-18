@@ -10,7 +10,9 @@ import { fetchEncoders } from '$lib/api/encoders';
 import { wsClient, type WSEnvelope } from '$lib/api/ws';
 import type { EncoderAvailabilityView } from '$lib/types/api.gen';
 
-export const PRESET_ENCODER_ID = 'preset';
+import { PRESET_ENCODER_ID } from '$lib/handbrake/encoder-availability';
+
+export { PRESET_ENCODER_ID };
 
 let encoders = $state<EncoderAvailabilityView[]>([]);
 let loading = $state(false);

@@ -147,7 +147,7 @@ a design decision, not a convenience.
    outside `tokens.css` and theme sheets. `color-mix()` **against a token**
    is fine.
 2. The set is closed. A missing exact match is a **named collapse onto the
-   nearest role**, recorded in the PR/DEVIATIONS — not a new token.
+   nearest role**, recorded in the PR — not a new token.
 3. Radius, shadow and motion values come from tokens too, not just colours.
 
 ## 3. Naming
@@ -434,12 +434,7 @@ Conventions the codebase holds to:
 cd services/ui-neu/frontend && npx vitest run && npm run check   # green
 cd services/ui-neu/frontend && npm run lint && npm run format:check   # 0 problems, formatted
 node devtools/ui-neu-style-lint.mjs --files <your files>          # 0
-node devtools/ui-neu-parity.mjs capture current && ... diff       # for changes to existing screens
 ```
-
-A brand-new screen has no parity baseline; a change to an existing screen
-must hold its screens at 0 FAIL or record a named colour collapse in
-`devtools/ui-neu-parity/DEVIATIONS.md`.
 
 ## 12. Growing the vocabulary
 
@@ -479,8 +474,8 @@ Promote the existing scoped style rather than writing a parallel one:
 5. Document it: the table in this guide and the block contract table in
    `ui-neu-theming.md` (themes may target it from that moment on - name
    its state hooks deliberately).
-6. Run the full gates; parity must hold on every screen the converted
-   consumers appear on.
+6. Run the full gates, and check every screen the converted consumers
+   appear on.
 
 ### Adding a token
 
@@ -505,10 +500,6 @@ keep it stable - schemes depend on it from the first release it ships in.
 - `npm run lint` / `npm run format:check`: ESLint and Prettier, run by the
   `lint-ui-neu` CI job and the `eslint-ui-neu` / `prettier-ui-neu` pre-commit
   hooks.
-- `node devtools/ui-neu-parity.mjs capture current && … diff` — the visual
-  gate: 44 screens x 6 schemes x 3 viewports against a pinned baseline,
-  0.5% pixelmatch threshold, allowed deviations named in
-  `devtools/ui-neu-parity/DEVIATIONS.md`.
 - `blocks.test.ts` / `tokens.test.ts` — the vocabulary and token contracts
   (every block file layered, headered, literal-free; the legacy aliases
   stay gone).

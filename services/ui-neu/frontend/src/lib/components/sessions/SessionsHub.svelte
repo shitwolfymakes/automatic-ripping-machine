@@ -1,13 +1,18 @@
 <script lang="ts">
-	import type { JoinedSession } from './sessionsData.svelte';
+	import type { JoinedSession } from '../../stores/sessions-data.svelte';
 	import type { MediaType } from '$lib/types/api.gen';
-	import DataTable from '$lib/components/DataTable.svelte';
+	import DataTable from '$lib/components/shared/DataTable.svelte';
 	import { encodersStore } from '$lib/stores/encoders.svelte';
 	import { onMount } from 'svelte';
-	import { resolveSample } from './sampleTokens';
-	import { deleteGuard, openLabel, sessionColumns } from './tableColumns';
+	import { resolveSample } from '../../sessions/sample-tokens';
+	import { deleteGuard, openLabel, sessionColumns } from '../../sessions/table-columns';
 	import MediaTypeChips from './MediaTypeChips.svelte';
-	import { matchesFilters, matchesTranscode, type SourceFilter, type TranscodeFilter } from './listFilters';
+	import {
+		matchesFilters,
+		matchesTranscode,
+		type SourceFilter,
+		type TranscodeFilter
+	} from '../../sessions/list-filters';
 
 	interface Props {
 		sessions: JoinedSession[];

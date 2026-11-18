@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import ChoiceCard from '$lib/components/ChoiceCard.svelte';
+	import ChoiceCard from '$lib/components/settings/ChoiceCard.svelte';
 	import { fetchDrives } from '$lib/api/drives';
 
 	// "When you insert a disc": one three-way choice over two config keys

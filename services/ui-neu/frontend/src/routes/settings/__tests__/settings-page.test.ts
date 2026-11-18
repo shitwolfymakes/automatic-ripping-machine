@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { renderComponent, screen, cleanup, waitFor, fireEvent } from '$lib/test-utils';
+import { renderComponent, screen, cleanup, waitFor, fireEvent } from '$lib/testing/render';
 import SettingsPage from '../+page.svelte';
 import { fetchSettings } from '$lib/api/settings';
 import { fetchDrives, fetchDriveDiagnostic } from '$lib/api/drives';
@@ -7,7 +7,7 @@ import { fetchGpus } from '$lib/api/gpus';
 import { get } from 'svelte/store';
 import { setTranscoderEnabled, setTranscodeRuntimeEnabled, transcodeRuntimeEnabled } from '$lib/stores/config';
 import type { DriveView } from '$lib/types/api.gen';
-import { IDENTITY_METAS, IDENTITY_DEFAULTS } from '$lib/utils/__tests__/fixtures/identity-metas';
+import { IDENTITY_METAS, IDENTITY_DEFAULTS } from '$lib/__fixtures__/identity-metas';
 
 function drive(over: Partial<DriveView> = {}): DriveView {
 	return {
@@ -243,20 +243,20 @@ vi.mock('$lib/api/sessions', () => ({
 	previewTemplate: vi.fn()
 }));
 
-vi.mock('$lib/api/sessionRoutes', () => ({
+vi.mock('$lib/api/session-routes', () => ({
 	fetchSessionRoutes: vi.fn(() => Promise.resolve([])),
 	upsertSessionRoute: vi.fn(),
 	deleteSessionRoute: vi.fn()
 }));
 
-vi.mock('$lib/api/ripPresets', () => ({
+vi.mock('$lib/api/rip-presets', () => ({
 	fetchRipPresets: vi.fn(() => Promise.resolve([])),
 	createRipPreset: vi.fn(),
 	updateRipPreset: vi.fn(),
 	deleteRipPreset: vi.fn()
 }));
 
-vi.mock('$lib/api/transcodePresets', () => ({
+vi.mock('$lib/api/transcode-presets', () => ({
 	fetchTranscodePresets: vi.fn(() => Promise.resolve([])),
 	createTranscodePreset: vi.fn(),
 	updateTranscodePreset: vi.fn(),
@@ -279,7 +279,7 @@ vi.mock('$lib/stores/theme', async () => {
 	return { theme: writable('dark'), toggleTheme: vi.fn() };
 });
 
-vi.mock('$lib/stores/colorScheme', async () => {
+vi.mock('$lib/stores/color-scheme', async () => {
 	const { writable } = await import('svelte/store');
 	return {
 		colorScheme: writable('default'),
@@ -591,7 +591,7 @@ describe('Settings Page', () => {
 		});
 
 		it('shows "Locked by theme" when schemeLocksMode is true', async () => {
-			const { schemeLocksMode } = await import('$lib/stores/colorScheme');
+			const { schemeLocksMode } = await import('$lib/stores/color-scheme');
 			const { writable } = await import('svelte/store');
 			const locked = writable(true);
 			Object.assign(schemeLocksMode, { set: locked.set, subscribe: locked.subscribe, update: locked.update });

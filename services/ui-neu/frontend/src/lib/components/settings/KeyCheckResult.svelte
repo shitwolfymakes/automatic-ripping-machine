@@ -4,7 +4,7 @@
 	// reach" the service, each with the check's detail where it has one.
 	import type { KeyCheckResponse } from '$lib/types/api.gen';
 	import { formatDateTime } from '$lib/utils/format';
-	import Glyph from '$lib/components/Glyph.svelte';
+	import Glyph from '$lib/components/shared/Glyph.svelte';
 
 	interface Props {
 		/** The check's result. */

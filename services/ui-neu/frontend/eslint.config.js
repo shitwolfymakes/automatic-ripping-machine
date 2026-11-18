@@ -3,6 +3,7 @@ import prettier from 'eslint-config-prettier';
 import sonarjs from 'eslint-plugin-sonarjs';
 import svelte from 'eslint-plugin-svelte';
 import { defineConfig } from 'eslint/config';
+import unicorn from 'eslint-plugin-unicorn';
 import globals from 'globals';
 import ts from 'typescript-eslint';
 
@@ -59,6 +60,46 @@ export default defineConfig(
 		plugins: { sonarjs },
 		rules: {
 			'sonarjs/cognitive-complexity': ['error', 15]
+		}
+	},
+	{
+		// ui-neu file layout (see the development guidelines): kebab-case modules, PascalCase components. SvelteKit route files
+		// (+page, +layout) and generated or ambient declarations are exempt.
+		plugins: { unicorn },
+		ignores: ['src/routes/**', '**/*.d.ts', 'src/lib/types/api.gen.ts'],
+		files: ['**/*.ts', '**/*.js'],
+		rules: {
+			'unicorn/filename-case': ['error', { cases: { kebabCase: true }, ignore: [/^__tests__$/, /^__fixtures__$/] }]
+		}
+	},
+	{
+		// Folders are checked kebab-case by the block above; a folder holding only .svelte files is not checked.
+		plugins: { unicorn },
+		files: ['**/*.svelte'],
+		ignores: ['src/routes/**'],
+		rules: {
+			'unicorn/filename-case': [
+				'error',
+				{ cases: { pascalCase: true }, checkDirectories: false, ignore: [/^__tests__$/, /^__fixtures__$/] }
+			]
+		}
+	},
+	{
+		// Layering: lib code outside components/ never imports from components/. Shared pieces live in lib/ui, lib/__fixtures__ etc.
+		files: ['src/lib/**/*.ts', 'src/lib/**/*.js'],
+		ignores: ['src/lib/components/**'],
+		rules: {
+			'no-restricted-imports': [
+				'error',
+				{
+					patterns: [
+						{
+							regex: '(^\\$lib/components(/|$))|((^|/)components/)',
+							message: 'lib code outside components/ must not import from components/.'
+						}
+					]
+				}
+			]
 		}
 	},
 	{

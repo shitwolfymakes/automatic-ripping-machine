@@ -3,8 +3,8 @@
 	// footer that submits it by id, fed by the builder's status.
 	import type { ComponentProps } from 'svelte';
 	import SessionBuilder from '../SessionBuilder.svelte';
-	import EditorFormFooter from '../../EditorFormFooter.svelte';
-	import { IDLE_STATUS, type EditorStatus } from '../../editorStatus';
+	import EditorFormFooter from '../../shared/EditorFormFooter.svelte';
+	import { IDLE_STATUS, type EditorStatus } from '../../../ui/editor-status';
 
 	let props: Omit<ComponentProps<typeof SessionBuilder>, 'formId' | 'onstatus'> = $props();
 

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
-import { renderComponent, screen, cleanup } from '$lib/test-utils';
+import { renderComponent, screen, cleanup } from '$lib/testing/render';
 vi.mock('$lib/api/sessions', () => ({ previewTemplate: vi.fn() }));
 import { previewTemplate } from '$lib/api/sessions';
 import OutputPathField from '../OutputPathField.svelte';
