@@ -45,3 +45,39 @@ describe('safe storage with localStorage blocked', () => {
 		expect(readStorage('k')).toBeNull();
 	});
 });
+
+describe('safe storage when writes fail but reads still work', () => {
+	function failWrites() {
+		return vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+			throw new DOMException('full', 'QuotaExceededError');
+		});
+	}
+
+	it('reads back the value whose write failed, not the older stored one', () => {
+		localStorage.setItem('k', 'old');
+		failWrites();
+		writeStorage('k', 'new');
+		expect(readStorage('k')).toBe('new');
+		// the stale copy is gone, so a reload cannot bring it back
+		expect(localStorage.getItem('k')).toBeNull();
+		removeStorage('k');
+	});
+
+	it('lets a later successful write replace the in-memory value', () => {
+		const writes = failWrites();
+		writeStorage('k', 'new');
+		writes.mockRestore();
+		writeStorage('k', 'newer');
+		expect(readStorage('k')).toBe('newer');
+		removeStorage('k');
+	});
+
+	it('keeps a new sign-in token instead of the stored old one', async () => {
+		const { setToken, getToken, clearToken } = await import('$lib/api/client');
+		localStorage.setItem('arm_token', 'old-token');
+		failWrites();
+		setToken('new-token');
+		expect(getToken()).toBe('new-token');
+		clearToken();
+	});
+});
