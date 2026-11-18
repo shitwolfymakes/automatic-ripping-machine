@@ -84,9 +84,11 @@ vi.mock('$lib/api/logs', () => ({
 }));
 
 /** Render dashboard and wait for initial data to load */
+// The body (sections, idle panel, All Jobs) draws once the first dashboard
+// load lands.
 async function renderDashboard() {
 	renderComponent(DashboardPage);
-	await waitFor(() => expect(screen.getByText('Dashboard')).toBeInTheDocument());
+	await waitFor(() => expect(screen.getByText('All Jobs')).toBeInTheDocument());
 }
 
 /** Render dashboard, wait for jobs, then switch to table view */

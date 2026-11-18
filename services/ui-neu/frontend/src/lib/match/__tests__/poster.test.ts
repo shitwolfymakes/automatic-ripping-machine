@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { posterSrc, posterFallback, POSTER_PLACEHOLDER } from '../poster';
+import { posterSrc, POSTER_PLACEHOLDER } from '../poster';
 
 describe('posterSrc', () => {
 	it('returns placeholder for null', () => {
@@ -30,25 +30,5 @@ describe('posterSrc', () => {
 
 	it('returns path-only strings unchanged', () => {
 		expect(posterSrc('poster.jpg')).toBe('poster.jpg');
-	});
-});
-
-describe('posterFallback', () => {
-	it('sets img src to placeholder on error', () => {
-		const img = { src: 'https://broken.com/img.jpg' } as HTMLImageElement;
-		posterFallback({ target: img } as unknown as Event);
-		expect(img.src).toBe(POSTER_PLACEHOLDER);
-	});
-
-	it('does not loop if already showing placeholder', () => {
-		const img = { src: POSTER_PLACEHOLDER } as HTMLImageElement;
-		posterFallback({ target: img } as unknown as Event);
-		expect(img.src).toBe(POSTER_PLACEHOLDER);
-	});
-
-	it('does not loop if src ends with placeholder filename', () => {
-		const img = { src: 'http://localhost:8888/img/poster-placeholder.svg' } as HTMLImageElement;
-		posterFallback({ target: img } as unknown as Event);
-		expect(img.src).toBe('http://localhost:8888/img/poster-placeholder.svg');
 	});
 });

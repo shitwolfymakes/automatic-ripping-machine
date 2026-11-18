@@ -18,6 +18,7 @@
 	import { transcoderEnabled } from '$lib/stores/config';
 	import { dashboard } from '$lib/stores/dashboard';
 	import { startRipperEvents, onRipperEvent } from '$lib/stores/ripper-events.svelte';
+	import HoldUntil from '$lib/components/shared/HoldUntil.svelte';
 
 	// --- Dashboard state ---
 	// The page reads the dashboard store the layout already polls every 5 s,
@@ -49,7 +50,12 @@
 
 	// --- Jobs section state ---
 	const jobsList = new DashboardJobs();
-	let pageReady = $derived(!dashLoading && !jobsList.loading);
+	// Nothing in flight anywhere on the dashboard: show the idle panel.
+	const idle = $derived(
+		[preparingRips, scanningJobs, waitingJobs, nonWaitingActiveJobs, finishingJobs, dash.active_transcodes].every(
+			(list) => list.length === 0
+		)
+	);
 
 	onMount(() => {
 		let stopped = false;
@@ -94,117 +100,124 @@
 		<SetupChecklistCard />
 	</div>
 
-	<!-- Global pause banner -->
-	{#if !dashLoading && !dash.ripping_enabled}
-		<div class="alert alert-warning flex items-center gap-3 dashboard-pause-banner">
-			<div class="dashboard-pause-dot"></div>
-			<div>
-				<p class="alert-title">Ripping Paused</p>
-				<p class="alert-body">New discs won't start ripping while paused.</p>
-			</div>
+	<!-- Everything below waits for the first dashboard load and then appears
+	     as one block. Rendering All Jobs earlier puts it at the top, and the
+	     sections or idle panel arriving above it would push it down. -->
+	<HoldUntil ready={!dashLoading}>
+		<div class="stack-lg stack" in:fade={fadeIn}>
+			<!-- Global pause banner -->
+			{#if !dash.ripping_enabled}
+				<div class="alert alert-warning flex items-center gap-3 dashboard-pause-banner">
+					<div class="dashboard-pause-dot"></div>
+					<div>
+						<p class="alert-title">Ripping Paused</p>
+						<p class="alert-body">New discs won't start ripping while paused.</p>
+					</div>
+				</div>
+			{/if}
+
+			<!-- API error (backend unreachable) -->
+			{#if $dashError}
+				<div class="alert alert-danger">
+					Failed to reach backend: {$dashError}
+				</div>
+			{/if}
+
+			<!-- Disc review (waiting jobs) -->
+			<DashboardSection
+				items={waitingJobs}
+				key={(job) => job.id}
+				accent="var(--color-primary)"
+				emphasis
+				listClass="grid grid-cols-1 gap-4"
+				label="WAITING FOR REVIEW - {waitingJobs.length} DISC{waitingJobs.length > 1 ? 'S' : ''}"
+			>
+				{#snippet row(job)}
+					<DiscReviewWidget
+						{job}
+						drive={driveSummary(dash.drives, job.drive_id)}
+						paused={!dash.ripping_enabled}
+						manualWaitSeconds={dash.review_wait_seconds}
+						onrefresh={refreshDashboard}
+						ondismiss={() => dismissJob(job.id)}
+					/>
+				{/snippet}
+			</DashboardSection>
+
+			<!-- Preparing: ISO rips scanning / unpacking their image, no job yet -->
+			<DashboardSection
+				items={preparingRips}
+				key={(prepare) => prepare.drive_id}
+				accent="var(--color-accent-4)"
+				label="PREPARING - {preparingRips.length} {plural(preparingRips.length, 'ISO', 'ISOS')}"
+			>
+				{#snippet row(prepare)}
+					<IsoPreparingRow {prepare} />
+				{/snippet}
+			</DashboardSection>
+
+			<!-- Scanning -->
+			<DashboardSection
+				items={scanningJobs}
+				key={(job) => job.id}
+				accent="var(--color-accent-4)"
+				label="SCANNING - {scanningJobs.length} {plural(scanningJobs.length, 'DISC', 'DISCS')}"
+			>
+				{#snippet row(job)}
+					<ActiveJobRow {job} drive={driveSummary(dash.drives, job.drive_id)} />
+				{/snippet}
+			</DashboardSection>
+
+			<!-- Active rips -->
+			<DashboardSection
+				items={nonWaitingActiveJobs}
+				key={(job) => job.id}
+				accent="var(--color-primary)"
+				label="ACTIVE RIPS - {nonWaitingActiveJobs.length} IN PROGRESS"
+			>
+				{#snippet row(job)}
+					<ActiveJobRow {job} drive={driveSummary(dash.drives, job.drive_id)} />
+				{/snippet}
+			</DashboardSection>
+
+			<!-- Finishing (identified / ripped / ripped_partial) -->
+			<DashboardSection
+				items={finishingJobs}
+				key={(job) => job.id}
+				accent="var(--color-accent-1)"
+				label="FINISHING - {finishingJobs.length} {plural(finishingJobs.length, 'JOB', 'JOBS')}"
+			>
+				{#snippet row(job)}
+					<ActiveJobRow {job} />
+				{/snippet}
+			</DashboardSection>
+
+			<!-- Active transcodes -->
+			<DashboardSection
+				items={$transcoderEnabled ? dash.active_transcodes : []}
+				key={(tc) => tc.id}
+				accent="var(--color-primary)"
+				label="TRANSCODING - {dash.active_transcodes.length} ACTIVE"
+			>
+				{#snippet row(tc)}
+					<TranscodeCard job={tc} />
+				{/snippet}
+			</DashboardSection>
+
+			<!-- Idle state -->
+			{#if idle}
+				<div in:fade={fadeIn}>
+					<EmptyDashboardPanel
+						drivesOnline={dash.drives_online}
+						armOnline={dash.arm_online}
+						transcoderOnline={dash.transcoder_online}
+					/>
+				</div>
+			{/if}
+
+			<AllJobsPanel jobs={jobsList} />
 		</div>
-	{/if}
-
-	<!-- API error (backend unreachable) -->
-	{#if $dashError}
-		<div class="alert alert-danger">
-			Failed to reach backend: {$dashError}
-		</div>
-	{/if}
-
-	<!-- Disc review (waiting jobs) -->
-	<DashboardSection
-		items={waitingJobs}
-		key={(job) => job.id}
-		accent="var(--color-primary)"
-		emphasis
-		listClass="grid grid-cols-1 gap-4"
-		label="WAITING FOR REVIEW - {waitingJobs.length} DISC{waitingJobs.length > 1 ? 'S' : ''}"
-	>
-		{#snippet row(job)}
-			<DiscReviewWidget
-				{job}
-				drive={driveSummary(dash.drives, job.drive_id)}
-				paused={!dash.ripping_enabled}
-				manualWaitSeconds={dash.review_wait_seconds}
-				onrefresh={refreshDashboard}
-				ondismiss={() => dismissJob(job.id)}
-			/>
-		{/snippet}
-	</DashboardSection>
-
-	<!-- Preparing: ISO rips scanning / unpacking their image, no job yet -->
-	<DashboardSection
-		items={preparingRips}
-		key={(prepare) => prepare.drive_id}
-		accent="var(--color-accent-4)"
-		label="PREPARING - {preparingRips.length} {plural(preparingRips.length, 'ISO', 'ISOS')}"
-	>
-		{#snippet row(prepare)}
-			<IsoPreparingRow {prepare} />
-		{/snippet}
-	</DashboardSection>
-
-	<!-- Scanning -->
-	<DashboardSection
-		items={scanningJobs}
-		key={(job) => job.id}
-		accent="var(--color-accent-4)"
-		label="SCANNING - {scanningJobs.length} {plural(scanningJobs.length, 'DISC', 'DISCS')}"
-	>
-		{#snippet row(job)}
-			<ActiveJobRow {job} drive={driveSummary(dash.drives, job.drive_id)} />
-		{/snippet}
-	</DashboardSection>
-
-	<!-- Active rips -->
-	<DashboardSection
-		items={nonWaitingActiveJobs}
-		key={(job) => job.id}
-		accent="var(--color-primary)"
-		label="ACTIVE RIPS - {nonWaitingActiveJobs.length} IN PROGRESS"
-	>
-		{#snippet row(job)}
-			<ActiveJobRow {job} drive={driveSummary(dash.drives, job.drive_id)} />
-		{/snippet}
-	</DashboardSection>
-
-	<!-- Finishing (identified / ripped / ripped_partial) -->
-	<DashboardSection
-		items={finishingJobs}
-		key={(job) => job.id}
-		accent="var(--color-accent-1)"
-		label="FINISHING - {finishingJobs.length} {plural(finishingJobs.length, 'JOB', 'JOBS')}"
-	>
-		{#snippet row(job)}
-			<ActiveJobRow {job} />
-		{/snippet}
-	</DashboardSection>
-
-	<!-- Active transcodes -->
-	<DashboardSection
-		items={$transcoderEnabled ? dash.active_transcodes : []}
-		key={(tc) => tc.id}
-		accent="var(--color-primary)"
-		label="TRANSCODING - {dash.active_transcodes.length} ACTIVE"
-	>
-		{#snippet row(tc)}
-			<TranscodeCard job={tc} />
-		{/snippet}
-	</DashboardSection>
-
-	<!-- Idle state -->
-	{#if pageReady && preparingRips.length === 0 && scanningJobs.length === 0 && waitingJobs.length === 0 && nonWaitingActiveJobs.length === 0 && finishingJobs.length === 0 && dash.active_transcodes.length === 0}
-		<div in:fade={fadeIn}>
-			<EmptyDashboardPanel
-				drivesOnline={dash.drives_online}
-				armOnline={dash.arm_online}
-				transcoderOnline={dash.transcoder_online}
-			/>
-		</div>
-	{/if}
-
-	<AllJobsPanel jobs={jobsList} />
+	</HoldUntil>
 </div>
 
 <style>

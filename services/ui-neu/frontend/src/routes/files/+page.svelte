@@ -28,6 +28,7 @@
 	import OrphanFoldersModal from '$lib/components/files/OrphanFoldersModal.svelte';
 	import { features } from '$lib/features';
 	import NewFolderRow from '$lib/components/files/NewFolderRow.svelte';
+	import HoldUntil from '$lib/components/shared/HoldUntil.svelte';
 
 	const browser = new FilesBrowser();
 	const movePicker = new MovePicker(browser);
@@ -182,6 +183,11 @@
 		}
 	});
 
+	// The root tabs and breadcrumb row sit above the listing and only exist
+	// once the roots load. Hold the listing until then so its skeleton does not
+	// draw first and get pushed down when they arrive.
+	const rootsSettled = $derived(browser.roots.length > 0 || browser.error !== null || !browser.loading);
+
 	onMount(async () => {
 		await browser.loadRoots();
 		const paramRoot = $page.url.searchParams.get('root');
@@ -271,68 +277,70 @@
 	{/if}
 
 	<!-- File listing -->
-	<LoadState
-		data={browser.listing}
-		loading={browser.loading && !browser.listing}
-		error={browser.filesError}
-		isEmpty={() => false}
-	>
-		{#snippet loadingSlot()}
-			<div class="files-page-listing">
-				<table class="table">
-					<thead>
-						<tr>
-							<th class="table-header w-10"></th>
-							<th class="table-header">Name</th>
-							<th class="table-header files-page-cell-lg">Permissions</th>
-							<th class="table-header table-right">Size</th>
-							<th class="table-header files-page-cell-md">Modified</th>
-							<th class="table-header table-right">Actions</th>
-						</tr>
-					</thead>
-					<tbody>
-						{#each Array(8) as _, i (i)}
-							<FileRow />
-						{/each}
-					</tbody>
-				</table>
-			</div>
-		{/snippet}
-		{#snippet ready(lst)}
-			<div class="files-page-listing">
-				{#if lst.parent_subpath != null}
-					{@const parent = lst.parent_subpath}
-					<button
-						type="button"
-						onclick={() => browser.navigate(browser.current.root, parent)}
-						class="flex w-full items-center gap-2 files-page-nav-row"
-					>
-						<span class="w-10"></span>
-						<Glyph name="arrow-left-short" class="h-4 w-4" />
-						..
-					</button>
-				{/if}
+	<HoldUntil ready={rootsSettled}>
+		<LoadState
+			data={browser.listing}
+			loading={browser.loading && !browser.listing}
+			error={browser.filesError}
+			isEmpty={() => false}
+		>
+			{#snippet loadingSlot()}
+				<div class="files-page-listing">
+					<table class="table">
+						<thead>
+							<tr>
+								<th class="table-header w-10"></th>
+								<th class="table-header">Name</th>
+								<th class="table-header files-page-cell-lg">Permissions</th>
+								<th class="table-header table-right">Size</th>
+								<th class="table-header files-page-cell-md">Modified</th>
+								<th class="table-header table-right">Actions</th>
+							</tr>
+						</thead>
+						<tbody>
+							{#each Array(8) as _, i (i)}
+								<FileRow />
+							{/each}
+						</tbody>
+					</table>
+				</div>
+			{/snippet}
+			{#snippet ready(lst)}
+				<div class="files-page-listing">
+					{#if lst.parent_subpath != null}
+						{@const parent = lst.parent_subpath}
+						<button
+							type="button"
+							onclick={() => browser.navigate(browser.current.root, parent)}
+							class="flex w-full items-center gap-2 files-page-nav-row"
+						>
+							<span class="w-10"></span>
+							<Glyph name="arrow-left-short" class="h-4 w-4" />
+							..
+						</button>
+					{/if}
 
-				<!-- Inline new folder row -->
-				{#if creatingFolder}
-					<NewFolderRow bind:name={newFolderName} onconfirm={confirmNewFolder} oncancel={cancelNewFolder} />
-				{/if}
+					<!-- Inline new folder row -->
+					{#if creatingFolder}
+						<NewFolderRow bind:name={newFolderName} onconfirm={confirmNewFolder} oncancel={cancelNewFolder} />
+					{/if}
 
-				{#if browser.listing?.unavailable}
-					<div class="files-page-empty">This root is not mounted on the server.</div>
-				{:else if browser.sortedEntries.length === 0 && !creatingFolder}
-					<div class="files-page-empty">This directory is empty</div>
-				{:else if browser.sortedEntries.length > 0}
-					<FilesTable
-						{browser}
-						onrename={handleRename}
-						ondelete={handleDeleteRequest}
-						onfixpermissions={handleFixPermissions}
-					/>
-				{/if}
-			</div>
-		{/snippet}
-	</LoadState>
+					{#if browser.listing?.unavailable}
+						<div class="files-page-empty">This root is not mounted on the server.</div>
+					{:else if browser.sortedEntries.length === 0 && !creatingFolder}
+						<div class="files-page-empty">This directory is empty</div>
+					{:else if browser.sortedEntries.length > 0}
+						<FilesTable
+							{browser}
+							onrename={handleRename}
+							ondelete={handleDeleteRequest}
+							onfixpermissions={handleFixPermissions}
+						/>
+					{/if}
+				</div>
+			{/snippet}
+		</LoadState>
+	</HoldUntil>
 </div>
 
 <!-- Delete confirmation -->
