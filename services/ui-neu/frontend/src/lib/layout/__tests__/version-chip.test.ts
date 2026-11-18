@@ -1,5 +1,5 @@
-import { describe, it, expect } from 'vitest';
-import { DEFAULT_REPO_URL, versionChipView, withV } from '../version-chip';
+import { describe, it, expect, vi, afterEach } from 'vitest';
+import { DEFAULT_REPO_URL, versionChipView, withV, withinTimeout } from '../version-chip';
 
 describe('withV', () => {
 	it('adds a v prefix', () => expect(withV('2.10.1')).toBe('v2.10.1'));
@@ -26,14 +26,14 @@ describe('versionChipView', () => {
 				version: '2.10.1',
 				latest_version: '2.11.0',
 				update_available: true,
-				release_url: 'https://example.test/r'
+				release_url: 'https://github.com/o/r/releases/tag/v2.11.0'
 			})
 		).toEqual({
 			version: 'v2.10.1',
 			state: 'update',
-			releaseUrl: 'https://example.test/r',
+			releaseUrl: 'https://github.com/o/r/releases/tag/v2.11.0',
 			latestVersion: '2.11.0',
-			href: 'https://example.test/r',
+			href: 'https://github.com/o/r/releases/tag/v2.11.0',
 			label: 'Update available: v2.11.0 (opens in a new tab)'
 		});
 	});
@@ -43,7 +43,10 @@ describe('versionChipView', () => {
 	});
 
 	it('falls back to version-only when an update has no latest version', () => {
-		expect(versionChipView({ version: '1', update_available: true, release_url: 'u' })?.state).toBe('version-only');
+		expect(
+			versionChipView({ version: '1', update_available: true, release_url: 'https://github.com/o/r/releases/tag/v2' })
+				?.state
+		).toBe('version-only');
 	});
 
 	it('is version-only when not yet checked', () => {
@@ -65,5 +68,57 @@ describe('versionChipView', () => {
 
 	it('never doubles the v in the label', () => {
 		expect(versionChipView({ version: 'v1' })?.label).toBe('ARM v1 on GitHub (opens in a new tab)');
+	});
+});
+
+describe('versionChipView link targets', () => {
+	it('shows the version alone when the release url is not a GitHub page', () => {
+		for (const release_url of [
+			'javascript:alert(document.domain)',
+			'https://evil.example/r',
+			'https://github.com.evil.example/r'
+		]) {
+			const view = versionChipView({
+				version: '2.10.1',
+				latest_version: '2.11.0',
+				update_available: true,
+				release_url
+			});
+			expect(view?.state).toBe('version-only');
+			expect(view?.href).toBe(DEFAULT_REPO_URL);
+		}
+	});
+
+	it('links to the upstream repo when repo_url is not a GitHub page', () => {
+		expect(versionChipView({ version: '2.10.1', repo_url: 'javascript:alert(1)' })?.href).toBe(DEFAULT_REPO_URL);
+	});
+});
+
+describe('withinTimeout', () => {
+	afterEach(() => vi.useRealTimers());
+
+	it('resolves with the value when the promise settles in time', async () => {
+		await expect(withinTimeout(() => Promise.resolve('v'), 1000)).resolves.toBe('v');
+	});
+
+	it('resolves null when the loader throws before returning a promise', async () => {
+		const load = (): Promise<string> => {
+			throw new Error('not wired');
+		};
+		await expect(withinTimeout(load, 1000)).resolves.toBeNull();
+	});
+
+	it('resolves null when the promise rejects', async () => {
+		await expect(withinTimeout(() => Promise.reject(new Error('down')), 1000)).resolves.toBeNull();
+	});
+
+	it('resolves null once the time runs out, and ignores a later answer', async () => {
+		vi.useFakeTimers();
+		let answer: (v: string) => void = () => {};
+		const result = withinTimeout(() => new Promise<string>((r) => (answer = r)), 1000);
+		vi.advanceTimersByTime(1000);
+		await expect(result).resolves.toBeNull();
+		answer('late');
+		await expect(result).resolves.toBeNull();
 	});
 });
