@@ -15,10 +15,7 @@ export function logout(): Promise<unknown> {
 	return post('/api/auth/logout');
 }
 
+/** A wrong current password is a 400; a 401 here means the token, so it ends the session like any other. */
 export function changePassword(currentPassword: string, newPassword: string): Promise<unknown> {
-	return post(
-		'/api/auth/password',
-		{ current_password: currentPassword, new_password: newPassword },
-		{ checksCredentials: true }
-	);
+	return post('/api/auth/password', { current_password: currentPassword, new_password: newPassword });
 }
