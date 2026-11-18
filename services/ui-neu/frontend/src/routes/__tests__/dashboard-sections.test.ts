@@ -1,3 +1,8 @@
+// Every branch of the dashboard page's own code is covered across this file and
+// dashboard-page.test.ts. The coverage tool still reports three open arms that
+// are Svelte's, each a text `{...}` compiled to `(...) ?? ''`: `{$dashError}`
+// (inside an #if on the same value), and the counts in the ACTIVE RIPS and
+// TRANSCODING section labels (array lengths, always numbers).
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import { renderComponent, screen, cleanup, waitFor, fireEvent, within } from '$lib/testing/render';
 import DashboardPage from '../+page.svelte';
