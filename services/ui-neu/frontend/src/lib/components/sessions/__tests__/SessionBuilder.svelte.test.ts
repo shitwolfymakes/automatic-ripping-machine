@@ -6,7 +6,7 @@ vi.mock('$lib/api/sessions', () => ({
 	previewTemplate: vi.fn().mockResolvedValue({ resolved: 'p', error: null })
 }));
 import { createSession } from '$lib/api/sessions';
-import SessionBuilder from '../SessionBuilder.svelte';
+import SessionBuilder from './SessionBuilderHarness.svelte';
 
 const rip = (id: string, mt = 'movie') => ({ id, name: `rip ${id}`, media_type: mt }) as any;
 const props = (over = {}) => ({
@@ -16,21 +16,46 @@ const props = (over = {}) => ({
 	oncreaterip: vi.fn(),
 	oncreatetranscode: vi.fn(),
 	onsaved: vi.fn(),
-	oncancel: vi.fn(),
 	...over
 });
 
 afterEach(cleanup);
 
-it('create is disabled until name + rip preset + template are set', async () => {
+it('Save with nothing filled in makes no call, marks every required field and focuses the name', async () => {
 	renderComponent(SessionBuilder, props());
-	const submit = () => screen.getByRole('button', { name: /create session/i }) as HTMLButtonElement;
-	expect(submit().disabled).toBe(true);
+	const submit = screen.getByRole('button', { name: /^save$/i }) as HTMLButtonElement;
+	expect(submit.disabled).toBe(false);
+	await fireEvent.click(submit);
+	const name = screen.getByLabelText(/session name/i);
+	await waitFor(() => expect(document.activeElement).toBe(name));
+	expect(createSession).not.toHaveBeenCalled();
+	expect(name).toHaveAttribute('aria-invalid', 'true');
+	expect(name).toHaveAttribute('aria-describedby', 'sb-name-error');
+	expect(document.getElementById('sb-name-error')).toHaveTextContent('Name is required');
+	expect(screen.getByLabelText(/rip preset/i)).toHaveAttribute('aria-invalid', 'true');
+	expect(document.getElementById('sb-rip-error')).toHaveTextContent('Choose a rip preset');
+	const path = screen.getByLabelText(/output path/i);
+	expect(path).toHaveAttribute('aria-invalid', 'true');
+	expect(path).toHaveAttribute('aria-describedby', 'sb-path-error');
+	expect(document.getElementById('sb-path-error')).toHaveTextContent('Output path is required');
+});
+
+it('focuses the first invalid field in form order, and clears each mark once filled', async () => {
+	renderComponent(SessionBuilder, props());
 	await fireEvent.input(screen.getByLabelText(/session name/i), { target: { value: 'My Movies' } });
+	await fireEvent.click(screen.getByRole('button', { name: /^save$/i }));
+	const rip = screen.getByLabelText(/rip preset/i);
+	await waitFor(() => expect(document.activeElement).toBe(rip));
+	expect(screen.getByLabelText(/session name/i)).not.toHaveAttribute('aria-invalid');
+	expect(screen.queryByText('Name is required')).toBeNull();
+
 	// movie is default media type; pick rip preset r1
-	await fireEvent.change(screen.getByLabelText(/rip preset/i), { target: { value: 'r1' } });
+	await fireEvent.change(rip, { target: { value: 'r1' } });
 	await fireEvent.input(screen.getByLabelText(/output path/i), { target: { value: 'movies/{title}.{ext}' } });
-	expect(submit().disabled).toBe(false);
+	expect(rip).not.toHaveAttribute('aria-invalid');
+	expect(screen.getByLabelText(/output path/i)).not.toHaveAttribute('aria-invalid');
+	expect(screen.getByLabelText(/output path/i)).not.toHaveAttribute('aria-describedby');
+	expect(document.querySelector('.field-error')).toBeNull();
 });
 
 it('rip preset dropdown only lists presets of the chosen media type', async () => {
@@ -55,7 +80,7 @@ it('submits createSession with the assembled body', async () => {
 	await fireEvent.input(screen.getByLabelText(/session name/i), { target: { value: 'My Movies' } });
 	await fireEvent.change(screen.getByLabelText(/rip preset/i), { target: { value: 'r1' } });
 	await fireEvent.input(screen.getByLabelText(/output path/i), { target: { value: 'movies/{title}.{ext}' } });
-	await fireEvent.click(screen.getByRole('button', { name: /create session/i }));
+	await fireEvent.click(screen.getByRole('button', { name: /^save$/i }));
 	await waitFor(() =>
 		expect(createSession).toHaveBeenCalledWith(
 			expect.objectContaining({
@@ -106,4 +131,10 @@ it('edit mode seeds overrides_json into the textarea', async () => {
 	await fireEvent.click(screen.getByText(/^Advanced$/i));
 	const textarea = screen.getByLabelText(/overrides json/i) as HTMLTextAreaElement;
 	expect(textarea.value).toContain('"foo"');
+});
+
+it('a built-in session offers Close and no save button', () => {
+	renderComponent(SessionBuilder, props({ session: { id: 's', name: 'b', media_type: 'movie', is_builtin: true } }));
+	expect(screen.getByRole('button', { name: 'Close' })).toBeInTheDocument();
+	expect(screen.queryByRole('button', { name: /^save/i })).toBeNull();
 });

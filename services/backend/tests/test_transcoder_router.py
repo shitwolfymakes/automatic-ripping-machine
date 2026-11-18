@@ -14,6 +14,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from arm_backend.db import get_session
+from arm_backend.handbrake_schema_store import SchemaStore
 from arm_backend.routers import transcoder as transcoder_router
 from arm_backend.ws import WSHub
 from arm_common import (
@@ -38,6 +39,7 @@ from arm_common import (
     TranscodeTool,
 )
 from tests._fakes import FakeSession
+from tests._hb_schema import fixture_schema
 
 _HOSTNAME = "arm-transcode-abc123"
 _SERVICE_AUTH = {"Authorization": "Bearer tok-service", "X-ARM-Hostname": _HOSTNAME}
@@ -126,9 +128,20 @@ def _seed(db: FakeSession, *, task_status: TranscodeTaskStatus = TranscodeTaskSt
     ]
 
 
-def _make_app(db: FakeSession) -> FastAPI:
+class _FakeRunner:
+    def __init__(self) -> None:
+        self.requested: list[str] = []
+
+    def request_refresh_if_hash_differs(self, schema_hash: str) -> None:
+        self.requested.append(schema_hash)
+
+
+def _make_app(db: FakeSession, *, store: SchemaStore | None = None, runner: _FakeRunner | None = None) -> FastAPI:
     app = FastAPI()
     app.state.ws_hub = WSHub()
+    app.state.handbrake_schema_store = store if store is not None else SchemaStore()
+    if runner is not None:
+        app.state.handbrake_schema_runner = runner
     app.include_router(transcoder_router.router)
 
     async def _override() -> AsyncIterator[FakeSession]:
@@ -527,3 +540,108 @@ def test_fail_409_when_not_in_progress() -> None:
         )
     assert r.status_code == 409
     assert "not in_progress" in r.json()["detail"]
+
+
+def test_register_returns_no_preset_when_session_has_none() -> None:
+    db = FakeSession()
+    _seed(db)
+    db.rows["sessions"][0].transcode_preset_id = None
+    with TestClient(_make_app(db)) as client:
+        r = client.post(
+            "/api/transcoder/register",
+            json={"task_id": "txt_1", "hostname": _HOSTNAME, "hw_caps": {"cpu_count": 4}},
+            headers=_SERVICE_AUTH,
+        )
+    assert r.status_code == 200, r.text
+    assert r.json()["transcode_preset"] is None
+
+
+# --- schema_hash guard and refresh -------------------------------------------
+
+_SETTINGS = {"common": {"PictureWidth": 1280}}
+_PREDATES = "transcode image predates HandBrake settings; rebuild or pull it"
+
+
+def _register(app: FastAPI, **extra: Any) -> Any:
+    body = {"task_id": "txt_1", "hostname": _HOSTNAME, "hw_caps": {"cpu_count": 4}, **extra}
+    with TestClient(app) as client:
+        return client.post("/api/transcoder/register", json=body, headers=_SERVICE_AUTH)
+
+
+def _loaded_store() -> SchemaStore:
+    store = SchemaStore()
+    store.replace(fixture_schema())
+    return store
+
+
+def test_register_refuses_an_image_without_schema_hash_when_the_preset_has_settings() -> None:
+    db = FakeSession()
+    _seed(db)
+    db.rows["transcode_presets"][0].handbrake_settings = _SETTINGS
+    r = _register(_make_app(db))
+    assert r.status_code == 409
+    assert r.json()["detail"] == _PREDATES
+
+
+def test_register_accepts_an_image_without_schema_hash_when_the_preset_has_no_settings() -> None:
+    db = FakeSession()
+    _seed(db)
+    r = _register(_make_app(db))
+    assert r.status_code == 200, r.text
+
+
+def test_register_returns_the_full_preset_view_with_settings() -> None:
+    db = FakeSession()
+    _seed(db)
+    db.rows["transcode_presets"][0].handbrake_settings = _SETTINGS
+    r = _register(_make_app(db), schema_hash="abc")
+    assert r.status_code == 200, r.text
+    preset = r.json()["transcode_preset"]
+    assert preset["handbrake_settings"]["common"] == _SETTINGS["common"]
+    assert "issues" in preset and "host_notes" in preset
+
+
+def test_register_requests_a_refresh_when_the_hash_differs() -> None:
+    db = FakeSession()
+    _seed(db)
+    runner = _FakeRunner()
+    r = _register(_make_app(db, store=_loaded_store(), runner=runner), schema_hash="other")
+    assert r.status_code == 200, r.text
+    assert runner.requested == ["other"]
+
+
+def test_register_requests_a_refresh_when_no_schema_is_loaded() -> None:
+    db = FakeSession()
+    _seed(db)
+    runner = _FakeRunner()
+    r = _register(_make_app(db, runner=runner), schema_hash="other")
+    assert r.status_code == 200, r.text
+    assert runner.requested == ["other"]
+
+
+def test_register_skips_the_refresh_when_the_hash_matches() -> None:
+    db = FakeSession()
+    _seed(db)
+    store = _loaded_store()
+    schema = store.current()
+    assert schema is not None
+    runner = _FakeRunner()
+    r = _register(_make_app(db, store=store, runner=runner), schema_hash=schema.content_hash)
+    assert r.status_code == 200, r.text
+    assert runner.requested == []
+
+
+def test_register_skips_the_refresh_when_the_image_reports_no_hash() -> None:
+    db = FakeSession()
+    _seed(db)
+    runner = _FakeRunner()
+    r = _register(_make_app(db, runner=runner))
+    assert r.status_code == 200, r.text
+    assert runner.requested == []
+
+
+def test_register_without_a_runner_is_a_no_op_refresh() -> None:
+    db = FakeSession()
+    _seed(db)
+    r = _register(_make_app(db), schema_hash="other")
+    assert r.status_code == 200, r.text

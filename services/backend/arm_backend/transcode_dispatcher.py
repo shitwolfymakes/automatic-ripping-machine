@@ -34,7 +34,12 @@ from arm_backend.docker_probe import TtlProbe, probe_backend_url, probe_docker
 from arm_backend.gpu_claim import (
     GpuAssignment,
     assignment_before_device_lookup,
+    assignment_when_only_family_invalid,
     assignment_with_no_candidate,
+    exclude_ffmpeg_engine,
+    exclude_invalid_families,
+    invalid_families_or_failure,
+    issue_messages,
     pick_free_gpu,
     release_gpu_for_task,
 )
@@ -67,7 +72,11 @@ from arm_common.encoders import (
 )
 
 if TYPE_CHECKING:
+    from arm_backend.handbrake_schema_store import SchemaStore
     from arm_backend.ws.hub import WSHub
+    from arm_common.encoders import EncoderSpec
+    from arm_common.handbrake_schema.types import HandbrakeSchema
+    from arm_common.schemas import SettingIssue
 
 logger = logging.getLogger("arm_backend.transcode_dispatcher")
 
@@ -401,9 +410,14 @@ class TranscodeDispatcher:
         docker_client: Any,
         hub: WSHub,
         docker_client_factory: Callable[[], Any] | None = None,
+        *,
+        schema_store: SchemaStore | None = None,
     ) -> None:
         self._settings = settings
         self._db_factory = db_factory
+        # The loaded HandBrake schema the claim checks a preset's settings
+        # against; with none (or none loaded) settings are not checked.
+        self._schema_store = schema_store
         # Every docker call goes through this wrapper, which reopens a dead
         # docker-over-SSH transport (see arm_backend.docker_client) and then
         # drops every cached probe answer made against the dead client.
@@ -618,15 +632,45 @@ class TranscodeDispatcher:
         - otherwise no eligible device: `any_<codec>` falls back to
           `cpu_<codec>`; a vendor-pinned encoder fails the task.
         - an encoder id missing from the catalog fails the task.
+        - with a schema loaded and a preset carrying HandBrake settings, the
+          families those settings make invalid are skipped under `any_<codec>`
+          (other devices, then CPU; the task fails only when none is valid)
+          and fail a single-family encoder; an unknown base preset fails the
+          task. A preset carrying HandBrake settings never claims a VAAPI
+          device (ffmpeg engine), schema or not.
 
         Eligibility (enabled, probed, codec verified) is `gpu_is_eligible`;
         a device in `probing_gpu_ids` is never claimed.
         """
         decided = assignment_before_device_lookup(preset)
+        if isinstance(decided, GpuAssignment) and (preset is None or decided.action == "fail"):
+            return decided
+        assert preset is not None  # a no-preset claim is always decided above
+        invalid = invalid_families_or_failure(self._current_schema(), preset)
+        if isinstance(invalid, GpuAssignment):
+            return invalid
+        blocked = assignment_when_only_family_invalid(decided, invalid)
+        if blocked is not None:
+            return blocked
         if isinstance(decided, GpuAssignment):
             return decided
-        assert preset is not None  # a spec is only returned for a real preset
-        spec = decided
+        assignment = await self._claim_device(db, task, preset, decided, invalid)
+        self._log_skipped_families(task, invalid, assignment)
+        return assignment
+
+    def _current_schema(self) -> HandbrakeSchema | None:
+        return self._schema_store.current() if self._schema_store is not None else None
+
+    async def _claim_device(
+        self,
+        db: AsyncSession,
+        task: TranscodeTask,
+        preset: TranscodePreset,
+        spec: EncoderSpec,
+        invalid: dict[str, list[SettingIssue]],
+    ) -> GpuAssignment:
+        """Claim the best free device that can run `spec` for this preset,
+        or decide what to do when none can (`assignment_with_no_candidate`)."""
         codec = str(spec.codec)
         # Filter in Python: `text[]` ANY predicates are awkward to express in
         # SQLAlchemy ORM and the in-memory test fake doesn't grok them. The
@@ -637,12 +681,13 @@ class TranscodeDispatcher:
         # ffmpeg engine cannot write WebM (a pinned vaapi_* + WebM preset is
         # refused at create time).
         all_gpus = [g for g in all_gpus if vendor_supports_container(g.vendor, preset.container)]
+        all_gpus = self._exclude_for_settings(all_gpus, preset, codec, invalid)
         eligible = [
             g for g in all_gpus if gpu_is_eligible(g, codec) and (spec.kind == "any" or g.vendor == spec.vendor)
         ]
         candidates = [g for g in eligible if g.id not in self.probing_gpu_ids]
         if not candidates:
-            return assignment_with_no_candidate(spec, codec, eligible, all_gpus, self.awaiting_probe)
+            return assignment_with_no_candidate(spec, codec, eligible, all_gpus, self.awaiting_probe, invalid)
         gpu = pick_free_gpu(candidates)
         if gpu is None:
             return GpuAssignment(gpu=None, encoder=spec, action="queue")
@@ -651,6 +696,26 @@ class TranscodeDispatcher:
         self.claimed_gpu_ids.add(gpu.id)
         resolved = spec if spec.kind == "gpu" else gpu_encoder_for(gpu.vendor, codec)
         return GpuAssignment(gpu=gpu, encoder=resolved, action="spawn")
+
+    def _exclude_for_settings(
+        self, gpus: list[Gpu], preset: TranscodePreset, codec: str, invalid: dict[str, list[SettingIssue]]
+    ) -> list[Gpu]:
+        """Drop the devices the preset's HandBrake settings rule out: the
+        ffmpeg VAAPI engine whenever it has settings, schema or not (M4), and
+        the families the claim-time check found invalid (R1; `invalid` is
+        empty without a loaded schema)."""
+        return exclude_invalid_families(exclude_ffmpeg_engine(gpus, preset), codec, invalid)
+
+    def _log_skipped_families(
+        self, task: TranscodeTask, invalid: dict[str, list[SettingIssue]], assignment: GpuAssignment
+    ) -> None:
+        """Log each family the preset's settings ruled out, once for the
+        claim that spawns the task (a queued claim repeats every tick; a
+        failed one carries every family in its reason)."""
+        if assignment.action != "spawn":
+            return
+        for family, issues in invalid.items():
+            logger.info("skipping %s for task %s: %s", family, task.id, issue_messages(issues))
 
     async def _fail_queued_task(self, db: AsyncSession, task: TranscodeTask, reason: str) -> None:
         """Terminal-fail a queued task that can never run as configured, emit

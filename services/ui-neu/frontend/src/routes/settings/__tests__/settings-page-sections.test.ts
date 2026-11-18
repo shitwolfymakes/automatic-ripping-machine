@@ -619,10 +619,11 @@ describe('Settings page sections', () => {
 	});
 
 	describe('Sessions and Users tabs', () => {
-		it('renders the Sessions tab with the session routes card', async () => {
+		it('renders the Sessions tab without the old routing card below the list', async () => {
 			await openTab('Sessions');
-			await waitFor(() => expect(fetchSessionRoutes).toHaveBeenCalled());
 			expect(tab('Sessions')).toHaveAttribute('aria-selected', 'true');
+			expect(screen.queryByText('Session Routing')).not.toBeInTheDocument();
+			expect(fetchSessionRoutes).not.toHaveBeenCalled();
 		});
 
 		it('renders the Users tab with its heading and the users card', async () => {

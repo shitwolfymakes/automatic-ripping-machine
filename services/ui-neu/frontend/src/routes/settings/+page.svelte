@@ -34,7 +34,6 @@
 	import SessionsArea from '$lib/components/sessions/SessionsArea.svelte';
 	import UsersCard from '$lib/components/settings/UsersCard.svelte';
 	import ThemesSettings from '$lib/components/settings/ThemesSettings.svelte';
-	import SessionRoutesCard from '$lib/components/settings/SessionRoutesCard.svelte';
 
 	const loaded = new LoadedSettings();
 	// A getter, not a value: the schema arrives after mount and context is set
@@ -236,7 +235,6 @@
 			{#if activeTab === 'sessions'}
 				<div class="space-y-6" data-page-section>
 					<SessionsArea />
-					<SessionRoutesCard />
 				</div>
 			{/if}
 

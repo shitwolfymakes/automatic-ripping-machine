@@ -3527,6 +3527,41 @@
         }
       }
     },
+    "/api/transcode-presets/import/parse": {
+      "post": {
+        "tags": [
+          "transcode-presets"
+        ],
+        "summary": "Parse Handbrake Export",
+        "description": "Turn a HandBrake GUI export into preset proposals. Stores nothing.",
+        "operationId": "parse_handbrake_export_api_transcode_presets_import_parse_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {}
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImportParseResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ]
+      }
+    },
     "/api/transcode-presets": {
       "get": {
         "tags": [
@@ -4657,6 +4692,137 @@
             "UserJWT": []
           },
           {}
+        ]
+      }
+    },
+    "/api/handbrake-schema": {
+      "get": {
+        "tags": [
+          "handbrake-schema"
+        ],
+        "summary": "Get Slim View",
+        "operationId": "get_slim_view_api_handbrake_schema_get",
+        "security": [
+          {
+            "UserJWT": []
+          },
+          {}
+        ],
+        "parameters": [
+          {
+            "name": "if-none-match",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "If-None-Match"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HandbrakeSchemaSlimView"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/handbrake-schema/builtin/{name}": {
+      "get": {
+        "tags": [
+          "handbrake-schema"
+        ],
+        "summary": "Get Builtin",
+        "operationId": "get_builtin_api_handbrake_schema_builtin__name__get",
+        "security": [
+          {
+            "UserJWT": []
+          },
+          {}
+        ],
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Name"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Get Builtin Api Handbrake Schema Builtin  Name  Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/handbrake-schema/refresh": {
+      "post": {
+        "tags": [
+          "handbrake-schema"
+        ],
+        "summary": "Refresh",
+        "operationId": "refresh_api_handbrake_schema_refresh_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HandbrakeSchemaRefreshResult"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "UserJWT": []
+          }
         ]
       }
     },
@@ -11250,6 +11416,184 @@
         "type": "object",
         "title": "HTTPValidationError"
       },
+      "HandbrakeSchemaRefreshResult": {
+        "properties": {
+          "ok": {
+            "type": "boolean",
+            "title": "Ok"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          }
+        },
+        "type": "object",
+        "required": [
+          "ok"
+        ],
+        "title": "HandbrakeSchemaRefreshResult"
+      },
+      "HandbrakeSchemaSlimView": {
+        "properties": {
+          "handbrake_tag": {
+            "type": "string",
+            "title": "Handbrake Tag"
+          },
+          "preset_version": {
+            "type": "string",
+            "title": "Preset Version"
+          },
+          "content_hash": {
+            "type": "string",
+            "title": "Content Hash"
+          },
+          "keys": {
+            "items": {
+              "$ref": "#/components/schemas/SlimKey"
+            },
+            "type": "array",
+            "title": "Keys"
+          },
+          "audio_item_keys": {
+            "items": {
+              "$ref": "#/components/schemas/SlimKey"
+            },
+            "type": "array",
+            "title": "Audio Item Keys"
+          },
+          "families": {
+            "items": {
+              "$ref": "#/components/schemas/SlimFamily"
+            },
+            "type": "array",
+            "title": "Families"
+          },
+          "lists": {
+            "additionalProperties": {
+              "items": {},
+              "type": "array"
+            },
+            "type": "object",
+            "title": "Lists"
+          },
+          "audio_mixdowns_by_encoder": {
+            "additionalProperties": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "type": "object",
+            "title": "Audio Mixdowns By Encoder"
+          },
+          "filters": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/SlimFilter"
+            },
+            "type": "object",
+            "title": "Filters"
+          },
+          "builtin_names": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Builtin Names"
+          },
+          "static_enums": {
+            "additionalProperties": {
+              "items": {},
+              "type": "array"
+            },
+            "type": "object",
+            "title": "Static Enums"
+          },
+          "source_extras": {
+            "additionalProperties": {
+              "items": {},
+              "type": "array"
+            },
+            "type": "object",
+            "title": "Source Extras"
+          },
+          "selector_filter_aliases": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Selector Filter Aliases"
+          },
+          "arm_owned_keys": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Arm Owned Keys"
+          },
+          "encoder_specific_keys": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Encoder Specific Keys"
+          },
+          "hidden_keys": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Hidden Keys"
+          }
+        },
+        "type": "object",
+        "required": [
+          "handbrake_tag",
+          "preset_version",
+          "content_hash",
+          "keys",
+          "audio_item_keys",
+          "families",
+          "lists",
+          "audio_mixdowns_by_encoder",
+          "filters",
+          "builtin_names",
+          "static_enums",
+          "source_extras",
+          "selector_filter_aliases",
+          "arm_owned_keys",
+          "encoder_specific_keys",
+          "hidden_keys"
+        ],
+        "title": "HandbrakeSchemaSlimView",
+        "description": "What the UI needs to render the settings sidebar; no built-in preset values."
+      },
+      "HandbrakeSettings": {
+        "properties": {
+          "common": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Common"
+          },
+          "encoders": {
+            "additionalProperties": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "object",
+            "title": "Encoders"
+          }
+        },
+        "type": "object",
+        "title": "HandbrakeSettings",
+        "description": "Settings every encoder shares (``common``) plus one block per encoder family (``encoders``)."
+      },
       "HardwareCaps": {
         "properties": {
           "cpu_count": {
@@ -11644,6 +11988,159 @@
         "type": "object",
         "title": "IdentityView",
         "description": "`GET /api/jobs/{id}/identity` response."
+      },
+      "ImportParseResponse": {
+        "properties": {
+          "handbrake_version": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Handbrake Version"
+          },
+          "presets": {
+            "items": {
+              "$ref": "#/components/schemas/ImportedPresetView"
+            },
+            "type": "array",
+            "title": "Presets"
+          }
+        },
+        "type": "object",
+        "required": [
+          "handbrake_version",
+          "presets"
+        ],
+        "title": "ImportParseResponse"
+      },
+      "ImportProposal": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "container": {
+            "$ref": "#/components/schemas/ContainerFormat"
+          },
+          "encoder": {
+            "type": "string",
+            "title": "Encoder"
+          },
+          "handbrake_settings": {
+            "$ref": "#/components/schemas/HandbrakeSettings"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "container",
+          "encoder",
+          "handbrake_settings"
+        ],
+        "title": "ImportProposal",
+        "description": "The preset an import would create from one HandBrake export entry."
+      },
+      "ImportedPresetView": {
+        "properties": {
+          "path": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Path"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "proposal": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ImportProposal"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "source_encoder": {
+            "type": "string",
+            "title": "Source Encoder"
+          },
+          "dropped_keys": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Dropped Keys"
+          },
+          "not_imported": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Not Imported"
+          },
+          "copied_depth_to": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Copied Depth To"
+          },
+          "eight_bit_only": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Eight Bit Only"
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Warnings"
+          },
+          "issues": {
+            "items": {
+              "$ref": "#/components/schemas/SettingIssue"
+            },
+            "type": "array",
+            "title": "Issues"
+          },
+          "importable": {
+            "type": "boolean",
+            "title": "Importable"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          }
+        },
+        "type": "object",
+        "required": [
+          "path",
+          "name",
+          "proposal",
+          "source_encoder",
+          "dropped_keys",
+          "not_imported",
+          "copied_depth_to",
+          "eight_bit_only",
+          "warnings",
+          "issues",
+          "importable"
+        ],
+        "title": "ImportedPresetView",
+        "description": "One export entry as the review step shows it: the proposal plus everything the import changed."
       },
       "InAppChannelConfig": {
         "properties": {
@@ -14932,6 +15429,17 @@
           },
           "hw_caps": {
             "$ref": "#/components/schemas/HardwareCaps"
+          },
+          "schema_hash": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Schema Hash"
           }
         },
         "type": "object",
@@ -16276,6 +16784,51 @@
         ],
         "title": "SessionView"
       },
+      "SettingIssue": {
+        "properties": {
+          "key": {
+            "type": "string",
+            "title": "Key"
+          },
+          "encoder": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Encoder"
+          },
+          "code": {
+            "type": "string",
+            "enum": [
+              "unknown_key",
+              "not_allowed_here",
+              "wrong_type",
+              "not_in_list",
+              "out_of_range",
+              "encoder_not_reachable",
+              "engine_ignores_settings",
+              "not_supported_by_encoder"
+            ],
+            "title": "Code"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          }
+        },
+        "type": "object",
+        "required": [
+          "key",
+          "code",
+          "message"
+        ],
+        "title": "SettingIssue",
+        "description": "One reason a setting is rejected. ``encoder`` names the block it sits in; None for ``common``."
+      },
       "SettingsGroup": {
         "properties": {
           "name": {
@@ -16437,6 +16990,263 @@
           "checklist_dismissed"
         ],
         "title": "SetupView"
+      },
+      "SlimFamily": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "codec_id": {
+            "type": "integer",
+            "title": "Codec Id"
+          },
+          "multipass": {
+            "type": "boolean",
+            "title": "Multipass"
+          },
+          "turbo": {
+            "type": "boolean",
+            "title": "Turbo"
+          },
+          "rate_controls": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "title": "Rate Controls"
+          },
+          "variants": {
+            "items": {
+              "$ref": "#/components/schemas/SlimVariant"
+            },
+            "type": "array",
+            "title": "Variants"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "codec_id",
+          "multipass",
+          "turbo",
+          "rate_controls",
+          "variants"
+        ],
+        "title": "SlimFamily"
+      },
+      "SlimFilter": {
+        "properties": {
+          "presets": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Presets"
+          },
+          "tunes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Tunes"
+          }
+        },
+        "type": "object",
+        "required": [
+          "presets",
+          "tunes"
+        ],
+        "title": "SlimFilter"
+      },
+      "SlimKey": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "type": {
+            "type": "string",
+            "title": "Type"
+          },
+          "default": {
+            "title": "Default"
+          },
+          "tab": {
+            "type": "string",
+            "title": "Tab"
+          },
+          "group": {
+            "type": "string",
+            "title": "Group"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SlimSource"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "limits": {
+            "anyOf": [
+              {
+                "prefixItems": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ],
+                "type": "array",
+                "maxItems": 2,
+                "minItems": 2
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Limits"
+          },
+          "known": {
+            "type": "boolean",
+            "title": "Known"
+          },
+          "option_labels": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Option Labels"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "type",
+          "default",
+          "tab",
+          "group",
+          "label",
+          "source",
+          "limits",
+          "known"
+        ],
+        "title": "SlimKey"
+      },
+      "SlimQuality": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "low": {
+            "type": "number",
+            "title": "Low"
+          },
+          "high": {
+            "type": "number",
+            "title": "High"
+          },
+          "step": {
+            "type": "number",
+            "title": "Step"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "low",
+          "high",
+          "step"
+        ],
+        "title": "SlimQuality"
+      },
+      "SlimSource": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "title": "Kind"
+          },
+          "ref": {
+            "type": "string",
+            "title": "Ref"
+          }
+        },
+        "type": "object",
+        "required": [
+          "kind",
+          "ref"
+        ],
+        "title": "SlimSource"
+      },
+      "SlimVariant": {
+        "properties": {
+          "encoder": {
+            "type": "string",
+            "title": "Encoder"
+          },
+          "depth": {
+            "type": "integer",
+            "title": "Depth"
+          },
+          "presets": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Presets"
+          },
+          "tunes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Tunes"
+          },
+          "profiles": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Profiles"
+          },
+          "levels": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Levels"
+          },
+          "quality": {
+            "$ref": "#/components/schemas/SlimQuality"
+          }
+        },
+        "type": "object",
+        "required": [
+          "encoder",
+          "depth",
+          "presets",
+          "tunes",
+          "profiles",
+          "levels",
+          "quality"
+        ],
+        "title": "SlimVariant"
       },
       "SourceClaims": {
         "properties": {
@@ -17628,17 +18438,15 @@
             ],
             "title": "Preset Ref"
           },
-          "preset_json": {
+          "handbrake_settings": {
             "anyOf": [
               {
-                "additionalProperties": true,
-                "type": "object"
+                "$ref": "#/components/schemas/HandbrakeSettings"
               },
               {
                 "type": "null"
               }
-            ],
-            "title": "Preset Json"
+            ]
           },
           "container": {
             "$ref": "#/components/schemas/ContainerFormat"
@@ -17705,17 +18513,15 @@
             ],
             "title": "Preset Ref"
           },
-          "preset_json": {
+          "handbrake_settings": {
             "anyOf": [
               {
-                "additionalProperties": true,
-                "type": "object"
+                "$ref": "#/components/schemas/HandbrakeSettings"
               },
               {
                 "type": "null"
               }
-            ],
-            "title": "Preset Json"
+            ]
           },
           "container": {
             "anyOf": [
@@ -17785,17 +18591,30 @@
             ],
             "title": "Preset Ref"
           },
-          "preset_json": {
+          "handbrake_settings": {
             "anyOf": [
               {
-                "additionalProperties": true,
-                "type": "object"
+                "$ref": "#/components/schemas/HandbrakeSettings"
               },
               {
                 "type": "null"
               }
-            ],
-            "title": "Preset Json"
+            ]
+          },
+          "issues": {
+            "items": {
+              "$ref": "#/components/schemas/SettingIssue"
+            },
+            "type": "array",
+            "title": "Issues"
+          },
+          "host_notes": {
+            "items": {
+              "type": "string",
+              "const": "encodes_on_cpu_here"
+            },
+            "type": "array",
+            "title": "Host Notes"
           },
           "container": {
             "$ref": "#/components/schemas/ContainerFormat"
@@ -17859,7 +18678,7 @@
           "is_builtin",
           "tool",
           "preset_ref",
-          "preset_json",
+          "handbrake_settings",
           "container",
           "encoder",
           "extra_args",

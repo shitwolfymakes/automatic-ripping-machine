@@ -12,6 +12,7 @@ from fastapi.testclient import TestClient
 import pytest
 
 from arm_backend.db import get_session
+from arm_backend.handbrake_schema_store import SchemaStore
 from arm_backend.jwt_utils import issue_access_token
 from arm_backend.routers import transcode_presets as tp_router
 from arm_common import (
@@ -34,6 +35,7 @@ def signing_key() -> bytes:
 def _make_app(signing_key: bytes, db: FakeSession) -> tuple[FastAPI, str]:
     app = FastAPI()
     app.state.signing_key = signing_key
+    app.state.handbrake_schema_store = SchemaStore()
     app.include_router(tp_router.router)
 
     async def _override_session() -> FakeSession:
