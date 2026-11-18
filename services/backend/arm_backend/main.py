@@ -422,14 +422,14 @@ class _BackendServices:
         self._thediscdb_refresh_task.cancel()
         try:
             await asyncio.wait_for(self._thediscdb_refresh_task, timeout=10.0)
-        except TimeoutError, asyncio.CancelledError:  # pragma: no cover, cancellation is the expected path
+        except TimeoutError, asyncio.CancelledError:  # cancellation is the expected path
             pass
 
     async def _stop_release_check(self) -> None:
         self._release_check_task.cancel()
         try:
             await asyncio.wait_for(self._release_check_task, timeout=10.0)
-        except TimeoutError, asyncio.CancelledError:  # pragma: no cover, cancellation is the expected path
+        except TimeoutError, asyncio.CancelledError:  # cancellation is the expected path
             pass
 
     async def _stop_disk_refresher(self) -> None:
