@@ -311,7 +311,7 @@ class DiscRip:
     async def _finish(self) -> None:
         """Report rip-complete, then eject the drive at the node it is on now and give it a moment to settle."""
         completed = await self._backend.rip_complete(self._job_id)
-        logger.info("rip-complete job_id=%s status=%s", self._job_id, completed.status.value)
+        logger.debug("rip-complete job_id=%s status=%s", self._job_id, completed.status.value)
 
         # Eject the node the drive is at NOW — it may have renumbered during
         # the rip (USB replug); the path captured at rip start is a hint only.
