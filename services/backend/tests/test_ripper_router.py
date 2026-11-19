@@ -10,7 +10,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import secrets
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -1945,6 +1945,44 @@ def test_update_track_failed_emits_failed() -> None:
     assert any(e["event_type"] == "track.failed" for e in hub.events)
 
 
+def test_update_track_done_logs_track_ripped_once(job_log: LineCapture) -> None:
+    db = FakeSession()
+    track = _track("trk_1", status=TrackStatus.IN_PROGRESS)
+    app = _track_app(db, track)
+    db.rows["tracks"] = [track, _track("trk_2", status=TrackStatus.QUEUED, index=2)]
+    body = {"status": "done", "size_bytes": 43_100_000, "duration_seconds": 244}
+    with TestClient(app) as client:
+        client.patch("/api/ripper/tracks/trk_1", json=body, headers=_OWNER_HEADERS)
+        again = client.patch("/api/ripper/tracks/trk_1", json=body, headers=_OWNER_HEADERS)
+    assert again.status_code == 409
+    (line,) = job_log.lines(event="track.ripped")
+    assert line["job_id"] == "job_01JZXR7K3M5Q8N4VWA00000001"
+    assert line["track_id"] == "trk_1"
+    assert line["msg"] == "track 1/2 ripped (41.1 MB, 4:04)"
+    assert set(line["fields"]) == {"track_index", "track_total", "title", "size_bytes", "duration_seconds"}
+
+
+def test_update_track_failed_logs_a_warning(job_log: LineCapture) -> None:
+    db = FakeSession()
+    app = _track_app(db, _track("trk_1", status=TrackStatus.IN_PROGRESS))
+    with TestClient(app) as client:
+        client.patch(
+            "/api/ripper/tracks/trk_1", json={"status": "failed", "last_error": "boom"}, headers=_OWNER_HEADERS
+        )
+    (line,) = job_log.lines(event="track.failed")
+    assert line["level"] == "warning"
+    assert line["msg"] == "track 1/1 failed: boom"
+
+
+def test_update_track_in_progress_logs_no_track_event(job_log: LineCapture) -> None:
+    db = FakeSession()
+    app = _track_app(db, _track("trk_1", status=TrackStatus.QUEUED))
+    with TestClient(app) as client:
+        client.patch("/api/ripper/tracks/trk_1", json={"status": "in_progress"}, headers=_OWNER_HEADERS)
+    assert job_log.lines(event="track.ripped") == []
+    assert job_log.lines(event="track.failed") == []
+
+
 def test_update_track_bad_to_failed_409() -> None:
     db = FakeSession()
     app = _track_app(db, _track("trk_1", status=TrackStatus.QUEUED))
@@ -2005,6 +2043,33 @@ def test_rip_complete_all_done_ripped(monkeypatch: pytest.MonkeyPatch) -> None:
     assert r.status_code == 200
     assert r.json()["status"] == "ripped"
     assert any(e["event_type"] == "rip.completed" for e in hub.events)
+
+
+def test_rip_complete_logs_rip_completed_with_elapsed(monkeypatch: pytest.MonkeyPatch, job_log: LineCapture) -> None:
+    db = FakeSession()
+    job = _job(status=JobStatus.RIPPING)
+    job.started_at = datetime.now(timezone.utc) - timedelta(seconds=402)
+    db.rows["jobs"] = [job]
+    db.rows["drives"] = [_drive()]
+    db.rows["tracks"] = [_track("t1", status=TrackStatus.DONE), _track("t2", status=TrackStatus.FAILED, index=2)]
+    r = _rip_complete(db, _Hub(), monkeypatch)
+    assert r.status_code == 200
+    (line,) = job_log.lines(event="rip.completed")
+    assert line["job_id"] == job.id
+    assert line["msg"].startswith("rip complete: 1/2 tracks in 6m")
+    assert line["fields"]["status"] == "ripped_partial"
+    assert line["fields"]["failed"] == 1
+
+
+def test_rip_complete_without_started_at_logs_no_elapsed(monkeypatch: pytest.MonkeyPatch, job_log: LineCapture) -> None:
+    db = FakeSession()
+    db.rows["jobs"] = [_job(status=JobStatus.RIPPING)]
+    db.rows["drives"] = [_drive()]
+    db.rows["tracks"] = [_track("t1", status=TrackStatus.DONE)]
+    _rip_complete(db, _Hub(), monkeypatch)
+    (line,) = job_log.lines(event="rip.completed")
+    assert line["msg"] == "rip complete: 1/1 tracks"
+    assert line["fields"]["elapsed_seconds"] is None
 
 
 def test_rip_complete_partial(monkeypatch: pytest.MonkeyPatch) -> None:

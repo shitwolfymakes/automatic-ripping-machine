@@ -3,9 +3,13 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Sequence
+from datetime import datetime, timezone
 from typing import Any
 
-from arm_common import Job
+from arm_backend.track_labels import TrackLabel, track_label
+from arm_common import Job, Track
+from arm_common.log_format import elapsed, human_duration, human_size
 from arm_common.logging import log_event, with_log_context
 
 logger = logging.getLogger("arm_backend.job_events")
@@ -92,6 +96,28 @@ def previously_ripped_reason(previous_job_id: str) -> str:
     return f"disc already ripped as {previous_job_id}"
 
 
+def _track_name(label: TrackLabel) -> str:
+    """`track 1/19` with the quoted title when the job's identity gives one."""
+    base = f"track {label.index}/{label.total}"
+    return f'{base} "{label.title}"' if label.title else base
+
+
+def track_ripped_message(label: TrackLabel, size_bytes: int | None, duration_seconds: int | None) -> str:
+    """`track 1/19 "<title>" ripped (41.1 MB, 4:04)`."""
+    return f"{_track_name(label)} ripped ({human_size(size_bytes)}, {human_duration(duration_seconds)})"
+
+
+def track_failed_message(label: TrackLabel, error: str) -> str:
+    """`track 7/19 "<title>" failed: <error>`."""
+    return f"{_track_name(label)} failed: {error}"
+
+
+def rip_completed_message(done: int, failed: int, total: int, elapsed_seconds: float | None) -> str:
+    """`rip complete: 19/19 tracks in 6m42s`; no `in …` without a start time. `failed` rides in the fields."""
+    suffix = "" if elapsed_seconds is None else f" in {elapsed(elapsed_seconds)}"
+    return f"rip complete: {done}/{total} tracks{suffix}"
+
+
 def log_identified(job: Job, provider: str, method: str, artist: str | None = None) -> None:
     with with_log_context(job_id=job.id):
         log_event(
@@ -140,4 +166,50 @@ def log_episodes_matched(
             unmatched=unmatched,
             series=series,
             season=season,
+        )
+
+
+def log_track_ripped(job: Job, track: Track, tracks: Sequence[Track]) -> None:
+    label = track_label(job, track, tracks)
+    with with_log_context(job_id=job.id):
+        log_event(
+            logger,
+            "track.ripped",
+            track_ripped_message(label, track.size_bytes, track.duration_seconds),
+            track_index=label.index,
+            track_total=label.total,
+            title=label.title,
+            size_bytes=track.size_bytes,
+            duration_seconds=track.duration_seconds,
+        )
+
+
+def log_track_failed(job: Job, track: Track, tracks: Sequence[Track]) -> None:
+    label = track_label(job, track, tracks)
+    error = track.last_error or "unknown error"
+    with with_log_context(job_id=job.id):
+        log_event(
+            logger,
+            "track.failed",
+            track_failed_message(label, error),
+            level=logging.WARNING,
+            track_index=label.index,
+            track_total=label.total,
+            title=label.title,
+            error=error,
+        )
+
+
+def log_rip_completed(job: Job, done: int, failed: int, total: int) -> None:
+    elapsed_seconds = None if job.started_at is None else (datetime.now(timezone.utc) - job.started_at).total_seconds()
+    with with_log_context(job_id=job.id):
+        log_event(
+            logger,
+            "rip.completed",
+            rip_completed_message(done, failed, total, elapsed_seconds),
+            done=done,
+            failed=failed,
+            total=total,
+            status=job.status.value,
+            elapsed_seconds=elapsed_seconds,
         )

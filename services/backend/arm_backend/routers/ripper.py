@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import col, select
 
-from arm_backend import iso_prepare
+from arm_backend import iso_prepare, job_events
 from arm_backend.auth import (
     require_drive_owner_by_job,
     require_drive_owner_by_track,
@@ -864,6 +864,18 @@ async def _emit_track_event(session: AsyncSession, hub: WSHub, track: Track, new
         await session.commit()
 
 
+async def _log_track_outcome(session: AsyncSession, track: Track, new_status: TrackStatus) -> None:
+    """Log the track's DONE or FAILED milestone; any other target status logs nothing."""
+    log = {TrackStatus.DONE: job_events.log_track_ripped, TrackStatus.FAILED: job_events.log_track_failed}.get(
+        new_status
+    )
+    if log is None:
+        return
+    job = (await session.execute(select(Job).where(col(Job.id) == track.job_id))).scalar_one()
+    tracks = (await session.execute(select(Track).where(col(Track.job_id) == track.job_id))).scalars().all()
+    log(job, track, tracks)
+
+
 @router.patch("/tracks/{track_id}", response_model=TrackView)
 async def update_track(
     req: TrackUpdateRequest,
@@ -887,6 +899,7 @@ async def update_track(
         await session.commit()
         await session.refresh(track)
         await _emit_track_event(session, hub, track, new_status)
+        await _log_track_outcome(session, track, new_status)
 
         return TrackView.model_validate(track)
 
@@ -939,6 +952,7 @@ async def rip_complete(
             failed,
             total,
         )
+        job_events.log_rip_completed(job, done, failed, total)
 
         event_type = {
             JobStatus.RIPPED: "rip.completed",

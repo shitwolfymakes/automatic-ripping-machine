@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timedelta, timezone
+
 import pytest
 
 from arm_backend import job_events
-from arm_common import DiscType, Job, JobStatus, MediaType
+from arm_backend.track_labels import TrackLabel
+from arm_common import DiscType, Job, JobStatus, MediaType, Track, TrackKind, TrackStatus
 from tests._logs import LineCapture
 
 
@@ -20,6 +23,19 @@ def _job(**kw: object) -> Job:
         "media_type": MediaType.MUSIC,
     }
     return Job(**{**base, **kw})  # type: ignore[arg-type]
+
+
+def _track(index: int, **kw: object) -> Track:
+    return Track(
+        id=f"t{index}",
+        job_id="job_1",
+        kind=TrackKind.AUDIO_TRACK,
+        index=index,
+        source_ref=str(index),
+        status=TrackStatus.DONE,
+        attempts=0,
+        **kw,  # type: ignore[arg-type]
+    )
 
 
 def test_identified_message_names_title_year_and_method() -> None:
@@ -171,3 +187,75 @@ def test_previously_ripped_reason() -> None:
 )
 def test_miss_cause(attempt: dict[str, object] | None, expected: tuple[str | None, str]) -> None:
     assert job_events.miss_cause(attempt) == expected
+
+
+def test_track_ripped_message_with_and_without_title() -> None:
+    label = TrackLabel(1, 19, "Don't Bring Me Down")
+    assert (
+        job_events.track_ripped_message(label, 43_100_000, 244)
+        == 'track 1/19 "Don\'t Bring Me Down" ripped (41.1 MB, 4:04)'
+    )
+    assert job_events.track_ripped_message(TrackLabel(3, 6, None), 9_800_000_000, 3093) == (
+        "track 3/6 ripped (9.1 GB, 51:33)"
+    )
+
+
+def test_track_failed_message() -> None:
+    assert job_events.track_failed_message(TrackLabel(7, 19, "Xanadu"), "cdparanoia returned code 1") == (
+        'track 7/19 "Xanadu" failed: cdparanoia returned code 1'
+    )
+    assert job_events.track_failed_message(TrackLabel(7, 19, None), "boom") == "track 7/19 failed: boom"
+
+
+def test_rip_completed_message_with_and_without_elapsed() -> None:
+    assert job_events.rip_completed_message(19, 0, 19, 402.0) == "rip complete: 19/19 tracks in 6m42s"
+    assert job_events.rip_completed_message(5, 1, 6, None) == "rip complete: 5/6 tracks"
+
+
+def test_log_track_ripped_emits_the_event(job_log: LineCapture) -> None:
+    tracks = [_track(1, size_bytes=10, duration_seconds=65)]
+    job_events.log_track_ripped(_job(), tracks[0], tracks)
+    (line,) = job_log.lines(event="track.ripped")
+    assert line["job_id"] == "job_1"
+    assert line["level"] == "info"
+    assert line["fields"] == {
+        "track_index": 1,
+        "track_total": 1,
+        "title": None,
+        "size_bytes": 10,
+        "duration_seconds": 65,
+    }
+
+
+def test_log_track_failed_emits_a_warning(job_log: LineCapture) -> None:
+    tracks = [_track(1, last_error="bad")]
+    job_events.log_track_failed(_job(), tracks[0], tracks)
+    (line,) = job_log.lines(event="track.failed")
+    assert line["level"] == "warning"
+    assert line["msg"] == "track 1/1 failed: bad"
+    assert line["fields"] == {"track_index": 1, "track_total": 1, "title": None, "error": "bad"}
+
+
+def test_log_track_failed_without_an_error_says_unknown(job_log: LineCapture) -> None:
+    tracks = [_track(1)]
+    job_events.log_track_failed(_job(), tracks[0], tracks)
+    assert job_log.lines(event="track.failed")[0]["msg"] == "track 1/1 failed: unknown error"
+
+
+def test_log_rip_completed_measures_from_started_at(job_log: LineCapture) -> None:
+    job = _job()
+    job.started_at = datetime.now(timezone.utc) - timedelta(seconds=402)
+    job.status = JobStatus.RIPPED
+    job_events.log_rip_completed(job, 19, 0, 19)
+    (line,) = job_log.lines(event="rip.completed")
+    assert line["msg"].startswith("rip complete: 19/19 tracks in 6m4")
+    assert line["fields"]["status"] == "ripped"
+    assert 401 <= line["fields"]["elapsed_seconds"] <= 410
+    assert {k: line["fields"][k] for k in ("done", "failed", "total")} == {"done": 19, "failed": 0, "total": 19}
+
+
+def test_log_rip_completed_without_started_at(job_log: LineCapture) -> None:
+    job_events.log_rip_completed(_job(), 1, 0, 1)
+    (line,) = job_log.lines(event="rip.completed")
+    assert line["msg"] == "rip complete: 1/1 tracks"
+    assert line["fields"]["elapsed_seconds"] is None
