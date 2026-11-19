@@ -8,7 +8,7 @@ export class LoadedSettings {
 	settings = $state<SettingsData | null>(null);
 	loading = $state(true);
 	error = $state<Error | null>(null);
-	notifSaving = $state(false);
+	savingKeys = $state<string[]>([]);
 
 	load = async (): Promise<void> => {
 		this.loading = true;
@@ -22,22 +22,29 @@ export class LoadedSettings {
 		}
 	};
 
-	// The notifications master toggle auto-saves on change (no Save button): PATCH
-	// immediately, optimistically flip settings.config so the channels UI shows/
-	// hides at once, and roll back on failure.
-	toggleNotifications = async (next: boolean): Promise<void> => {
-		if (!this.settings || this.notifSaving) return;
-		const prev = Boolean(this.settings.config?.notifications_enabled);
-		this.settings = { ...this.settings, config: { ...this.settings.config, notifications_enabled: next } };
-		this.notifSaving = true;
+	isSaving = (key: string): boolean => this.savingKeys.includes(key);
+
+	// An on/off setting that saves on change (no Save button), such as the
+	// notifications master switch: settings.config flips at once so the page
+	// follows it, the key is PATCHed alone, and a failed save rolls it back.
+	toggleSetting = async (key: string, next: boolean): Promise<void> => {
+		if (!this.settings || this.isSaving(key)) return;
+		const prev = Boolean((this.settings.config as Record<string, unknown> | undefined)?.[key]);
+		this.#setConfig(key, next);
+		this.savingKeys = [...this.savingKeys, key];
 		try {
-			await saveArmConfig({ notifications_enabled: next });
+			await saveArmConfig({ [key]: next });
 		} catch {
-			this.settings = { ...this.settings, config: { ...this.settings.config, notifications_enabled: prev } };
+			this.#setConfig(key, prev);
 		} finally {
-			this.notifSaving = false;
+			this.savingKeys = this.savingKeys.filter((k) => k !== key);
 		}
 	};
+
+	#setConfig(key: string, value: boolean): void {
+		if (!this.settings) return;
+		this.settings = { ...this.settings, config: { ...this.settings.config, [key]: value } };
+	}
 
 	// A form's saved values are folded back into `settings.config`, so every
 	// other tab sees them: the Identity card's "Needs ... key" chip reads the

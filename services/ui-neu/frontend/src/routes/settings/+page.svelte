@@ -251,7 +251,7 @@
 			{#if activeTab === 'notifications'}
 				<NotificationsSettings
 					enabled={Boolean(settings.config?.notifications_enabled)}
-					ontoggle={loaded.toggleNotifications}
+					ontoggle={(next) => loaded.toggleSetting('notifications_enabled', next)}
 				/>
 			{/if}
 
