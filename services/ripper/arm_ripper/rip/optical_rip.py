@@ -158,21 +158,8 @@ class _OpticalRip:
         self._started.add(title_idx)
         await self._on_track_start(track)
 
-    async def _on_title_progress(self, title_idx: int, fraction: float) -> None:
-        if self._on_track_progress is None:
-            return
-        track = self._track_by_index.get(title_idx)
-        if track is None:
-            return
-        await self._on_track_progress(track, fraction)
-
     async def _on_disc_progress(self, fraction: float) -> None:
-        """Disc-overall PRGV fallback for `mkv all`.
-
-        MakeMKV in `mkv all` mode emits no per-title PRGT, so the
-        streamer's `current_title` stays None and no `_on_title_progress`
-        ever fires. Without this fallback the dashboard bar would stay
-        at 0 % for the whole rip even though the file is being written.
+        """Report MakeMKV's disc-overall PRGV fraction.
 
         The figure is the disc-wide fraction, so the bar fills smoothly
         0→100 % across the whole rip via the PRGV `total/max` channel.
@@ -275,7 +262,6 @@ class _OpticalRip:
                 minlength_seconds=self._min_length_seconds,
                 eligible_source_indexes=self._eligible,
                 on_title_start=self._on_title_start,
-                on_title_progress=self._on_title_progress,
                 on_disc_progress=self._on_disc_progress,
                 on_title_done=self._on_title_done,
                 hash_outputs=False,

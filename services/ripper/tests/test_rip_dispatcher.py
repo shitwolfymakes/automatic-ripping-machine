@@ -218,7 +218,6 @@ def _stub_rip_disc(
         minlength_seconds: int,
         eligible_source_indexes: list[int] | None = None,
         on_title_start: Any | None = None,
-        on_title_progress: Any | None = None,
         on_disc_progress: Any | None = None,
         on_title_done: Any | None = None,
         hash_outputs: bool = True,
@@ -233,17 +232,6 @@ def _stub_rip_disc(
         if fire_per_title_start and on_title_start is not None:
             for idx in fake_result.titles:
                 await on_title_start(idx)
-        # Per-title progress can only fire when the streamer has
-        # established `current_title` from a "Saving title #N" PRGT —
-        # i.e. the same condition that gates `fire_per_title_start`.
-        # `mkv all` mode (fire_per_title_start=False) emits no
-        # per-title PRGT and therefore no per-title progress; skipping
-        # it here keeps the fake's behaviour aligned with the real
-        # streamer in [makemkv_stream.py].
-        if fire_per_title_start and on_title_progress is not None:
-            for idx in fake_result.titles:
-                await on_title_progress(idx, 0.5)
-                await on_title_progress(idx, 1.0)
         if fire_disc_progress is not None and on_disc_progress is not None:
             for frac in fire_disc_progress:
                 await on_disc_progress(frac)
@@ -271,18 +259,12 @@ async def test_rip_all_dvd_single_invocation_per_disc(monkeypatch, tmp_path):
 
     started: list[str] = []
     done: list[tuple[str, bool, str | None]] = []
-    progress: list[tuple[str, float]] = []
 
     async def on_start(track: TrackView) -> None:
         started.append(track.id)
 
     async def on_done(track: TrackView, result: RipResult) -> None:
         done.append((track.id, result.ok, result.error))
-
-    async def on_progress(track: TrackView, fraction: float, stats: Any = None) -> None:
-        if stats is not None and stats.get("phase") == "verifying":
-            return  # the post-rip hash pass; covered by its own tests
-        progress.append((track.id, fraction))
 
     tracks = [_track(0), _track(1), _track(2)]
     await rip_all(
@@ -292,7 +274,6 @@ async def test_rip_all_dvd_single_invocation_per_disc(monkeypatch, tmp_path):
         output_dir=tmp_path,
         on_track_start=on_start,
         on_track_done=on_done,
-        on_track_progress=on_progress,
         min_length_seconds=600,
     )
 
@@ -302,8 +283,6 @@ async def test_rip_all_dvd_single_invocation_per_disc(monkeypatch, tmp_path):
     assert started == ["trk_0", "trk_1", "trk_2"]
     assert [t for t, ok, _ in done] == ["trk_0", "trk_1", "trk_2"]
     assert all(ok for _, ok, _ in done)
-    # Two progress samples per track (0.5 then 1.0) routed through the lookup.
-    assert len(progress) == 6
 
 
 async def test_rip_all_marks_skipped_titles_failed(monkeypatch, tmp_path):
@@ -543,10 +522,9 @@ async def test_rip_all_disc_progress_with_no_eligible_title_reports_nothing(monk
 
 
 async def test_rip_all_disc_progress_attributes_to_first_eligible_track(monkeypatch, tmp_path):
-    """`mkv all` emits no per-title PRGT, so `on_title_progress` never
-    fires from the stream. The dispatcher must surface PRGV's
-    `total/max` (disc-overall) channel via `on_disc_progress`, so the
-    bar advances 0 → 100 % across the rip. No title finishes mid-rip
+    """The dispatcher surfaces PRGV's `total/max` (disc-overall)
+    channel via `on_disc_progress`, so the bar advances 0 → 100 %
+    across the rip. No title finishes mid-rip
     here, so every report names the first eligible track."""
     fake_result = RipDiscResult(
         overall_error=None,
@@ -1491,22 +1469,6 @@ async def test_rip_all_cancels_the_hasher_and_propagates_an_exception_raised_mid
 
     assert caught.value is exc
     assert len(cancelled) == 1
-
-
-async def test_rip_all_drops_per_title_progress_for_a_title_that_was_not_selected(monkeypatch, tmp_path):
-    """Progress for a title index with no selected track fires no
-    on_track_progress; progress for a selected title does."""
-
-    async def fake_rip_disc(**kwargs: Any) -> RipDiscResult:
-        await kwargs["on_title_progress"](9, 0.25)
-        await kwargs["on_title_progress"](0, 0.5)
-        return RipDiscResult(overall_error=None, titles={})
-
-    monkeypatch.setattr(optical_rip_module, "rip_disc", fake_rip_disc)
-
-    events = await _run_rip_all_recording_events(tmp_path, [_track(0)])
-
-    assert [e for e in events if e[0] == "progress"] == [("progress", "trk_0", 0.5)]
 
 
 # --- rip_all (CD, DATA, fallback, backup progress) ---------------------------
