@@ -122,7 +122,8 @@ def test_uvicorn_uses_the_root_handlers(monkeypatch: pytest.MonkeyPatch) -> None
     assert "log_level" not in captured
 
 
-def test_uvicorn_keeps_the_quiet_access_logger(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_uvicorn_keeps_the_quiet_access_and_connection_loggers(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Request lines (uvicorn.access) and WebSocket open/close lines (uvicorn.error) stay below info."""
     configure_service_logging("arm-backend", log_dir=str(tmp_path), level="info")
 
     def _build_config(app: str, **kw: Any) -> None:
@@ -131,6 +132,7 @@ def test_uvicorn_keeps_the_quiet_access_logger(tmp_path: Path, monkeypatch: pyte
     monkeypatch.setattr(main_mod.uvicorn, "run", _build_config)
     main_mod.main()
     assert logging.getLogger("uvicorn.access").level == logging.WARNING
+    assert logging.getLogger("uvicorn.error").level == logging.WARNING
 
 
 # --- refresh_gpu_inventory (both populated + empty branches) ----------------

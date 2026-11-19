@@ -11,7 +11,7 @@ from typing import Any
 from arm_common.logging import QUIET_LOGGERS, JsonFormatter
 
 # Loggers whose level service logging setup (and uvicorn's) changes.
-_LEVELLED_LOGGERS = (*QUIET_LOGGERS, "uvicorn.error", "uvicorn.asgi")
+_LEVELLED_LOGGERS = (*QUIET_LOGGERS, "uvicorn.asgi")
 
 
 class LineCapture(logging.Handler):
