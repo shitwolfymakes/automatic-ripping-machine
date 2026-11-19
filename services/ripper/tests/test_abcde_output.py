@@ -4,7 +4,13 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from arm_ripper.rip.abcde_output import expected_wav_bytes, moved_tracks, read_workdir_file, wav_bytes_written
+from arm_ripper.rip.abcde_output import (
+    expected_wav_bytes,
+    moved_tracks,
+    read_workdir_file,
+    track_errors,
+    wav_bytes_written,
+)
 
 # The head of a real abcde 2.9.3 status file, taken mid-rip on an 18-track CD.
 _STATUS = """abcde-version=2.9.3
@@ -67,3 +73,12 @@ def test_expected_wav_bytes_is_unknown_when_any_length_is() -> None:
 
 def test_expected_wav_bytes_of_no_tracks_is_zero() -> None:
     assert expected_wav_bytes([]) == 0
+
+
+def test_track_errors_maps_each_failed_track_to_its_reason() -> None:
+    errors = "readtrack-02: cdparanoia returned code 1\nreadtrack-07: cdparanoia returned code 2\n"
+    assert track_errors(errors) == {2: "cdparanoia returned code 1", 7: "cdparanoia returned code 2"}
+
+
+def test_track_errors_ignores_lines_about_other_steps() -> None:
+    assert track_errors("encodetrack-03: lame returned code 1\n") == {}

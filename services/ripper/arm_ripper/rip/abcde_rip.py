@@ -8,7 +8,7 @@ from functools import partial
 from pathlib import Path
 from tempfile import NamedTemporaryFile
 
-from arm_ripper.rip.abcde_output import moved_tracks, read_workdir_file, wav_bytes_written
+from arm_ripper.rip.abcde_output import moved_tracks, read_workdir_file, track_errors, wav_bytes_written
 from arm_ripper.rip.hashing import sha256_file
 from arm_ripper.rip.poller import Poller, start_byte_reporter, stop_all
 from arm_ripper.rip.result import RipResult
@@ -130,12 +130,15 @@ class _CdTracks:
         if self._on_track_done is not None:
             await self._on_track_done(idx, result)
 
-    async def fail_remaining(self, error: str) -> None:
-        """Build + fire RipResult(ok=False) for every track not yet finalized."""
+    async def fail_remaining(self, error: str, reasons_by_track: dict[int, str] | None = None) -> None:
+        """Build + fire RipResult(ok=False) for every track not yet finalized: with the reason abcde recorded for
+        that track when there is one, otherwise `error`."""
+        reasons = reasons_by_track or {}
         for idx in self._track_indexes:
             if idx in self.results:
                 continue
-            result = RipResult(ok=False, error=error)
+            reason = reasons.get(idx)
+            result = RipResult(ok=False, error=f"abcde could not read the track: {reason}" if reason else error)
             self.results[idx] = result
             if self._on_track_done is not None:
                 await self._on_track_done(idx, result)
@@ -158,12 +161,23 @@ async def _finalize_moved_tracks(output_dir: Path, tracks: _CdTracks) -> None:
     await tracks.finalize_moved(moved_tracks(status))
 
 
+def _output_line(raw: bytes) -> str:
+    """One line of abcde or cdparanoia output as text. A line redrawn with carriage returns (cdparanoia's progress
+    meter) keeps only its last state."""
+    return raw.decode(errors="replace").rstrip().rsplit("\r", 1)[-1]
+
+
+def _log_output(line: str) -> None:
+    """Log a line of abcde output; the backend copies it into the job's log, as it does makemkvcon's milestones."""
+    if line:
+        logger.info("abcde: %s", line)
+
+
 async def _read_until_exit(proc: asyncio.subprocess.Process) -> int:
-    """Read abcde's stdout to the end so the pipe never fills, then wait for abcde to exit and return its exit
-    code."""
+    """Log each line of abcde's stdout until it closes, then wait for abcde to exit and return its exit code."""
     assert proc.stdout is not None
-    while await proc.stdout.readline():
-        pass
+    while raw := await proc.stdout.readline():
+        _log_output(_output_line(raw))
     return await proc.wait()
 
 
@@ -266,15 +280,16 @@ async def rip_cd(
     # get one more chance to finalize before the rest are failed.
     await tracks.finalize_pending()
 
-    await tracks.fail_remaining(_exit_failure(rc, stderr_buf))
+    errors = await asyncio.to_thread(read_workdir_file, output_dir, "errors")
+    await tracks.fail_remaining(_exit_failure(rc, stderr_buf), track_errors(errors))
     return tracks.results
 
 
 async def _drain_stderr(stream: asyncio.StreamReader | None, buf: list[str]) -> None:
+    """Log each line of abcde's stderr, and keep it in `buf` for the exit error."""
     if stream is None:  # pragma: no cover — PIPE is always set above
         return
-    while True:
-        line = await stream.readline()
-        if not line:
-            break
-        buf.append(line.decode(errors="replace").rstrip())
+    while raw := await stream.readline():
+        line = _output_line(raw)
+        _log_output(line)
+        buf.append(line)

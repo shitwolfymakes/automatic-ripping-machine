@@ -216,6 +216,42 @@ async def test_rip_cd_without_a_progress_listener_reports_nothing(monkeypatch, t
 
 
 @pytest.mark.asyncio
+async def test_rip_cd_logs_abcde_output_for_the_job_log(monkeypatch, tmp_path, caplog):
+    """abcde's stdout and stderr go to the service log, which the backend copies into the job's log. A line
+    cdparanoia redraws with carriage returns is logged as its last state."""
+    _write_track_wav(tmp_path, 1)
+    _stub_subprocess(
+        monkeypatch,
+        lines=["Grabbing entire CD - tracks: 01"],
+        stderr_lines=["(== PROGRESS == [  >   ] ==)\r(== PROGRESS == [ done ] ==)"],
+    )
+    caplog.set_level("INFO", logger="arm_ripper.rip.abcde")
+
+    await rip_cd("/dev/sr0", tmp_path, [1])
+
+    logged = [r.getMessage() for r in caplog.records if r.name == "arm_ripper.rip.abcde"]
+    assert "abcde: Grabbing entire CD - tracks: 01" in logged
+    assert "abcde: (== PROGRESS == [ done ] ==)" in logged
+
+
+@pytest.mark.asyncio
+async def test_rip_cd_fails_a_track_with_the_read_error_abcde_recorded_for_it(monkeypatch, tmp_path):
+    """abcde writes `readtrack-NN: <reader> returned code N` to its errors file when a track cannot be read; that
+    track fails with it, and the others keep the generic reason."""
+    _write_track_wav(tmp_path, 1)
+    workdir = tmp_path / "abcde.fc110d12"
+    workdir.mkdir()
+    (workdir / "errors").write_text("readtrack-02: cdparanoia returned code 1\n")
+    _stub_subprocess(monkeypatch, lines=["Grabbing entire CD - tracks: 01 02 03"])
+
+    results = await rip_cd("/dev/sr0", tmp_path, [1, 2, 3])
+
+    assert results[1].ok
+    assert results[2].error == "abcde could not read the track: cdparanoia returned code 1"
+    assert results[3].error == "abcde did not produce the expected wav file"
+
+
+@pytest.mark.asyncio
 async def test_rip_cd_streams_per_track_callbacks_in_order(monkeypatch, tmp_path):
     """Happy path: abcde moved all three tracks into place; each is reported once, in track order, with size and
     sha256."""
@@ -751,3 +787,17 @@ def test_exit_failure_falls_back_to_the_exit_code_when_stderr_is_blank(stderr_li
 
 def test_exit_failure_reports_a_missing_wav_on_a_zero_exit():
     assert abcde_rip._exit_failure(0, ["ignored"]) == "abcde did not produce the expected wav file"
+
+
+def test_output_line_keeps_the_last_state_of_a_redrawn_line():
+    assert abcde_rip._output_line(b"(== 10% ==)\r(== 55% ==)\r(== 100% ==)\n") == "(== 100% ==)"
+
+
+def test_output_line_of_a_plain_line_is_the_line():
+    assert abcde_rip._output_line(b"Grabbing track 01: Overture...\n") == "Grabbing track 01: Overture..."
+
+
+def test_log_output_skips_a_blank_line(caplog):
+    caplog.set_level("INFO", logger="arm_ripper.rip.abcde")
+    abcde_rip._log_output("")
+    assert caplog.records == []

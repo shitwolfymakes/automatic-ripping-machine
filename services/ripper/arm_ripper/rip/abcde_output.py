@@ -1,5 +1,5 @@
 """What abcde leaves on disk during a rip: its work dir's status file (a line per completed step of each track) and
-the WAVs it has written, plus how many WAV bytes a rip will produce."""
+errors file (a line per failed step), and the WAVs it has written; plus how many WAV bytes a rip will produce."""
 
 import re
 from pathlib import Path
@@ -11,10 +11,18 @@ CD_WAV_BYTES_PER_SECOND = 44_100 * 2 * 2
 # `movetrack-output-wav` marker does not match.
 _MOVED_RE = re.compile(r"^movetrack-(\d+)$", re.MULTILINE)
 
+# abcde appends `readtrack-NN: <reader> returned code N` to its errors file when it cannot read track NN.
+_READ_ERROR_RE = re.compile(r"^readtrack-(\d+): (.+)$", re.MULTILINE)
+
 
 def moved_tracks(status: str) -> set[int]:
     """The track numbers whose file abcde has moved into the output directory, from the status file's text."""
     return {int(n) for n in _MOVED_RE.findall(status)}
+
+
+def track_errors(errors: str) -> dict[int, str]:
+    """The reason abcde gave for each track it could not read, from the errors file's text."""
+    return {int(n): reason.strip() for n, reason in _READ_ERROR_RE.findall(errors)}
 
 
 def read_workdir_file(output_dir: Path, name: str) -> str:
