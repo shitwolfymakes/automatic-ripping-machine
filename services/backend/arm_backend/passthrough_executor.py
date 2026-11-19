@@ -308,6 +308,8 @@ class _PassthroughRun:
             logger.info("passthrough task_id=%s deleted mid-move; skipping terminal update", self._task_id)
             return error is None
 
+        # The last progress the copy wrote, before the terminal state sets 100.
+        previous_pct = fresh_task.progress_pct
         event_type, payload_extra = await self._record_terminal(fresh_task, size, error)
         await self._announce_terminal(event_type, payload_extra)
         if self._application is not None:
@@ -319,12 +321,14 @@ class _PassthroughRun:
         # Commit the terminal state (+ any aggregate transition) as its own
         # transaction, separate from the claim commit above.
         await self._db.commit()
-        await self._log_terminal(fresh_task, size, error)
+        await self._log_terminal(fresh_task, size, error, previous_pct)
         return error is None
 
-    async def _log_terminal(self, task: TranscodeTask, size: int | None, error: str | None) -> None:
-        """Log the committed terminal state: `transcode.completed` or `transcode.failed`."""
+    async def _log_terminal(self, task: TranscodeTask, size: int | None, error: str | None, previous_pct: int) -> None:
+        """Log the committed terminal state: the last progress quarter and `transcode.completed`, or
+        `transcode.failed`. The copy's progress writes cap at 99 %, so completion reports the 100 % mark."""
         if error is None:
+            await log_safely("transcode.progress", announce_progress(self._db, task, previous_pct, 100))
             await log_safely(
                 "transcode.completed", announce_completed(self._db, task, self._task_output_path or "", size)
             )

@@ -27,8 +27,9 @@ logger = logging.getLogger("arm_backend.transcode_task_events")
 GpuWaitState = Literal["waiting", "resumed"]
 
 
-def _track_ref(label: TrackLabel) -> str:
-    return f"track {label.index}/{label.total}"
+def _track_ref(label: TrackLabel | None) -> str:
+    """`track 1/19`; `an unknown track` when the task's source track is not among the job's tracks."""
+    return f"track {label.index}/{label.total}" if label is not None else "an unknown track"
 
 
 def _shown_output(output: str) -> str:
@@ -37,24 +38,24 @@ def _shown_output(output: str) -> str:
     return output if name == output else f".../{name}"
 
 
-def transcode_started_message(label: TrackLabel, preset: str | None) -> str:
+def transcode_started_message(label: TrackLabel | None, preset: str | None) -> str:
     """`transcoding track 1/19 to FLAC`; a task without a preset copies the file as it is."""
     if preset is None:
         return f"copying {_track_ref(label)} as is (no transcode preset)"
     return f"transcoding {_track_ref(label)} to {preset}"
 
 
-def transcode_progress_message(label: TrackLabel, percent: int) -> str:
+def transcode_progress_message(label: TrackLabel | None, percent: int) -> str:
     """`track 1/19: 50%`."""
     return f"{_track_ref(label)}: {percent}%"
 
 
-def transcode_completed_message(label: TrackLabel, output: str, size_bytes: int | None) -> str:
+def transcode_completed_message(label: TrackLabel | None, output: str, size_bytes: int | None) -> str:
     """`track 1/19 transcoded: .../01 - Title - flac.flac (31.1 MB)`."""
     return f"{_track_ref(label)} transcoded: {_shown_output(output)} ({human_size(size_bytes)})"
 
 
-def transcode_failed_message(label: TrackLabel, error: str) -> str:
+def transcode_failed_message(label: TrackLabel | None, error: str) -> str:
     """`track 1/19 transcode failed: <error>`."""
     return f"{_track_ref(label)} transcode failed: {error}"
 
@@ -67,9 +68,10 @@ def gpu_wait_message(state: GpuWaitState, encoder: str | None, track: str | None
     return f"transcode {verb} for a GPU encoder{which}{where}"
 
 
-def _label(task: TranscodeTask, job: Job, tracks: Sequence[Track]) -> TrackLabel:
-    track = next(t for t in tracks if t.id == task.source_track_id)
-    return track_label(job, track, tracks)
+def _label(task: TranscodeTask, job: Job, tracks: Sequence[Track]) -> TrackLabel | None:
+    """The task's source track label, or None when that track is not among `tracks`."""
+    track = next((t for t in tracks if t.id == task.source_track_id), None)
+    return track_label(job, track, tracks) if track is not None else None
 
 
 def _task_context(task: TranscodeTask, job: Job) -> AbstractContextManager[None]:
@@ -86,14 +88,14 @@ def log_transcode_started(task: TranscodeTask, job: Job, tracks: Sequence[Track]
             "transcode.started",
             transcode_started_message(label, preset),
             task_id=task.id,
-            track_index=label.index,
-            track_total=label.total,
+            track_index=label.index if label is not None else None,
+            track_total=label.total if label is not None else None,
             preset=preset,
         )
 
 
 def log_transcode_progress(
-    task: TranscodeTask, job: Job, tracks: Sequence[Track], previous_pct: int | None, current_pct: int
+    task: TranscodeTask, job: Job, tracks: Sequence[Track], previous_pct: int, current_pct: int
 ) -> None:
     """Log the highest quarter (25/50/75/100) the task crossed since `previous_pct`, if any."""
     percent = quarter_crossed(previous_pct, current_pct)
@@ -196,7 +198,11 @@ async def announce_failed(db: AsyncSession, task: TranscodeTask, error: str) -> 
 
 
 async def log_safely(event: str, work: Awaitable[None]) -> None:
-    """Await a milestone log; a failure in it is logged, never raised into the caller."""
+    """Await a milestone log; a Python-level failure in it is logged, never raised into the caller.
+
+    It does not undo a database error inside `work`: on a session that work leaves needing a
+    rollback, so callers run it after their commit where they can.
+    """
     try:
         await work
     except Exception:
@@ -222,17 +228,21 @@ class GpuWaitLog:
 
     def __init__(self) -> None:
         self._waiting: dict[str, _GpuWait] = {}
+        # Spawned tasks their transcoder has not claimed yet: still QUEUED, and the next
+        # pass finds their GPU busy (claimed by the task itself), which is not a new wait.
+        self._spawned: set[str] = set()
 
     async def waiting(self, db: AsyncSession, task: TranscodeTask, encoder: str | None, reason: str | None) -> None:
         """Log `transcode.waiting` (state `waiting`) the first time `task` queues for a GPU."""
-        if task.id in self._waiting:
+        if task.id in self._waiting or task.id in self._spawned:
             return
         subject = await _subject(db, task)
+        label = _label(task, *subject) if subject is not None else None
         wait = _GpuWait(
             job_id=subject[0].id if subject is not None else None,
             track_id=task.source_track_id,
             session_application_id=task.session_application_id,
-            track=_track_ref(_label(task, *subject)) if subject is not None else None,
+            track=_track_ref(label) if label is not None else None,
             encoder=encoder,
             reason=reason,
         )
@@ -245,16 +255,23 @@ class GpuWaitLog:
         if wait is not None:
             _log_gpu_wait(task_id, wait, "resumed")
 
+    def spawned(self, task_id: str) -> None:
+        """Note a spawned task, so it is not logged as waiting again before its transcoder claims it."""
+        self._spawned.add(task_id)
+
     async def settle(self, db: AsyncSession) -> None:
-        """End the logged wait of every task no longer queued (cancelled, deleted or failed elsewhere)."""
-        if not self._waiting:
+        """End the logged wait of every task no longer queued (cancelled, deleted or failed elsewhere),
+        and forget spawned tasks that have left the queue."""
+        watched = set(self._waiting) | self._spawned
+        if not watched:
             return
         rows = await db.execute(
             select(TranscodeTask).where(
-                col(TranscodeTask.id).in_(list(self._waiting)), col(TranscodeTask.status) == TranscodeTaskStatus.QUEUED
+                col(TranscodeTask.id).in_(list(watched)), col(TranscodeTask.status) == TranscodeTaskStatus.QUEUED
             )
         )
         queued = {task.id for task in rows.scalars().all()}
+        self._spawned &= queued
         for task_id in [waiting_id for waiting_id in self._waiting if waiting_id not in queued]:
             self.resumed(task_id)
 

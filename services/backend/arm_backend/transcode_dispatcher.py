@@ -138,7 +138,6 @@ class _SpawnPass:
         self.encode_slots = await self._free_encode_slots()
         for task_id in await self._queued_task_ids():
             await self._handle_queued(task_id)
-        await log_safely("transcode.waiting", self._dispatcher.gpu_waits.settle(self._db))
         if self.held_encode:
             logger.debug(
                 "%d encode task(s) held (enabled=%s docker=%s)",
@@ -147,6 +146,7 @@ class _SpawnPass:
                 self._dispatcher._docker is not None,
             )
         await self._db.commit()
+        await log_safely("transcode.waiting", self._dispatcher.gpu_waits.settle(self._db))
         return self.spawned
 
     async def _free_encode_slots(self) -> int:
@@ -332,6 +332,7 @@ class _SpawnPass:
             await asyncio.to_thread(self._dispatcher._spawn_container, task, assignment=assignment)
             started = True
             self.spawned += 1
+            self._dispatcher.gpu_waits.spawned(task_id)
             self._dispatcher.last_spawn_error = None
             # Commit this task's GPU claim promptly, per-task, right
             # after its container is confirmed running: a later

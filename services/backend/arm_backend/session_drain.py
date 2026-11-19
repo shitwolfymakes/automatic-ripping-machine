@@ -7,11 +7,13 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime, timezone
+from collections.abc import Sequence
 from typing import NamedTuple
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import col, select
 
+from arm_backend import job_events
 from arm_backend.auto_session import (
     ApplySessionOutcome,
     SkippedReason,
@@ -49,6 +51,7 @@ class ResolveFanOutOutcome(NamedTuple):
     tasks: list[TranscodeTask]
     skipped_reason: SkippedReason | None
     error_detail: str | None
+    session_name: str | None = None  # the applied session's name when the application queued tasks
 
 
 async def cancel_parked_applications(db: AsyncSession, job: Job) -> int:
@@ -118,7 +121,24 @@ def _to_resolve_fan_out_outcome(
         tasks=outcome.tasks,
         skipped_reason=None,
         error_detail=None,
+        session_name=sess.name,
     )
+
+
+def log_queued_applications(job: Job, outcomes: Sequence[ResolveFanOutOutcome]) -> None:
+    """Log `session.applied` for each promoted application that queued tasks; parked ones log nothing.
+
+    A parked application is promoted by the operator's earlier manual apply, so its source is manual.
+    """
+    for outcome in outcomes:
+        if outcome.skipped_reason is None:
+            job_events.log_session_applied(
+                job,
+                outcome.session_name or outcome.application.session_id,
+                "manual",
+                len(outcome.tasks),
+                session_application_id=outcome.application.id,
+            )
 
 
 async def _fan_out_waiting_application(
@@ -270,16 +290,9 @@ async def drain_parked_applications_after_rip(
         except Exception:  # noqa: BLE001
             logger.warning("%s: reloading job_id=%s after a failed drain failed", trigger, job_id, exc_info=True)
         return []
+    log_queued_applications(job, outcomes)
     for outcome in outcomes:
-        if outcome.skipped_reason is None:
-            logger.info(
-                "%s: fanned out parked session_application=%s job_id=%s tasks=%d",
-                trigger,
-                outcome.application.id,
-                job_id,
-                len(outcome.tasks),
-            )
-        else:
+        if outcome.skipped_reason is not None:
             logger.warning(
                 "%s: parked session_application=%s job_id=%s stays parked reason=%s: %s",
                 trigger,

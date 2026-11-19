@@ -319,3 +319,39 @@ async def test_settle_without_waits_reads_nothing() -> None:
     db = FakeSession()
     await events.GpuWaitLog().settle(db)
     assert db.call_log == []
+
+
+async def test_a_task_whose_source_track_is_gone_still_logs_its_milestones(job_log: LineCapture) -> None:
+    db = _db()
+    db.rows["tracks"] = [t for t in db.rows["tracks"] if t.id != "trk_2"]
+    await events.announce_started(db, _task())
+    await events.announce_failed(db, _task(), "boom")
+    started, failed = job_log.lines(logger_prefix="arm_backend.transcode_task_events")
+    assert started["msg"] == "transcoding an unknown track to FLAC"
+    assert (started["fields"]["track_index"], started["fields"]["track_total"]) == (None, None)
+    assert failed["msg"] == "an unknown track transcode failed: boom" and failed["exc"] is None
+
+
+async def test_a_gpu_wait_whose_source_track_is_gone_logs_once_without_a_track(job_log: LineCapture) -> None:
+    waits = events.GpuWaitLog()
+    db = _db()
+    db.rows["tracks"] = [t for t in db.rows["tracks"] if t.id != "trk_2"]
+    for _ in range(2):
+        await waits.waiting(db, db.rows["transcode_tasks"][0], "any_h265", None)
+    (line,) = job_log.lines(event="transcode.waiting")
+    assert line["msg"] == "transcode waiting for a GPU encoder (any_h265)" and line["job_id"] == "job_1"
+    assert job_log.lines(level="error") == []
+
+
+async def test_a_spawned_task_is_not_logged_waiting_until_it_leaves_the_queue(job_log: LineCapture) -> None:
+    waits = events.GpuWaitLog()
+    db = _db()
+    task = db.rows["transcode_tasks"][0]
+    waits.spawned("txt_1")
+    await waits.waiting(db, task, "any_h265", None)
+    assert job_log.lines(event="transcode.waiting") == []
+    task.status = TranscodeTaskStatus.IN_PROGRESS
+    await waits.settle(db)
+    task.status = TranscodeTaskStatus.QUEUED
+    await waits.waiting(db, task, "any_h265", None)
+    assert [line["fields"]["state"] for line in job_log.lines(event="transcode.waiting")] == ["waiting"]

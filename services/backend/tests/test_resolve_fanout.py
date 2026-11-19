@@ -46,6 +46,7 @@ from arm_common import (
 )
 
 from tests._fakes import FakeSession
+from tests._logs import LineCapture
 
 
 @pytest.fixture
@@ -726,3 +727,29 @@ def test_resolve_unidentified_partial_rip_runs_after_rip(
     assert r.status_code == 200, r.text
     assert r.json()["job"]["status"] == "ripped_partial"
     assert calls == (["after_rip"] if expect_after_rip else ["fan_out"])
+
+
+@pytest.mark.parametrize(
+    ("flags", "path"),
+    [({}, "resolve fan-out"), ({"unidentified": True}, "after-rip drain")],
+)
+def test_resolve_logs_session_applied_once_per_queued_application(
+    signing_key: bytes, tmp_path: Path, job_log: LineCapture, flags: dict[str, bool], path: str
+) -> None:
+    db = FakeSession()
+    _seed(db, job_status=JobStatus.RIPPED_AWAITING_IDENTIFY, extra_sessions=1)
+    db.rows["jobs"][0].metadata_json = dict(flags)
+    app, token = _make_app(signing_key, db, tmp_path, _CapturingHub())
+    with TestClient(app) as client:
+        r = client.post(
+            "/api/jobs/job_01JZXR7K3M5Q8N4VWA00000001/resolve",
+            json={"title": "Iron Man", "year": 2008},
+            headers=_auth(token),
+        )
+    assert r.status_code == 200, r.text
+    lines = job_log.lines(event="session.applied")
+    assert sorted(line["msg"] for line in lines) == [
+        "Extra 0 applied (manual): 1 transcode queued",
+        "My Plex applied (manual): 1 transcode queued",
+    ], path
+    assert {line["job_id"] for line in lines} == {"job_01JZXR7K3M5Q8N4VWA00000001"}

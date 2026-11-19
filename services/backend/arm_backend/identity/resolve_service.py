@@ -11,7 +11,12 @@ from arm_backend.identity.ids import current_ids
 from arm_backend.identity.pipeline import resolve_job
 from arm_backend.identity.proposals import forget_episode_show_ids, record_manual_job
 from arm_backend.identity.stage_runner import EpisodeStageRunner
-from arm_backend.session_drain import ResolveFanOutOutcome, after_rip, fan_out_waiting_identify_applications
+from arm_backend.session_drain import (
+    ResolveFanOutOutcome,
+    after_rip,
+    fan_out_waiting_identify_applications,
+    log_queued_applications,
+)
 from arm_backend.ws import WSHub
 from arm_common import Job, JobStatus, MediaType
 from arm_common.enums import RESOLVABLE_PROMOTE_JOB_STATUSES
@@ -333,9 +338,12 @@ async def resolve_identity(
         # rip-complete runs for identified jobs — drain parked applications
         # (fan-out uses the just-resolved title) and then the auto-apply
         # hook. `after_rip` commits its own work and never raises.
+        # The drain inside after_rip logs session.applied after its own commit.
         fan_out_outcomes = await after_rip(session, job, hub)
+        unlogged_outcomes: list[ResolveFanOutOutcome] = []
     else:
         fan_out_outcomes = await fan_out_waiting_identify_applications(session, job=job, hub=hub)
+        unlogged_outcomes = fan_out_outcomes
 
     logger.info(
         "resolve job_id=%s -> identified title=%s fan_out=%d",
@@ -354,6 +362,7 @@ async def resolve_identity(
     await session.refresh(job)
     for outcome in fan_out_outcomes:
         await session.refresh(outcome.application)
+    log_queued_applications(job, unlogged_outcomes)
 
     if stage_runner is not None and identity_snapshot(job) != before_identity:
         stage_runner.schedule(job.id)

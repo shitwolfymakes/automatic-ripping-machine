@@ -1149,9 +1149,38 @@ async def test_a_gpu_wait_logs_once_and_resumes_when_the_task_spawns(job_log: Li
     gpu = db.rows["gpus"][0]
     gpu.status, gpu.claimed_by_task_id = GpuStatus.AVAILABLE, None
     assert await disp.spawn_pending(db) == 1
-    db.rows["transcode_tasks"][0].status = TranscodeTaskStatus.IN_PROGRESS  # the transcoder claimed it
-    await disp.spawn_pending(db)
     assert _wait_states(job_log) == ["waiting", "resumed"]
+
+
+async def test_a_spawned_task_not_yet_claimed_does_not_wait_again(job_log: LineCapture) -> None:
+    """Until its transcoder claims it the spawned task is still QUEUED, and the next tick finds its GPU
+    busy (claimed by the task itself); that is not a new wait."""
+    db = _busy_gpu_db()
+    disp = TranscodeDispatcher(_settings(), _db_factory(db), MagicMock(), WSHub())
+    await disp.spawn_pending(db)
+    gpu = db.rows["gpus"][0]
+    gpu.status, gpu.claimed_by_task_id = GpuStatus.AVAILABLE, None
+    assert await disp.spawn_pending(db) == 1
+    assert db.rows["transcode_tasks"][0].status == TranscodeTaskStatus.QUEUED
+    assert await disp.spawn_pending(db) == 0
+    assert await disp.spawn_pending(db) == 0
+    assert _wait_states(job_log) == ["waiting", "resumed"]
+
+    # Once the task leaves the queue it is forgotten: queued again later, it waits afresh.
+    db.rows["transcode_tasks"][0].status = TranscodeTaskStatus.IN_PROGRESS
+    await disp.spawn_pending(db)
+    db.rows["transcode_tasks"][0].status = TranscodeTaskStatus.QUEUED
+    await disp.spawn_pending(db)
+    assert _wait_states(job_log) == ["waiting", "resumed", "waiting"]
+
+
+async def test_the_wait_check_runs_after_the_pass_commits(job_log: LineCapture) -> None:
+    db = _busy_gpu_db()
+    disp = TranscodeDispatcher(_settings(), _db_factory(db), MagicMock(), WSHub())
+    await disp.spawn_pending(db)
+    db.call_log.clear()
+    await disp.spawn_pending(db)
+    assert db.call_log[-2:] == ["commit", "execute"]
 
 
 async def test_a_waiting_task_that_is_cancelled_resumes_once(job_log: LineCapture) -> None:

@@ -904,9 +904,8 @@ async def test_passthrough_failure_logs_an_error(tmp_path: Path, job_log: LineCa
     assert [line["event"] for line in job_log.lines(level="error")] == ["transcode.failed"]
 
 
-async def test_passthrough_copy_logs_the_quarter_it_crosses(
-    tmp_path: Path, job_log: LineCapture, monkeypatch: Any
-) -> None:
+async def test_passthrough_copy_logs_each_quarter_once(tmp_path: Path, job_log: LineCapture, monkeypatch: Any) -> None:
+    """A copy going 10, 30, 30, 80, 100 % logs 25 and 75 from its progress writes and 100 when it completes."""
     import threading
 
     import arm_backend.passthrough_executor as mod
@@ -918,21 +917,29 @@ async def test_passthrough_copy_logs_the_quarter_it_crosses(
     hub, _sent = _hub_with_recorder()
     monkeypatch.setattr(mod, "PROGRESS_INTERVAL_SECONDS", 0.01)
 
-    def _slow_copy(input_path: Path, output_path: Path, *, on_bytes: Any, **_kw: Any) -> int:
-        on_bytes(50)
-        for _ in range(500):
-            if job_log.lines(event="transcode.progress"):
-                break
-            threading.Event().wait(0.01)
+    def _stepped_copy(input_path: Path, output_path: Path, *, on_bytes: Any, **_kw: Any) -> int:
+        copied = 0
+        for step in (10, 30, 30, 80, 100):
+            on_bytes(step - copied)
+            copied = step
+            # Hold each step until the row shows it (the copy caps at 99 %).
+            for _ in range(500):
+                if db.rows["transcode_tasks"][0].progress_pct == min(99, step):
+                    break
+                threading.Event().wait(0.01)
         output_path.parent.mkdir(parents=True, exist_ok=True)
         input_path.rename(output_path)
         return 100
 
-    monkeypatch.setattr(mod, "transcode_none", _slow_copy)
+    monkeypatch.setattr(mod, "transcode_none", _stepped_copy)
     await execute_passthrough_task(db, db.rows["transcode_tasks"][0], hub, _settings(MEDIA_ROOT=str(tmp_path)))
 
-    (line,) = job_log.lines(event="transcode.progress")
-    assert line["fields"] == {"task_id": "txt_1", "percent": 50}
+    progress = job_log.lines(event="transcode.progress")
+    assert [line["fields"]["percent"] for line in progress] == [25, 75, 100]
+    assert [line["event"] for line in job_log.lines(logger_prefix="arm_backend.transcode_task_events")][-2:] == [
+        "transcode.progress",
+        "transcode.completed",
+    ]
 
 
 async def test_progress_publisher_reports_each_written_percentage(monkeypatch: Any) -> None:
