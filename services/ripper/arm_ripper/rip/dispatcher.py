@@ -55,7 +55,7 @@ async def rip_all(
     - Any disc whose tracks are all DISC_BACKUP: one `makemkvcon backup --decrypt` (`rip_backup`) for the first track.
     - CD: mark all tracks IN_PROGRESS and run abcde once for the whole
       disc; each track goes DONE as abcde moves it into place, the WAV
-      bytes written are reported as the first track's progress, and
+      bytes written are reported as the progress of the track being read, and
       FAILED goes to every track abcde did not produce.
     - DATA: a single dd dump assigned to the first (only) track.
     """
@@ -119,6 +119,11 @@ async def _rip_disc_backup(
     await on_track_done(backup, result)
 
 
+def _first_unfinished(tracks: list[TrackView], finished: set[int]) -> TrackView:
+    """The track abcde is reading: the first one by index it has not finished, or the last once all are done."""
+    return next((t for t in tracks if t.index not in finished), tracks[-1])
+
+
 async def _rip_audio_cd(
     device_path: str,
     tracks: list[TrackView],
@@ -128,15 +133,17 @@ async def _rip_audio_cd(
     on_track_progress: OnTrackProgress | None,
 ) -> None:
     """Rip an audio CD with one abcde run: start every track, then report each one as abcde finishes it, with the WAV
-    bytes written so far as the first track's progress."""
+    bytes written so far as the progress of the track being read."""
     for track in tracks:
         await on_track_start(track)
     track_by_index = {t.index: t for t in tracks}
+    finished: set[int] = set()
 
     async def _cd_on_track_done(idx: int, result: RipResult) -> None:
         track = track_by_index.get(idx)
         if track is None:
             return
+        finished.add(idx)
         await on_track_done(track, result)
 
     results = await rip_cd(
@@ -144,7 +151,9 @@ async def _rip_audio_cd(
         output_dir=output_dir,
         track_indexes=[t.index for t in tracks],
         on_track_done=_cd_on_track_done,
-        on_progress=track_byte_progress(tracks[0], on_track_progress) if tracks else None,
+        on_progress=track_byte_progress(lambda: _first_unfinished(tracks, finished), on_track_progress)
+        if tracks
+        else None,
         expected_bytes=expected_wav_bytes([t.expected_duration_seconds for t in tracks]),
     )
     # Defensive: rip_cd's contract is to fire on_track_done for every
@@ -174,7 +183,9 @@ async def _rip_data_dump(
     first = tracks[0]
     await on_track_start(first)
     result = await rip_data(
-        device_path=device_path, output_dir=output_dir, on_progress=track_byte_progress(first, on_track_progress)
+        device_path=device_path,
+        output_dir=output_dir,
+        on_progress=track_byte_progress(lambda: first, on_track_progress),
     )
     await on_track_done(first, result)
 

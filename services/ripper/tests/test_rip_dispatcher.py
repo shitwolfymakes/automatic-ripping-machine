@@ -1550,6 +1550,37 @@ async def test_rip_all_cd_reports_wav_bytes_as_the_first_tracks_progress_against
     assert ticks[0][2]["bytes_done"] == 1_764_000
 
 
+async def test_rip_all_cd_names_the_track_being_read_in_each_progress_report(monkeypatch, tmp_path):
+    """Progress goes to the first track abcde has not finished yet, and stays on the last one once all are done."""
+    ticks: list[str] = []
+
+    async def fake_rip_cd(**kwargs: Any) -> dict[int, RipResult]:
+        await kwargs["on_progress"](10, 100)
+        await kwargs["on_track_done"](1, RipResult(ok=True, size_bytes=1))
+        await kwargs["on_progress"](60, 100)
+        await kwargs["on_track_done"](2, RipResult(ok=True, size_bytes=2))
+        await kwargs["on_progress"](100, 100)
+        return {1: RipResult(ok=True, size_bytes=1), 2: RipResult(ok=True, size_bytes=2)}
+
+    monkeypatch.setattr(dispatcher_module, "rip_cd", fake_rip_cd)
+    _events, on_start, on_done = _recorders()
+
+    async def on_progress(track: TrackView, _fraction: float, _stats: Any = None) -> None:
+        ticks.append(track.id)
+
+    await rip_all(
+        disc_type=DiscType.CD,
+        device_path="/dev/sr0",
+        tracks=[_track(1), _track(2)],
+        output_dir=tmp_path,
+        on_track_start=on_start,
+        on_track_done=on_done,
+        on_track_progress=on_progress,
+    )
+
+    assert ticks == ["trk_1", "trk_2", "trk_2"]
+
+
 async def test_rip_all_cd_with_an_unknown_track_length_reports_no_total(monkeypatch, tmp_path):
     captured = _stub_rip_cd(monkeypatch)
     _events, on_start, on_done = _recorders()

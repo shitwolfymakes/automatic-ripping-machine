@@ -31,8 +31,11 @@ class OnTrackProgress(Protocol):
 OnByteProgress = Callable[[int, int | None], Awaitable[None]]
 
 
-def track_byte_progress(track: TrackView, on_track_progress: OnTrackProgress | None) -> OnByteProgress:
-    """An OnByteProgress that reports each byte count as `track`'s progress, with the average rate since this call.
+def track_byte_progress(
+    current_track: Callable[[], TrackView], on_track_progress: OnTrackProgress | None
+) -> OnByteProgress:
+    """An OnByteProgress that reports each byte count as the progress of the track `current_track()` names at that
+    moment, with the average rate since this call.
 
     The fraction is the share of the total copied, or 0 when the total is unknown. Does nothing without a listener.
     """
@@ -47,6 +50,6 @@ def track_byte_progress(track: TrackView, on_track_progress: OnTrackProgress | N
             "bytes_total": total,
             "rate_bps": done / elapsed if elapsed > 0 else None,
         }
-        await on_track_progress(track, min(done / total, 1.0) if total else 0.0, stats)
+        await on_track_progress(current_track(), min(done / total, 1.0) if total else 0.0, stats)
 
     return report
