@@ -2,6 +2,7 @@ import asyncio
 import contextlib
 import logging
 import os
+import re
 import signal
 from collections.abc import Awaitable, Callable
 from functools import partial
@@ -15,6 +16,8 @@ from arm_ripper.rip.result import RipResult
 from arm_ripper.rip.track_callbacks import OnByteProgress
 
 logger = logging.getLogger("arm_ripper.rip.abcde")
+
+_ABCDE_PROBLEM_LINE = re.compile(r"^\[(ERROR|WARNING)\]")
 
 CD_RIP_TIMEOUT_SECONDS = 90 * 60  # 90 min: worst-case scratched disc, ~60min audio
 
@@ -43,7 +46,7 @@ def _kill_group(proc: asyncio.subprocess.Process) -> None:
 
 
 def _abcde_config(output_dir: Path) -> str:
-    """Force WAV output landing at `output_dir/trackNN.wav`, no CDDB.
+    """Force WAV output landing at `output_dir/trackNN.wav`, no lookup.
 
     abcde's `read` action always stages WAVs as
     `${WAVOUTPUTDIR}/abcde.${CDDBDISCID}/trackNN.wav` regardless of
@@ -57,12 +60,17 @@ def _abcde_config(output_dir: Path) -> str:
     matching abcde's pre-move name (`trackNN.wav`), so `_finalize_track`
     only needs one shape to look for. Without an explicit OUTPUTFORMAT
     the move would try to substitute ARTISTFILE/ALBUMFILE which are
-    empty under CDDBAVAIL=N, producing a `-/-/01.wav`-style path.
+    empty without a lookup, producing a `-/-/01.wav`-style path.
 
-    `CDDBAVAIL=N` skips all metadata lookups (ARM does its own via
-    MusicBrainz upstream). `CDDBMETHOD` still has to parse as a valid
-    method even when lookups are disabled — abcde validates the keyword
-    at startup before consulting `CDDBAVAIL`.
+    abcde does no metadata lookup (ARM does its own via MusicBrainz
+    upstream). The `move` action sets DOCDDB=y (abcde line 4325), which
+    runs the lookup phase (line 5098). That phase loops over
+    `CDDBMETHOD`: the `musicbrainz` method queries the server without
+    ever reading `CDDBAVAIL` (line 2676), while the `cddb` method skips
+    its query when `CDDBAVAIL` is exactly lowercase `n` (lines 2731,
+    2780). So the config sets `CDDBMETHOD="cddb"` and `CDDBAVAIL="n"`
+    (an uppercase `N` never matched); abcde still needs a valid method
+    keyword at startup.
     """
     return (
         f'OUTPUTTYPE="wav"\n'
@@ -71,8 +79,8 @@ def _abcde_config(output_dir: Path) -> str:
         f'ACTIONS="read,move"\n'
         f'FORCE="y"\n'
         f'PADTRACKS="y"\n'
-        f'CDDBAVAIL="N"\n'
-        f'CDDBMETHOD="musicbrainz"\n'
+        f'CDDBAVAIL="n"\n'
+        f'CDDBMETHOD="cddb"\n'
         f'EJECT=""\n'
     )
 
@@ -168,9 +176,10 @@ def _output_line(raw: bytes) -> str:
 
 
 def _log_output(line: str) -> None:
-    """Log a line of abcde output; the backend copies it into the job's log, as it does makemkvcon's milestones."""
+    """Log a line of abcde output at debug, or at warning when it is abcde's own `[ERROR]`/`[WARNING]` line."""
     if line:
-        logger.info("abcde: %s", line)
+        level = logging.WARNING if _ABCDE_PROBLEM_LINE.match(line) else logging.DEBUG
+        logger.log(level, "abcde: %s", line)
 
 
 async def _read_until_exit(proc: asyncio.subprocess.Process) -> int:
