@@ -1,8 +1,9 @@
 // Live rip progress, keyed by job_id. Components read
 // `ripProgress.value[jobId]?.progress_pct` to render the bar and
 // `?.eta_seconds` for the ETA. The backend publishes on
-// `ripper.progress.{job_id}` with `{track_id, progress_pct}`; ETA is computed
-// here on the receiving side (matches the legacy UI's approach).
+// `ripper.progress.{job_id}` with `{track_id, progress_pct}`: the percentage
+// is for the whole disc, and `track_id` names the track being ripped. ETA is
+// computed here on the receiving side (matches the legacy UI's approach).
 //
 // Ported from the removed Vue UI's Pinia rips store into ui-neu's Svelte-5
 // runes idiom (module-level $state, like lib/stores/toast.svelte.ts).
@@ -21,8 +22,7 @@ interface RipperProgressPayload {
 }
 
 interface RipBaseline {
-	// Anchored on the first tick of a given track, used to compute pct/sec.
-	trackId: string;
+	// Anchored on the first tick of the rip, used to compute pct/sec.
 	atMs: number;
 	atPct: number;
 }
@@ -30,9 +30,9 @@ interface RipBaseline {
 export interface RipLiveProgress {
 	track_id: string;
 	progress_pct: number;
-	// Null until we've seen ≥1 follow-up tick for the same track and the
-	// signal is past the masking threshold. Resets to null when the track
-	// changes. A byte copy that reports its rate gets an ETA straight away.
+	// Null until we've seen ≥1 follow-up tick and the signal is past the
+	// masking threshold. A byte copy that reports its rate gets an ETA
+	// straight away.
 	eta_seconds: number | null;
 	bytes_done: number | null;
 	bytes_total: number | null;
@@ -40,7 +40,7 @@ export interface RipLiveProgress {
 	phase: string | null;
 }
 
-// Mask early per-track samples — the first tick has no rate yet, and the
+// Mask early samples — the first tick has no rate yet, and the
 // second can mislead if the drive stalls briefly. Matches the legacy
 // "wait a bit before showing ETA" behaviour.
 const ETA_MIN_ELAPSED_MS = 5_000;
@@ -107,12 +107,12 @@ function byteEta(bytes: ByteFields): number | null {
 		: null;
 }
 
-// First tick for this track (or track changed) → reset baseline; ETA stays
-// null until enough has accumulated. Also reset on a sustained backwards
-// jump (>1 pp) — defensive against a non-monotonic sequence under a stable
-// track_id; without it pctDelta goes negative and ETA hangs at null.
+// The percentage covers the whole disc, so the baseline holds across tracks.
+// It resets on a sustained backwards jump (>1 pp), defensive against a
+// non-monotonic sequence; without it pctDelta goes negative and ETA hangs at
+// null.
 function isStaleBaseline(baseline: RipBaseline, payload: RipperProgressPayload): boolean {
-	return baseline.trackId !== payload.track_id || payload.progress_pct < baseline.atPct - 1;
+	return payload.progress_pct < baseline.atPct - 1;
 }
 
 function percentEta(baseline: RipBaseline, payload: RipperProgressPayload, now: number): number | null {
@@ -139,7 +139,7 @@ export function onProgress(jobId: string, env: WSEnvelope): void {
 	const bytes = readBytes(payload);
 	const baseline = baselines[jobId];
 	if (baseline === undefined || isStaleBaseline(baseline, payload)) {
-		baselines[jobId] = { trackId: payload.track_id, atMs: now, atPct: payload.progress_pct };
+		baselines[jobId] = { atMs: now, atPct: payload.progress_pct };
 		writeLive(jobId, payload, byteEta(bytes), bytes);
 		return;
 	}
