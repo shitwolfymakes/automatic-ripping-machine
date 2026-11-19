@@ -2,7 +2,7 @@
 	import SchemaConfigForm from '$lib/components/settings/SchemaConfigForm.svelte';
 	import GpusCard from '$lib/components/settings/GpusCard.svelte';
 	import Toggle from '$lib/components/notifications/Toggle.svelte';
-	import TranscodeCapabilityPill from './TranscodeCapabilityPill.svelte';
+	import TranscodeCapabilityStatus from './TranscodeCapabilityStatus.svelte';
 	import { transcoderEnabled } from '$lib/stores/config';
 	import type { SettingsGroup } from '$lib/types/api.gen';
 
@@ -19,7 +19,7 @@
 	{#if $transcoderEnabled && group}
 		<SchemaConfigForm {group} {config} {onsaved}>
 			{#snippet beforeSections()}
-				<TranscodeCapabilityPill capable />
+				<TranscodeCapabilityStatus capable />
 			{/snippet}
 			{#snippet beforeSave()}
 				<GpusCard />
@@ -27,7 +27,7 @@
 		</SchemaConfigForm>
 	{:else}
 		<div class="stack" id="setting-transcode_enabled" data-testid="setting-transcode_enabled">
-			<TranscodeCapabilityPill capable={$transcoderEnabled} />
+			<TranscodeCapabilityStatus capable={$transcoderEnabled} />
 			<label class="field field-row settings-page-notif-toggle-row">
 				<!-- Always rendered off: on a ripper-only box the backend column
 				 still defaults to true, but it has no effect without capability. -->
