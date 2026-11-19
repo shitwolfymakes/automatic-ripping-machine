@@ -2,7 +2,7 @@
 	import { onMount } from 'svelte';
 	import type { ConfigFieldMeta, ConfigView, DriveView } from '$lib/types/api.gen';
 	import ChoiceCard from '$lib/components/ChoiceCard.svelte';
-	import StatusStrip from '$lib/components/StatusStrip.svelte';
+	import StatusField from '$lib/components/StatusField.svelte';
 	import SecretInput from './SecretInput.svelte';
 	import { fetchConfigView, HIDDEN_SECRET } from '$lib/api/config';
 	import { fetchDrives } from '$lib/api/drives';
@@ -88,10 +88,7 @@
 		</div>
 	{/if}
 	{#if status}
-		<div class="makemkv-key-field-status">
-			<span class="makemkv-key-field-status-label">Key status</span>
-			<StatusStrip tone={status.tone} title={status.title} message={status.message} />
-		</div>
+		<StatusField label="Key status" tone={status.tone} title={status.title} message={status.message} />
 	{/if}
 </div>
 
@@ -110,16 +107,5 @@
 	.makemkv-key-field-row {
 		display: flex;
 		gap: 0.5rem;
-	}
-	.makemkv-key-field-status {
-		display: grid;
-		gap: 0.25rem;
-	}
-	.makemkv-key-field-status-label {
-		font-size: 0.75rem;
-		font-weight: 600;
-		letter-spacing: 0.05em;
-		text-transform: uppercase;
-		color: var(--color-text-faint);
 	}
 </style>
