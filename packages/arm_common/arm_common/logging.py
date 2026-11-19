@@ -73,8 +73,9 @@ _RESERVED_LOGRECORD_KEYS: frozenset[str] = frozenset(
 )
 
 
-# Chatty third-party loggers held at WARNING while the root level is INFO or above.
-QUIET_LOGGERS: tuple[str, ...] = ("httpx", "httpcore", "uvicorn.access")
+# Chatty third-party loggers held at WARNING while the root level is INFO or above
+# (uvicorn.error carries the WebSocket open/close lines; its real errors are WARNING and up).
+QUIET_LOGGERS: tuple[str, ...] = ("httpx", "httpcore", "uvicorn.access", "uvicorn.error")
 
 _job_id: ContextVar[str | None] = ContextVar("arm_log_job_id", default=None)
 _track_id: ContextVar[str | None] = ContextVar("arm_log_track_id", default=None)

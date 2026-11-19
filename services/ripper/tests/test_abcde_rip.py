@@ -596,6 +596,7 @@ async def test_cd_tracks_finalize_records_the_wav_and_fires_the_callback_once(tm
 
     assert first.ok is True
     assert first.size_bytes == 3
+    assert first.duration_seconds == 0
     assert first.sha256 == hashlib.sha256(b"abc").hexdigest()
     assert tracks.results[1] is first
     assert calls == [(1, first)]
@@ -811,3 +812,26 @@ def test_log_output_logs_abcdes_own_error_and_warning_lines_at_warning(caplog, l
     caplog.set_level("DEBUG", logger="arm_ripper.rip.abcde")
     abcde_rip._log_output(line)
     assert [(r.levelname, r.getMessage()) for r in caplog.records] == [("WARNING", f"abcde: {line}")]
+
+
+async def test_cd_tracks_finalize_measures_the_track_length_from_the_wav(tmp_path):
+    """The ripped length comes from the WAV itself, so the job log and the track row carry it like a MakeMKV title."""
+    (tmp_path / "track01.wav").write_bytes(b"\0" * (3 * 176_400 + 44))
+    tracks, _ = _recording_tracks(tmp_path, [1])
+
+    await tracks.finalize(1)
+
+    assert tracks.results[1].duration_seconds == 3
+
+
+@pytest.mark.asyncio
+async def test_rip_cd_logs_its_start_at_debug_only(monkeypatch, tmp_path, caplog):
+    """rip.started already announces the rip at info; the device and work dir line is detail."""
+    _write_track_wav(tmp_path, 1)
+    _stub_subprocess(monkeypatch, lines=[])
+    caplog.set_level("DEBUG", logger="arm_ripper.rip.abcde")
+
+    await rip_cd("/dev/sr0", tmp_path, [1])
+
+    start = [r for r in caplog.records if r.getMessage().startswith("abcde rip device=")]
+    assert [r.levelname for r in start] == ["DEBUG"]
