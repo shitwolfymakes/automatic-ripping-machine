@@ -480,14 +480,74 @@ async def test_rip_all_synthesises_start_when_prgt_misses(monkeypatch, tmp_path)
         assert seq == ["start", "done"], f"track {tid} had bad lifecycle: {seq}"
 
 
+async def test_rip_all_disc_progress_names_the_title_being_ripped(monkeypatch, tmp_path):
+    """Disc-wide progress names the first eligible title MakeMKV has not finished: title 0 until its file is
+    finalised mid-rip, then title 2. The figure stays the disc-wide fraction."""
+
+    async def fake_rip_disc(
+        *, output_dir: Path, on_disc_progress: Any, on_title_done: Any, **_kw: Any
+    ) -> RipDiscResult:
+        await on_disc_progress(0.2)
+        (output_dir / "title_t00.mkv").write_bytes(b"x" * 100)
+        await on_title_done(0)
+        await on_disc_progress(0.6)
+        return RipDiscResult(overall_error=None, titles={})
+
+    monkeypatch.setattr(optical_rip_module, "rip_disc", fake_rip_disc)
+    progress: list[tuple[str, float]] = []
+
+    async def on_progress(track: TrackView, fraction: float, stats: Any = None) -> None:
+        if stats is None:
+            progress.append((track.id, fraction))
+
+    _events, on_start, on_done = _recorders()
+    await rip_all(
+        disc_type=DiscType.BLURAY,
+        device_path="/dev/sr0",
+        tracks=[_track(0), _track(2)],
+        output_dir=tmp_path,
+        on_track_start=on_start,
+        on_track_done=on_done,
+        on_track_progress=on_progress,
+    )
+
+    assert progress == [("trk_0", 0.2), ("trk_2", 0.6)]
+
+
+async def test_rip_all_disc_progress_with_no_eligible_title_reports_nothing(monkeypatch, tmp_path):
+    """Every selected title is below the minimum length, so no title carries the disc-wide progress."""
+
+    async def fake_rip_disc(*, on_disc_progress: Any, **_kw: Any) -> RipDiscResult:
+        await on_disc_progress(0.5)
+        return RipDiscResult(overall_error=None, titles={})
+
+    monkeypatch.setattr(optical_rip_module, "rip_disc", fake_rip_disc)
+    progress: list[float] = []
+
+    async def on_progress(_track: TrackView, fraction: float, stats: Any = None) -> None:
+        progress.append(fraction)
+
+    _events, on_start, on_done = _recorders()
+    await rip_all(
+        disc_type=DiscType.BLURAY,
+        device_path="/dev/sr0",
+        tracks=[_track(0, duration_seconds=30)],
+        output_dir=tmp_path,
+        on_track_start=on_start,
+        on_track_done=on_done,
+        on_track_progress=on_progress,
+        min_length_seconds=120,
+    )
+
+    assert progress == []
+
+
 async def test_rip_all_disc_progress_attributes_to_first_eligible_track(monkeypatch, tmp_path):
     """`mkv all` emits no per-title PRGT, so `on_title_progress` never
     fires from the stream. The dispatcher must surface PRGV's
-    `total/max` (disc-overall) channel via `on_disc_progress`,
-    attributed to the first eligible track. The UI's rips store keys
-    live progress by job_id and renders one bar per disc, so the
-    track_id chosen is purely a wire-format detail — what matters is
-    that the bar advances 0 → 100 % across the rip."""
+    `total/max` (disc-overall) channel via `on_disc_progress`, so the
+    bar advances 0 → 100 % across the rip. No title finishes mid-rip
+    here, so every report names the first eligible track."""
     fake_result = RipDiscResult(
         overall_error=None,
         titles={
@@ -1887,3 +1947,11 @@ def test_effective_disc_type_keeps_the_scan_type_for_mixed_kinds() -> None:
 
 def test_effective_disc_type_keeps_the_scan_type_without_tracks() -> None:
     assert _effective_disc_type(DiscType.DVD, []) == DiscType.DVD
+
+
+def test_active_index_is_the_first_key_not_finished() -> None:
+    assert track_callbacks_module.active_index([3, 5, 9], {3}) == 5
+
+
+def test_active_index_is_the_last_key_once_all_are_finished() -> None:
+    assert track_callbacks_module.active_index([3, 5, 9], {3, 5, 9}) == 9

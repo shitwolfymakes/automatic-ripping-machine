@@ -16,7 +16,7 @@ from arm_ripper.rip.makemkv_rip import (
 )
 from arm_ripper.rip.result import RipResult
 from arm_ripper.rip.title_hasher import OnHashed, TitleHasher
-from arm_ripper.rip.track_callbacks import OnTrackDone, OnTrackProgress, OnTrackStart, TransferStats
+from arm_ripper.rip.track_callbacks import OnTrackDone, OnTrackProgress, OnTrackStart, TransferStats, active_index
 
 # Log under the dispatcher's name: these lines have always come from that logger.
 logger = logging.getLogger("arm_ripper.rip.dispatcher")
@@ -174,19 +174,22 @@ class _OpticalRip:
         ever fires. Without this fallback the dashboard bar would stay
         at 0 % for the whole rip even though the file is being written.
 
-        We attribute disc-level progress to the first eligible track —
-        the WS payload requires a track_id, but the UI's rips store
-        keys live progress by `job_id` and only ever displays a single
-        bar per disc (see services/ui-neu/frontend/src/lib/stores/rips.svelte.ts),
-        so the choice of track_id is purely a wire-format detail. The
-        bar fills smoothly 0→100 % across the whole rip via the PRGV
-        `total/max` channel. Per-title attribution still happens
-        post-rip in the attribution loop below.
+        The figure is the disc-wide fraction, so the bar fills smoothly
+        0→100 % across the whole rip via the PRGV `total/max` channel.
+        It is reported as the progress of the title being ripped (see
+        `_active_track`), so the UI can show which file is active.
         """
-        first_track = _first_eligible_track(self._track_by_index, self._eligible)
-        if self._on_track_progress is None or first_track is None:
+        track = self._active_track()
+        if self._on_track_progress is None or track is None:
             return
-        await self._on_track_progress(first_track, fraction)
+        await self._on_track_progress(track, fraction)
+
+    def _active_track(self) -> TrackView | None:
+        """The track for the eligible title MakeMKV is ripping: the first whose file it has not finished, or the last
+        once all are; None when nothing is eligible."""
+        if not self._eligible:
+            return None
+        return self._track_by_index[active_index(self._eligible, self._done_emitted)]
 
     def _finalise_after_hash(self, track: TrackView, result: RipResult) -> OnHashed:
         async def then(digest: str | None) -> None:

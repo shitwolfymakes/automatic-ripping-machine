@@ -12,7 +12,13 @@ from arm_ripper.rip.data_rip import rip_data
 from arm_ripper.rip.makemkv_backup import rip_backup
 from arm_ripper.rip.optical_rip import rip_optical
 from arm_ripper.rip.result import RipResult
-from arm_ripper.rip.track_callbacks import OnTrackDone, OnTrackProgress, OnTrackStart, track_byte_progress
+from arm_ripper.rip.track_callbacks import (
+    OnTrackDone,
+    OnTrackProgress,
+    OnTrackStart,
+    active_index,
+    track_byte_progress,
+)
 
 # v3 default. 120s drops menu loops and vendor bumpers without cutting
 # the 2–5 minute extras users typically care about. Sessions can
@@ -119,11 +125,6 @@ async def _rip_disc_backup(
     await on_track_done(backup, result)
 
 
-def _first_unfinished(tracks: list[TrackView], finished: set[int]) -> TrackView:
-    """The track abcde is reading: the first one by index it has not finished, or the last once all are done."""
-    return next((t for t in tracks if t.index not in finished), tracks[-1])
-
-
 async def _rip_audio_cd(
     device_path: str,
     tracks: list[TrackView],
@@ -137,6 +138,7 @@ async def _rip_audio_cd(
     for track in tracks:
         await on_track_start(track)
     track_by_index = {t.index: t for t in tracks}
+    indexes = [t.index for t in tracks]
     finished: set[int] = set()
 
     async def _cd_on_track_done(idx: int, result: RipResult) -> None:
@@ -149,9 +151,9 @@ async def _rip_audio_cd(
     results = await rip_cd(
         device_path=device_path,
         output_dir=output_dir,
-        track_indexes=[t.index for t in tracks],
+        track_indexes=indexes,
         on_track_done=_cd_on_track_done,
-        on_progress=track_byte_progress(lambda: _first_unfinished(tracks, finished), on_track_progress)
+        on_progress=track_byte_progress(lambda: track_by_index[active_index(indexes, finished)], on_track_progress)
         if tracks
         else None,
         expected_bytes=expected_wav_bytes([t.expected_duration_seconds for t in tracks]),

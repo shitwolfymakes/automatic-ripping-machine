@@ -2,7 +2,7 @@
 the adapter that turns a byte count into a track's progress."""
 
 import time
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Collection, Sequence
 from typing import NotRequired, Protocol, TypedDict
 
 from arm_common.schemas import TrackView
@@ -25,6 +25,12 @@ class TransferStats(TypedDict):
 
 class OnTrackProgress(Protocol):
     def __call__(self, track: TrackView, fraction: float, stats: TransferStats | None = None, /) -> Awaitable[None]: ...
+
+
+def active_index(keys: Sequence[int], finished: Collection[int]) -> int:
+    """The key of the track a whole-disc rip is on: the first of `keys`, in rip order, not in `finished`, or the last
+    once all are. `keys` must not be empty."""
+    return next((key for key in keys if key not in finished), keys[-1])
 
 
 # (bytes copied so far, total bytes or None when the size is not known in advance)
