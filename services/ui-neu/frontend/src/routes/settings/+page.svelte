@@ -88,7 +88,7 @@
 		pendingField = null;
 		if (!el) return;
 		el.scrollIntoView({ block: 'center' });
-		el.querySelector<HTMLElement>('input, select, textarea')?.focus({ preventScroll: true });
+		el.querySelector<HTMLElement>('input, select, textarea, [role="switch"]')?.focus({ preventScroll: true });
 		el.classList.add('settings-field-highlight');
 		setTimeout(() => el.classList.remove('settings-field-highlight'), 1600);
 	});
@@ -261,7 +261,7 @@
 					<SessionsArea
 						{defaultsGroup}
 						config={settings.config}
-						onsaved={loaded.foldSaved}
+						ontoggle={loaded.toggleSetting}
 						initialView={sessionsView}
 					/>
 				</div>
@@ -271,7 +271,7 @@
 			{#if activeTab === 'notifications'}
 				<NotificationsSettings
 					enabled={Boolean(settings.config?.notifications_enabled)}
-					ontoggle={loaded.toggleNotifications}
+					ontoggle={(next) => loaded.toggleSetting('notifications_enabled', next)}
 				/>
 			{/if}
 

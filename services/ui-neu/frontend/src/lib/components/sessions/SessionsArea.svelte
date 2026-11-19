@@ -35,19 +35,20 @@
 		type View
 	} from '../../sessions/sessions-area-model';
 	import { countByMediaType } from '$lib/sessions/sessions';
-	import SchemaConfigForm from '$lib/components/settings/SchemaConfigForm.svelte';
+	import AutoSaveToggle from '$lib/components/settings/AutoSaveToggle.svelte';
 	import type { RipPresetView, SessionView, SettingsGroup, TranscodePresetView } from '$lib/types/api.gen';
 
 	interface Props {
 		/** The Defaults settings group (auto-apply), shown above the matrix on a transcode-capable deployment. */
 		defaultsGroup?: SettingsGroup;
 		config?: Record<string, unknown>;
-		onsaved?: (payload: Record<string, unknown>) => void;
+		/** Saves an on/off Defaults setting as soon as its switch flips. */
+		ontoggle?: (key: string, next: boolean) => void;
 		/** The view to open on (a deep link to a Defaults field opens Defaults). */
 		initialView?: View;
 	}
 
-	let { defaultsGroup, config = {}, onsaved, initialView = 'sessions' }: Props = $props();
+	let { defaultsGroup, config = {}, ontoggle, initialView = 'sessions' }: Props = $props();
 
 	const data = createSessionsData();
 
@@ -323,7 +324,15 @@
 		/>
 	{:else if view === 'routing'}
 		{#if $transcoderEnabled && defaultsGroup}
-			<SchemaConfigForm group={defaultsGroup} {config} {onsaved} bare />
+			{#each defaultsGroup.fields as field (field.key)}
+				<AutoSaveToggle
+					key={field.key}
+					label={field.label}
+					help={field.help}
+					checked={Boolean(config[field.key])}
+					ontoggle={(next) => ontoggle?.(field.key, next)}
+				/>
+			{/each}
 		{/if}
 		<RoutingMatrix />
 	{:else}

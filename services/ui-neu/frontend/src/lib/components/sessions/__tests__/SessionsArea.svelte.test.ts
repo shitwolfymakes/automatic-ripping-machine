@@ -47,7 +47,6 @@ import { fetchRipPresets, createRipPreset } from '$lib/api/rip-presets';
 import { fetchTranscodePresets, createTranscodePreset } from '$lib/api/transcode-presets';
 import { deleteSession, cloneSession } from '$lib/api/sessions';
 import SessionsArea from '../SessionsArea.svelte';
-import { saveArmConfig } from '$lib/api/settings';
 import type { SettingsGroup } from '$lib/types/api.gen';
 import { setTranscoderEnabled } from '$lib/stores/config';
 
@@ -449,34 +448,33 @@ describe('Defaults view auto-apply', () => {
 	} as SettingsGroup;
 	const LABEL = 'Apply these defaults automatically after each rip';
 
-	async function openDefaults(onsaved = vi.fn()) {
+	async function openDefaults(ontoggle = vi.fn()) {
 		renderComponent(SessionsArea, {
-			props: { defaultsGroup: DEFAULTS, config: { auto_transcode_on_idle: false }, onsaved }
+			props: { defaultsGroup: DEFAULTS, config: { auto_transcode_on_idle: false }, ontoggle }
 		});
 		await screen.findByText('ses Alpha');
 		await fireEvent.click(screen.getByRole('tab', { name: 'Defaults' }));
-		return onsaved;
+		return ontoggle;
 	}
 
 	afterEach(() => setTranscoderEnabled(true));
 
-	it('shows auto-apply above the matrix and saves it through onsaved', async () => {
+	it('shows auto-apply as a switch above the matrix that reports its key and value, with no Save button', async () => {
 		setTranscoderEnabled(true);
-		const onsaved = await openDefaults();
-		const toggle = await screen.findByRole('checkbox', { name: LABEL });
+		const ontoggle = await openDefaults();
+		const toggle = await screen.findByRole('switch', { name: LABEL });
 		const cell = await screen.findByLabelText('Movie, Any disc');
 		expect(toggle.compareDocumentPosition(cell) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+		expect(screen.queryByRole('button', { name: 'Save' })).not.toBeInTheDocument();
 		await fireEvent.click(toggle);
-		await fireEvent.click(screen.getByRole('button', { name: 'Save' }));
-		await waitFor(() => expect(onsaved).toHaveBeenCalledWith({ auto_transcode_on_idle: true }));
-		expect(saveArmConfig).toHaveBeenCalledWith({ auto_transcode_on_idle: true });
+		expect(ontoggle).toHaveBeenCalledWith('auto_transcode_on_idle', true);
 	});
 
 	it('hides auto-apply on a ripper-only deployment and keeps the matrix', async () => {
 		setTranscoderEnabled(false);
 		await openDefaults();
 		expect(await screen.findByLabelText('Movie, Any disc')).toBeInTheDocument();
-		expect(screen.queryByRole('checkbox', { name: LABEL })).not.toBeInTheDocument();
+		expect(screen.queryByRole('switch', { name: LABEL })).not.toBeInTheDocument();
 	});
 });
 
