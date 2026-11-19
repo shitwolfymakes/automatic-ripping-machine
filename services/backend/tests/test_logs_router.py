@@ -90,7 +90,9 @@ def _auth(token: str) -> dict[str, str]:
     return {"Authorization": f"Bearer {token}"}
 
 
-def test_grep_hard_cap_pins_at_10000(tmp_path: Path, signing_key: bytes, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_stream_limit_is_capped_at_the_hard_cap(
+    tmp_path: Path, signing_key: bytes, monkeypatch: pytest.MonkeyPatch
+) -> None:
     monkeypatch.setattr(log_reader, "LOG_DIR", tmp_path)
     monkeypatch.setattr(log_reader.settings, "ARM_LOG_PER_FILE_HARD_CAP", 3)  # cheap cap for the test
     _seed_per_job(tmp_path, job_id="job_01JZXR7K3M5Q8N4VWA00000001", lines=[_line(msg=f"m{i}") for i in range(10)])
@@ -101,7 +103,9 @@ def test_grep_hard_cap_pins_at_10000(tmp_path: Path, signing_key: bytes, monkeyp
     assert len(body_lines) == 3
 
 
-def test_grep_requires_jwt(tmp_path: Path, signing_key: bytes, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_stream_without_a_token_reads_as_guest(
+    tmp_path: Path, signing_key: bytes, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """No Authorization header falls back to the guest account (read-only route)."""
     monkeypatch.setattr(log_reader, "LOG_DIR", tmp_path)
     app, _token = _make_app(signing_key)
@@ -122,7 +126,9 @@ def test_zip_per_entry_line_cap(tmp_path: Path, signing_key: bytes, monkeypatch:
     assert len(body) == 3
 
 
-def test_zip_requires_jwt(tmp_path: Path, signing_key: bytes, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_zip_without_a_token_reads_as_guest(
+    tmp_path: Path, signing_key: bytes, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """No Authorization header falls back to the guest account (read-only route)."""
     monkeypatch.setattr(log_reader, "LOG_DIR", tmp_path)
     app, _token = _make_app(signing_key)
@@ -167,7 +173,7 @@ def test_zip_uses_per_job_file_when_present(
     assert msgs == ["per-job-line"]
 
 
-def test_grep_uses_per_job_file_when_present(
+def test_stream_reads_the_per_job_file_not_the_service_log(
     tmp_path: Path, signing_key: bytes, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setattr(log_reader, "LOG_DIR", tmp_path)
@@ -213,7 +219,7 @@ def test_job_without_a_per_job_file_zips_no_entries(
 
 def test_zip_per_job_present_but_empty(tmp_path: Path, signing_key: bytes, monkeypatch: pytest.MonkeyPatch) -> None:
     """per-job file exists but has no lines → _read_capped_lines returns [],
-    so no zip entry is written (85->93)."""
+    so no zip entry is written."""
     monkeypatch.setattr(log_reader, "LOG_DIR", tmp_path)
     (tmp_path / "jobs").mkdir()
     (tmp_path / "jobs" / "job_01JZXR7K3M5Q8N4VWA00000001.log").write_text("")
@@ -242,7 +248,7 @@ def test_stream_per_job_open_oserror(tmp_path: Path, signing_key: bytes, monkeyp
     with TestClient(app) as client:
         r = client.get("/api/logs/job_01JZXR7K3M5Q8N4VWA00000001", headers=_auth(token))
     assert r.status_code == 200
-    assert r.content == b""  # generator returned immediately (125-126)
+    assert r.content == b""  # the generator returned before yielding
 
 
 def test_stream_per_job_respects_cap(tmp_path: Path, signing_key: bytes, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -255,7 +261,7 @@ def test_stream_per_job_respects_cap(tmp_path: Path, signing_key: bytes, monkeyp
     with TestClient(app) as client:
         r = client.get("/api/logs/job_01JZXR7K3M5Q8N4VWA00000001?limit=2", headers=_auth(token))
     assert r.status_code == 200
-    assert len([ln for ln in r.text.splitlines() if ln]) == 2  # capped (133)
+    assert len([ln for ln in r.text.splitlines() if ln]) == 2  # capped at the limit
 
 
 def test_stream_limit_zero_returns_no_lines(

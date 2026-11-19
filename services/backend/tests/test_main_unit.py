@@ -122,21 +122,15 @@ def test_uvicorn_uses_the_root_handlers(monkeypatch: pytest.MonkeyPatch) -> None
     assert "log_level" not in captured
 
 
-def test_uvicorn_keeps_the_quiet_access_logger(tmp_path: Path) -> None:
-    saved = {n: logging.getLogger(n).level for n in ("uvicorn.access", "uvicorn.error", "uvicorn.asgi")}
-    try:
-        configure_service_logging("arm-backend", log_dir=str(tmp_path), level="info")
+def test_uvicorn_keeps_the_quiet_access_logger(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    configure_service_logging("arm-backend", log_dir=str(tmp_path), level="info")
 
-        def _build_config(app: str, **kw: Any) -> None:
-            uvicorn.Config(app, **kw).configure_logging()
+    def _build_config(app: str, **kw: Any) -> None:
+        uvicorn.Config(app, **kw).configure_logging()
 
-        with pytest.MonkeyPatch.context() as mp:
-            mp.setattr(main_mod.uvicorn, "run", _build_config)
-            main_mod.main()
-        assert logging.getLogger("uvicorn.access").level == logging.WARNING
-    finally:
-        for name, level in saved.items():
-            logging.getLogger(name).setLevel(level)
+    monkeypatch.setattr(main_mod.uvicorn, "run", _build_config)
+    main_mod.main()
+    assert logging.getLogger("uvicorn.access").level == logging.WARNING
 
 
 # --- refresh_gpu_inventory (both populated + empty branches) ----------------

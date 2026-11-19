@@ -47,18 +47,6 @@ def _read_log_file(tmp_path: Path, service: str) -> list[dict[str, object]]:
     return out
 
 
-@pytest.fixture(autouse=True)
-def reset_root_logger() -> None:
-    yield
-    root = logging.getLogger()
-    for h in list(root.handlers):
-        try:
-            h.close()
-        except Exception:
-            pass
-        root.removeHandler(h)
-
-
 def test_emitted_lines_are_valid_json_with_required_fields(tmp_path: Path) -> None:
     configure_service_logging("test-svc", log_dir=str(tmp_path))
     logger = logging.getLogger("arm_common.tests.shape")
@@ -285,3 +273,4 @@ def test_unusable_log_dir_falls_back_to_stdout_only(tmp_path: Path) -> None:
     assert not isinstance(handlers[0], logging.FileHandler)
     assert not (tmp_path / "test-svc.log").exists()
     assert not (blocker / "logs").exists()
+

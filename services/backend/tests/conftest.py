@@ -16,7 +16,7 @@ from collections.abc import Iterator
 
 import pytest
 
-from tests._logs import LineCapture
+from tests._logs import LineCapture, restored_logging_state
 
 os.environ["DATABASE_URL"] = "postgresql://x:x@localhost/x"
 os.environ["ARM_SERVICE_TOKEN"] = "tok-service"
@@ -37,14 +37,22 @@ def _unspaced_musicbrainz_calls(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(musicbrainz, "_MIN_INTERVAL_SECONDS", 0.0)
 
 
+@pytest.fixture(autouse=True)
+def _isolated_logging() -> Iterator[None]:
+    """Undo what a test does to the root logger and the service-set logger levels.
+
+    Service logging setup replaces the root handlers and levels process-wide; under
+    pytest-xdist a leftover would change what later tests on the same worker capture.
+    """
+    with restored_logging_state():
+        yield
+
+
 @pytest.fixture
-def job_log() -> Iterator[LineCapture]:
+def job_log() -> LineCapture:
     """Job-log lines emitted during the test, captured at INFO from the root logger."""
     capture = LineCapture()
     root = logging.getLogger()
-    previous = root.level
     root.addHandler(capture)
     root.setLevel(logging.INFO)
-    yield capture
-    root.removeHandler(capture)
-    root.setLevel(previous)
+    return capture
