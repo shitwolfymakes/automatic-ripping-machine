@@ -8,32 +8,45 @@ import { ApiError, apiFetch, getToken, notifyUnauthorized } from './client';
 // v3 equivalent and was removed.
 
 export interface LogEntry {
-	timestamp?: string | null;
+	ts: string | null;
 	level: string;
-	logger: string;
-	event: string;
-	job_id?: number | string | null;
-	label?: string | null;
 	service: string;
+	logger: string;
+	job_id: string | null;
+	track_id: string | null;
+	session_application_id: string | null;
+	event: string | null;
+	msg: string;
+	fields: Record<string, unknown>;
+	exc: string | null;
+}
+
+const strOrNull = (v: unknown): string | null => (typeof v === 'string' ? v : null);
+const strOrEmpty = (v: unknown): string => (typeof v === 'string' ? v : '');
+
+function fieldsOf(v: unknown): Record<string, unknown> {
+	return v !== null && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : {};
 }
 
 /**
- * Parse one raw backend log record ({ts, level, service, job_id, track_id,
- * session_application_id, msg, extra:{logger,...}}) into a LogEntry. Exported
- * so the WS live-tail path (jobLog store) can reuse the same parsing as the
- * one-shot NDJSON fetch below.
+ * Parse one raw backend log line ({ts, level, service, logger, job_id,
+ * track_id, session_application_id, event, msg, fields, exc}) into a
+ * LogEntry. Exported so the WS live-tail path (jobLog store) parses lines the
+ * same way as the one-shot NDJSON fetch below.
  */
 export function toLogEntry(raw: Record<string, unknown>): LogEntry {
-	const extra = (raw.extra ?? {}) as Record<string, unknown>;
-	const str = (v: unknown): string => (typeof v === 'string' ? v : v == null ? '' : String(v));
 	return {
-		timestamp: typeof raw.ts === 'string' ? raw.ts : null,
-		level: str(raw.level),
-		logger: str(extra.logger ?? raw.service),
-		event: str(raw.msg),
-		job_id: (raw.job_id as string | number | null | undefined) ?? null,
-		label: typeof extra.label === 'string' ? extra.label : null,
-		service: str(raw.service)
+		ts: strOrNull(raw.ts),
+		level: strOrEmpty(raw.level),
+		service: strOrEmpty(raw.service),
+		logger: strOrEmpty(raw.logger),
+		job_id: strOrNull(raw.job_id),
+		track_id: strOrNull(raw.track_id),
+		session_application_id: strOrNull(raw.session_application_id),
+		event: strOrNull(raw.event),
+		msg: strOrEmpty(raw.msg),
+		fields: fieldsOf(raw.fields),
+		exc: strOrNull(raw.exc)
 	};
 }
 

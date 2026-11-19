@@ -16,27 +16,31 @@ import type { LogEntry } from '$lib/api/logs';
 // element), so the contentEditable test defines it on the element with
 // Object.defineProperty, as a browser reports it.
 
-// LogEntry types level, logger and event as string, but the component guards
+// LogEntry types level, logger and msg as string, but the component guards
 // them with `??`, so a null is passed through a cast to pin that guard.
 const NULL = null as unknown as string;
 
 function entry(over: Partial<LogEntry> = {}): LogEntry {
 	return {
-		timestamp: '2026-09-05T10:00:00Z',
+		ts: '2026-09-05T10:00:00Z',
 		level: 'info',
 		logger: 'arm',
-		event: 'line',
+		msg: 'line',
 		job_id: 'job_a',
-		label: null,
 		service: 'arm-backend',
+		track_id: null,
+		session_application_id: null,
+		event: null,
+		fields: {},
+		exc: null,
 		...over
 	};
 }
 
 const ENTRIES: LogEntry[] = [
-	entry({ event: 'backend line', service: 'arm-backend' }),
-	entry({ event: 'ripper line', service: 'arm-ripper-XYZ' }),
-	entry({ event: 'transcode line', service: 'arm-transcode-t1' })
+	entry({ msg: 'backend line', service: 'arm-backend' }),
+	entry({ msg: 'ripper line', service: 'arm-ripper-XYZ' }),
+	entry({ msg: 'transcode line', service: 'arm-transcode-t1' })
 ];
 
 function textSnippet(text: string) {
@@ -81,10 +85,10 @@ afterEach(() => {
 
 describe('LogView service filter', () => {
 	const MIXED = [
-		entry({ event: 'b', service: 'arm-backend' }),
-		entry({ event: 'r', service: 'arm-ripper-1' }),
-		entry({ event: 't', service: 'arm-transcode-1' }),
-		entry({ event: 'n', service: 'nginx' })
+		entry({ msg: 'b', service: 'arm-backend' }),
+		entry({ msg: 'r', service: 'arm-ripper-1' }),
+		entry({ msg: 't', service: 'arm-transcode-1' }),
+		entry({ msg: 'n', service: 'nginx' })
 	];
 
 	it.each([
@@ -112,21 +116,21 @@ describe('LogView service filter', () => {
 
 describe('LogView level filter', () => {
 	const LEVELS = [
-		entry({ event: 'i', level: 'info' }),
-		entry({ event: 'w', level: 'WARNING' }),
-		entry({ event: 'e', level: 'Error' }),
-		entry({ event: 'c', level: 'critical' }),
-		entry({ event: 'd', level: 'debug' }),
-		entry({ event: 'null', level: NULL })
+		entry({ msg: 'i', level: 'info' }),
+		entry({ msg: 'w', level: 'WARNING' }),
+		entry({ msg: 'e', level: 'Error' }),
+		entry({ msg: 'c', level: 'critical' }),
+		entry({ msg: 'd', level: 'debug' }),
+		entry({ msg: 'null', level: NULL })
 	];
 
 	it.each([
-		['error', ['e']],
-		['warning', ['w']],
-		['info', ['i']],
-		['debug', ['d']],
+		['error', ['e', 'c']],
+		['warning', ['w', 'e', 'c']],
+		['info', ['i', 'w', 'e', 'c', 'null']],
+		['debug', ['i', 'w', 'e', 'c', 'd', 'null']],
 		['all', ['i', 'w', 'e', 'c', 'd', 'null']]
-	])('matches %s case-insensitively, and a null level shows only under All', async (key, expected) => {
+	])('keeps %s and higher levels case-insensitively, and a null level ranks as info', async (key, expected) => {
 		renderComponent(LogView, { props: { entries: LEVELS } });
 		await fireEvent.click(screen.getByTestId(`job-log-level-${key}`));
 		expect(shown()).toEqual(expected);
@@ -147,10 +151,10 @@ describe('LogView level filter', () => {
 describe('LogView text filter', () => {
 	it('needs a line to pass the service, level and text filters together', async () => {
 		const entries = [
-			entry({ event: 'disk full', service: 'arm-ripper-1', level: 'error' }),
-			entry({ event: 'disk full', service: 'arm-backend', level: 'error' }),
-			entry({ event: 'disk full', service: 'arm-ripper-1', level: 'info' }),
-			entry({ event: 'tray open', service: 'arm-ripper-1', level: 'error' })
+			entry({ msg: 'disk full', service: 'arm-ripper-1', level: 'error' }),
+			entry({ msg: 'disk full', service: 'arm-backend', level: 'error' }),
+			entry({ msg: 'disk full', service: 'arm-ripper-1', level: 'info' }),
+			entry({ msg: 'tray open', service: 'arm-ripper-1', level: 'error' })
 		];
 		renderComponent(LogView, { props: { entries, search: true } });
 		await fireEvent.click(screen.getByTestId('job-log-filter-ripper'));
@@ -160,12 +164,12 @@ describe('LogView text filter', () => {
 		expect(screen.getByTestId('job-log-count')).toHaveTextContent('Showing 1 of 4 lines');
 	});
 
-	it('matches event and logger joined by a space, never a line with neither', async () => {
+	it('matches msg, event and logger joined by spaces, never a line with none of them', async () => {
 		const entries = [
-			entry({ event: 'alpha', logger: 'beta' }),
-			entry({ event: 'alpha', logger: NULL }),
-			entry({ event: NULL, logger: 'beta' }),
-			entry({ event: NULL, logger: NULL })
+			entry({ msg: 'alpha', logger: 'beta' }),
+			entry({ msg: 'alpha', logger: '' }),
+			entry({ msg: '', logger: 'beta' }),
+			entry({ msg: '', logger: '' })
 		];
 		renderComponent(LogView, { props: { entries, search: true } });
 		const search = screen.getByTestId('job-log-search');
@@ -232,12 +236,12 @@ describe('LogView chips, tones and times', () => {
 		['debug', 'debug'],
 		['Debug', 'debug']
 	])('tones a %s line %s', (level, tone) => {
-		renderComponent(LogView, { props: { entries: [entry({ level, event: 'x' })] } });
+		renderComponent(LogView, { props: { entries: [entry({ level, msg: 'x' })] } });
 		expect(screen.getByText('x')).toHaveAttribute('data-tone', tone);
 	});
 
 	it.each([['info'], ['Info'], [NULL], ['trace']])('gives a %s line no tone', (level) => {
-		renderComponent(LogView, { props: { entries: [entry({ level, event: 'x' })] } });
+		renderComponent(LogView, { props: { entries: [entry({ level, msg: 'x' })] } });
 		expect(screen.getByText('x')).not.toHaveAttribute('data-tone');
 	});
 
@@ -247,7 +251,7 @@ describe('LogView chips, tones and times', () => {
 		['an empty timestamp', '', ''],
 		['an unparseable timestamp', 'not a date', '']
 	])('shows the time column for %s', (_name, timestamp, expected) => {
-		renderComponent(LogView, { props: { entries: [entry({ timestamp })] } });
+		renderComponent(LogView, { props: { entries: [entry({ ts: timestamp })] } });
 		const time = screen.getByTestId('job-log-line').querySelector('.log-view-time')!;
 		expect(time.textContent).toBe(expected);
 		expect(time.textContent).not.toMatch(/AM|PM/i);
@@ -260,21 +264,21 @@ describe('LogView follow label', () => {
 		await scrollTo(screen.getByTestId('job-log-view'), 0);
 		expect(screen.getByTestId('job-log-follow')).toHaveTextContent(/^Paused$/);
 
-		await rerender({ entries: [...ENTRIES, entry({ event: 'late' })] });
+		await rerender({ entries: [...ENTRIES, entry({ msg: 'late' })] });
 		expect(screen.getByTestId('job-log-follow')).toHaveTextContent('Paused · 1 new line');
 		expect(screen.getByTestId('job-log-follow')).not.toHaveTextContent('lines');
 	});
 });
 
 describe('LogView copy', () => {
-	it('writes one line per shown line, with an empty event as nothing', async () => {
+	it('writes one line per shown line, with an empty msg as nothing', async () => {
 		const writeText = vi.fn().mockResolvedValue(undefined);
 		stubClipboard(writeText);
 		const entries = [
-			entry({ event: 'one', timestamp: '2026-09-05T10:00:00Z', service: 'arm-backend' }),
-			entry({ event: NULL, timestamp: '2026-09-05T10:00:01Z', service: 'arm-ripper-1' }),
-			entry({ event: 'three', timestamp: null, service: 'nginx' }),
-			entry({ event: 'hidden', timestamp: '2026-09-05T10:00:03Z', service: 'arm-transcode-1' })
+			entry({ msg: 'one', ts: '2026-09-05T10:00:00Z', service: 'arm-backend' }),
+			entry({ msg: '', ts: '2026-09-05T10:00:01Z', service: 'arm-ripper-1' }),
+			entry({ msg: 'three', ts: null, service: 'nginx' }),
+			entry({ msg: 'hidden', ts: '2026-09-05T10:00:03Z', service: 'arm-transcode-1' })
 		];
 		renderComponent(LogView, { props: { entries } });
 		await fireEvent.click(screen.getByTestId('job-log-filter-all'));
@@ -389,7 +393,7 @@ describe('LogView follow and pause', () => {
 		const view = screen.getByTestId('job-log-view');
 		setScroll(view, 0);
 
-		await rerender({ entries: [...ENTRIES, entry({ event: 'late' })] });
+		await rerender({ entries: [...ENTRIES, entry({ msg: 'late' })] });
 		expect(view.scrollTop).toBe(1000);
 		expect(screen.getByTestId('job-log-follow')).toHaveTextContent('Following');
 	});
@@ -405,7 +409,7 @@ describe('LogView follow and pause', () => {
 		expect(screen.getByTestId('job-log-follow')).toHaveTextContent(/^Paused$/);
 		expect(view.scrollTop).toBe(0);
 
-		await rerender({ entries: [...ENTRIES, entry({ event: 'late' })] });
+		await rerender({ entries: [...ENTRIES, entry({ msg: 'late' })] });
 		expect(screen.getByTestId('job-log-follow')).toHaveTextContent('Paused · 1 new line');
 		expect(view.scrollTop).toBe(0);
 	});

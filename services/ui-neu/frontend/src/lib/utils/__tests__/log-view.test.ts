@@ -15,7 +15,20 @@ import {
 } from '../log-view';
 
 function entry(over: Partial<LogEntry> = {}): LogEntry {
-	return { level: 'info', logger: 'log', event: 'evt', service: 'arm-backend', ...over };
+	return {
+		ts: null,
+		level: 'info',
+		service: 'arm-backend',
+		logger: 'log',
+		job_id: null,
+		track_id: null,
+		session_application_id: null,
+		event: null,
+		msg: 'evt',
+		fields: {},
+		exc: null,
+		...over
+	};
 }
 
 function filter(over: Partial<LogFilter> = {}): LogFilter {
@@ -24,12 +37,12 @@ function filter(over: Partial<LogFilter> = {}): LogFilter {
 
 describe('filterEntries service filter', () => {
 	const entries = [
-		entry({ event: 'b', service: 'arm-backend' }),
-		entry({ event: 'r', service: 'arm-ripper-SER1' }),
-		entry({ event: 't', service: 'arm-transcode-task_1' }),
-		entry({ event: 'o', service: 'mystery' })
+		entry({ msg: 'b', service: 'arm-backend' }),
+		entry({ msg: 'r', service: 'arm-ripper-SER1' }),
+		entry({ msg: 't', service: 'arm-transcode-task_1' }),
+		entry({ msg: 'o', service: 'mystery' })
 	];
-	const events = (f: Partial<LogFilter>) => filterEntries(entries, filter(f)).map((e) => e.event);
+	const events = (f: Partial<LogFilter>) => filterEntries(entries, filter(f)).map((e) => e.msg);
 
 	it('keeps only backend lines under backend', () => {
 		expect(events({ service: 'backend' })).toEqual(['b']);
@@ -52,11 +65,21 @@ describe('filterEntries service filter', () => {
 });
 
 describe('filterEntries level filter', () => {
-	const entries = ['error', 'warning', 'info', 'debug'].map((level) => entry({ level, event: level }));
-	const events = (level: LogFilter['level']) => filterEntries(entries, filter({ level })).map((e) => e.event);
+	const entries = ['critical', 'error', 'warning', 'info', 'debug'].map((level) => entry({ level, msg: level }));
+	const msgs = (level: LogFilter['level']) => filterEntries(entries, filter({ level })).map((e) => e.msg);
 
-	it.each(['error', 'warning', 'info', 'debug'] as const)('keeps only %s lines', (level) => {
-		expect(events(level)).toEqual([level]);
+	it.each([
+		['critical', ['critical']],
+		['error', ['critical', 'error']],
+		['warning', ['critical', 'error', 'warning']],
+		['info', ['critical', 'error', 'warning', 'info']],
+		['debug', ['critical', 'error', 'warning', 'info', 'debug']]
+	] as const)('keeps %s and every higher level', (level, expected) => {
+		expect(msgs(level)).toEqual(expected);
+	});
+
+	it('keeps every line under all', () => {
+		expect(msgs('all')).toHaveLength(5);
 	});
 
 	it('matches the level case-insensitively', () => {
@@ -64,16 +87,22 @@ describe('filterEntries level filter', () => {
 		expect(out).toHaveLength(1);
 	});
 
-	it('keeps a null level only under all', () => {
-		const nullLevel = [entry({ level: null as never })];
-		expect(filterEntries(nullLevel, filter({ level: 'all' }))).toHaveLength(1);
-		expect(filterEntries(nullLevel, filter({ level: 'info' }))).toHaveLength(0);
+	it('ranks a null or unknown level as info', () => {
+		const odd = [entry({ level: null as never }), entry({ level: 'trace' })];
+		expect(filterEntries(odd, filter({ level: 'all' }))).toHaveLength(2);
+		expect(filterEntries(odd, filter({ level: 'info' }))).toHaveLength(2);
+		expect(filterEntries(odd, filter({ level: 'warning' }))).toHaveLength(0);
 	});
 });
 
 describe('filterEntries text filter', () => {
-	it('matches the query against the event case-insensitively by default', () => {
-		const out = filterEntries([entry({ event: 'Disc Ejected' })], filter({ query: 'disc ejected' }));
+	it('matches the query against the msg case-insensitively by default', () => {
+		const out = filterEntries([entry({ msg: 'Disc Ejected' })], filter({ query: 'disc ejected' }));
+		expect(out).toHaveLength(1);
+	});
+
+	it('matches the query against the event', () => {
+		const out = filterEntries([entry({ event: 'rip.Started' })], filter({ query: 'RIP.started' }));
 		expect(out).toHaveLength(1);
 	});
 
@@ -82,25 +111,26 @@ describe('filterEntries text filter', () => {
 		expect(out).toHaveLength(1);
 	});
 
-	it('matches across the event and logger joined by a space', () => {
-		const out = filterEntries([entry({ event: 'ev', logger: 'lg' })], filter({ query: 'ev lg' }));
+	it('matches across the msg, event and logger joined by spaces', () => {
+		const out = filterEntries([entry({ msg: 'ms', event: 'ev', logger: 'lg' })], filter({ query: 'ev lg' }));
 		expect(out).toHaveLength(1);
 	});
 
 	it('is exact under matchCase', () => {
-		const entries = [entry({ event: 'Disc' })];
+		const entries = [entry({ msg: 'Disc' })];
 		expect(filterEntries(entries, filter({ query: 'Disc', matchCase: true }))).toHaveLength(1);
 		expect(filterEntries(entries, filter({ query: 'disc', matchCase: true }))).toHaveLength(0);
 	});
 
-	it('reads a null event and logger as empty', () => {
-		const nulls = entry({ event: null as never, logger: null as never });
-		expect(filterEntries([nulls], filter({ query: 'x' }))).toHaveLength(0);
-		expect(filterEntries([nulls], filter({ query: ' ' }))).toHaveLength(1);
+	it('skips a null event and empty parts when joining', () => {
+		const e = entry({ msg: 'a', event: null, logger: 'b' });
+		expect(filterEntries([e], filter({ query: 'a b' }))).toHaveLength(1);
+		expect(filterEntries([e], filter({ query: 'a  b' }))).toHaveLength(0);
+		expect(filterEntries([entry({ msg: '', event: null, logger: '' })], filter({ query: 'x' }))).toHaveLength(0);
 	});
 
 	it('keeps every line for an empty query', () => {
-		const entries = [entry({ event: 'a' }), entry({ event: 'b' })];
+		const entries = [entry({ msg: 'a' }), entry({ msg: 'b' })];
 		expect(filterEntries(entries, filter({ query: '', matchCase: true }))).toHaveLength(2);
 	});
 });
@@ -108,18 +138,18 @@ describe('filterEntries text filter', () => {
 describe('filterEntries combined filters', () => {
 	it('requires the service, level and text filters together', () => {
 		const entries = [
-			entry({ event: 'hit', level: 'error', service: 'arm-ripper-S' }),
-			entry({ event: 'hit', level: 'error', service: 'arm-backend' }),
-			entry({ event: 'hit', level: 'info', service: 'arm-ripper-S' }),
-			entry({ event: 'miss', level: 'error', service: 'arm-ripper-S' })
+			entry({ msg: 'hit', level: 'error', service: 'arm-ripper-S' }),
+			entry({ msg: 'hit', level: 'error', service: 'arm-backend' }),
+			entry({ msg: 'hit', level: 'info', service: 'arm-ripper-S' }),
+			entry({ msg: 'miss', level: 'error', service: 'arm-ripper-S' })
 		];
 		const out = filterEntries(entries, filter({ service: 'ripper', level: 'error', query: 'hit' }));
 		expect(out).toEqual([entries[0]]);
 	});
 
 	it('keeps the order of the entries', () => {
-		const entries = [entry({ event: 'c' }), entry({ event: 'a' }), entry({ event: 'b' })];
-		expect(filterEntries(entries, filter()).map((e) => e.event)).toEqual(['c', 'a', 'b']);
+		const entries = [entry({ msg: 'c' }), entry({ msg: 'a' }), entry({ msg: 'b' })];
+		expect(filterEntries(entries, filter()).map((e) => e.msg)).toEqual(['c', 'a', 'b']);
 	});
 });
 
@@ -243,19 +273,15 @@ describe('levelTone', () => {
 describe('entryTimeLabel', () => {
 	it('formats a valid timestamp as local time without AM or PM', () => {
 		const ts = '2026-01-02T03:04:05Z';
-		expect(entryTimeLabel(entry({ timestamp: ts }))).toBe(new Date(ts).toLocaleTimeString([], { hour12: false }));
+		expect(entryTimeLabel(entry({ ts }))).toBe(new Date(ts).toLocaleTimeString([], { hour12: false }));
 	});
 
 	it('is empty when the timestamp is missing', () => {
-		expect(entryTimeLabel(entry({ timestamp: undefined }))).toBe('');
-	});
-
-	it('is empty when the timestamp is null', () => {
-		expect(entryTimeLabel(entry({ timestamp: null as never }))).toBe('');
+		expect(entryTimeLabel(entry({ ts: null }))).toBe('');
 	});
 
 	it('is empty when the timestamp does not parse', () => {
-		expect(entryTimeLabel(entry({ timestamp: 'not a date' }))).toBe('');
+		expect(entryTimeLabel(entry({ ts: 'not a date' }))).toBe('');
 	});
 });
 
@@ -264,10 +290,10 @@ describe('formatCopyText', () => {
 		const ts = '2026-01-02T03:04:05Z';
 		const time = new Date(ts).toLocaleTimeString([], { hour12: false });
 		const text = formatCopyText([
-			entry({ event: 'b', service: 'arm-backend', timestamp: ts }),
-			entry({ event: 'r', service: 'arm-ripper-SER1', timestamp: ts }),
-			entry({ event: 't', service: 'arm-transcode-task_1', timestamp: ts }),
-			entry({ event: 'o', service: 'mystery', timestamp: ts })
+			entry({ msg: 'b', service: 'arm-backend', ts }),
+			entry({ msg: 'r', service: 'arm-ripper-SER1', ts }),
+			entry({ msg: 't', service: 'arm-transcode-task_1', ts }),
+			entry({ msg: 'o', service: 'mystery', ts })
 		]);
 		const lines = text.split('\n');
 		expect(lines).toHaveLength(4);
@@ -277,8 +303,8 @@ describe('formatCopyText', () => {
 		expect(lines[3]).toBe(`${time} [${serviceLabel(logService('mystery'))}] o`);
 	});
 
-	it('leaves the event and the time blank when an entry has neither', () => {
-		const text = formatCopyText([entry({ event: null as never, timestamp: null as never })]);
+	it('leaves the msg and the time blank when an entry has neither', () => {
+		const text = formatCopyText([entry({ msg: '', ts: null })]);
 		expect(text).toBe(` [${serviceLabel(logService('arm-backend'))}] `);
 	});
 

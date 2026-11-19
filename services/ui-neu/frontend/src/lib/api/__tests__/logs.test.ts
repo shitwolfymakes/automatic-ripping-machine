@@ -25,11 +25,34 @@ beforeEach(() => {
 	stored.token = 'tok-123';
 });
 
+const BASE = {
+	ts: '2026-06-19T00:00:01Z',
+	level: 'info',
+	service: 'arm-backend',
+	logger: 'arm_backend.x',
+	job_id: null,
+	track_id: null,
+	session_application_id: null,
+	event: null,
+	msg: 'm',
+	fields: {},
+	exc: null
+};
+const line = (over: Record<string, unknown> = {}) => JSON.stringify({ ...BASE, ...over });
+const full = (over: Record<string, unknown> = {}) => ({ ...BASE, ...over });
+
 describe('fetchJobLog', () => {
 	it('GETs /api/logs/:id with a bearer token and parses NDJSON into entries', async () => {
-		const ndjson =
-			'{"ts":"2026-06-19T00:00:01Z","level":"info","service":"arm-backend","job_id":"job_a","msg":"start","extra":{"logger":"arm"}}\n' +
-			'{"ts":"2026-06-19T00:00:02Z","level":"error","service":"arm-backend","job_id":"job_a","msg":"boom","extra":{"logger":"ripper"}}\n';
+		const ndjson = `${line({ job_id: 'job_a', msg: 'start', logger: 'arm' })}\n${line({
+			ts: '2026-06-19T00:00:02Z',
+			level: 'error',
+			job_id: 'job_a',
+			msg: 'boom',
+			logger: 'ripper',
+			event: 'rip.failed',
+			fields: { code: 2 },
+			exc: 'Traceback'
+		})}\n`;
 		mockFetch.mockResolvedValue(textResponse(ndjson));
 		const entries = await fetchJobLog('job_01ARZ3NDEKTSV4RRFFQ69G5FAV');
 		expect(mockFetch).toHaveBeenCalledWith(
@@ -37,24 +60,17 @@ describe('fetchJobLog', () => {
 			expect.objectContaining({ headers: expect.objectContaining({ Authorization: 'Bearer tok-123' }) })
 		);
 		expect(entries).toEqual([
-			{
-				timestamp: '2026-06-19T00:00:01Z',
-				level: 'info',
-				logger: 'arm',
-				event: 'start',
-				job_id: 'job_a',
-				label: null,
-				service: 'arm-backend'
-			},
-			{
-				timestamp: '2026-06-19T00:00:02Z',
+			full({ job_id: 'job_a', msg: 'start', logger: 'arm' }),
+			full({
+				ts: '2026-06-19T00:00:02Z',
 				level: 'error',
-				logger: 'ripper',
-				event: 'boom',
 				job_id: 'job_a',
-				label: null,
-				service: 'arm-backend'
-			}
+				msg: 'boom',
+				logger: 'ripper',
+				event: 'rip.failed',
+				fields: { code: 2 },
+				exc: 'Traceback'
+			})
 		]);
 	});
 
@@ -65,28 +81,17 @@ describe('fetchJobLog', () => {
 	});
 
 	it('skips blank and unparseable lines (defensive)', async () => {
-		const ndjson =
-			'{"ts":"2026-06-19T00:00:01Z","level":"info","service":"x","msg":"ok","extra":{"logger":"a"}}\n\n{not json\n   \n';
+		const ndjson = `${line({ msg: 'ok' })}\n\n{not json\n   \n`;
 		mockFetch.mockResolvedValue(textResponse(ndjson));
 		const entries = await fetchJobLog('job_x');
-		expect(entries).toEqual([
-			{
-				timestamp: '2026-06-19T00:00:01Z',
-				level: 'info',
-				logger: 'a',
-				event: 'ok',
-				job_id: null,
-				label: null,
-				service: 'x'
-			}
-		]);
+		expect(entries).toEqual([full({ msg: 'ok' })]);
 	});
 
 	it('skips a line that parses to null or to a non-object value', async () => {
 		const ndjson = 'null\n42\n"text"\n{"level":"info","service":"x","msg":"ok"}\n';
 		mockFetch.mockResolvedValue(textResponse(ndjson));
 		const entries = await fetchJobLog('job_x');
-		expect(entries.map((e) => e.event)).toEqual(['ok']);
+		expect(entries.map((e) => e.msg)).toEqual(['ok']);
 	});
 
 	it('sends no Authorization header when no token is stored', async () => {
@@ -94,16 +99,6 @@ describe('fetchJobLog', () => {
 		mockFetch.mockResolvedValue(textResponse(''));
 		await fetchJobLog('job_x');
 		expect(mockFetch).toHaveBeenCalledWith('/api/logs/job_x', { headers: {} });
-	});
-
-	it('falls back to service when extra.logger is absent', async () => {
-		mockFetch.mockResolvedValue(
-			textResponse('{"ts":"t","level":"info","service":"arm-backend","msg":"m","extra":{}}\n')
-		);
-		const [e] = await fetchJobLog('job_x');
-		expect(e.logger).toBe('arm-backend');
-		expect(e.event).toBe('m');
-		expect(e.timestamp).toBe('t');
 	});
 
 	it('returns [] for an empty body (unknown/logless job — backend streams empty, not 404)', async () => {
@@ -137,23 +132,56 @@ describe('jobLogDownloadUrl', () => {
 
 describe('toLogEntry', () => {
 	it('is exported so the WS live-tail path can parse raw records the same way', () => {
-		const entry = toLogEntry({
-			ts: '2026-09-05T00:00:00Z',
+		const raw = {
+			...BASE,
 			level: 'warning',
-			service: 'arm-ripper-ABCD',
 			job_id: 'job_a',
-			msg: 'drive slow',
-			extra: {}
+			track_id: 'trk_1',
+			session_application_id: 'sa_1',
+			event: 'rip.started',
+			fields: { a: 1 },
+			exc: 'tb'
+		};
+		expect(toLogEntry(raw)).toEqual(raw);
+	});
+
+	it('does not accept a number as a job id', () => {
+		expect(toLogEntry({ ...BASE, job_id: 5 }).job_id).toBeNull();
+	});
+
+	it('defaults fields to {} and event/exc to null when absent', () => {
+		const e = toLogEntry({ level: 'info', service: 's', msg: 'm' });
+		expect(e).toEqual({
+			ts: null,
+			level: 'info',
+			service: 's',
+			logger: '',
+			job_id: null,
+			track_id: null,
+			session_application_id: null,
+			event: null,
+			msg: 'm',
+			fields: {},
+			exc: null
 		});
-		expect(entry).toEqual({
-			timestamp: '2026-09-05T00:00:00Z',
-			level: 'warning',
-			logger: 'arm-ripper-ABCD',
-			event: 'drive slow',
-			job_id: 'job_a',
-			label: null,
-			service: 'arm-ripper-ABCD'
-		});
+	});
+
+	it('treats a non-object fields value as {}', () => {
+		expect(toLogEntry({ ...BASE, fields: 'x' }).fields).toEqual({});
+		expect(toLogEntry({ ...BASE, fields: [1] }).fields).toEqual({});
+		expect(toLogEntry({ ...BASE, fields: null }).fields).toEqual({});
+	});
+
+	it('parses an old-shape line without throwing, with no logger or event', () => {
+		const e = toLogEntry({ ts: 't', level: 'info', service: 's', job_id: 'job_a', msg: 'm', extra: { logger: 'x' } });
+		expect(e.logger).toBe('');
+		expect(e.event).toBeNull();
+		expect(e.fields).toEqual({});
+	});
+
+	it('maps non-string scalars to empty or null', () => {
+		const e = toLogEntry({ ...BASE, ts: 5, level: null, msg: 7, event: 3, exc: 4 });
+		expect([e.ts, e.level, e.msg, e.event, e.exc]).toEqual([null, '', '', null, null]);
 	});
 });
 
