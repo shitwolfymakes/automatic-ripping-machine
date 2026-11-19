@@ -65,6 +65,7 @@ from arm_backend.identity.sources.registry import EPISODE_SOURCE_IDS
 from arm_backend.constants import CONFIG_SINGLETON_ID
 from arm_backend.ws import WSHub
 from arm_common import Config, Job, JobStatus, Track
+from arm_common.logging import with_log_context
 from arm_common.schemas import ExternalIds
 
 logger = logging.getLogger("arm_backend.identity.stage_runner")
@@ -355,16 +356,17 @@ class EpisodeStageRunner:
             await apply_outcomes_and_emit(apply_session, fresh_job, outcomes, self._hub)
 
     async def _run_body(self, job_id: str) -> None:
-        try:
-            computed = await self._compute_phase(job_id)
-            if computed is None:
-                return
-            outcomes, found = computed
-            await self._apply_phase(job_id, outcomes, found)
-        except Exception:
-            # Never crash the loop: a provider outage or a DB hiccup on one
-            # job must not take down every other job's background stage.
-            logger.exception("episode stage: background run failed job_id=%s", job_id)
+        with with_log_context(job_id=job_id):
+            try:
+                computed = await self._compute_phase(job_id)
+                if computed is None:
+                    return
+                outcomes, found = computed
+                await self._apply_phase(job_id, outcomes, found)
+            except Exception:
+                # Never crash the loop: a provider outage or a DB hiccup on one
+                # job must not take down every other job's background stage.
+                logger.exception("episode stage: background run failed job_id=%s", job_id)
 
     # -- startup sweep --------------------------------------------------
 

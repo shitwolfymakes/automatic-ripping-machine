@@ -10,9 +10,13 @@ headers, so the assignment is unconditional: a value exported by the
 developer's shell must not reach the singleton either.
 """
 
+import logging
 import os
+from collections.abc import Iterator
 
 import pytest
+
+from tests._logs import LineCapture
 
 os.environ["DATABASE_URL"] = "postgresql://x:x@localhost/x"
 os.environ["ARM_SERVICE_TOKEN"] = "tok-service"
@@ -31,3 +35,16 @@ def _unspaced_musicbrainz_calls(monkeypatch: pytest.MonkeyPatch) -> None:
     from arm_backend.metadata import musicbrainz
 
     monkeypatch.setattr(musicbrainz, "_MIN_INTERVAL_SECONDS", 0.0)
+
+
+@pytest.fixture
+def job_log() -> Iterator[LineCapture]:
+    """Job-log lines emitted during the test, captured at INFO from the root logger."""
+    capture = LineCapture()
+    root = logging.getLogger()
+    previous = root.level
+    root.addHandler(capture)
+    root.setLevel(logging.INFO)
+    yield capture
+    root.removeHandler(capture)
+    root.setLevel(previous)

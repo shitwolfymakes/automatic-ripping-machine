@@ -48,6 +48,7 @@ from arm_common.enums import IdentificationMode, OutputMode, TrackKind, TrackSel
 from arm_common.models import Track
 
 from tests._fakes import FakeSession
+from tests._logs import LineCapture
 
 _SERVICE_AUTH = {"Authorization": "Bearer tok-service"}
 _PRIOR = "job_01M4Q4V53S8AC69YM5CKHE11DX"
@@ -616,3 +617,21 @@ def test_unpausing_does_not_start_a_countdown_on_a_suggestion_hold() -> None:
         assert client.patch("/api/config", json={"ripping_paused": False}, headers=auth).status_code == 200
     assert suggested.wait_start_time is None
     assert plain.wait_start_time is not None
+
+
+def test_hold_emits_identify_held_in_the_new_jobs_context(job_log: LineCapture) -> None:
+    db = _db(PreviouslyRippedAction.HOLD)
+    out = _identify(db, _Hub()).json()
+    [held] = job_log.lines(event="identify.held")
+    assert held["job_id"] == out["id"]
+    assert held["fields"] == {"reason": f"disc already ripped as {_PRIOR}"}
+    assert not any(line["msg"].startswith("identify job_id=") for line in job_log.lines())
+
+
+def test_a_held_suggestion_emits_identify_held(job_log: LineCapture) -> None:
+    db = _db(PreviouslyRippedAction.RIP, movie_auto_apply=False)
+    _identify(db, _Hub())
+    held = job_log.lines(event="identify.held")
+    assert [h["fields"] for h in held] == [
+        {"reason": "movie hit 'Resident Evil' held for confirmation (auto-apply off)"}
+    ]

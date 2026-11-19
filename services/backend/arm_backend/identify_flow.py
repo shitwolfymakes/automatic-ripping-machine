@@ -9,7 +9,7 @@ from typing import Any
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import col, select
 
-from arm_backend import iso_prepare
+from arm_backend import iso_prepare, job_events
 from arm_backend.disc_dedupe import find_previous_rips, find_reusable_job_for_disc
 from arm_backend.metadata import MetadataDispatcher
 from arm_backend.metadata.base import MetadataResult
@@ -48,6 +48,7 @@ from arm_common import (
     MediaType,
     Session,
 )
+from arm_common.logging import with_log_context
 from arm_common.enums import DriveKind, PreviouslyRippedAction
 from arm_common.models import Track
 from arm_common.schemas import (
@@ -409,7 +410,6 @@ class IdentifyFlow:
 
         await self.session.commit()
         await self.session.refresh(job)
-        logger.info("identify job_id=%s status=%s title=%s", job.id, job.status.value, job.title)
 
     async def _emit_held_event(self, job: Job, scan: ScanResult) -> None:
         if job.status in (JobStatus.AWAITING_USER_ID, JobStatus.AWAITING_REVIEW):
@@ -474,6 +474,7 @@ class IdentifyFlow:
             await _persist_review_tracks(self.session, job, scan)
         else:
             job.status = JobStatus.IDENTIFIED
+        job_events.log_identified(job, result.provider or "unknown", self._hit_method(result))
 
     async def _hold_hit(
         self, job: Job, scan: ScanResult, result: MetadataResult, miss_title: str | None, ambiguous_toc: bool
@@ -497,13 +498,12 @@ class IdentifyFlow:
         # result.kind is a subset of MediaType's values by construction.
         job.media_type = MediaType(result.kind)
         await _persist_review_tracks(self.session, job, scan)
-        logger.info(
-            "identify job_id=%s: %s hit %r held for confirmation (%s)",
-            job.id,
-            result.kind,
-            result.title,
-            "several releases fit the track layout" if ambiguous_toc else "auto-apply off",
-        )
+        job_events.log_identify_held(job, job_events.held_hit_reason(result.kind, result.title, ambiguous_toc))
+
+    def _hit_method(self, result: MetadataResult) -> str:
+        """How the hit was found: the step of the lookup that returned it, `release` when no lookup did."""
+        hits = [a for a in self.attempts if a["outcome"] == "hit" and a["source"] == result.provider]
+        return hits[-1]["step"] if hits else "release"
 
     def _apply_miss(self, job: Job, cfg: Config, miss_title: str | None) -> None:
         diagnostic: dict[str, bool] = {}
@@ -512,6 +512,7 @@ class IdentifyFlow:
         if cfg.block_on_miss:
             job.status = JobStatus.AWAITING_USER_ID
             job.title = miss_title
+            job_events.log_not_identified(job, *job_events.miss_cause(self.attempts[-1] if self.attempts else None))
             if diagnostic:
                 job.metadata_json = with_flags(job.metadata_json, **diagnostic)
         else:
@@ -531,7 +532,7 @@ class IdentifyFlow:
             **(job.metadata_json or {}),
             "previously_ripped": {"job_id": previous.id},
         }
-        logger.info("identify job_id=%s: disc already ripped as job_id=%s; holding it", job.id, previous.id)
+        job_events.log_identify_held(job, job_events.previously_ripped_reason(previous.id))
 
     async def _identify_new_disc(self, job: Job, cfg: Config, scan: ScanResult) -> None:
         await self._dispatch(job, cfg, scan)
@@ -580,7 +581,10 @@ class IdentifyFlow:
         self.previous = await self._apply_previously_ripped_policy(drive, cfg, scan)
 
         self.job = job = await self._reuse_or_create_job(drive, scan)
+        with with_log_context(job_id=job.id):
+            return await self._identify_job(job, cfg, scan)
 
+    async def _identify_job(self, job: Job, cfg: Config, scan: ScanResult) -> Job:
         await self._persist_fingerprints(job, scan)
 
         self.hints = enabled_hint_sources(cfg)

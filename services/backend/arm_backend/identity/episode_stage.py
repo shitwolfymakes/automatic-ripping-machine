@@ -33,7 +33,10 @@ from sqlmodel import col, select
 from arm_common import Config, Job, Track, TrackKind
 from arm_common.enums import MediaType, TrackRole
 from arm_common.schemas import ExternalIds
+from arm_common.logging import with_log_context
 from arm_common.schemas.identity import JobClaim, SourceClaims, TrackClaim
+
+from arm_backend import job_events
 
 from arm_backend.identity.episode_holds import SeasonFit, hold_reasons
 from arm_backend.identity.episode_siblings import episode_range, sibling_discs, sibling_rows, sibling_seasons
@@ -521,6 +524,15 @@ async def compute_episode_claims(
     return outcomes
 
 
+def _log_matched(job: Job, outcomes: Sequence[SourceOutcome]) -> None:
+    """Log the first outcome that matched at least one title; nothing when none did."""
+    matched = next((o.result for o in outcomes if o.claims.status == "ok" and o.result and o.result.matches), None)
+    if matched is not None:
+        job_events.log_episodes_matched(
+            job, len(matched.matches), len(matched.skipped), job.title, matched.matches[0].season
+        )
+
+
 async def apply_episode_outcomes(session: AsyncSession, job: Job, outcomes: Sequence[SourceOutcome]) -> ResolveOutcome:
     """Store every outcome with `put_source`, then resolve. Flushes; the
     caller commits.
@@ -538,7 +550,9 @@ async def apply_episode_outcomes(session: AsyncSession, job: Job, outcomes: Sequ
     good "ok" entry stays applicable too, per F8)."""
     for outcome in outcomes:
         put_source(job, outcome.source_id, outcome.claims)
-    return await resolve_job(session, job)
+    resolved = await resolve_job(session, job)
+    _log_matched(job, outcomes)
+    return resolved
 
 
 def found_ids_from_outcomes(outcomes: Sequence[SourceOutcome], providers: Sequence[EpisodeListProvider]) -> ExternalIds:
@@ -573,6 +587,7 @@ async def run_episode_stage(
     opts: StageOptions,
 ) -> tuple[list[SourceOutcome], ResolveOutcome]:
     """Compute, store every outcome, resolve, flush. The caller commits."""
-    outcomes = await compute_episode_claims(session, job, providers, cfg, opts)
-    resolved = await apply_episode_outcomes(session, job, outcomes)
+    with with_log_context(job_id=job.id):
+        outcomes = await compute_episode_claims(session, job, providers, cfg, opts)
+        resolved = await apply_episode_outcomes(session, job, outcomes)
     return outcomes, resolved
