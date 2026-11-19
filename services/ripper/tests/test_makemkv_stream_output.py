@@ -161,6 +161,37 @@ async def test_a_repeated_prgc_for_the_same_title_logs_one_start(caplog: pytest.
     assert len(_title_events(caplog, "title.started")) == 1
 
 
+async def test_a_title_announced_by_prgt_logs_its_start_and_restarts_its_quarters(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    caplog.set_level(logging.INFO, logger=LOGGER)
+    lines = [b'PRGT:5024,0,"Saving all titles to MKV files"', _PRGC.format(0).encode(), _prgv(80)]
+    lines += [b'PRGT:5011,0,"Saving title #5 to MKV file"', _prgv(30)]
+    await _run(lines, eligible_source_indexes=[3, 5])
+    started = _title_events(caplog, "title.started")
+    assert [r.getMessage() for r in started] == ["saving title 3 (file 1 of 2)", "saving title 5 (file 2 of 2)"]
+    progress = _title_events(caplog, "title.progress")
+    assert [r.getMessage() for r in progress] == ["title 3: 75%", "title 5: 25%"]
+
+
+async def test_a_late_prgt_for_an_open_title_keeps_its_quarters(caplog: pytest.LogCaptureFixture) -> None:
+    caplog.set_level(logging.INFO, logger=LOGGER)
+    lines = [_PRGC.format(0).encode(), _prgv(30), b'PRGT:5011,0,"Saving title #3 to MKV file"', _prgv(40)]
+    await _run(lines, eligible_source_indexes=[3])
+    assert len(_title_events(caplog, "title.started")) == 1
+    assert [r.getMessage() for r in _title_events(caplog, "title.progress")] == ["title 3: 25%"]
+
+
+async def test_a_prgt_title_outside_the_eligible_list_starts_without_a_file_position(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    caplog.set_level(logging.INFO, logger=LOGGER)
+    state = await _run([b'PRGT:5011,0,"Saving title #9 to MKV file"', _prgv(60)], eligible_source_indexes=[3])
+    assert state.current_title == 9
+    assert _title_events(caplog, "title.started") == []
+    assert [r.getMessage() for r in _title_events(caplog, "title.progress")] == ["title 9: 50%"]
+
+
 async def test_nothing_is_logged_before_the_save_phase(caplog: pytest.LogCaptureFixture) -> None:
     caplog.set_level(logging.INFO, logger=LOGGER)
     await _run([_prgv(10), _prgv(60)], eligible_source_indexes=[3])

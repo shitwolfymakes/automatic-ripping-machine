@@ -18,7 +18,7 @@ from arm_ripper.eject import Ejector
 from arm_ripper.makemkv_prep import MakeMKVPrep
 from arm_ripper.ripper_config import ripper_config_or_none
 from arm_ripper.resolution_wait import IDENTIFY_WAIT, RESOLUTION_TIMEOUT_UNSET, REVIEW_WAIT, ResolutionWaiter, WaitSpec
-from arm_ripper.rip.dispatcher import DEFAULT_MIN_LENGTH_SECONDS, rip_tool
+from arm_ripper.rip.dispatcher import DEFAULT_MIN_LENGTH_SECONDS, NO_RIP_TOOL, rip_tool
 from arm_ripper.rip_events import disc_type_label, rip_started_message
 from arm_ripper.disc_scan import scan_or_none
 from arm_ripper.drive_poll import DriveState, read_drive_status
@@ -49,7 +49,7 @@ def _log_rip_started(disc_type: DiscType, rip_start: RipStartResponse, **extra_f
     """Log the `rip.started` event for the rip about to run."""
     track_count = len(rip_start.tracks)
     tool = rip_tool(disc_type, rip_start.tracks)
-    if tool == "none":
+    if tool == NO_RIP_TOOL:
         logger.warning("rip cannot start: no rip path for %s", disc_type_label(disc_type))
         return
     log_event(

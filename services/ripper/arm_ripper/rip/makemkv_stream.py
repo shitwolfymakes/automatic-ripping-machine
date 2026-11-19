@@ -78,7 +78,7 @@ class ParserState:
     # holds ETA null until the bar climbs back past the pre-rip peak).
     save_phase_started: bool = False
     # The highest quarter (25/50/75/100) of the current title's own
-    # progress already logged; reset when PRGC:5017 starts a new title.
+    # progress already logged; reset when PRGC:5017 or PRGT starts a new title.
     title_logged_pct: int = 0
     # Set when MakeMKV emits MSG:5021 (the binary's hard-coded 60-day
     # beta kill-switch). The streamer kills the subprocess as soon as
@@ -230,7 +230,7 @@ class _LineParser:
                 if self._state.current_title is not None and self._state.current_title != source_idx:
                     await _emit_title_done(self._state, self._state.current_title, self._callbacks.on_title_done)
                 if self._state.current_title != source_idx:
-                    self._log_title_started(source_idx, out_pos)
+                    self._log_title_started(source_idx)
                 await _emit_title_start(self._state, source_idx, self._callbacks.on_title_start)
             else:
                 logger.warning(
@@ -241,15 +241,21 @@ class _LineParser:
             return True
         return False
 
-    def _log_title_started(self, source_idx: int, out_pos: int) -> None:
-        """Log `title.started` for a new title and restart its quarter tracking."""
+    def _log_title_started(self, source_idx: int) -> None:
+        """Restart the quarter tracking for a new title and log its `title.started`.
+
+        The line names the title's file position, so a title outside the eligible list logs none.
+        """
         self._state.title_logged_pct = 0
+        if source_idx not in self._eligible:
+            return
+        position = self._eligible.index(source_idx) + 1
         log_event(
             logger,
             "title.started",
-            title_started_message(source_idx, out_pos + 1, len(self._eligible)),
+            title_started_message(source_idx, position, len(self._eligible)),
             title_index=source_idx,
-            file_position=out_pos + 1,
+            file_position=position,
             file_count=len(self._eligible),
         )
 
@@ -261,10 +267,17 @@ class _LineParser:
         # late PRGT doesn't reset progress on a title PRGC already
         # opened.
         title_idx = parse_prgt_title(line)
-        if title_idx is not None:
-            await _emit_title_start(self._state, title_idx, self._callbacks.on_title_start)
-            return True
-        return False
+        if title_idx is None:
+            return False
+        if not self._started(title_idx):
+            self._log_title_started(title_idx)
+        await _emit_title_start(self._state, title_idx, self._callbacks.on_title_start)
+        return True
+
+    def _started(self, title_idx: int) -> bool:
+        """The title has already been started by an earlier PRGC:5017 or PRGT line."""
+        title = self._state.titles.get(title_idx)
+        return title is not None and title.started_emitted
 
     async def _apply_milestone(self, line: str) -> bool:
         """Any other PRGT: log the milestone, noting the save phase start (5024)."""

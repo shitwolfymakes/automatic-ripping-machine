@@ -33,7 +33,7 @@ from arm_common.enums import TrackKind, TrackStatus
 from arm_common.schemas import TrackView
 
 from arm_ripper.drive_status import probe_drive_media
-from arm_ripper.rip.dispatcher import _effective_disc_type, rip_all, rip_tool
+from arm_ripper.rip.dispatcher import NO_RIP_TOOL, _effective_disc_type, rip_all, rip_tool
 from arm_ripper.rip.makemkv_rip import RipDiscResult
 from arm_ripper.rip.optical_rip import (
     _eligible_source_indexes,
@@ -1928,7 +1928,7 @@ def test_active_index_is_the_last_key_once_all_are_finished() -> None:
         (DiscType.BLURAY, [TrackKind.DISC_BACKUP], "makemkv"),
         (DiscType.DATA, [TrackKind.DATA_DUMP], "dd"),
         (DiscType.BLURAY, [TrackKind.DATA_DUMP], "dd"),
-        (DiscType.UNKNOWN, [TrackKind.VIDEO_TITLE], "none"),
+        (DiscType.UNKNOWN, [TrackKind.VIDEO_TITLE], NO_RIP_TOOL),
     ],
 )
 def test_rip_tool_names_the_tool_the_dispatcher_runs(disc_type, kinds, tool) -> None:

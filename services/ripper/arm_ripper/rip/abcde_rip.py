@@ -63,7 +63,8 @@ def _abcde_config(output_dir: Path) -> str:
     empty without a lookup, producing a `-/-/01.wav`-style path.
 
     abcde does no metadata lookup (ARM does its own via MusicBrainz
-    upstream). The `move` action sets DOCDDB=y (abcde line 4325), which
+    upstream). Line numbers below are from the abcde 2.9.3 script. The
+    `move` action sets DOCDDB=y (line 4325), which
     runs the lookup phase (line 5098). That phase loops over
     `CDDBMETHOD`: the `musicbrainz` method queries the server without
     ever reading `CDDBAVAIL` (line 2676), while the `cddb` method skips

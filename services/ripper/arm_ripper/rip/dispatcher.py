@@ -28,13 +28,16 @@ DEFAULT_MIN_LENGTH_SECONDS = 120
 
 _ROUTE_BACKUP, _ROUTE_OPTICAL, _ROUTE_CD, _ROUTE_DATA, _ROUTE_NONE = "backup", "optical", "cd", "data", "none"
 
+# What `rip_tool` returns for a disc `rip_all` cannot rip.
+NO_RIP_TOOL = "none"
+
 # The tool each route runs; `rip_all` and `rip_tool` both read the route from `_rip_route`.
 _TOOL_BY_ROUTE: dict[str, str] = {
     _ROUTE_BACKUP: "makemkv",
     _ROUTE_OPTICAL: "makemkv",
     _ROUTE_CD: "abcde",
     _ROUTE_DATA: "dd",
-    _ROUTE_NONE: "none",
+    _ROUTE_NONE: NO_RIP_TOOL,
 }
 
 _ROUTE_BY_DISC_TYPE: dict[DiscType, str] = {
@@ -123,7 +126,7 @@ async def rip_all(
 
 
 def rip_tool(disc_type: DiscType, tracks: list[TrackView]) -> str:
-    """The tool `rip_all` runs for this disc: `makemkv`, `abcde`, `dd`, or `none` for a disc it cannot rip."""
+    """The tool `rip_all` runs for this disc: `makemkv`, `abcde`, `dd`, or `NO_RIP_TOOL` for a disc it cannot rip."""
     return _TOOL_BY_ROUTE[_rip_route(disc_type, tracks)]
 
 
