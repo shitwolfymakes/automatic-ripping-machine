@@ -19,12 +19,11 @@ export interface LiveSample {
 type Payload = Record<string, unknown>;
 
 interface RipBaseline {
-	trackId: string | null;
 	atMs: number;
 	atPct: number;
 }
 
-// Mask early per-track samples: the first tick has no rate yet, and the
+// Mask early samples: the first tick has no rate yet, and the
 // second can mislead if the drive stalls briefly.
 const ETA_MIN_ELAPSED_MS = 5_000;
 const ETA_MIN_DELTA = 0.5;
@@ -61,8 +60,9 @@ function byteEta(sample: LiveSample): number | null {
 	return Math.round(Math.max(0, bytesTotal - bytesDone) / rateBps);
 }
 
-function isStaleBaseline(baseline: RipBaseline, trackId: string | null, pct: number): boolean {
-	return baseline.trackId !== trackId || pct < baseline.atPct - 1;
+/** The percentage covers the whole disc, so the baseline holds across tracks; only a backwards jump resets it. */
+function isStaleBaseline(baseline: RipBaseline, pct: number): boolean {
+	return pct < baseline.atPct - 1;
 }
 
 function percentEta(baseline: RipBaseline, pct: number, now: number): number | null {
@@ -94,11 +94,11 @@ export function createRipFeed(): (payload: Payload, now: number) => LiveSample {
 	let baseline: RipBaseline | null = null;
 	return (payload, now) => {
 		const sample = readRip(payload);
-		const { pct, trackId } = sample;
+		const { pct } = sample;
 		const published = sample.etaSeconds ?? byteEta(sample);
 		if (pct === null) return { ...sample, etaSeconds: published };
-		if (baseline === null || isStaleBaseline(baseline, trackId, pct)) {
-			baseline = { trackId, atMs: now, atPct: pct };
+		if (baseline === null || isStaleBaseline(baseline, pct)) {
+			baseline = { atMs: now, atPct: pct };
 			return { ...sample, etaSeconds: published };
 		}
 		return { ...sample, etaSeconds: published ?? percentEta(baseline, pct, now) };
