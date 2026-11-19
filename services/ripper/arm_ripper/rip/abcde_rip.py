@@ -9,7 +9,13 @@ from functools import partial
 from pathlib import Path
 from tempfile import NamedTemporaryFile
 
-from arm_ripper.rip.abcde_output import moved_tracks, read_workdir_file, track_errors, wav_bytes_written
+from arm_ripper.rip.abcde_output import (
+    moved_tracks,
+    read_workdir_file,
+    track_errors,
+    wav_bytes_written,
+    wav_duration_seconds,
+)
 from arm_ripper.rip.hashing import sha256_file
 from arm_ripper.rip.poller import Poller, start_byte_reporter, stop_all
 from arm_ripper.rip.result import RipResult
@@ -134,7 +140,9 @@ class _CdTracks:
             logger.warning("stat failed track=%d path=%s err=%s", idx, wav_path, exc)
             return
         digest = await sha256_file(wav_path)
-        result = RipResult(ok=True, output_path=wav_path, size_bytes=size, sha256=digest)
+        result = RipResult(
+            ok=True, output_path=wav_path, size_bytes=size, duration_seconds=wav_duration_seconds(size), sha256=digest
+        )
         self.results[idx] = result
         if self._on_track_done is not None:
             await self._on_track_done(idx, result)
@@ -246,7 +254,7 @@ async def rip_cd(
 
     conf_path = _write_config(output_dir)
 
-    logger.info("abcde rip device=%s output_dir=%s", device_path, output_dir)
+    logger.debug("abcde rip device=%s output_dir=%s", device_path, output_dir)
 
     tracks = _CdTracks(output_dir, track_indexes, on_track_done)
 
