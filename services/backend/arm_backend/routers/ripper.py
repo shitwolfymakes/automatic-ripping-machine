@@ -864,6 +864,14 @@ async def _emit_track_event(session: AsyncSession, hub: WSHub, track: Track, new
         await session.commit()
 
 
+async def _log_track_outcome_safely(session: AsyncSession, track: Track, new_status: TrackStatus) -> None:
+    """Log the track milestone; a failure here must not undo the committed update, so it is only logged."""
+    try:
+        await _log_track_outcome(session, track, new_status)
+    except Exception:
+        logger.exception("could not log the track %s milestone", new_status.value)
+
+
 async def _log_track_outcome(session: AsyncSession, track: Track, new_status: TrackStatus) -> None:
     """Log the track's DONE or FAILED milestone; any other target status logs nothing."""
     log = {TrackStatus.DONE: job_events.log_track_ripped, TrackStatus.FAILED: job_events.log_track_failed}.get(
@@ -899,7 +907,7 @@ async def update_track(
         await session.commit()
         await session.refresh(track)
         await _emit_track_event(session, hub, track, new_status)
-        await _log_track_outcome(session, track, new_status)
+        await _log_track_outcome_safely(session, track, new_status)
 
         return TrackView.model_validate(track)
 

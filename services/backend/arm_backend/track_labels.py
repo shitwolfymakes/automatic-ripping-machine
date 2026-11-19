@@ -6,6 +6,7 @@ from collections.abc import Sequence
 from typing import NamedTuple
 
 from arm_common import Job, Track
+from arm_common.schemas import flag_is_set
 
 
 # Functional form: `index` shadows `tuple.index`, which the class form makes mypy reject.
@@ -24,7 +25,12 @@ def _music_title(job: Job, track: Track) -> str | None:
 
 
 def _title(job: Job, track: Track) -> str | None:
-    """The identified title: the music track list, else the track's episode name, title or label."""
+    """The identified title: the music track list, else the track's episode name, title or label.
+
+    A job flagged `unidentified` has none: its tracks carry only raw disc labels such as "Title 1".
+    """
+    if flag_is_set(job.metadata_json, "unidentified"):
+        return None
     return _music_title(job, track) or track.episode_name or track.title or track.label
 
 

@@ -66,3 +66,9 @@ def test_position_ranks_the_index_among_sparse_indexes_and_total_counts_every_tr
     tracks = [_track(0), _track(3, excluded=True), _track(5)]
     assert track_label(_job(), tracks[2], tracks) == TrackLabel(3, 3, None)
     assert track_label(_job(), tracks[0], tracks).index == 1
+
+
+def test_unidentified_job_with_a_label_has_no_title() -> None:
+    tracks = [_track(1, label="Title 1", episode_name="x")]
+    job = _job({"flags": {"unidentified": True}, "music": {"tracks": [{"title": "A"}]}})
+    assert track_label(job, tracks[0], tracks).title is None

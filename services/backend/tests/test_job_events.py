@@ -208,8 +208,8 @@ def test_track_failed_message() -> None:
 
 
 def test_rip_completed_message_with_and_without_elapsed() -> None:
-    assert job_events.rip_completed_message(19, 0, 19, 402.0) == "rip complete: 19/19 tracks in 6m42s"
-    assert job_events.rip_completed_message(5, 1, 6, None) == "rip complete: 5/6 tracks"
+    assert job_events.rip_completed_message(19, 19, 402.0) == "rip complete: 19/19 tracks in 6m42s"
+    assert job_events.rip_completed_message(5, 6, None) == "rip complete: 5/6 tracks"
 
 
 def test_log_track_ripped_emits_the_event(job_log: LineCapture) -> None:
@@ -242,15 +242,18 @@ def test_log_track_failed_without_an_error_says_unknown(job_log: LineCapture) ->
     assert job_log.lines(event="track.failed")[0]["msg"] == "track 1/1 failed: unknown error"
 
 
-def test_log_rip_completed_measures_from_started_at(job_log: LineCapture) -> None:
+def test_log_rip_completed_measures_from_started_at(job_log: LineCapture, monkeypatch: pytest.MonkeyPatch) -> None:
     job = _job()
-    job.started_at = datetime.now(timezone.utc) - timedelta(seconds=402)
+    now = datetime(2026, 11, 19, 12, 0, tzinfo=timezone.utc)
+    monkeypatch.setattr(job_events, "_now", lambda: now)
+    job.started_at = now - timedelta(seconds=402)
     job.status = JobStatus.RIPPED
     job_events.log_rip_completed(job, 19, 0, 19)
     (line,) = job_log.lines(event="rip.completed")
-    assert line["msg"].startswith("rip complete: 19/19 tracks in 6m4")
+    assert line["msg"] == "rip complete: 19/19 tracks in 6m42s"
+    assert line["level"] == "info"
     assert line["fields"]["status"] == "ripped"
-    assert 401 <= line["fields"]["elapsed_seconds"] <= 410
+    assert line["fields"]["elapsed_seconds"] == 402
     assert {k: line["fields"][k] for k in ("done", "failed", "total")} == {"done": 19, "failed": 0, "total": 19}
 
 
@@ -259,3 +262,16 @@ def test_log_rip_completed_without_started_at(job_log: LineCapture) -> None:
     (line,) = job_log.lines(event="rip.completed")
     assert line["msg"] == "rip complete: 1/1 tracks"
     assert line["fields"]["elapsed_seconds"] is None
+
+
+def test_rip_failed_message() -> None:
+    assert job_events.rip_completed_message(0, 6, 90.0, rip_failed=True) == "rip failed: 0/6 tracks in 1m30s"
+
+
+def test_log_rip_completed_for_a_failed_rip_warns(job_log: LineCapture) -> None:
+    job = _job(status=JobStatus.FAILED)
+    job_events.log_rip_completed(job, 0, 6, 6)
+    (line,) = job_log.lines(event="rip.completed")
+    assert line["level"] == "warning"
+    assert line["msg"] == "rip failed: 0/6 tracks"
+    assert line["fields"]["status"] == "failed"

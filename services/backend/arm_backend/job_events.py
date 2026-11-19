@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from arm_backend.track_labels import TrackLabel, track_label
-from arm_common import Job, Track
+from arm_common import Job, JobStatus, Track
 from arm_common.log_format import elapsed, human_duration, human_size
 from arm_common.logging import log_event, with_log_context
 
@@ -112,10 +112,10 @@ def track_failed_message(label: TrackLabel, error: str) -> str:
     return f"{_track_name(label)} failed: {error}"
 
 
-def rip_completed_message(done: int, failed: int, total: int, elapsed_seconds: float | None) -> str:
-    """`rip complete: 19/19 tracks in 6m42s`; no `in …` without a start time. `failed` rides in the fields."""
+def rip_completed_message(done: int, total: int, elapsed_seconds: float | None, *, rip_failed: bool = False) -> str:
+    """`rip complete: 19/19 tracks in 6m42s` (`rip failed: 0/6 tracks …` when nothing was ripped); no `in …` without a start."""
     suffix = "" if elapsed_seconds is None else f" in {elapsed(elapsed_seconds)}"
-    return f"rip complete: {done}/{total} tracks{suffix}"
+    return f"rip {'failed' if rip_failed else 'complete'}: {done}/{total} tracks{suffix}"
 
 
 def log_identified(job: Job, provider: str, method: str, artist: str | None = None) -> None:
@@ -200,13 +200,19 @@ def log_track_failed(job: Job, track: Track, tracks: Sequence[Track]) -> None:
         )
 
 
+def _now() -> datetime:
+    return datetime.now(timezone.utc)
+
+
 def log_rip_completed(job: Job, done: int, failed: int, total: int) -> None:
-    elapsed_seconds = None if job.started_at is None else (datetime.now(timezone.utc) - job.started_at).total_seconds()
+    elapsed_seconds = None if job.started_at is None else (_now() - job.started_at).total_seconds()
+    rip_failed = job.status == JobStatus.FAILED
     with with_log_context(job_id=job.id):
         log_event(
             logger,
             "rip.completed",
-            rip_completed_message(done, failed, total, elapsed_seconds),
+            rip_completed_message(done, total, elapsed_seconds, rip_failed=rip_failed),
+            level=logging.WARNING if rip_failed else logging.INFO,
             done=done,
             failed=failed,
             total=total,

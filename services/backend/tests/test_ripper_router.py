@@ -1974,6 +1974,22 @@ def test_update_track_failed_logs_a_warning(job_log: LineCapture) -> None:
     assert line["msg"] == "track 1/1 failed: boom"
 
 
+def test_update_track_survives_a_failing_milestone_log(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    def _boom(*_a: Any) -> None:
+        raise RuntimeError("label lookup broke")
+
+    monkeypatch.setattr(ripper_router.job_events, "log_track_ripped", _boom)
+    db = FakeSession()
+    app = _track_app(db, _track("trk_1", status=TrackStatus.IN_PROGRESS))
+    with caplog.at_level(logging.ERROR), TestClient(app) as client:
+        r = client.patch("/api/ripper/tracks/trk_1", json={"status": "done"}, headers=_OWNER_HEADERS)
+    assert r.status_code == 200
+    assert r.json()["status"] == "done"
+    assert any(rec.exc_info and "label lookup broke" in str(rec.exc_info[1]) for rec in caplog.records)
+
+
 def test_update_track_in_progress_logs_no_track_event(job_log: LineCapture) -> None:
     db = FakeSession()
     app = _track_app(db, _track("trk_1", status=TrackStatus.QUEUED))
