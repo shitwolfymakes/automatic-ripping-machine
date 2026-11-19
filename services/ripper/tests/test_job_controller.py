@@ -1955,3 +1955,16 @@ async def test_run_rip_does_not_claim_a_start_for_an_unknown_disc(caplog, monkey
     (warning,) = [r for r in caplog.records if r.getMessage().startswith("rip cannot start")]
     assert warning.levelno == logging.WARNING
     assert warning.getMessage() == "rip cannot start: no rip path for unknown disc"
+
+
+async def test_rip_complete_is_logged_at_debug_only(stub_scan, stub_eject, caplog):
+    """The backend logs rip.completed for the job; the ripper's own rip-complete line is detail."""
+    client = FakeClient()
+    client.identify_responses.append(_job(JobStatus.IDENTIFIED, title="Test Movie"))
+    controller = JobController(client, "drv_test")
+    caplog.set_level("DEBUG")
+
+    await asyncio.wait_for(controller.handle_disc_inserted("/dev/sr0"), timeout=2.0)
+
+    complete = [r for r in caplog.records if r.getMessage().startswith("rip-complete job_id=")]
+    assert [r.levelname for r in complete] == ["DEBUG"]
