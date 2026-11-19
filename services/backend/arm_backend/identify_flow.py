@@ -13,6 +13,7 @@ from arm_backend import iso_prepare, job_events
 from arm_backend.disc_dedupe import find_previous_rips, find_reusable_job_for_disc
 from arm_backend.metadata import MetadataDispatcher
 from arm_backend.metadata.base import MetadataResult
+from arm_backend.metadata.identity_payload import first_str
 from arm_backend.metadata.dispatcher import DISPATCH_TIMEOUT_SECONDS
 from arm_backend.rip_preset_resolution import (
     RipPresetUnavailable,
@@ -140,7 +141,7 @@ async def _record_duplicate_rejection(
         session=session,
     )
     await session.commit()
-    logger.info("identify drive_id=%s: disc already ripped as job_id=%s; rejecting it", drive.id, previous.id)
+    logger.info("identify drive_id=%s: disc already ripped as %s; rejecting it", drive.id, previous.id)
 
 
 class IdentifyFlow:
@@ -217,7 +218,7 @@ class IdentifyFlow:
                 for j in armed:
                     j.metadata_json = with_flags(j.metadata_json, rerip_allowed=False)
                     self.session.add(j)
-                logger.info("identify drive_id=%s: rip again of job_id=%s allowed once", drive.id, armed[0].id)
+                logger.info("identify drive_id=%s: rip again of %s allowed once", drive.id, armed[0].id)
             elif earlier:
                 previous = earlier[0]
             if previous is not None and action == PreviouslyRippedAction.REJECT:
@@ -285,7 +286,7 @@ class IdentifyFlow:
                 match = await asyncio.to_thread(store.lookup, content_hash)
                 if match is not None:
                     put_source(job, THEDISCDB, build_claims(match, scan, now=datetime.now(timezone.utc)))
-                    logger.info("thediscdb: matched job_id=%s release=%s", job.id, match.release_slug)
+                    logger.info("thediscdb: matched release=%s", match.release_slug)
             except Exception as e:
                 logger.warning("thediscdb: lookup failed job_id=%s: %s", job.id, e)
                 match = None
@@ -368,7 +369,7 @@ class IdentifyFlow:
             self.result = await asyncio.wait_for(self._walk_sources(job, cfg, scan), timeout=DISPATCH_TIMEOUT_SECONDS)
             self.timed_out = False
         except asyncio.TimeoutError:
-            logger.info("identify dispatch_timeout job_id=%s", job.id)
+            logger.info("identify dispatch_timeout")
             self.result = None
             self.timed_out = True
             self.attempts.append(
@@ -474,7 +475,9 @@ class IdentifyFlow:
             await _persist_review_tracks(self.session, job, scan)
         else:
             job.status = JobStatus.IDENTIFIED
-        job_events.log_identified(job, result.provider or "unknown", self._hit_method(result))
+        job_events.log_identified(
+            job, result.provider or "unknown", self._hit_method(result), first_str((result.payload or {}).get("artist"))
+        )
 
     async def _hold_hit(
         self, job: Job, scan: ScanResult, result: MetadataResult, miss_title: str | None, ambiguous_toc: bool
@@ -512,13 +515,17 @@ class IdentifyFlow:
         if cfg.block_on_miss:
             job.status = JobStatus.AWAITING_USER_ID
             job.title = miss_title
-            job_events.log_not_identified(job, *job_events.miss_cause(self.attempts[-1] if self.attempts else None))
             if diagnostic:
                 job.metadata_json = with_flags(job.metadata_json, **diagnostic)
         else:
             job.status = JobStatus.IDENTIFIED
             job.title = miss_title
             job.metadata_json = with_flags(job.metadata_json, unidentified=True, **diagnostic)
+        self._log_miss(job, waiting=cfg.block_on_miss)
+
+    def _log_miss(self, job: Job, *, waiting: bool) -> None:
+        provider, reason = job_events.miss_cause(self.attempts[-1] if self.attempts else None)
+        job_events.log_not_identified(job, provider, reason, waiting=waiting)
 
     async def _hold_previously_ripped(self, job: Job, scan: ScanResult, previous: Job) -> None:
         # on_previously_ripped=hold: whatever identify concluded, the disc

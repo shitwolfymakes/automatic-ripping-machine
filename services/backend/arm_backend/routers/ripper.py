@@ -579,8 +579,7 @@ async def rip_start(
 
         refreshed = await _job_tracks(session, job.id)
         logger.info(
-            "rip-start job_id=%s preset=%s tracks=%d",
-            job.id,
+            "rip-start preset=%s tracks=%d",
             preset_id,
             len(refreshed),
         )
@@ -620,7 +619,7 @@ async def resume(
         await session.commit()
 
         refreshed = await _job_tracks(session, job.id)
-        logger.info("rip-resume job_id=%s tracks=%d", job.id, len(refreshed))
+        logger.info("rip-resume tracks=%d", len(refreshed))
 
         await hub.emit(
             topic="ripper.events",
@@ -934,8 +933,7 @@ async def rip_complete(
         await session.commit()
         await session.refresh(job)
         logger.info(
-            "rip-complete job_id=%s status=%s done=%d failed=%d total=%d",
-            job.id,
+            "rip-complete status=%s done=%d failed=%d total=%d",
             job.status.value,
             done,
             failed,

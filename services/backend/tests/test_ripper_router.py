@@ -872,7 +872,7 @@ def test_identify_miss_without_block_marks_identified_unidentified() -> None:
     assert r.json()["metadata_json"]["flags"]["unidentified"] is True
 
 
-def test_identify_timeout_records_diagnostic() -> None:
+def test_identify_timeout_records_diagnostic(job_log: LineCapture) -> None:
     db = FakeSession()
     db.rows["drives"] = [_drive()]
     db.rows["config"] = [_config(block_on_miss=True)]
@@ -886,6 +886,9 @@ def test_identify_timeout_records_diagnostic() -> None:
     assert r.status_code == 200
     assert r.json()["status"] == "awaiting_user_id"
     assert r.json()["metadata_json"]["flags"]["dispatch_timeout"] is True
+    [timeout] = job_log.lines(logger_prefix="arm_backend.identify_flow", level="info")
+    assert timeout["msg"] == "identify dispatch_timeout"
+    assert timeout["job_id"] == r.json()["id"]
 
 
 _MISS = {"source": "tmdb", "step": "title", "kind": "movie", "outcome": "miss", "detail": "MY DISC"}
@@ -1220,7 +1223,7 @@ class _FakeStore:
         return self.match
 
 
-def test_identify_thediscdb_match_stamps_map_and_uses_exact_identity() -> None:
+def test_identify_thediscdb_match_stamps_map_and_uses_exact_identity(job_log: LineCapture) -> None:
     """A TheDiscDB content-hash match on a new job: the exact-identity path
     (identify_from_imdb) wins over fuzzy identify, the match is stored as an
     identity_claims source, and it is resolved onto the review Track row
@@ -1249,6 +1252,11 @@ def test_identify_thediscdb_match_stamps_map_and_uses_exact_identity() -> None:
     assert out["metadata_json"]["identity_claims"]["sources"]["thediscdb"]["tracks"]["0"]["role"] == "main"
     assert app.state.thediscdb.called_with == ["2D61282D8DA5EAC2CA87B451BCE9A055"]
     assert dispatcher.identify_from_imdb_calls == ["tt0090557"]
+    [matched] = [
+        line for line in job_log.lines(logger_prefix="arm_backend.identify_flow") if "thediscdb" in line["msg"]
+    ]
+    assert matched["job_id"] == out["id"]
+    assert matched["msg"] == "thediscdb: matched release=2022-criterion-blu-ray"
 
     tracks = [row for row in db.added if type(row).__name__ == "Track"]
     by_ref = {t.source_ref: t for t in tracks}
@@ -3738,6 +3746,7 @@ def _assert_all_in_job_context(job_log: LineCapture, job_id: str) -> None:
     emitted = job_log.lines(logger_prefix="arm_backend")
     assert emitted
     assert {line["job_id"] for line in emitted} == {job_id}
+    assert not [line["msg"] for line in emitted if "job_id=" in line["msg"]]
 
 
 def test_identify_logs_in_the_new_jobs_context_and_emits_resolved(job_log: LineCapture) -> None:
@@ -3816,7 +3825,7 @@ def test_identify_miss_without_attempts_reports_no_source(job_log: LineCapture) 
     assert missed["fields"] == {"provider": None, "reason": "no source answered"}
 
 
-def test_identify_miss_unblocked_does_not_wait_for_identification(job_log: LineCapture) -> None:
+def test_identify_miss_unblocked_emits_missed_for_the_placeholder_rip(job_log: LineCapture) -> None:
     db = FakeSession()
     db.rows["drives"] = [_drive()]
     db.rows["config"] = [_config(block_on_miss=False)]
@@ -3825,7 +3834,9 @@ def test_identify_miss_unblocked_does_not_wait_for_identification(job_log: LineC
             "/api/ripper/identify", json={"drive_id": "drv_x", "scan_result": _scan_dict()}, headers=_SERVICE_AUTH
         )
     assert r.json()["status"] == "identified"
-    assert job_log.lines(event="identify.missed") == []
+    [missed] = job_log.lines(event="identify.missed")
+    assert missed["job_id"] == r.json()["id"]
+    assert missed["msg"].endswith("ripping as unidentified")
 
 
 def test_rip_start_logs_in_the_jobs_context(job_log: LineCapture) -> None:
@@ -3893,3 +3904,26 @@ def test_identify_flow_warnings_carry_the_new_jobs_context(job_log: LineCapture)
         r = client.post("/api/ripper/identify", json=body, headers=_SERVICE_AUTH)
     [warning] = job_log.lines(logger_prefix="arm_backend.identify_flow", level="warning")
     assert warning["job_id"] == r.json()["id"]
+
+
+def test_identify_music_hit_names_the_artist(job_log: LineCapture) -> None:
+    db = FakeSession()
+    db.rows["drives"] = [_drive()]
+    db.rows["config"] = [_config()]
+    result = MetadataResult(
+        title="The Essential Electric Light Orchestra",
+        year=2011,
+        kind="music",
+        payload={"artist": "Electric Light Orchestra"},
+        provider="musicbrainz",
+    )
+    attempts = [{"source": "musicbrainz", "step": "disc_id", "kind": "music", "outcome": "hit", "detail": "x"}]
+    with TestClient(_make_app(db, dispatcher=_Dispatcher(result, attempts=attempts))) as client:
+        client.post(
+            "/api/ripper/identify", json={"drive_id": "drv_x", "scan_result": _scan_dict("cd")}, headers=_SERVICE_AUTH
+        )
+    [resolved] = job_log.lines(event="identify.resolved")
+    assert resolved["fields"]["artist"] == "Electric Light Orchestra"
+    assert resolved["msg"] == (
+        "identified: Electric Light Orchestra - The Essential Electric Light Orchestra (2011), MusicBrainz disc ID"
+    )

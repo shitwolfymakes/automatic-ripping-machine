@@ -1572,6 +1572,7 @@ async def test_run_episode_stage_logs_in_the_jobs_context_and_emits_matched(job_
     assert {line["job_id"] for line in emitted} == {"job_1"}
     [matched] = job_log.lines(event="episodes.matched")
     assert matched["fields"] == {"matched": 4, "unmatched": 0, "series": "Kolchak", "season": 1}
+    assert matched["msg"] == "matched 4 titles to Kolchak S1E3-E6 (0 unmatched)"
 
 
 async def test_run_episode_stage_with_a_failing_source_logs_in_the_jobs_context(

@@ -32,24 +32,40 @@ def _provider_name(provider: str) -> str:
     return _PROVIDER_NAMES.get(provider, provider)
 
 
-def identified_message(title: str | None, year: int | None, provider: str, method: str) -> str:
-    """`identified: <title> (<year>), <Provider> <method>`, naming how the disc was recognised."""
+def identified_message(
+    title: str | None, year: int | None, provider: str, method: str, artist: str | None = None
+) -> str:
+    """`identified: <artist> - <title> (<year>), <Provider> <method>`, naming how the disc was recognised."""
     name = title or "untitled"
-    shown = f"{name} ({year})" if year else name
+    named = f"{artist} - {name}" if artist else name
+    shown = f"{named} ({year})" if year else named
     return f"identified: {shown}, {_provider_name(provider)} {_METHOD_NAMES.get(method, method)}"
 
 
-def not_identified_message(provider: str | None, reason: str) -> str:
-    """`not identified: <Provider>: <reason>; waiting for identification`."""
+def not_identified_message(provider: str | None, reason: str, *, waiting: bool = True) -> str:
+    """`not identified: <Provider>: <reason>; <what happens next>`: the job waits, or rips as unidentified."""
     cause = f"{_provider_name(provider)}: {reason}" if provider else reason
-    return f"not identified: {cause}; waiting for identification"
+    outcome = "waiting for identification" if waiting else "ripping as unidentified"
+    return f"not identified: {cause}; {outcome}"
 
 
-def episodes_matched_message(matched: int, unmatched: int, series: str | None, season: int | None) -> str:
-    """`matched 5 titles to <series> S1 (1 unmatched)`."""
+def _season_label(season: int | None, episodes: tuple[int, int] | None) -> str:
+    """` S1E1-E5` (` S1E3` for one episode, ` S1` without episode numbers, empty without a season)."""
+    if season is None:
+        return ""
+    if episodes is None:
+        return f" S{season}"
+    first, last = episodes
+    return f" S{season}E{first}" + (f"-E{last}" if last != first else "")
+
+
+def episodes_matched_message(
+    matched: int, unmatched: int, series: str | None, season: int | None, episodes: tuple[int, int] | None = None
+) -> str:
+    """`matched 5 titles to <series> S1E1-E5 (1 unmatched)`; `episodes` is the first and last episode number."""
     noun = "title" if matched == 1 else "titles"
     target = series or "an unnamed show"
-    return f"matched {matched} {noun} to {target}{f' S{season}' if season is not None else ''} ({unmatched} unmatched)"
+    return f"matched {matched} {noun} to {target}{_season_label(season, episodes)} ({unmatched} unmatched)"
 
 
 _KEYED_STEPS = frozenset({"title", "fingerprint", "imdb"})
@@ -76,12 +92,13 @@ def previously_ripped_reason(previous_job_id: str) -> str:
     return f"disc already ripped as {previous_job_id}"
 
 
-def log_identified(job: Job, provider: str, method: str) -> None:
+def log_identified(job: Job, provider: str, method: str, artist: str | None = None) -> None:
     with with_log_context(job_id=job.id):
         log_event(
             logger,
             "identify.resolved",
-            identified_message(job.title, job.year, provider, method),
+            identified_message(job.title, job.year, provider, method, artist),
+            artist=artist,
             title=job.title,
             year=job.year,
             media_type=job.media_type.value if job.media_type else None,
@@ -90,12 +107,12 @@ def log_identified(job: Job, provider: str, method: str) -> None:
         )
 
 
-def log_not_identified(job: Job, provider: str | None, reason: str) -> None:
+def log_not_identified(job: Job, provider: str | None, reason: str, *, waiting: bool = True) -> None:
     with with_log_context(job_id=job.id):
         log_event(
             logger,
             "identify.missed",
-            not_identified_message(provider, reason),
+            not_identified_message(provider, reason, waiting=waiting),
             provider=provider,
             reason=reason,
         )
@@ -106,12 +123,19 @@ def log_identify_held(job: Job, reason: str) -> None:
         log_event(logger, "identify.held", f"held: {reason}", reason=reason)
 
 
-def log_episodes_matched(job: Job, matched: int, unmatched: int, series: str | None, season: int | None) -> None:
+def log_episodes_matched(
+    job: Job,
+    matched: int,
+    unmatched: int,
+    series: str | None,
+    season: int | None,
+    episodes: tuple[int, int] | None = None,
+) -> None:
     with with_log_context(job_id=job.id):
         log_event(
             logger,
             "episodes.matched",
-            episodes_matched_message(matched, unmatched, series, season),
+            episodes_matched_message(matched, unmatched, series, season, episodes),
             matched=matched,
             unmatched=unmatched,
             series=series,

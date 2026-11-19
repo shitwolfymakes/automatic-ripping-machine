@@ -27,6 +27,15 @@ def test_identified_message_names_title_year_and_method() -> None:
     assert msg == "identified: The Essential Electric Light Orchestra (2011), MusicBrainz disc ID"
 
 
+def test_identified_message_leads_with_the_artist() -> None:
+    msg = job_events.identified_message(
+        "The Essential Electric Light Orchestra", 2011, "musicbrainz", "disc_id", "Electric Light Orchestra"
+    )
+    assert msg == (
+        "identified: Electric Light Orchestra - The Essential Electric Light Orchestra (2011), MusicBrainz disc ID"
+    )
+
+
 @pytest.mark.parametrize(
     ("title", "year", "provider", "method", "expected"),
     [
@@ -48,6 +57,11 @@ def test_not_identified_message_carries_the_reason() -> None:
     assert msg == "not identified: MusicBrainz: no release fits the track layout; waiting for identification"
 
 
+def test_not_identified_message_for_a_placeholder_rip() -> None:
+    msg = job_events.not_identified_message("tmdb", "no match for MY_DISC", waiting=False)
+    assert msg == "not identified: TMDB: no match for MY_DISC; ripping as unidentified"
+
+
 def test_not_identified_message_without_a_provider() -> None:
     assert job_events.not_identified_message(None, "no source configured") == (
         "not identified: no source configured; waiting for identification"
@@ -59,15 +73,31 @@ def test_episodes_matched_message() -> None:
     assert msg == "matched 5 titles to Kolchak: The Night Stalker S1 (1 unmatched)"
 
 
+def test_episodes_matched_message_with_the_episode_range() -> None:
+    msg = job_events.episodes_matched_message(5, 1, "Kolchak: The Night Stalker", 1, (1, 5))
+    assert msg == "matched 5 titles to Kolchak: The Night Stalker S1E1-E5 (1 unmatched)"
+
+
+def test_episodes_matched_message_with_a_single_episode() -> None:
+    assert job_events.episodes_matched_message(1, 0, "Show", 2, (4, 4)) == "matched 1 title to Show S2E4 (0 unmatched)"
+
+
+def test_episodes_matched_message_range_needs_a_season() -> None:
+    assert job_events.episodes_matched_message(2, 0, "Show", None, (1, 2)) == "matched 2 titles to Show (0 unmatched)"
+
+
 def test_episodes_matched_message_singular_and_unknown_show() -> None:
     assert job_events.episodes_matched_message(1, 0, None, None) == "matched 1 title to an unnamed show (0 unmatched)"
 
 
 def test_log_identified_emits_the_event(job_log: LineCapture) -> None:
-    job_events.log_identified(_job(), "musicbrainz", "disc_id")
+    job_events.log_identified(_job(), "musicbrainz", "disc_id", "Electric Light Orchestra")
     [line] = job_log.lines(event="identify.resolved")
-    assert line["msg"] == "identified: The Essential Electric Light Orchestra (2011), MusicBrainz disc ID"
+    assert line["msg"] == (
+        "identified: Electric Light Orchestra - The Essential Electric Light Orchestra (2011), MusicBrainz disc ID"
+    )
     assert line["fields"] == {
+        "artist": "Electric Light Orchestra",
         "title": "The Essential Electric Light Orchestra",
         "year": 2011,
         "media_type": "music",
@@ -81,6 +111,13 @@ def test_log_not_identified_emits_the_event(job_log: LineCapture) -> None:
     [line] = job_log.lines(event="identify.missed")
     assert line["fields"] == {"provider": "musicbrainz", "reason": "no release fits the track layout"}
     assert "no release fits the track layout" in line["msg"]
+    assert line["msg"].endswith("waiting for identification")
+
+
+def test_log_not_identified_for_a_placeholder_rip(job_log: LineCapture) -> None:
+    job_events.log_not_identified(_job(), "tmdb", "no match for MY_DISC", waiting=False)
+    [line] = job_log.lines(event="identify.missed")
+    assert line["msg"].endswith("ripping as unidentified")
 
 
 def test_log_identify_held_emits_the_event(job_log: LineCapture) -> None:
@@ -91,8 +128,9 @@ def test_log_identify_held_emits_the_event(job_log: LineCapture) -> None:
 
 
 def test_log_episodes_matched_emits_the_event(job_log: LineCapture) -> None:
-    job_events.log_episodes_matched(_job(), 5, 1, "Kolchak", 1)
+    job_events.log_episodes_matched(_job(), 5, 1, "Kolchak", 1, (1, 5))
     [line] = job_log.lines(event="episodes.matched")
+    assert line["msg"] == "matched 5 titles to Kolchak S1E1-E5 (1 unmatched)"
     assert line["fields"] == {"matched": 5, "unmatched": 1, "series": "Kolchak", "season": 1}
 
 

@@ -42,7 +42,7 @@ from arm_backend.identity.episode_holds import SeasonFit, hold_reasons
 from arm_backend.identity.episode_siblings import episode_range, sibling_discs, sibling_rows, sibling_seasons
 from arm_backend.identity.episodes.continuity import SiblingDisc, align_runs, rank_seasons, start_anchor
 from arm_backend.identity.episodes.matcher import effective_tolerance
-from arm_backend.identity.episodes.model import Episode, MatchResult, TitleIn
+from arm_backend.identity.episodes.model import Episode, MatchResult, TitleIn, TitleMatch
 from arm_backend.identity.episodes.providers.base import EpisodeListProvider
 from arm_backend.identity.http import SourceError, SourceMiss
 from arm_backend.identity.ids import resolve_show_ids
@@ -524,12 +524,22 @@ async def compute_episode_claims(
     return outcomes
 
 
+def _episode_span(matches: Sequence[TitleMatch]) -> tuple[int, int]:
+    """The first and last episode number the matches cover."""
+    return min(m.episode for m in matches), max(m.episode_end or m.episode for m in matches)
+
+
 def _log_matched(job: Job, outcomes: Sequence[SourceOutcome]) -> None:
     """Log the first outcome that matched at least one title; nothing when none did."""
     matched = next((o.result for o in outcomes if o.claims.status == "ok" and o.result and o.result.matches), None)
     if matched is not None:
         job_events.log_episodes_matched(
-            job, len(matched.matches), len(matched.skipped), job.title, matched.matches[0].season
+            job,
+            len(matched.matches),
+            len(matched.skipped),
+            job.title,
+            matched.matches[0].season,
+            _episode_span(matched.matches),
         )
 
 

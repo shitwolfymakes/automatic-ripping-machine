@@ -242,10 +242,12 @@ def test_a_failed_or_abandoned_earlier_job_is_not_a_previous_rip() -> None:
         assert "previously_ripped" not in r.json()["metadata_json"]
 
 
-def test_reject_creates_no_job_records_the_event_and_notes_the_drive() -> None:
+def test_reject_creates_no_job_records_the_event_and_notes_the_drive(job_log: LineCapture) -> None:
     db = _db(PreviouslyRippedAction.REJECT)
     hub = _Hub()
     r = _identify(db, hub)
+    [rejected_line] = [line for line in job_log.lines(level="info") if "rejecting it" in line["msg"]]
+    assert rejected_line["msg"] == f"identify drive_id=drv_new: disc already ripped as {_PRIOR}; rejecting it"
     assert r.status_code == 409
     assert r.json()["detail"] == {"reason": "previously_ripped", "job_id": _PRIOR}
     assert _new_jobs(db) == []
@@ -268,10 +270,12 @@ def test_rip_mode_rips_it_again_without_asking() -> None:
 
 
 @pytest.mark.parametrize("action", [PreviouslyRippedAction.HOLD, PreviouslyRippedAction.REJECT])
-def test_rip_again_lets_the_next_identify_through_once(action: PreviouslyRippedAction) -> None:
+def test_rip_again_lets_the_next_identify_through_once(action: PreviouslyRippedAction, job_log: LineCapture) -> None:
     prior = _prior(meta={"flags": {"rerip_allowed": True}})
     db = _db(action, prior=prior)
     r = _identify(db, _Hub())
+    [allowed] = [line for line in job_log.lines(level="info") if "allowed once" in line["msg"]]
+    assert allowed["msg"] == f"identify drive_id=drv_new: rip again of {_PRIOR} allowed once"
     assert r.status_code == 200
     assert r.json()["status"] == "identified"
     assert prior.metadata_json["flags"]["rerip_allowed"] is False  # used up
