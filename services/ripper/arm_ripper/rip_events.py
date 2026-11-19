@@ -20,3 +20,13 @@ def rip_started_message(disc_type: str, track_count: int, preset: str, tool: str
     """The `rip.started` line: what is being ripped, how many tracks, with which preset and tool."""
     noun = "track" if track_count == 1 else "tracks"
     return f"rip started: {disc_type}, {track_count} {noun}, preset {preset} ({tool})"
+
+
+def title_started_message(title_index: int, file_position: int, file_count: int) -> str:
+    """The `title.started` line: the source title being saved and where its file falls among the eligible titles."""
+    return f"saving title {title_index} (file {file_position} of {file_count})"
+
+
+def title_progress_message(title_index: int, percent: int) -> str:
+    """The `title.progress` line: a source title's own save progress at a quarter step."""
+    return f"title {title_index}: {percent}%"

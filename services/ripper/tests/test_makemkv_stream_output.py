@@ -122,6 +122,57 @@ async def test_disc_progress_gated_before_5024_and_ungated_when_disabled() -> No
     assert ungated.calls == [(0.5,)]
 
 
+def _title_events(caplog: pytest.LogCaptureFixture, event: str) -> list[logging.LogRecord]:
+    return [r for r in caplog.records if getattr(r, "event", None) == event]
+
+
+def _prgv(current_pct: int) -> bytes:
+    return f"PRGV:{current_pct * 100},{current_pct * 50},10000".encode()
+
+
+_PRGC = 'PRGC:5017,{},"Saving to MKV file"'
+
+
+async def test_each_title_logs_its_start_and_its_quarter_steps(caplog: pytest.LogCaptureFixture) -> None:
+    caplog.set_level(logging.INFO, logger=LOGGER)
+    disc = _Recorder()
+    lines = [b'PRGT:5024,0,"Saving all titles to MKV files"', _PRGC.format(0).encode()]
+    lines += [_prgv(p) for p in (10, 30, 80, 100)]
+    lines += [_PRGC.format(1).encode(), _prgv(60)]
+    await _run(lines, on_disc_progress=disc, eligible_source_indexes=[3, 7])
+    started = _title_events(caplog, "title.started")
+    assert [(r.getMessage(), r.fields) for r in started] == [  # type: ignore[attr-defined]
+        ("saving title 3 (file 1 of 2)", {"title_index": 3, "file_position": 1, "file_count": 2}),
+        ("saving title 7 (file 2 of 2)", {"title_index": 7, "file_position": 2, "file_count": 2}),
+    ]
+    progress = _title_events(caplog, "title.progress")
+    assert [(r.getMessage(), r.fields) for r in progress] == [  # type: ignore[attr-defined]
+        ("title 3: 25%", {"title_index": 3, "percent": 25}),
+        ("title 3: 75%", {"title_index": 3, "percent": 75}),
+        ("title 3: 100%", {"title_index": 3, "percent": 100}),
+        ("title 7: 50%", {"title_index": 7, "percent": 50}),
+    ]
+    assert [c[0] for c in disc.calls] == [0.05, 0.15, 0.4, 0.5, 0.3]
+
+
+async def test_a_repeated_prgc_for_the_same_title_logs_one_start(caplog: pytest.LogCaptureFixture) -> None:
+    caplog.set_level(logging.INFO, logger=LOGGER)
+    await _run([_PRGC.format(0).encode()] * 2, eligible_source_indexes=[3])
+    assert len(_title_events(caplog, "title.started")) == 1
+
+
+async def test_nothing_is_logged_before_the_save_phase(caplog: pytest.LogCaptureFixture) -> None:
+    caplog.set_level(logging.INFO, logger=LOGGER)
+    await _run([_prgv(10), _prgv(60)], eligible_source_indexes=[3])
+    assert _title_events(caplog, "title.progress") == []
+
+
+async def test_progress_with_no_announced_title_logs_nothing(caplog: pytest.LogCaptureFixture) -> None:
+    caplog.set_level(logging.INFO, logger=LOGGER)
+    await _run([_prgv(10), _prgv(60)], ParserState(save_phase_started=True))
+    assert _title_events(caplog, "title.progress") == []
+
+
 async def test_title_start_callback_raising_via_prgc(caplog: pytest.LogCaptureFixture) -> None:
     caplog.set_level(logging.DEBUG, logger=LOGGER)
     cb = _Recorder(RuntimeError("nope"))

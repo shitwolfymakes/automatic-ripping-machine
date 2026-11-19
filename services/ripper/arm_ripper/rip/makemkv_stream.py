@@ -9,6 +9,8 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from typing import Any
 
+from arm_common import log_event
+from arm_common.log_format import quarter_crossed
 from arm_ripper.rip.makemkv_robot import (
     PRGT_RE,
     QUOTED_ARG_RE,
@@ -18,8 +20,9 @@ from arm_ripper.rip.makemkv_robot import (
     parse_msg_args,
     parse_prgc_save_position,
     parse_prgt_title,
-    parse_progress_total,
+    parse_progress_fractions,
 )
+from arm_ripper.rip_events import title_progress_message, title_started_message
 
 logger = logging.getLogger("arm_ripper.rip.makemkv")
 
@@ -74,6 +77,9 @@ class ParserState:
     # baseline (rips store sees a sustained negative pctDelta and
     # holds ETA null until the bar climbs back past the pre-rip peak).
     save_phase_started: bool = False
+    # The highest quarter (25/50/75/100) of the current title's own
+    # progress already logged; reset when PRGC:5017 starts a new title.
+    title_logged_pct: int = 0
     # Set when MakeMKV emits MSG:5021 (the binary's hard-coded 60-day
     # beta kill-switch). The streamer kills the subprocess as soon as
     # this is seen so a 6-hour RIP_TIMEOUT_SECONDS doesn't run out.
@@ -165,20 +171,43 @@ class _LineParser:
         return False
 
     async def _apply_progress(self, line: str) -> bool:
-        """PRGV: the disc-overall fraction, once the save phase has begun."""
+        """PRGV: log the title's quarter steps and report the disc-overall fraction, once the save phase has begun."""
         # PRGV carries two channels: `current/max` for the current
         # operation (it resets at each title) and `total/max` for the
         # whole disc. The bar shows the whole disc, so only `total/max`
-        # is reported. It is monotonic within each makemkvcon phase, and
-        # the pre-rip analyse phase can reach 70-80 % before the save
-        # phase resets it to 0, so PRGV before the save phase (PRGT:5024,
-        # or a title announced by PRGC:5017) is dropped.
-        total = parse_progress_total(line)
-        if total is None:
+        # is reported; `current/max` is read only to log each title's
+        # own quarter steps. The pre-rip analyse phase can reach 70-80 %
+        # before the save phase resets it to 0, so PRGV before the save
+        # phase (PRGT:5024, or a title announced by PRGC:5017) is dropped.
+        fractions = parse_progress_fractions(line)
+        if fractions is None:
             return False
-        if self._saving() and self._callbacks.on_disc_progress is not None:
-            await _call_safely("disc progress", self._callbacks.on_disc_progress, total)
+        if self._saving():
+            await self._report_progress(*fractions)
         return True
+
+    async def _report_progress(self, title_fraction: float, disc_fraction: float) -> None:
+        """Log the title's quarter step and send the disc-overall fraction to the callback."""
+        self._log_title_progress(title_fraction)
+        if self._callbacks.on_disc_progress is not None:
+            await _call_safely("disc progress", self._callbacks.on_disc_progress, disc_fraction)
+
+    def _log_title_progress(self, title_fraction: float) -> None:
+        """Log `title.progress` when the current title's own progress crosses a 25 % step."""
+        title_idx = self._state.current_title
+        if title_idx is None:
+            return
+        quarter = quarter_crossed(self._state.title_logged_pct, title_fraction * 100)
+        if quarter is None:
+            return
+        self._state.title_logged_pct = quarter
+        log_event(
+            logger,
+            "title.progress",
+            title_progress_message(title_idx, quarter),
+            title_index=title_idx,
+            percent=quarter,
+        )
 
     def _saving(self) -> bool:
         """The save phase has begun (or this run has no analyse phase to skip)."""
@@ -200,6 +229,8 @@ class _LineParser:
                 # IN_PROGRESS, keeping the lifecycle ordering clean.
                 if self._state.current_title is not None and self._state.current_title != source_idx:
                     await _emit_title_done(self._state, self._state.current_title, self._callbacks.on_title_done)
+                if self._state.current_title != source_idx:
+                    self._log_title_started(source_idx, out_pos)
                 await _emit_title_start(self._state, source_idx, self._callbacks.on_title_start)
             else:
                 logger.warning(
@@ -209,6 +240,18 @@ class _LineParser:
                 )
             return True
         return False
+
+    def _log_title_started(self, source_idx: int, out_pos: int) -> None:
+        """Log `title.started` for a new title and restart its quarter tracking."""
+        self._state.title_logged_pct = 0
+        log_event(
+            logger,
+            "title.started",
+            title_started_message(source_idx, out_pos + 1, len(self._eligible)),
+            title_index=source_idx,
+            file_position=out_pos + 1,
+            file_count=len(self._eligible),
+        )
 
     async def _apply_title_line(self, line: str) -> bool:
         """A PRGT "Saving title N" line: start that title."""
