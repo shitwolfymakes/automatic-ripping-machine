@@ -49,6 +49,9 @@ def _log_rip_started(disc_type: DiscType, rip_start: RipStartResponse, **extra_f
     """Log the `rip.started` event for the rip about to run."""
     track_count = len(rip_start.tracks)
     tool = rip_tool(disc_type, rip_start.tracks)
+    if tool == "none":
+        logger.warning("rip cannot start: no rip path for %s", disc_type_label(disc_type))
+        return
     log_event(
         logger,
         "rip.started",

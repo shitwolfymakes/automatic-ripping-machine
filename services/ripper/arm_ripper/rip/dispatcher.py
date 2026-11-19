@@ -26,12 +26,30 @@ from arm_ripper.rip.track_callbacks import (
 DEFAULT_MIN_LENGTH_SECONDS = 120
 
 
-_TOOL_BY_DISC_TYPE: dict[DiscType, str] = {
-    DiscType.DVD: "makemkv",
-    DiscType.BLURAY: "makemkv",
-    DiscType.CD: "abcde",
-    DiscType.DATA: "dd",
+_ROUTE_BACKUP, _ROUTE_OPTICAL, _ROUTE_CD, _ROUTE_DATA, _ROUTE_NONE = "backup", "optical", "cd", "data", "none"
+
+# The tool each route runs; `rip_all` and `rip_tool` both read the route from `_rip_route`.
+_TOOL_BY_ROUTE: dict[str, str] = {
+    _ROUTE_BACKUP: "makemkv",
+    _ROUTE_OPTICAL: "makemkv",
+    _ROUTE_CD: "abcde",
+    _ROUTE_DATA: "dd",
+    _ROUTE_NONE: "none",
 }
+
+_ROUTE_BY_DISC_TYPE: dict[DiscType, str] = {
+    DiscType.DVD: _ROUTE_OPTICAL,
+    DiscType.BLURAY: _ROUTE_OPTICAL,
+    DiscType.CD: _ROUTE_CD,
+    DiscType.DATA: _ROUTE_DATA,
+}
+
+
+def _rip_route(disc_type: DiscType, tracks: list[TrackView]) -> str:
+    """Which rip a disc gets: a backup when every track is a disc backup, else by the effective disc type."""
+    if tracks and all(t.kind == TrackKind.DISC_BACKUP for t in tracks):
+        return _ROUTE_BACKUP
+    return _ROUTE_BY_DISC_TYPE.get(_effective_disc_type(disc_type, tracks), _ROUTE_NONE)
 
 
 async def rip_all(
@@ -73,12 +91,12 @@ async def rip_all(
       FAILED goes to every track abcde did not produce.
     - DATA: a single dd dump assigned to the first (only) track.
     """
-    if tracks and all(t.kind == TrackKind.DISC_BACKUP for t in tracks):
+    route = _rip_route(disc_type, tracks)
+    if route == _ROUTE_BACKUP:
         await _rip_disc_backup(device_path, tracks[0], output_dir, on_track_start, on_track_done, on_track_progress)
         return
 
-    rip_as = _effective_disc_type(disc_type, tracks)
-    if rip_as in (DiscType.DVD, DiscType.BLURAY):
+    if route == _ROUTE_OPTICAL:
         await rip_optical(
             device_path=device_path,
             tracks=tracks,
@@ -93,23 +111,20 @@ async def rip_all(
         )
         return
 
-    if rip_as == DiscType.CD:
+    if route == _ROUTE_CD:
         await _rip_audio_cd(device_path, tracks, output_dir, on_track_start, on_track_done, on_track_progress)
         return
 
-    if rip_as == DiscType.DATA:
+    if route == _ROUTE_DATA:
         await _rip_data_dump(device_path, tracks, output_dir, on_track_start, on_track_done, on_track_progress)
         return
 
-    await _fail_unsupported(rip_as, tracks, on_track_done)
+    await _fail_unsupported(_effective_disc_type(disc_type, tracks), tracks, on_track_done)
 
 
 def rip_tool(disc_type: DiscType, tracks: list[TrackView]) -> str:
-    """The tool `rip_all` runs for this disc: `makemkv` for a disc backup or a DVD / Blu-ray, `abcde` for a CD, `dd`
-    for a data dump, `none` for a disc it cannot rip."""
-    if tracks and all(t.kind == TrackKind.DISC_BACKUP for t in tracks):
-        return "makemkv"
-    return _TOOL_BY_DISC_TYPE.get(_effective_disc_type(disc_type, tracks), "none")
+    """The tool `rip_all` runs for this disc: `makemkv`, `abcde`, `dd`, or `none` for a disc it cannot rip."""
+    return _TOOL_BY_ROUTE[_rip_route(disc_type, tracks)]
 
 
 def _effective_disc_type(disc_type: DiscType, tracks: list[TrackView]) -> DiscType:
