@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import logging
 from pathlib import Path
 from typing import Any
 
@@ -1161,3 +1162,11 @@ def test_failed_titles_does_not_mutate_ripped():
     ripped = {1: RipResult(ok=True)}
     makemkv_rip._failed_titles(_state_with_reasons(t2="bad"), [3], ripped)
     assert list(ripped) == [1]
+
+
+async def test_rip_disc_logs_the_makemkvcon_command_line_at_debug(monkeypatch, tmp_path, caplog):
+    _stub_subprocess(monkeypatch, ['MSG:1005,0,1,"MakeMKV started","%1 started","..."'])
+    with caplog.at_level(logging.DEBUG, logger="arm_ripper.rip.makemkv"):
+        await rip_disc(device_path="/dev/sr0", output_dir=tmp_path, minlength_seconds=600, eligible_source_indexes=[])
+    lines = [r for r in caplog.records if r.getMessage().startswith("makemkvcon mkv all")]
+    assert [r.levelno for r in lines] == [logging.DEBUG]

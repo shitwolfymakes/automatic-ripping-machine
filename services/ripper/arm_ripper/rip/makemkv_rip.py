@@ -207,7 +207,7 @@ async def rip_disc(
     """
     output_dir.mkdir(parents=True, exist_ok=True)
     cmd = _mkv_all_command(device_path, output_dir, minlength_seconds)
-    logger.info(
+    logger.debug(
         "makemkvcon mkv all device=%s outdir=%s minlength=%ds",
         device_path,
         output_dir,

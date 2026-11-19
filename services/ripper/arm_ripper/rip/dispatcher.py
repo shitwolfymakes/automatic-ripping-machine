@@ -26,6 +26,14 @@ from arm_ripper.rip.track_callbacks import (
 DEFAULT_MIN_LENGTH_SECONDS = 120
 
 
+_TOOL_BY_DISC_TYPE: dict[DiscType, str] = {
+    DiscType.DVD: "makemkv",
+    DiscType.BLURAY: "makemkv",
+    DiscType.CD: "abcde",
+    DiscType.DATA: "dd",
+}
+
+
 async def rip_all(
     disc_type: DiscType,
     device_path: str,
@@ -94,6 +102,14 @@ async def rip_all(
         return
 
     await _fail_unsupported(rip_as, tracks, on_track_done)
+
+
+def rip_tool(disc_type: DiscType, tracks: list[TrackView]) -> str:
+    """The tool `rip_all` runs for this disc: `makemkv` for a disc backup or a DVD / Blu-ray, `abcde` for a CD, `dd`
+    for a data dump, `none` for a disc it cannot rip."""
+    if tracks and all(t.kind == TrackKind.DISC_BACKUP for t in tracks):
+        return "makemkv"
+    return _TOOL_BY_DISC_TYPE.get(_effective_disc_type(disc_type, tracks), "none")
 
 
 def _effective_disc_type(disc_type: DiscType, tracks: list[TrackView]) -> DiscType:

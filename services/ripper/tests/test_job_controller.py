@@ -1882,3 +1882,26 @@ async def test_auto_rip_lookup_failure_proceeds_fail_open(caplog, stub_scan, stu
     assert "auto-rip config lookup failed (down); proceeding fail-open" in warnings
     assert client.rip_start_calls == ["job_test"]
     assert client.rip_complete_calls == ["job_test"]
+
+
+def _rip_started_records(caplog) -> list[logging.LogRecord]:
+    return [r for r in caplog.records if getattr(r, "event", None) == "rip.started"]
+
+
+async def test_run_rip_logs_rip_started_as_an_event(caplog, monkeypatch):
+    async def _noop(self, **kw):
+        return None
+
+    monkeypatch.setattr(JobController, "_execute_rip", _noop)
+    controller = JobController(FakeClient(), "drv_test")
+    with caplog.at_level(logging.INFO, logger="arm_ripper.job_controller"):
+        await controller._run_rip(_view(JobStatus.IDENTIFIED), "/dev/sr0")
+    (record,) = _rip_started_records(caplog)
+    assert record.levelno == logging.INFO
+    assert record.fields == {
+        "disc_type": "dvd",
+        "track_count": 0,
+        "preset": "rpr_builtin_movie_archive",
+        "tool": "makemkv",
+    }
+    assert record.getMessage() == "rip started: DVD, 0 tracks, preset rpr_builtin_movie_archive (makemkv)"
