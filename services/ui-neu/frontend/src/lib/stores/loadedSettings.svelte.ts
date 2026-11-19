@@ -41,9 +41,10 @@ export class LoadedSettings {
 		}
 	};
 
+	// Only called once settings have loaded, and they are never cleared after that.
 	#setConfig(key: string, value: boolean): void {
-		if (!this.settings) return;
-		this.settings = { ...this.settings, config: { ...this.settings.config, [key]: value } };
+		const settings = this.settings as SettingsData;
+		this.settings = { ...settings, config: { ...settings.config, [key]: value } };
 	}
 
 	// A form's saved values are folded back into `settings.config`, so every
