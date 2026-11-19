@@ -109,6 +109,13 @@ def test_main_invokes_uvicorn(monkeypatch: pytest.MonkeyPatch) -> None:
     assert "host" in captured and "port" in captured
 
 
+def test_uvicorn_uses_the_root_handlers(monkeypatch: pytest.MonkeyPatch) -> None:
+    captured: dict[str, object] = {}
+    monkeypatch.setattr(main_mod.uvicorn, "run", lambda app, **kw: captured.update(kw))
+    main_mod.main()
+    assert captured["log_config"] is None
+
+
 # --- refresh_gpu_inventory (both populated + empty branches) ----------------
 
 

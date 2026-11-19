@@ -502,6 +502,7 @@ def main() -> None:
         ssl_certfile=settings.TLS_CERT_PATH,
         ssl_keyfile=settings.TLS_KEY_PATH,
         log_level=settings.ARM_LOG_LEVEL.lower(),
+        log_config=None,
     )
 
 

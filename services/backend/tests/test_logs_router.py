@@ -1,8 +1,8 @@
 """Phase 12 — `/api/logs/{job_id}` (NDJSON) and `/api/logs/{job_id}.zip`.
 
-Both endpoints grep `LOG_DIR/*.log` line-by-line for `record["job_id"]`.
-Tests monkeypatch `arm_backend.log_reader.LOG_DIR` to a `tmp_path`
-seeded with hand-rolled JSONL across multiple service files.
+Both endpoints read only `LOG_DIR/jobs/<job_id>.log`. Tests monkeypatch
+`arm_backend.log_reader.LOG_DIR` to a `tmp_path` seeded with hand-rolled
+JSONL.
 """
 
 from __future__ import annotations
@@ -48,11 +48,14 @@ def _line(
         "ts": "2026-04-30T00:00:00+00:00",
         "level": "info",
         "service": service,
+        "logger": f"{service}.test",
         "job_id": job_id,
         "track_id": None,
         "session_application_id": None,
+        "event": None,
         "msg": msg,
-        "extra": {"logger": f"{service}.test"},
+        "fields": {},
+        "exc": None,
     }
 
 
@@ -87,79 +90,15 @@ def _auth(token: str) -> dict[str, str]:
     return {"Authorization": f"Bearer {token}"}
 
 
-def test_grep_returns_only_matching_lines(tmp_path: Path, signing_key: bytes, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(log_reader, "LOG_DIR", tmp_path)
-    _seed(
-        tmp_path,
-        service="arm-backend",
-        lines=[
-            _line(msg="hit-1"),
-            _line(job_id="other_job", msg="miss"),
-            _line(msg="hit-2"),
-        ],
-    )
-    app, token = _make_app(signing_key)
-    with TestClient(app) as client:
-        r = client.get("/api/logs/job_01JZXR7K3M5Q8N4VWA00000001", headers=_auth(token))
-    assert r.status_code == 200
-    assert r.headers["content-type"].startswith("application/x-ndjson")
-    body_lines = [json.loads(line) for line in r.text.strip().splitlines()]
-    assert [row["msg"] for row in body_lines] == ["hit-1", "hit-2"]
-
-
-def test_grep_files_alphabetical_no_resort(tmp_path: Path, signing_key: bytes, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(log_reader, "LOG_DIR", tmp_path)
-    _seed(tmp_path, service="zzz-svc", lines=[_line(msg="z1"), _line(msg="z2")])
-    _seed(tmp_path, service="arm-backend", lines=[_line(msg="b1")])
-    app, token = _make_app(signing_key)
-    with TestClient(app) as client:
-        r = client.get("/api/logs/job_01JZXR7K3M5Q8N4VWA00000001", headers=_auth(token))
-    body_lines = [json.loads(line) for line in r.text.strip().splitlines()]
-    msgs = [row["msg"] for row in body_lines]
-    # arm-backend.log sorts before zzz-svc.log alphabetically.
-    assert msgs == ["b1", "z1", "z2"]
-
-
-def test_grep_per_file_limit_clamps_each_file(
-    tmp_path: Path, signing_key: bytes, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    monkeypatch.setattr(log_reader, "LOG_DIR", tmp_path)
-    _seed(tmp_path, service="svc-a", lines=[_line(msg=f"a{i}") for i in range(5)])
-    _seed(tmp_path, service="svc-b", lines=[_line(msg=f"b{i}") for i in range(5)])
-    app, token = _make_app(signing_key)
-    with TestClient(app) as client:
-        r = client.get("/api/logs/job_01JZXR7K3M5Q8N4VWA00000001?limit=2", headers=_auth(token))
-    body_lines = [json.loads(line) for line in r.text.strip().splitlines()]
-    msgs = [row["msg"] for row in body_lines]
-    # 2 from svc-a + 2 from svc-b = 4 total (per-file cap, not global).
-    assert msgs == ["a0", "a1", "b0", "b1"]
-
-
 def test_grep_hard_cap_pins_at_10000(tmp_path: Path, signing_key: bytes, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(log_reader, "LOG_DIR", tmp_path)
     monkeypatch.setattr(log_reader.settings, "ARM_LOG_PER_FILE_HARD_CAP", 3)  # cheap cap for the test
-    _seed(tmp_path, service="svc", lines=[_line(msg=f"m{i}") for i in range(10)])
+    _seed_per_job(tmp_path, job_id="job_01JZXR7K3M5Q8N4VWA00000001", lines=[_line(msg=f"m{i}") for i in range(10)])
     app, token = _make_app(signing_key)
     with TestClient(app) as client:
         r = client.get("/api/logs/job_01JZXR7K3M5Q8N4VWA00000001?limit=99999", headers=_auth(token))
     body_lines = [json.loads(line) for line in r.text.strip().splitlines()]
     assert len(body_lines) == 3
-
-
-def test_grep_skips_unparseable_lines(tmp_path: Path, signing_key: bytes, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(log_reader, "LOG_DIR", tmp_path)
-    path = tmp_path / "svc.log"
-    with path.open("w", encoding="utf-8") as fh:
-        fh.write("not json\n")
-        fh.write(json.dumps(_line(msg="ok")) + "\n")
-        fh.write("\n")  # blank line
-        fh.write("{ broken json\n")
-    app, token = _make_app(signing_key)
-    with TestClient(app) as client:
-        r = client.get("/api/logs/job_01JZXR7K3M5Q8N4VWA00000001", headers=_auth(token))
-    assert r.status_code == 200
-    body_lines = [json.loads(line) for line in r.text.strip().splitlines()]
-    assert [row["msg"] for row in body_lines] == ["ok"]
 
 
 def test_grep_requires_jwt(tmp_path: Path, signing_key: bytes, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -171,45 +110,15 @@ def test_grep_requires_jwt(tmp_path: Path, signing_key: bytes, monkeypatch: pyte
     assert r.status_code == 200
 
 
-def test_zip_contains_one_entry_per_service_with_matching_lines(
-    tmp_path: Path, signing_key: bytes, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    monkeypatch.setattr(log_reader, "LOG_DIR", tmp_path)
-    _seed(
-        tmp_path,
-        service="arm-backend",
-        lines=[_line(msg="b1"), _line(job_id="other", msg="b-miss")],
-    )
-    _seed(tmp_path, service="arm-ripper-sr0", lines=[_line(msg="r1")])
-    # No matches in this file → must be omitted from the zip.
-    _seed(tmp_path, service="arm-empty", lines=[_line(job_id="other", msg="x")])
-
-    app, token = _make_app(signing_key)
-    with TestClient(app) as client:
-        r = client.get("/api/logs/job_01JZXR7K3M5Q8N4VWA00000001.zip", headers=_auth(token))
-
-    assert r.status_code == 200
-    assert r.headers["content-type"] == "application/zip"
-    assert 'filename="arm-logs-job_01JZXR7K3M5Q8N4VWA00000001.zip"' in r.headers["content-disposition"]
-    assert int(r.headers["content-length"]) == len(r.content)
-
-    with zipfile.ZipFile(io.BytesIO(r.content)) as zf:
-        names = sorted(zf.namelist())
-        assert names == ["arm-backend.log", "arm-ripper-sr0.log"]
-        backend_body = zf.read("arm-backend.log").decode("utf-8")
-    backend_lines = [json.loads(line) for line in backend_body.strip().splitlines()]
-    assert [row["msg"] for row in backend_lines] == ["b1"]
-
-
 def test_zip_per_entry_line_cap(tmp_path: Path, signing_key: bytes, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(log_reader, "LOG_DIR", tmp_path)
     monkeypatch.setattr(log_reader.settings, "ARM_LOG_ZIP_PER_ENTRY_LINE_CAP", 3)
-    _seed(tmp_path, service="svc", lines=[_line(msg=f"m{i}") for i in range(10)])
+    _seed_per_job(tmp_path, job_id="job_01JZXR7K3M5Q8N4VWA00000001", lines=[_line(msg=f"m{i}") for i in range(10)])
     app, token = _make_app(signing_key)
     with TestClient(app) as client:
         r = client.get("/api/logs/job_01JZXR7K3M5Q8N4VWA00000001.zip", headers=_auth(token))
     with zipfile.ZipFile(io.BytesIO(r.content)) as zf:
-        body = zf.read("svc.log").decode("utf-8").strip().splitlines()
+        body = zf.read("job_01JZXR7K3M5Q8N4VWA00000001.log").decode("utf-8").strip().splitlines()
     assert len(body) == 3
 
 
@@ -258,23 +167,6 @@ def test_zip_uses_per_job_file_when_present(
     assert msgs == ["per-job-line"]
 
 
-def test_zip_falls_back_to_service_scan_when_per_job_file_absent(
-    tmp_path: Path, signing_key: bytes, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """Legacy path: a job whose run predated the per-job append still
-    has its lines in service logs. The endpoint walks them as before."""
-    monkeypatch.setattr(log_reader, "LOG_DIR", tmp_path)
-    _seed(tmp_path, service="arm-backend", lines=[_line(msg="legacy-line")])
-    # No /jobs/job_01JZXR7K3M5Q8N4VWA00000001.log exists.
-    app, token = _make_app(signing_key)
-    with TestClient(app) as client:
-        r = client.get("/api/logs/job_01JZXR7K3M5Q8N4VWA00000001.zip", headers=_auth(token))
-    with zipfile.ZipFile(io.BytesIO(r.content)) as zf:
-        assert "arm-backend.log" in zf.namelist()
-        body = zf.read("arm-backend.log").decode("utf-8")
-    assert "legacy-line" in body
-
-
 def test_grep_uses_per_job_file_when_present(
     tmp_path: Path, signing_key: bytes, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -291,6 +183,32 @@ def test_grep_uses_per_job_file_when_present(
 
 
 # --- residual file-IO branch coverage ----------------------------------------
+
+
+def test_job_without_a_per_job_file_streams_nothing(
+    tmp_path: Path, signing_key: bytes, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(log_reader, "LOG_DIR", tmp_path)
+    _seed(tmp_path, service="arm-backend", lines=[_line(msg="only-in-service-log")])
+    app, token = _make_app(signing_key)
+    with TestClient(app) as client:
+        r = client.get("/api/logs/job_01JZXR7K3M5Q8N4VWA00000001", headers=_auth(token))
+    assert r.status_code == 200
+    assert r.headers["content-type"].startswith("application/x-ndjson")
+    assert r.content == b""
+
+
+def test_job_without_a_per_job_file_zips_no_entries(
+    tmp_path: Path, signing_key: bytes, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(log_reader, "LOG_DIR", tmp_path)
+    _seed(tmp_path, service="arm-backend", lines=[_line(msg="only-in-service-log")])
+    app, token = _make_app(signing_key)
+    with TestClient(app) as client:
+        r = client.get("/api/logs/job_01JZXR7K3M5Q8N4VWA00000001.zip", headers=_auth(token))
+    assert r.status_code == 200
+    with zipfile.ZipFile(io.BytesIO(r.content)) as zf:
+        assert zf.namelist() == []
 
 
 def test_zip_per_job_present_but_empty(tmp_path: Path, signing_key: bytes, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -343,10 +261,9 @@ def test_stream_per_job_respects_cap(tmp_path: Path, signing_key: bytes, monkeyp
 def test_stream_limit_zero_returns_no_lines(
     tmp_path: Path, signing_key: bytes, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """limit=0 means no lines, on both the per-job and fallback paths (D-166)."""
+    """limit=0 means no lines, with and without a per-job file (D-166)."""
     monkeypatch.setattr(log_reader, "LOG_DIR", tmp_path)
     _seed(tmp_path, service="svc-a", lines=[_line(msg="a0")])
-    _seed(tmp_path, service="svc-b", lines=[_line(msg="b0")])
     app, token = _make_app(signing_key)
     with TestClient(app) as client:
         r = client.get("/api/logs/job_01JZXR7K3M5Q8N4VWA00000001?limit=0", headers=_auth(token))
@@ -359,36 +276,6 @@ def test_stream_limit_zero_returns_no_lines(
         r = client.get("/api/logs/job_01JZXR7K3M5Q8N4VWA00000001?limit=0", headers=_auth(token))
         assert r.status_code == 200
         assert r.content == b""
-
-
-def test_stream_fallback_skips_unreadable_log(
-    tmp_path: Path, signing_key: bytes, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """A directory named like a log file: glob picks it, .open() raises
-    OSError → the fallback `continue`s past it (140-141)."""
-    monkeypatch.setattr(log_reader, "LOG_DIR", tmp_path)
-    (tmp_path / "bad.log").mkdir()  # directory, not a file
-    _seed(tmp_path, service="arm-backend", lines=[_line(msg="hello")])
-    app, token = _make_app(signing_key)
-    with TestClient(app) as client:
-        r = client.get("/api/logs/job_01JZXR7K3M5Q8N4VWA00000001", headers=_auth(token))
-    assert r.status_code == 200
-    assert "hello" in r.text
-
-
-def test_zip_fallback_skips_unreadable_log(tmp_path: Path, signing_key: bytes, monkeypatch: pytest.MonkeyPatch) -> None:
-    """_read_capped_lines hits OSError opening the dir-as-log and returns []
-    (161-162); the real log still lands in the zip."""
-    monkeypatch.setattr(log_reader, "LOG_DIR", tmp_path)
-    (tmp_path / "bad.log").mkdir()
-    _seed(tmp_path, service="arm-backend", lines=[_line(msg="zipme")])
-    app, token = _make_app(signing_key)
-    with TestClient(app) as client:
-        r = client.get("/api/logs/job_01JZXR7K3M5Q8N4VWA00000001.zip", headers=_auth(token))
-    assert r.status_code == 200
-    with zipfile.ZipFile(io.BytesIO(r.content)) as zf:
-        assert "arm-backend.log" in zf.namelist()
-        assert "bad.log" not in zf.namelist()
 
 
 # --- GET /api/logs (index of per-job log files) ---------------------------
