@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
+	import { onMount, untrack } from 'svelte';
 	import { createSessionsData, type JoinedSession } from './sessionsData.svelte';
 	import { copyName, isRipPreset, ripPresetCopy, transcodePresetCopy } from './sessionPresets';
 	import SessionsHub from './SessionsHub.svelte';
@@ -43,9 +43,11 @@
 		defaultsGroup?: SettingsGroup;
 		config?: Record<string, unknown>;
 		onsaved?: (payload: Record<string, unknown>) => void;
+		/** The view to open on (a deep link to a Defaults field opens Defaults). */
+		initialView?: View;
 	}
 
-	let { defaultsGroup, config = {}, onsaved }: Props = $props();
+	let { defaultsGroup, config = {}, onsaved, initialView = 'sessions' }: Props = $props();
 
 	const data = createSessionsData();
 
@@ -61,7 +63,7 @@
 	const shownTypeCounts = $derived($transcoderEnabled ? data.typeCounts() : countByMediaType(shownSessions));
 
 	// Active view: the sessions hub, one of the two preset libraries, or the defaults
-	let view = $state<View>('sessions');
+	let view = $state<View>(untrack(() => initialView));
 
 	// Each list view's count, shown on its tab; Defaults has none.
 	const tabs = $derived(

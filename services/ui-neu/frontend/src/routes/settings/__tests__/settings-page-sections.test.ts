@@ -89,11 +89,17 @@ const mockSchema = {
 			fields: [field('auto_rip_on_insert', 'Ripping', { label: 'Auto-rip on insert', type: 'bool' })]
 		},
 		{
-			name: 'Transcoding',
+			name: 'Defaults',
 			fields: [
-				field('transcode_enabled', 'Transcoding', { label: 'Enable transcoding', type: 'bool' }),
-				field('auto_transcode_on_idle', 'Transcoding', { label: 'Auto-transcode on idle', type: 'bool' })
+				field('auto_transcode_on_idle', 'Defaults', {
+					label: 'Apply these defaults automatically after each rip',
+					type: 'bool'
+				})
 			]
+		},
+		{
+			name: 'Transcoding',
+			fields: [field('transcode_enabled', 'Transcoding', { label: 'Enable transcoding', type: 'bool' })]
 		},
 		{
 			name: 'Notifications',
@@ -522,6 +528,14 @@ describe('Settings page sections', () => {
 			expect(el).toHaveClass('settings-field-highlight');
 			await vi.advanceTimersByTimeAsync(1);
 			expect(el).not.toHaveClass('settings-field-highlight');
+		});
+
+		it('opens the Sessions tab on its Defaults view for the auto-apply field, even from an old Transcoding link', async () => {
+			window.location.hash = '#transcoding/auto_transcode_on_idle';
+			renderComponent(SettingsPage);
+			await waitFor(() => expect(screen.getByRole('checkbox', { name: /apply these defaults/i })).toHaveFocus());
+			expect(screen.getByRole('tab', { name: 'Defaults' })).toHaveAttribute('aria-selected', 'true');
+			expect(screen.getByTestId('setting-auto_transcode_on_idle')).toHaveClass('settings-field-highlight');
 		});
 
 		it('decodes a URL-encoded field key', async () => {

@@ -69,6 +69,11 @@
 	// still lands on the tab that now holds the field.
 	let pendingField = $state<string | null>(fieldFromHash(window.location.hash));
 
+	// A deep link to a Defaults field opens the Sessions tab on its Defaults view.
+	const sessionsView = $derived(
+		pendingField && defaultsGroup?.fields.some((f) => f.key === pendingField) ? 'routing' : 'sessions'
+	);
+
 	$effect(() => {
 		const key = pendingField;
 		if (!key || !loaded.settings) return;
@@ -233,7 +238,12 @@
 
 			{#if activeTab === 'sessions'}
 				<div class="space-y-6" data-page-section>
-					<SessionsArea {defaultsGroup} config={settings.config} onsaved={loaded.foldSaved} />
+					<SessionsArea
+						{defaultsGroup}
+						config={settings.config}
+						onsaved={loaded.foldSaved}
+						initialView={sessionsView}
+					/>
 				</div>
 			{/if}
 
