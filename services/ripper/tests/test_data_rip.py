@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 
 from arm_ripper.rip import data_rip, subprocess_cleanup
+from arm_ripper.rip.poller import Poller
 
 
 class _FakeProc:
@@ -239,24 +240,6 @@ def test_dd_command_device_uses_2k_blocks_with_noerror_sync(tmp_path: Path) -> N
     ]
 
 
-async def test_stop_reporter_without_reporter_returns() -> None:
-    await data_rip._stop_reporter(None)
-
-
-async def test_stop_reporter_cancels_running_task() -> None:
-    task = asyncio.create_task(asyncio.sleep(60))
-    await asyncio.sleep(0)
-    await data_rip._stop_reporter(task)
-    assert task.cancelled()
-
-
-async def test_stop_reporter_accepts_finished_task() -> None:
-    task = asyncio.create_task(asyncio.sleep(0))
-    await task
-    await data_rip._stop_reporter(task)
-    assert task.done() and not task.cancelled()
-
-
 async def test_kill_if_running_leaves_finished_proc_alone(tmp_path: Path) -> None:
     proc = _HangProc(tmp_path / "o")
     proc.returncode = 0
@@ -276,11 +259,22 @@ async def test_kill_if_running_swallows_reap_error(tmp_path: Path) -> None:
     assert proc.kills == 1 and not proc.reaped
 
 
+def _idle_poller() -> Poller:
+    """A started poller whose step never comes due within a test."""
+
+    async def step() -> None:
+        raise AssertionError("never runs")
+
+    poller = Poller(60, step)
+    poller.start()
+    return poller
+
+
 async def test_wait_for_dd_exit_in_time_returns_none_and_stops_reporter(tmp_path: Path) -> None:
     proc = _FakeProc(tmp_path / "o", [b"x"])
-    reporter = asyncio.create_task(asyncio.sleep(60))
+    reporter = _idle_poller()
     assert await data_rip._wait_for_dd(proc, reporter) is None  # type: ignore[arg-type]
-    assert reporter.cancelled()
+    assert reporter._task is not None and reporter._task.done()
 
 
 async def test_wait_for_dd_without_reporter(tmp_path: Path) -> None:
@@ -293,13 +287,13 @@ async def test_wait_for_dd_timeout_returns_failure_and_kills_once(
 ) -> None:
     monkeypatch.setattr(data_rip, "DATA_RIP_TIMEOUT_SECONDS", 0.05)
     proc = _HangProc(tmp_path / "o")
-    reporter = asyncio.create_task(asyncio.sleep(60))
+    reporter = _idle_poller()
     result = await data_rip._wait_for_dd(proc, reporter)  # type: ignore[arg-type]
     assert result is not None
     assert not result.ok
     assert result.error == "dd timed out after 0.05s"
     assert proc.kills == 1 and proc.reaped
-    assert reporter.cancelled()
+    assert reporter._task is not None and reporter._task.done()
 
 
 async def test_wait_for_dd_cancelled_propagates_and_kills(tmp_path: Path) -> None:

@@ -2,11 +2,12 @@ import asyncio
 import contextlib
 import logging
 import os
-from collections.abc import Awaitable, Callable
 from pathlib import Path
 
 from arm_ripper.rip.hashing import sha256_file
+from arm_ripper.rip.poller import Poller, start_byte_reporter, stop_all
 from arm_ripper.rip.result import RipResult
+from arm_ripper.rip.track_callbacks import OnByteProgress
 from arm_ripper.rip.subprocess_cleanup import kill_if_running
 from arm_ripper.source import is_iso_source
 
@@ -16,9 +17,6 @@ DATA_RIP_TIMEOUT_SECONDS = 4 * 60 * 60
 
 # How often the copy reports the bytes written so far while dd runs.
 PROGRESS_INTERVAL_SECONDS = 2.0
-
-# (bytes copied so far, total bytes or None when the source size is unknown)
-OnDataProgress = Callable[[int, int | None], Awaitable[None]]
 
 
 def source_size(device_path: str) -> int | None:
@@ -31,19 +29,6 @@ def source_size(device_path: str) -> int | None:
     return size or None
 
 
-async def _report_progress(output_path: Path, total: int | None, on_progress: OnDataProgress) -> None:
-    while True:
-        await asyncio.sleep(PROGRESS_INTERVAL_SECONDS)
-        try:
-            done = output_path.stat().st_size
-        except OSError:
-            continue
-        try:
-            await on_progress(done, total)
-        except Exception:  # noqa: BLE001 — progress is best-effort, never fails the copy
-            logger.debug("data progress callback failed", exc_info=True)
-
-
 def _dd_command(device_path: str, output_path: Path) -> list[str]:
     """The dd argv: 4 MB blocks for an image file; 2 KB blocks with noerror,sync for a disc."""
     if is_iso_source(device_path):
@@ -51,16 +36,7 @@ def _dd_command(device_path: str, output_path: Path) -> list[str]:
     return ["dd", f"if={device_path}", f"of={output_path}", "bs=2048", "conv=noerror,sync"]
 
 
-async def _stop_reporter(reporter: asyncio.Task[None] | None) -> None:
-    """Cancel the progress reporter, if any, and wait for it to finish."""
-    if reporter is None:
-        return
-    reporter.cancel()
-    with contextlib.suppress(asyncio.CancelledError):
-        await reporter
-
-
-async def _wait_for_dd(proc: asyncio.subprocess.Process, reporter: asyncio.Task[None] | None) -> RipResult | None:
+async def _wait_for_dd(proc: asyncio.subprocess.Process, reporter: Poller | None) -> RipResult | None:
     """Wait for dd to exit; return the timeout failure, or None if it exits in time.
 
     Either way, the progress reporter is stopped and dd is reaped before this returns.
@@ -72,7 +48,7 @@ async def _wait_for_dd(proc: asyncio.subprocess.Process, reporter: asyncio.Task[
         await proc.wait()
         return RipResult(ok=False, error=f"dd timed out after {DATA_RIP_TIMEOUT_SECONDS}s")
     finally:
-        await _stop_reporter(reporter)
+        await stop_all(reporter)
         await kill_if_running(proc)
     return None
 
@@ -95,7 +71,7 @@ def _empty_output_failure(output_path: Path) -> RipResult | None:
     return None
 
 
-async def rip_data(device_path: str, output_dir: Path, on_progress: OnDataProgress | None = None) -> RipResult:
+async def rip_data(device_path: str, output_dir: Path, on_progress: OnByteProgress | None = None) -> RipResult:
     """Pull a raw image from the disc, or copy an ISO image, via dd.
 
     A physical disc keeps 2 KB blocks so `conv=noerror,sync` pads exactly one
@@ -120,9 +96,7 @@ async def rip_data(device_path: str, output_dir: Path, on_progress: OnDataProgre
     except FileNotFoundError as e:
         return RipResult(ok=False, error=f"dd not on PATH: {e}")
 
-    reporter = (
-        asyncio.create_task(_report_progress(output_path, total, on_progress)) if on_progress is not None else None
-    )
+    reporter = start_byte_reporter(PROGRESS_INTERVAL_SECONDS, lambda: output_path.stat().st_size, total, on_progress)
     timed_out = await _wait_for_dd(proc, reporter)
     if timed_out is not None:
         return timed_out
