@@ -30,7 +30,7 @@ describe('viewTabs', () => {
 			{ key: 'sessions', label: 'Sessions', count: 3 },
 			{ key: 'rip', label: 'Rip presets', count: 0 },
 			{ key: 'transcode', label: 'Transcode presets', count: 2 },
-			{ key: 'routing', label: 'Routing', count: undefined }
+			{ key: 'routing', label: 'Defaults', count: undefined }
 		]);
 	});
 });

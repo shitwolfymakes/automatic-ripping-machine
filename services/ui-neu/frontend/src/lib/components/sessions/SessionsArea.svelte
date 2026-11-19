@@ -35,7 +35,17 @@
 		type View
 	} from './sessionsAreaModel';
 	import { countByMediaType } from '$lib/utils/sessions';
-	import type { RipPresetView, SessionView, TranscodePresetView } from '$lib/types/api.gen';
+	import SchemaConfigForm from '$lib/components/settings/SchemaConfigForm.svelte';
+	import type { RipPresetView, SessionView, SettingsGroup, TranscodePresetView } from '$lib/types/api.gen';
+
+	interface Props {
+		/** The Defaults settings group (auto-apply), shown above the matrix on a transcode-capable deployment. */
+		defaultsGroup?: SettingsGroup;
+		config?: Record<string, unknown>;
+		onsaved?: (payload: Record<string, unknown>) => void;
+	}
+
+	let { defaultsGroup, config = {}, onsaved }: Props = $props();
 
 	const data = createSessionsData();
 
@@ -50,10 +60,10 @@
 	);
 	const shownTypeCounts = $derived($transcoderEnabled ? data.typeCounts() : countByMediaType(shownSessions));
 
-	// Active view: the sessions hub, one of the two preset libraries, or routing
+	// Active view: the sessions hub, one of the two preset libraries, or the defaults
 	let view = $state<View>('sessions');
 
-	// Each list view's count, shown on its tab; Routing has none.
+	// Each list view's count, shown on its tab; Defaults has none.
 	const tabs = $derived(
 		viewTabs({
 			sessions: shownSessions.length,
@@ -301,6 +311,9 @@
 			ondelete={handleDeleteSession}
 		/>
 	{:else if view === 'routing'}
+		{#if $transcoderEnabled && defaultsGroup}
+			<SchemaConfigForm group={defaultsGroup} {config} {onsaved} bare />
+		{/if}
 		<RoutingMatrix />
 	{:else}
 		<PresetLibrary

@@ -57,6 +57,7 @@
 	const keysGroup = $derived(group('Keys'));
 	const rippingGroup = $derived(group('Ripping'));
 	const transcodingGroup = $derived(group('Transcoding'));
+	const defaultsGroup = $derived(group('Defaults'));
 	const systemGroup = $derived(group('System'));
 
 	let activeTab = $state<Tab>(tabFromHash(window.location.hash));
@@ -232,7 +233,7 @@
 
 			{#if activeTab === 'sessions'}
 				<div class="space-y-6" data-page-section>
-					<SessionsArea />
+					<SessionsArea {defaultsGroup} config={settings.config} onsaved={loaded.foldSaved} />
 				</div>
 			{/if}
 

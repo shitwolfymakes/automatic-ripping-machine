@@ -266,3 +266,11 @@ describe('sectionFields: Transcoding', () => {
 		expect(sections[1].fields.map((f) => f.key)).toEqual(['max_parallel_transcodes']);
 	});
 });
+
+describe('the Defaults group', () => {
+	it('is rendered on the Sessions tab, so its field links point there', () => {
+		const groups = [{ name: 'Defaults', fields: [{ key: 'auto_transcode_on_idle' }] }] as SettingsGroup[];
+		expect(settingsTabFor('Defaults')).toBe('sessions');
+		expect(settingsFieldHref('auto_transcode_on_idle', groups)).toBe('#sessions/auto_transcode_on_idle');
+	});
+});

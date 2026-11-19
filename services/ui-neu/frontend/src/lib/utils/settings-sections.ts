@@ -151,8 +151,10 @@ export function stepGroup(groups: SettingsGroup[], step: string): SettingsGroup 
 }
 
 /** The Settings tab (a `#<tab>` hash) that renders a schema group: the config
- *  groups keep their own name, the others fold into their lower-case screen tab. */
+ *  groups keep their own name, Defaults renders on the Sessions tab, and the
+ *  others fold into their lower-case screen tab. */
 export function settingsTabFor(groupName: string): string {
+	if (groupName === 'Defaults') return 'sessions';
 	return ['Identification', 'Keys', 'Ripping'].includes(groupName) ? groupName : groupName.toLowerCase();
 }
 

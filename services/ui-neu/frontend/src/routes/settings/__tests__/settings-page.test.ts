@@ -857,6 +857,25 @@ describe('Settings Page', () => {
 		});
 	});
 
+	describe('Sessions tab Defaults view', () => {
+		it('shows auto-apply above the routing matrix and folds a save into the page config', async () => {
+			const { saveArmConfig } = await import('$lib/api/settings');
+			vi.mocked(saveArmConfig).mockClear();
+			setTranscoderEnabled(true);
+			await renderAndOpenTab('Sessions');
+			await fireEvent.click(await screen.findByRole('tab', { name: 'Defaults' }));
+			const toggle = await screen.findByRole('checkbox', { name: /apply these defaults/i });
+			expect(toggle).not.toBeChecked();
+			await fireEvent.click(toggle);
+			await fireEvent.click(screen.getByRole('button', { name: /^save/i }));
+			await waitFor(() => expect(vi.mocked(saveArmConfig)).toHaveBeenCalledWith({ auto_transcode_on_idle: true }));
+			// Leave and come back: the view reads the folded config, not the stale value.
+			await fireEvent.click(screen.getByRole('tab', { name: /^sessions \d/i }));
+			await fireEvent.click(screen.getByRole('tab', { name: 'Defaults' }));
+			expect(await screen.findByRole('checkbox', { name: /apply these defaults/i })).toBeChecked();
+		});
+	});
+
 	describe('Transcoding tab', () => {
 		it('keeps the Transcoding tab visible even when the deployment is not transcode-capable', async () => {
 			setTranscoderEnabled(false);
