@@ -1,5 +1,5 @@
 // Hand-written types for the notification channel + catalog system.
-// The BFF proxies channel data as opaque dicts, so these are not in the
+// Channel data crosses the wire as opaque dicts, so these are not in the
 // generated api.gen.ts. Catalog types mirror apprise-introspection output.
 
 export type ChannelType = 'apprise' | 'webhook' | 'bash';

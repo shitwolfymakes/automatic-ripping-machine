@@ -5,7 +5,7 @@
 
 	// "When you insert a disc": one three-way choice over two config keys
 	// (auto_rip_on_insert + hold_for_review). The global default each drive
-	// follows unless it has its own mode (setup spec D1). Rendered by
+	// follows unless it has its own mode. Rendered by
 	// SchemaConfigForm for the `disc_handling` widget, in Settings > Ripping and
 	// in the setup walkthrough. `values` is the live form state it writes into.
 	let { values, context = {} }: { values: Record<string, unknown>; context?: Record<string, unknown> } = $props();

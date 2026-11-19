@@ -87,8 +87,7 @@ describe('applyScheme effective-mode tokens', () => {
 		expect(document.documentElement.style.getPropertyValue('--color-primary').trim()).toBe(
 			DEFAULT_SCHEME.tokens['--color-primary']
 		);
-		// The legacy alias itself is still written unchanged for unmigrated
-		// components (e.g. `dark:text-primary-dark`).
+		// The legacy alias itself is still written unchanged.
 		expect(document.documentElement.style.getPropertyValue('--color-primary-dark').trim()).toBe(
 			DEFAULT_SCHEME.tokens['--color-primary-dark']
 		);

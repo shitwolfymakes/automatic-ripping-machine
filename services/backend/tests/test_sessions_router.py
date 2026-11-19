@@ -215,7 +215,7 @@ def test_create_session_rejects_media_type_mismatch(signing_key: bytes) -> None:
 
 def test_patch_builtin_name_409(signing_key: bytes) -> None:
     # The seeder re-syncs a built-in's name on every boot, so a rename would
-    # silently revert; the router refuses it instead (D-146).
+    # silently revert; the router refuses it instead.
     db = FakeSession()
     _seed(db)
     app, token = _make_app(signing_key, db)

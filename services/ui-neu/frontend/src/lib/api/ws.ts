@@ -1,7 +1,5 @@
 // Minimal UI WebSocket client — a single shared connection per page that
-// subscribes to backend topics on demand. Ported from the legacy Vue UI
-// (removed 2026-09-27), adapted to ui-neu's same-origin setup and
-// localStorage token getter.
+// subscribes to backend topics on demand. Same-origin, with the token read from localStorage.
 //
 // Design: one connection, topic -> handler-set demux, `subscribe(topic, h)`
 // returns an unsubscribe fn, JWT auth on open, exponential-backoff reconnect
@@ -26,7 +24,7 @@ const RECONNECT_DELAYS = [1000, 2000, 4000, 8000, 30000];
 const CLOSE_UNAUTHORIZED = 4401;
 const CLOSE_FORBIDDEN = 4403;
 
-// Connection status for the UI's "live updates unavailable" state (G-28).
+// Connection status for the UI's "live updates unavailable" state.
 // 'offline' only after OFFLINE_AFTER_FAILURES consecutive failed attempts, so
 // a single blip reconnecting within a second never flashes the banner; once
 // shown it stays until a connection actually authenticates.

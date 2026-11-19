@@ -3,7 +3,7 @@ import type { NotificationTestResult } from '$lib/api/channels';
 import { createChannel, testConfig } from '$lib/api/channels';
 
 // The add-a-channel and test-send calls, shared by Settings > Notifications
-// and the setup walkthrough's quick add (setup spec D5: one implementation
+// and the setup walkthrough's quick add (one implementation
 // per feature).
 
 /** A channel as the add form builds it: its fields, with the picked

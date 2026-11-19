@@ -98,8 +98,7 @@
 	.music-search-success-btn:hover {
 		filter: brightness(0.9);
 	}
-	/* the original action buttons were px-3 py-1.5 (0.75rem/0.375rem),
-	   narrower than .btn's default */
+	/* the action buttons use 0.75rem/0.375rem padding, narrower than .btn's default */
 	.music-search-action-btn {
 		padding: 0.375rem 0.75rem;
 		border: 0;

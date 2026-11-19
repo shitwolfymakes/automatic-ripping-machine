@@ -176,7 +176,7 @@ def test_diagnostics_no_drives_is_warning(signing_key: bytes, tmp_path) -> None:
 
 
 def _unserved_online_drives() -> list[Drive]:
-    # Every row here is status=online but has no ripper serving it (D-149).
+    # Every row here is status=online but has no ripper serving it.
     return [
         Drive(
             id="drv_det000000000000000000003",
@@ -516,7 +516,7 @@ def test_diagnostics_transcoder_ripper_only_ok_even_without_dispatcher(
 
 
 def test_diagnostics_ripper_only_warns_about_held_encode_tasks(signing_key: bytes, tmp_path, monkeypatch) -> None:
-    """D-067: encode tasks queued before the box went ripper-only are held
+    """Encode tasks queued before the box went ripper-only are held
     forever; diagnostics must say so instead of an unconditional ok."""
     from arm_backend.config import settings
 
@@ -607,7 +607,7 @@ def test_diagnostics_transcoder_warning_when_last_spawn_failed(signing_key: byte
 
 
 def test_diagnostics_transcoder_warns_about_a_backend_url_check_set_to_warn(signing_key: bytes, tmp_path) -> None:
-    """D-129 follow-up: with ARM_TRANSCODE_BACKEND_URL_CHECK=warn a failed URL
+    """With ARM_TRANSCODE_BACKEND_URL_CHECK=warn a failed URL
     check no longer holds spawns, but the operator still sees it."""
     db = FakeSession()
     _seed(db)
@@ -826,7 +826,7 @@ def test_thediscdb_refresh_now_409_when_the_lock_is_taken_after_the_check(
 
 
 def test_thediscdb_refresh_now_409_while_refresh_running(signing_key: bytes, tmp_path, monkeypatch) -> None:
-    """D-159: a manual refresh during the loop's (or another click's) build is refused."""
+    """A manual refresh during the loop's (or another click's) build is refused."""
     called: list[bool] = []
 
     async def _fake(http, path):  # noqa: ANN001, ANN202 — matches thediscdb_refresh signature
@@ -858,7 +858,7 @@ def test_thediscdb_refresh_now_denied_for_guest(signing_key: bytes, tmp_path) ->
     assert r.status_code == 403
 
 
-# --- Setup walkthrough detail (setup spec 2026-10-01 §6.3) ---
+# --- Setup walkthrough detail ---
 
 
 def _diag(app: FastAPI, token: str) -> dict:

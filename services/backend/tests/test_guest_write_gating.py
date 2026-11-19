@@ -1,4 +1,4 @@
-"""Guest-role write gating sweep (spec's Task 4 gate table).
+"""Guest-role write gating sweep.
 
 A `role=guest` user must get 403 `"read-only role: write access required"`
 on every mutating UI route swapped to `Depends(require_writer)`, and must
@@ -117,7 +117,7 @@ def _guest_headers() -> dict[str, str]:
     return {"Authorization": f"Bearer {token}"}
 
 
-# --- Gate table (spec §3) — every mutating route swapped to require_writer --
+# --- Gate table — every mutating route swapped to require_writer --
 
 _GATED_ROUTES: list[tuple[str, str, dict[str, object]]] = [
     # jobs
@@ -128,7 +128,7 @@ _GATED_ROUTES: list[tuple[str, str, dict[str, object]]] = [
     ("PATCH", "/api/jobs/job_01JZXR7K3M5Q8N4VWA00000001", {}),
     ("POST", "/api/jobs/job_01JZXR7K3M5Q8N4VWA00000001/resolve", {}),
     ("POST", "/api/jobs/job_01JZXR7K3M5Q8N4VWA00000001/transcode", {}),
-    # jobs — timed-review-gate stragglers (found in Step 1 sweep; see report)
+    # jobs — timed-review-gate routes
     ("POST", "/api/jobs/job_01JZXR7K3M5Q8N4VWA00000001/rip-start-review", {}),
     ("POST", "/api/jobs/job_01JZXR7K3M5Q8N4VWA00000001/review-pause", {}),
     # drives
@@ -243,7 +243,7 @@ def test_guest_denied_theme_upload() -> None:
 def test_admin_must_change_password_can_still_change_password() -> None:
     """require_writer composes require_jwt, whose must-change whitelist already
     allows /api/auth/password; an admin mid-password_must_change passes the
-    role check too, so the route must stay reachable (spec Task 4 Step 4 note).
+    role check too, so the route must stay reachable.
     """
     from argon2 import PasswordHasher
 

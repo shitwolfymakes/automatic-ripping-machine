@@ -21,7 +21,7 @@ async def evict_colliding_tasks(db: AsyncSession, paths: list[str], *, job_id: s
     explicitly first.
 
     Scoped to `job_id`: eviction only ever removes tasks that belong to
-    applications owned by the job doing the applying (G-08). A collision
+    applications owned by the job doing the applying. A collision
     owned by a *different* job is never reachable here — the caller filters
     those out and reports them as a hard `skipped_reason="collisions"`
     before this function is called, even when overwrite=True. Re-ripping a

@@ -1,7 +1,7 @@
 import type { DiscRouteSummary, SetupStep, SetupStepState, SetupView } from '$lib/types/api.gen';
 import { get, post, put } from './client';
 
-// First-run setup walkthrough state (setup spec 2026-10-01 §6.1). The
+// First-run setup walkthrough state. The
 // walkthrough writes settings through each feature's own API; these calls only
 // record progress.
 

@@ -184,7 +184,7 @@
 </div>
 
 <style>
-	/* the original bar was px-4 py-3 (1rem/0.75rem); .panel-compact is
+	/* the bar's padding is 1rem horizontally and 0.75rem vertically; .panel-compact is
 	   0.75rem all round, close but not identical on the horizontal axis. */
 	.preset-library-bar {
 		padding: 0.75rem 1rem;
@@ -202,8 +202,7 @@
 		width: auto;
 	}
 	/* the divider's own border-primary/15 maps to --color-border; hr's
-	   default border-top plus browser margin is overridden to the original's
-	   my-3 (0.75rem) spacing, height 1px. */
+	   default border-top plus browser margin is overridden to 0.75rem spacing, height 1px. */
 	.preset-library-divider {
 		margin: 0.75rem 0;
 		border: 0;
@@ -218,7 +217,7 @@
 		justify-content: flex-end;
 		gap: 0.375rem;
 	}
-	/* original: h-16 rounded-lg border border-primary/20 bg-gray-100 - taller,
+	/* this skeleton is h-16 with rounded-lg and a border - taller,
 	   more-rounded, and bordered compared to .skeleton-block's 2.5rem/radius-sm/
 	   no border. */
 	.preset-library-skeleton {

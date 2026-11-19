@@ -129,7 +129,7 @@ def gpu_encoder_for(vendor: GpuVendor, codec: str) -> EncoderSpec | None:
 
 
 def gpu_is_eligible(gpu: Gpu, codec: str) -> bool:
-    """The one eligibility rule (spec section 4): enabled, probed, and the probe
+    """The one eligibility rule: enabled, probed, and the probe
     verified this codec."""
     return bool(gpu.enabled) and gpu.probed_at is not None and codec in (gpu.encoder_kinds or [])
 

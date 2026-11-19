@@ -23,14 +23,12 @@ import type {
 import { apiFetch, apiFetchResponse, post } from './client';
 
 // ---------------------------------------------------------------------------
-// Job listing / detail (EXISTS in v3)
+// Job listing / detail
 // ---------------------------------------------------------------------------
 
-// v3 GET /api/jobs supports status/drive_id/limit/offset only. The BFF's
-// page/per_page/search/sort/video_type/disctype/days are gone; we keep a thin
-// local param type so callers compile, mapping page→offset where we can and
-// silently dropping the unsupported filters (the screens that used them are
-// guarded off in Tier C).
+// GET /api/jobs supports status/drive_id/limit/offset only. Callers pass a thin local param type,
+// mapping page→offset where possible and silently dropping the unsupported filters
+// (page/per_page/search/sort/video_type/disctype/days).
 interface FetchJobsParams {
 	status?: string;
 	drive_id?: string;
@@ -101,15 +99,14 @@ export function bulkDeleteJobs(params: { job_ids?: string[]; status?: string }):
 }
 
 // ---------------------------------------------------------------------------
-// Job / track edits — the v3 bulk-PATCH (FIELD-MISMATCH delta)
+// Job / track edits — the bulk PATCH
 // ---------------------------------------------------------------------------
 //
 // v3 collapses every per-job and per-track edit into ONE atomic call:
 //   PATCH /api/jobs/{job_id}  body: JobUpdateRequest
 //     { poster_url_manual?, tracks?: TrackEditRequest[] }
-// A single-track edit is wrapped into the `tracks` array; the BFF's dedicated
-// /tracks/:id endpoints no longer exist. `track_id` selects the row, every
-// other field is an optional operator edit (omitted=untouched, null=clear).
+// A single-track edit is wrapped into the `tracks` array; there are no dedicated /tracks/:id
+// endpoints. `track_id` selects the row, every other field is an optional operator edit (omitted=untouched, null=clear).
 
 export function patchJob(jobId: string, body: JobUpdateRequest): Promise<JobView> {
 	return apiFetch<JobView>(`/api/jobs/${jobId}`, {
@@ -142,13 +139,13 @@ export function updateJobTitle(jobId: string, data: { poster_url_manual?: string
 	return patchJob(jobId, { poster_url_manual: data.poster_url_manual ?? null });
 }
 
-// Header Movie | TV switch: the type alone; ids and title stay (spec 3.2).
+// Header Movie | TV switch: the type alone; ids and title stay.
 export function setJobMediaType(jobId: string, mediaType: 'movie' | 'tv'): Promise<JobView> {
 	return patchJob(jobId, { media_type: mediaType });
 }
 
 // ---------------------------------------------------------------------------
-// Identify / resolve + apply-session (EXISTS in v3)
+// Identify / resolve + apply-session
 // ---------------------------------------------------------------------------
 
 export interface ResolveJobBody {
@@ -220,7 +217,7 @@ export function applySession(
 }
 
 // ---------------------------------------------------------------------------
-// Metadata search / lookup (EXISTS in v3)
+// Metadata search / lookup
 // ---------------------------------------------------------------------------
 
 export type MatchProvider = 'tmdb' | 'omdb' | 'tvmaze' | 'tvdb';
@@ -282,7 +279,7 @@ export function fetchMusicDetail(releaseId: string): Promise<MetadataReleaseDeta
 }
 
 // ---------------------------------------------------------------------------
-// Naming (EXISTS in v3 — note the reshaped request/response contracts)
+// Naming (note the reshaped request/response contracts)
 // ---------------------------------------------------------------------------
 
 // v3 per-job naming preview: { job_output_dir, job_output_name, items[] }.

@@ -1976,8 +1976,8 @@ export type HandbrakeSettings = {
 /**
  * HardwareCaps
  *
- * Self-reported transcoder capabilities. Phase 7 (CPU-only) ignores these;
- * Phase 7b consumes them for GPU dispatch + `gpus` row writes.
+ * Self-reported transcoder capabilities. The Backend does not dispatch on
+ * these; GPU eligibility comes from the probed `gpus` rows.
  */
 export type HardwareCaps = {
     /**
@@ -2040,9 +2040,9 @@ export type HeartbeatRequest = {
  * Boot-probe payload for a disc held in AWAITING_REVIEW (timed review gate).
  *
  * `paused` is true when the held disc should survive a ripper reboot as a hold
- * (global `ripping_paused` on — or, once it lands, a per-job pause). The ripper
- * uses it to choose re-park (paused) vs. abandon-and-self-heal (counting down)
- * on restart. See the timed-review-gate spec §6.3.
+ * (global `ripping_paused`, or the per-job `manual_pause` set by review-pause).
+ * The ripper uses it to choose re-park (paused) vs. abandon-and-self-heal
+ * (counting down) on restart.
  */
 export type HeldJobView = {
     job: JobView;
@@ -2148,8 +2148,7 @@ export type IdentityFacts = {
  * IdentitySuggestion
  *
  * A confident online match identify did not apply because the media
- * type's "Apply confident matches" switch is off (identification-sources
- * spec D-10). The job keeps its miss title and the `unidentified` flag and
+ * type's "Apply confident matches" switch is off. The job keeps its miss title and the `unidentified` flag and
  * waits in AWAITING_REVIEW with no countdown until the operator accepts
  * it (POST /api/jobs/{id}/identity/accept) or identifies the disc another
  * way (any resolve clears this section).
@@ -2916,14 +2915,14 @@ export type JobView = {
      * Looks Episodic
      *
      * The stored scan looks like a TV disc (several same-length episode
-     * titles, no feature): the title search defaults to TV (spec 3.3).
+     * titles, no feature): the title search defaults to TV.
      */
     readonly looks_episodic: boolean;
     /**
      * Has Series
      *
      * A TV show is known: a TMDb id of kind tv, a TVDB or TVmaze id, or a
-     * show id some episode source resolved (spec 3.4). False means the
+     * show id some episode source resolved. False means the
      * Match Episodes tab asks for the series first.
      */
     readonly has_series: boolean;
@@ -4164,7 +4163,7 @@ export type ResolveFanOutOutcomeView = {
 /**
  * ResolveMatch
  *
- * A search result the operator picked (match picker spec 3.6). Its
+ * A search result the operator picked (from the match picker). Its
  * presence makes `external_ids` replace the stored show ids wholesale.
  */
 export type ResolveMatch = {
@@ -4873,7 +4872,7 @@ export type SetupStatusPublic = {
 /**
  * SetupStep
  *
- * First-run setup walkthrough steps, in walkthrough order (setup spec 2026-10-01).
+ * First-run setup walkthrough steps, in walkthrough order.
  *
  * Stored as VARCHAR keys inside Config.setup_progress JSON, validated in the app.
  */
@@ -5506,8 +5505,7 @@ export type TrackKind = 'video_title' | 'audio_track' | 'data_dump' | 'disc_back
  * TrackRole
  *
  * What one title on a disc is. Set by identity sources via the resolver
- * (arm_backend.identity) or by the operator; replaces the old free-text
- * role and the per-track video_type.
+ * (arm_backend.identity) or by the operator.
  */
 export type TrackRole = 'main' | 'episode' | 'extra' | 'trailer' | 'other';
 
@@ -5983,7 +5981,7 @@ export type UserPasswordSetRequest = {
 /**
  * UserRole
  *
- * Fixed two-account model (spec 2026-07-12-basic-user-management-design).
+ * Fixed two-account model.
  *
  * ADMIN — the single writer; the only account that can hold a session.
  * GUEST — read-everything/write-nothing; acquired by having no token at all
@@ -6051,9 +6049,9 @@ export type ValidationError = {
  * Boot-probe payload for a disc held in AWAITING_REVIEW (timed review gate).
  *
  * `paused` is true when the held disc should survive a ripper reboot as a hold
- * (global `ripping_paused` on — or, once it lands, a per-job pause). The ripper
- * uses it to choose re-park (paused) vs. abandon-and-self-heal (counting down)
- * on restart. See the timed-review-gate spec §6.3.
+ * (global `ripping_paused`, or the per-job `manual_pause` set by review-pause).
+ * The ripper uses it to choose re-park (paused) vs. abandon-and-self-heal
+ * (counting down) on restart.
  */
 export type HeldJobViewWritable = {
     job: JobViewWritable;

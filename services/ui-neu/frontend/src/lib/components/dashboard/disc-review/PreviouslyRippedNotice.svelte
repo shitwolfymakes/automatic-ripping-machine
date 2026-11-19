@@ -36,7 +36,7 @@
 
 <style>
 	/* mixed from text + surface rather than --color-surface-raised, which
-	   most schemes leave unset (the box used to show the default navy) */
+	   most schemes leave unset */
 	.disc-review-widget-previous {
 		margin: 0 1rem 0.75rem;
 		border-radius: var(--radius-md);

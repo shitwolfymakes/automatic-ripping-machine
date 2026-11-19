@@ -147,7 +147,7 @@ it('formatLength', () => {
 	expect(formatLength(542)).toBe('9:02');
 	expect(formatLength(null)).toBe('-');
 });
-describe('fix round 1', () => {
+describe('failed sources and hand-set provenance', () => {
 	const errOnly = () =>
 		identity({ sources: { episodes_tmdb: { status: 'error', detail: 'boom' }, episodes_tvdb: { status: 'error' } } });
 	it('error-only is nomatch and names the failed sources', () => {

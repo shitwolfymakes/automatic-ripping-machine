@@ -84,7 +84,7 @@
 	.notifications-page {
 		gap: 1.5rem;
 	}
-	/* alert's own border isn't in the original (a plain tinted strip, no
+	/* alert's own border isn't wanted here (a plain tinted strip, no
 	   border), and its padding (0.5rem 0.75rem) is a hair short of this
 	   banner's own px-4 py-2.5. */
 	.notifications-page-feedback {
@@ -99,7 +99,7 @@
 	.notifications-page-feedback-close:hover {
 		opacity: 1;
 	}
-	/* space-y-3 (0.75rem), the original's per-card gap. */
+	/* 0.75rem per-card gap. */
 	.notifications-page-list {
 		gap: 0.75rem;
 	}

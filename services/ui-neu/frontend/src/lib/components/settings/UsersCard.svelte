@@ -18,7 +18,7 @@
 	const guest = $derived(users.find((u) => u.role === 'guest') ?? null);
 
 	// Which slide-over is open: 'admin-password' (change own password). Guest
-	// sessions are passwordless (spec 2026-07-12-guest-autologin); the backend
+	// sessions are passwordless; the backend
 	// password endpoint remains but is not surfaced here.
 	let panel = $state<'admin-password' | null>(null);
 
@@ -117,7 +117,7 @@
 	/* the card's own eyebrow-title/hint gap was tighter than the panel
 	   default's 0.75rem margin, and its intro line sits directly under the
 	   title with no list below it yet. */
-	/* both were text-sm text-gray-500 (0.875rem/1.25rem), not panel-hint's
+	/* both are text-sm text-gray-500 (0.875rem/1.25rem), not panel-hint's
 	   0.75rem - panel-hint is sized for a note under a form control, a
 	   visibly smaller role. */
 	/* text-base font-semibold text-gray-900, mb-1 - a plain heading, not
@@ -142,14 +142,13 @@
 		line-height: 1.25rem;
 		color: var(--color-text-faint);
 	}
-	/* the original row list was space-y-3 (0.75rem) - between stack-sm's
+	/* the row list gap is 0.75rem - between stack-sm's
 	   0.5rem and stack's own 1rem, so neither modifier matches exactly. */
 	.users-card-rows {
 		gap: 0.75rem;
 	}
-	/* the original rows were bordered, rounded boxes (rounded-lg
-	   border-primary/10 px-3 py-2.5) with no fill - panel-section's shape,
-	   but at 10% primary border (tint-2) instead of --color-border's 18%,
+	/* the rows are bordered, rounded boxes (rounded-lg border-primary/10 px-3 py-2.5) with no fill -
+	   panel-section's shape, but at 10% primary border (tint-2) instead of --color-border's 18%,
 	   its own 0.625rem/0.75rem padding, and no tint background. */
 	.users-card-row {
 		display: flex;
@@ -173,24 +172,22 @@
 		align-items: center;
 		gap: 0.5rem;
 	}
-	/* the original role badge was text-xs font-bold tracking-widest
+	/* the role badge is text-xs font-bold tracking-widest
 	   (12px/700/0.1em), not badge-sm's 10px/500/0.06em. */
 	.users-card-role-badge {
 		font-size: 0.75rem;
 		font-weight: 700;
 		letter-spacing: 0.1em;
 	}
-	/* bg-blue-100/text-blue-700 was a soft tint, not badge-info's solid
+	/* this is a soft tint (bg-blue-100/text-blue-700), not badge-info's solid
 	   fill. */
 	.users-card-role-badge-info {
 		background: var(--color-info-soft);
 		color: var(--color-on-info-soft);
 	}
-	/* the original was border-primary/30 bg-primary/10 text-primary (a
-	   tinted fill with a border), not .btn's plain outlined default. Its
-	   text-xs also carried Tailwind's bundled 1rem line-height, which
-	   .btn-sm (font-size only) leaves at .btn's own 1.25rem - 4px taller
-	   than the original 26px button, which set the whole row's height. */
+	/* the button is a tinted fill with a border, not .btn's plain outlined default. Its line-height is
+	   1rem (text-xs's bundled value) because .btn-sm (font-size only) would leave .btn's own
+	   1.25rem, making it 4px taller and setting the whole row's height. */
 	.users-card-change-password-btn {
 		min-height: 0;
 		line-height: 1rem;

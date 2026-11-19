@@ -32,8 +32,8 @@
 </div>
 
 <style>
-	/* the original recipe container used a black/20 wash; --color-backdrop
-	   (fixed black in both themes) scaled via color-mix stands in for it. */
+	/* the recipe container uses a black/20 wash: --color-backdrop (fixed black in both themes) scaled
+	   via color-mix. */
 	.recipe-strip {
 		display: grid;
 		grid-template-columns: 1fr;

@@ -178,7 +178,7 @@ describe('Job detail page (v3)', () => {
 		await waitFor(() => {
 			expect(screen.getByText('Tracks (1)')).toBeInTheDocument();
 		});
-		// Source column was replaced by Kind + Filename; assert on the Kind header.
+		// The table has Kind + Filename columns; assert on the Kind header.
 		expect(screen.getByRole('columnheader', { name: 'Kind' })).toBeInTheDocument();
 	});
 
@@ -415,7 +415,7 @@ describe('Job detail page (v3)', () => {
 		).not.toBeNull();
 	});
 
-	it('shows the encoder frame rate beside an in-progress transcode (D-248)', async () => {
+	it('shows the encoder frame rate beside an in-progress transcode', async () => {
 		mockFetchJob.mockResolvedValue({
 			job: createJob({ id: 'job_42', title: 'Test Movie', status: 'ripped' }),
 			tracks: [

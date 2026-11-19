@@ -14,7 +14,7 @@
 	import { enrollBlockReason, isoStatus, type IsoStatus } from '$lib/drives/setup-drives';
 	import type { StepCommitResult } from '../../../setup/steps';
 
-	// Step 3, the core step: enroll the drives to rip with (setup spec §5.4).
+	// Step 3, the core step: enroll the drives to rip with.
 	// The same drive components as Settings > Drives; changes save as made.
 	let { view }: { view: SetupView; setBlocked?: (reason: string | null) => void } = $props();
 	void view;

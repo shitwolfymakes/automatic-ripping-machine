@@ -29,7 +29,7 @@ describe('JobActions', () => {
 		vi.mocked(confirm).mockReturnValue(true);
 	});
 
-	describe('rip again (D-132)', () => {
+	describe('rip again', () => {
 		it('is offered for a ripped job only', () => {
 			renderComponent(JobActions, { props: { job: createJob({ status: 'ripped_partial' }) } });
 			expect(screen.getByRole('button', { name: 'Rip again' })).toBeInTheDocument();

@@ -8,7 +8,7 @@
 	import SystemHealthList from './SystemHealthList.svelte';
 
 	// Settings > System and the setup walkthrough's System check share this.
-	// `grouped`: Storage + Services panels with fix commands (setup spec §5.3).
+	// `grouped`: Storage + Services panels with fix commands.
 	// `scope="system"`: only what the System check step is about; drives and
 	// the MakeMKV key are later steps. `autorun`: check on mount.
 	let {

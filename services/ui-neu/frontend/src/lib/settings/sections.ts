@@ -133,7 +133,7 @@ export const KEY_SERVICE_LABEL: Record<'tmdb' | 'omdb' | 'tvdb' | 'makemkv', str
 
 /** The fields a setup walkthrough step renders: those tagged `setup_step`, in
  *  `setup_order`, plus any field whose widget lives on one of them
- *  (`part_of`), across every settings group (setup spec 2026-10-01 §7.2). */
+ *  (`part_of`), across every settings group. */
 export function stepFields(groups: SettingsGroup[], step: string): ConfigFieldMeta[] {
 	const all = groups.flatMap((g) => g.fields);
 	const tagged = all.filter((f) => f.setup_step === step).sort((a, b) => (a.setup_order ?? 0) - (b.setup_order ?? 0));

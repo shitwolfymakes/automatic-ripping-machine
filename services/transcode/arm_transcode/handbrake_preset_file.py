@@ -1,7 +1,7 @@
-"""The one-preset file a HandBrake encode imports when its preset carries HandBrake settings (spec 4.7).
+"""The one-preset file a HandBrake encode imports when its preset carries HandBrake settings.
 
 Deciding whether a preset has settings, checking them against the image's
-baked schema (M5), materialising the file and flags, and writing the file
+baked schema, materialising the file and flags, and writing the file
 are separate functions; `main` owns the temp directory and the launch.
 """
 
@@ -68,7 +68,7 @@ def _family_issues(
 def check_settings(
     schema: HandbrakeSchema, family: str | None, preset_ref: str | None, settings: HandbrakeSettings
 ) -> None:
-    """M5: raise `SettingsRejected` when `common` or the family's block is invalid against this image's schema.
+    """Raise `SettingsRejected` when `common` or the family's block is invalid against this image's schema.
 
     `UnknownBasePreset` from either check propagates unchanged.
     """

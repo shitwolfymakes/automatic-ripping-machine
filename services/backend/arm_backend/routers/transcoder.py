@@ -1,4 +1,4 @@
-"""Transcoder ↔ Backend REST endpoints (Phase 7).
+"""Transcoder ↔ Backend REST endpoints.
 
 Five endpoints per `03-protocol.md § Transcode container ↔ Backend`:
 - `POST /register` — bootstrap; transcoder receives the task, session, preset,
@@ -80,7 +80,7 @@ _PREDATES_SETTINGS = "transcode image predates HandBrake settings; rebuild or pu
 
 
 def _refuse_image_without_settings_support(req: RegisterTranscoderRequest, preset: TranscodePreset | None) -> None:
-    """M6: an image that reports no schema hash cannot apply HandBrake settings, so it must not get a preset that has them."""
+    """An image that reports no schema hash cannot apply HandBrake settings, so it must not get a preset that has them."""
     if req.schema_hash is None and preset is not None and preset.handbrake_settings:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=_PREDATES_SETTINGS)
 

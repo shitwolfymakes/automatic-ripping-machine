@@ -82,7 +82,7 @@
 		// recipe preview and (when transcoding is runtime-disabled) gate the
 		// passthrough filter on filteredSessions. Fire both fetches
 		// CONCURRENTLY (not sessions-then-presets) and let each update its own
-		// state independently as it settles - sessions no longer waits on a
+		// state independently as it settles - sessions do not wait on a
 		// sequential presets round-trip, and a preset-list failure still only
 		// degrades the recipe preview (names fall back to ids) rather than
 		// breaking the dialog.

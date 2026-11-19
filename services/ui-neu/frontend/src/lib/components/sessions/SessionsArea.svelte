@@ -117,7 +117,7 @@
 		await reloadAfter(() => cloneSession(s.id, { name: copyName(s.name) }), 'Clone failed');
 	}
 
-	// FIX 1: open confirm dialog instead of deleting immediately
+	// open confirm dialog instead of deleting immediately
 	function handleDeleteSession(s: JoinedSession) {
 		deleteSessionTarget = s;
 	}
@@ -183,7 +183,7 @@
 		}
 	}
 
-	// FIX 1 (preset): open confirm before deleting a preset
+	// open confirm before deleting a preset
 	function handleDeletePreset(p: RipPresetView | TranscodePresetView) {
 		deletePresetTarget = p;
 	}
@@ -388,7 +388,7 @@
 />
 
 <style>
-	/* original: flex flex-wrap items-start justify-between gap-4 - .page-header
+	/* wrapping row (items-start, justify-between, gap-4); .page-header
 	   is items-center/gap-3/margin-bottom-6, tuned for a top-level H1 row, not
 	   this sub-tab header (items-start, gap-4, no own margin - the stack-lg
 	   parent supplies spacing to the next sibling). */
@@ -437,7 +437,7 @@
 		box-shadow: var(--shadow-1);
 		padding: 0.25rem;
 	}
-	/* original padding was px-3 py-1.5 (0.75rem/0.375rem), not tabs-pills'
+	/* padding is 0.75rem/0.375rem, not tabs-pills'
 	   default 0.25rem 0.75rem - 2px taller per side. */
 	/* reach the imported block's class from this scoped selector */
 	.sessions-area-tabs :global(.tabs-tab) {

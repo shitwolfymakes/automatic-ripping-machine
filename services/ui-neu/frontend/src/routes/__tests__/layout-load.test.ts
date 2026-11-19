@@ -148,7 +148,7 @@ describe('+layout.ts load guard', () => {
 	});
 
 	it('the server decides: an old browser-session Finish later flag no longer pauses the redirect', async () => {
-		// Finish later is recorded server-wide now (the status endpoint then
+		// Finish later is recorded server-wide (the status endpoint then
 		// reports first_run=false for everyone); a leftover flag from an older
 		// build must not hide a setup the server says is still pending.
 		asAdmin();

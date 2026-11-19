@@ -106,8 +106,7 @@
 		color: var(--color-primary-text);
 	}
 	/* Four distinct count tones. These are TEXT labels, so they take the
-	   accent roles that match their originals (blue-400, indigo-400,
-	   amber-400), not the --color-status-* machine that fills dots and
+	   accent roles (blue-400, indigo-400, amber-400), not the --color-status-* machine that fills dots and
 	   progress bars: a scheme is free to redefine the status colours for its
 	   own state machine (winamp-97 sets every one of them to terminal green),
 	   which would collapse all four counts into one colour. */

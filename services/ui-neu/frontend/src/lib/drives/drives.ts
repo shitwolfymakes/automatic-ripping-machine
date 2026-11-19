@@ -3,7 +3,7 @@ import type { DriveMediaStatus, DriveView } from '$lib/types/api.gen';
 export const DETACHED_LABEL = '○ detached: reconnect the drive';
 export const NO_SERIAL_LABEL = 'no serial, identified by port';
 
-// Settings > Drives lists optical drives only (spec 7.5); an in-flight ISO
+// Settings > Drives lists optical drives only; an in-flight ISO
 // rip is a virtual drive and never shows there.
 export function opticalOnly(drives: DriveView[]): DriveView[] {
 	return drives.filter((d) => (d.kind ?? 'optical') === 'optical');
@@ -54,7 +54,7 @@ const MEDIA_BLOCK_REASONS: Partial<Record<DriveMediaStatus, string>> = {
 	unavailable: 'The drive cannot be opened: check its permissions'
 };
 
-// Why Start rip cannot work right now, or null when it can (D-208). The
+// Why Start rip cannot work right now, or null when it can. The
 // backend refuses a trigger while the drive rips (409) or reports no disc
 // ready (400), and the ripper silently drops one while it owns any job or
 // when no ripper is listening, so gate the button up front instead of

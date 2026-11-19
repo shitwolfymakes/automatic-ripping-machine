@@ -39,10 +39,8 @@
 </div>
 
 <style>
-	/* .panel's own shadow (--shadow-1) stands in for the original's shadow-xs;
-	   everything else (border-color, radius, background, padding) is .panel's
-	   own default, an exact match for rounded-lg border border-primary/20
-	   bg-surface p-4. */
+	/* .panel's own shadow (--shadow-1) is used as is; everything else (border-color, radius,
+	   background, padding) is .panel's own default. */
 	.notifications-page-card[data-seen='true'] {
 		opacity: 0.6;
 	}
@@ -68,9 +66,8 @@
 		border-radius: 9999px;
 		background: var(--color-warning);
 	}
-	/* the original title had no explicit text-size class (font-medium
-	   text-gray-900 only), so it renders at the body default: 1rem/1.5 line
-	   height (24px), not a text-sm/text-xs utility. */
+	/* the title has no explicit text-size class, so it renders at the body default: 1rem with a 1.5
+	   line height (24px). */
 	.notifications-page-row-title {
 		font-size: 1rem;
 		line-height: 1.5rem;
@@ -83,7 +80,7 @@
 		line-height: 1.25rem;
 		color: var(--color-text-secondary);
 	}
-	/* the original was text-gray-600 dark:text-gray-400; --color-text-secondary is gray-700/gray-300, so it is right in light mode but a shade too bright in dark - --color-text-muted is the role that is gray-400 there. */
+	/* the wanted colour is gray-600 in light mode and gray-400 in dark; --color-text-secondary is gray-700/gray-300, so it is right in light mode but a shade too bright in dark - --color-text-muted is the role that is gray-400 there. */
 	:global(.dark) .notifications-page-row-message {
 		color: var(--color-text-muted);
 	}
@@ -93,13 +90,11 @@
 		line-height: 1rem;
 		color: var(--color-text-faint);
 	}
-	/* the original Dismiss button: rounded-lg px-3 py-1.5 text-xs font-medium
-	   bg-primary/5 text-gray-600 ring-1 ring-primary/25 hover:bg-primary/10 -
-	   a tinted-fill button with no visible border box (ring, not border), so
+	/* the Dismiss button is a tinted-fill button with no visible border box (ring, not border), so
 	   btn's own border is dropped and the ring approximated with a matching
 	   border colour instead (rings and borders paint differently, but no ring
 	   utility exists in the allowed inline families). */
-	/* ring-1 ring-primary/25 in the original, not a real border - see the
+	/* ring-1 ring-primary/25, not a real border - see the
 	   header Dismiss All button's own note above. */
 	.notifications-page-dismiss-btn {
 		flex-shrink: 0;

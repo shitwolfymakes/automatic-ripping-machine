@@ -6,7 +6,7 @@ import { get, post } from './client';
 // fetch. The image-cache endpoints are real.
 //
 // The shapes the (dormant) maintenance UI reads are declared locally here and
-// re-exported under the names the pages import; api.gen no longer carries them.
+// re-exported under the names the pages import.
 
 interface OrphanFolderEntry {
 	path: string;

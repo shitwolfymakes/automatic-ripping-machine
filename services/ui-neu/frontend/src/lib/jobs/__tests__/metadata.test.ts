@@ -64,7 +64,7 @@ describe('readJobMetadata — pending_session_id', () => {
 	});
 });
 
-describe('readJobMetadata typed sections (step 2 §3.4)', () => {
+describe('readJobMetadata typed sections', () => {
 	it('reads external ids / video_type / multi_title / source_type / music from the typed sections', () => {
 		const out = readJobMetadata({
 			identity: { provider: 'tmdb', external_ids: { imdb: 'tt0371746', tmdb: '1726' } },

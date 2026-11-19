@@ -1,4 +1,4 @@
-"""Phase 12 — `/api/logs/{job_id}` (NDJSON) and `/api/logs/{job_id}.zip`.
+"""`/api/logs/{job_id}` (NDJSON) and `/api/logs/{job_id}.zip`.
 
 Both endpoints grep `LOG_DIR/*.log` line-by-line for `record["job_id"]`.
 Tests monkeypatch `arm_backend.log_reader.LOG_DIR` to a `tmp_path`
@@ -343,7 +343,7 @@ def test_stream_per_job_respects_cap(tmp_path: Path, signing_key: bytes, monkeyp
 def test_stream_limit_zero_returns_no_lines(
     tmp_path: Path, signing_key: bytes, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """limit=0 means no lines, on both the per-job and fallback paths (D-166)."""
+    """limit=0 means no lines, on both the per-job and fallback paths."""
     monkeypatch.setattr(log_reader, "LOG_DIR", tmp_path)
     _seed(tmp_path, service="svc-a", lines=[_line(msg="a0")])
     _seed(tmp_path, service="svc-b", lines=[_line(msg="b0")])
