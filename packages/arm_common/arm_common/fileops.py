@@ -99,7 +99,7 @@ def atomic_output(final_path: Path) -> Iterator[Path]:
     _fsync_file(tmp_path)
     os.replace(tmp_path, final_path)
     _fsync_dir(final_path.parent)
-    logger.info("atomic rename → %s", final_path)
+    logger.debug("atomic rename → %s", final_path)
 
 
 def _copy_file(
@@ -119,17 +119,29 @@ def _copy_file(
     shutil.copystat(src, dst)
 
 
+_shared_filesystem_advised = False
+
+
 def _same_device_hint(src: Path, dst_dir: Path) -> None:
     try:
         same = src.stat().st_dev == dst_dir.stat().st_dev
     except OSError:
         return
     if same:
-        logger.info(
-            "passthrough is copying %s although source and destination share a filesystem; "
-            "mount their common parent once (raw and media as subfolders) to make this an instant rename",
-            src.name,
-        )
+        _log_shared_filesystem_hint(src.name)
+
+
+def _log_shared_filesystem_hint(name: str) -> None:
+    """The operator advice at INFO once per process; repeats for later files are DEBUG."""
+    global _shared_filesystem_advised
+    level = logging.DEBUG if _shared_filesystem_advised else logging.INFO
+    _shared_filesystem_advised = True
+    logger.log(
+        level,
+        "passthrough is copying %s although source and destination share a filesystem; "
+        "mount their common parent once (raw and media as subfolders) to make this an instant rename",
+        name,
+    )
 
 
 def _copy_across_filesystems(
@@ -176,7 +188,7 @@ def transcode_none(
         _copy_across_filesystems(input_path, output_path, cancel, on_bytes)
     _fsync_dir(output_path.parent)
     size = output_path.stat().st_size
-    logger.info("passthrough wrote %s (%d bytes)", output_path, size)
+    logger.debug("passthrough wrote %s (%d bytes)", output_path, size)
     return size
 
 
@@ -233,5 +245,5 @@ def move_tree(
     if copying:
         _fsync_tree_dirs(dst)
     size = tree_size(dst)
-    logger.info("passthrough moved folder to %s (%d bytes)", dst, size)
+    logger.debug("passthrough moved folder to %s (%d bytes)", dst, size)
     return size

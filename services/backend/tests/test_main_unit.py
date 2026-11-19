@@ -5,14 +5,19 @@ booting the app (the lifespan itself is exercised by the e2e harness).
 
 from __future__ import annotations
 
+import logging
 import subprocess
+from pathlib import Path
+from typing import Any
 
 
 import pytest
+import uvicorn
 
 from arm_backend import docker_factory, gpu_inventory
 from arm_backend import main as main_mod
 from arm_backend import thediscdb_schedule
+from arm_common import configure_service_logging
 
 
 def test_run_migrations_invokes_alembic(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -107,6 +112,25 @@ def test_main_invokes_uvicorn(monkeypatch: pytest.MonkeyPatch) -> None:
     main_mod.main()
     assert captured["app"] == "arm_backend.main:app"
     assert "host" in captured and "port" in captured
+
+
+def test_uvicorn_uses_the_root_handlers(monkeypatch: pytest.MonkeyPatch) -> None:
+    captured: dict[str, object] = {}
+    monkeypatch.setattr(main_mod.uvicorn, "run", lambda app, **kw: captured.update(kw))
+    main_mod.main()
+    assert captured["log_config"] is None
+    assert "log_level" not in captured
+
+
+def test_uvicorn_keeps_the_quiet_access_logger(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    configure_service_logging("arm-backend", log_dir=str(tmp_path), level="info")
+
+    def _build_config(app: str, **kw: Any) -> None:
+        uvicorn.Config(app, **kw).configure_logging()
+
+    monkeypatch.setattr(main_mod.uvicorn, "run", _build_config)
+    main_mod.main()
+    assert logging.getLogger("uvicorn.access").level == logging.WARNING
 
 
 # --- refresh_gpu_inventory (both populated + empty branches) ----------------
@@ -367,7 +391,6 @@ async def test_thediscdb_refresh_loop_skips_a_fresh_index(monkeypatch: pytest.Mo
     import asyncio
     import types
     from datetime import UTC, datetime, timedelta
-    from pathlib import Path
 
     from fastapi import FastAPI
 

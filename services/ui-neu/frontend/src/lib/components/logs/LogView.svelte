@@ -182,7 +182,7 @@
 							>
 								{serviceLabel(svc)}
 							</span>
-							<span class="log-view-line" data-tone={levelTone(entry.level)}>{entry.event}</span>
+							<span class="log-view-line" data-tone={levelTone(entry.level)}>{entry.msg}</span>
 						</div>
 					{/each}
 				{/if}

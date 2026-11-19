@@ -8,7 +8,7 @@ import { fetchJobLog, toLogEntry, type LogEntry } from '$lib/api/logs';
 
 function sortByTime(list: LogEntry[]): LogEntry[] {
 	return list
-		.map((e, i) => ({ e, i, t: e.timestamp ? Date.parse(e.timestamp) : Number.NaN }))
+		.map((e, i) => ({ e, i, t: e.ts ? Date.parse(e.ts) : Number.NaN }))
 		.sort((a, b) => {
 			if (Number.isNaN(a.t) || Number.isNaN(b.t) || a.t === b.t) return a.i - b.i;
 			return a.t - b.t;

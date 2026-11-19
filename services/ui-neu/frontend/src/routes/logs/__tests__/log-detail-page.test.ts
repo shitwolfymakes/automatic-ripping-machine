@@ -4,23 +4,15 @@ import type { WSEnvelope } from '$lib/api/ws';
 import LogDetailPage from '../[job_id]/+page.svelte';
 
 const ENTRIES = [
-	{ level: 'info', logger: 'arm', event: 'started ripping', service: 'arm-backend' },
-	{ level: 'error', logger: 'ripper', event: 'makemkv failed', service: 'arm-ripper-XYZ' }
+	{ level: 'info', logger: 'arm', msg: 'started ripping', service: 'arm-backend' },
+	{ level: 'error', logger: 'ripper', msg: 'makemkv failed', service: 'arm-ripper-XYZ' }
 ];
 
 const fetchJobLog = vi.fn();
 vi.mock('$lib/api/logs', () => ({
 	fetchJobLog: (...a: unknown[]) => fetchJobLog(...a),
 	jobLogDownloadUrl: (id: string) => `/api/logs/${id}.zip`,
-	toLogEntry: (raw: Record<string, unknown>) => ({
-		timestamp: raw.ts ?? null,
-		level: raw.level,
-		logger: raw.service,
-		event: raw.msg,
-		job_id: raw.job_id ?? null,
-		label: null,
-		service: raw.service
-	})
+	toLogEntry: (raw: Record<string, unknown>) => ({ ...raw, ts: raw.ts ?? null })
 }));
 
 const subscribeMock = vi.fn();
@@ -103,7 +95,7 @@ describe('Logs single-job viewer', () => {
 		const many = Array.from({ length: 1000 }, (_, i) => ({
 			level: 'info',
 			logger: 'arm',
-			event: `line ${i}`,
+			msg: `line ${i}`,
 			service: 'arm-backend'
 		}));
 		fetchJobLog.mockResolvedValue(many);
@@ -163,7 +155,15 @@ describe('Logs single-job viewer', () => {
 			topic: 'logs.job_a',
 			job_id: 'job_a',
 			track_id: null,
-			payload: { ts: 't', level: 'info', service: 'arm-transcode-t1', job_id: 'job_a', msg: 'live line', extra: {} }
+			payload: {
+				ts: 't',
+				level: 'info',
+				service: 'arm-transcode-t1',
+				job_id: 'job_a',
+				msg: 'live line',
+				logger: 'arm',
+				fields: {}
+			}
 		});
 
 		await waitFor(() => {

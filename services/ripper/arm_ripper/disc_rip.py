@@ -157,7 +157,7 @@ class DiscRip:
         if result.output_path is not None:
             self._kept.add(Path(result.output_path))
         await self._backend.patch_track(track.id, **_done_fields(result))
-        logger.info(
+        logger.debug(
             "track %s done size=%s duration=%s",
             track.id,
             result.size_bytes,

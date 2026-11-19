@@ -23,14 +23,16 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import col, select
 
+from arm_backend import transcode_task_events
 from arm_backend.auth import require_service_token
 from arm_backend.db import get_session
 from arm_backend.gpu_claim import release_gpu_for_task
 from arm_backend.handbrake_schema_runner import HandbrakeSchemaRunner
 from arm_backend.handbrake_schema_store import SchemaStore, get_schema_store
+from arm_backend.log_safely import log_safely
 from arm_backend.preset_views import preset_view
 from arm_backend.routers._deps import get_hub, get_schema_runner
-from arm_backend.transcode_apply import settle_session_application
+from arm_backend.transcode_apply import log_session_settled, settle_session_application
 from arm_backend.ws import WSHub
 from arm_common import (
     Gpu,
@@ -228,7 +230,8 @@ async def claim(
     )
     await db.commit()
     await db.refresh(task)
-    logger.info("transcode claim task_id=%s host=%s attempts=%d", task.id, task.claimed_by, task.attempts)
+    logger.debug("transcode claim task_id=%s host=%s attempts=%d", task.id, task.claimed_by, task.attempts)
+    await log_safely("transcode.started", transcode_task_events.announce_started(db, task))
     return ClaimTaskResponse(task=TranscodeTaskView.model_validate(task))
 
 
@@ -246,6 +249,7 @@ async def heartbeat(
             status_code=status.HTTP_409_CONFLICT,
             detail=f"task is in status={task.status.value}, not in_progress",
         )
+    previous_pct = task.progress_pct
     task.claim_heartbeat_at = datetime.now(UTC)
     task.progress_pct = req.progress_pct
     task.current_pass = req.current_pass
@@ -254,6 +258,9 @@ async def heartbeat(
     task.avg_fps = req.avg_fps
     await db.commit()
     await db.refresh(task)
+    await log_safely(
+        "transcode.progress", transcode_task_events.announce_progress(db, task, previous_pct, req.progress_pct)
+    )
     return task
 
 
@@ -300,10 +307,14 @@ async def complete(
         session=db,
     )
 
-    await settle_session_application(db, hub, application)
+    outcome = await settle_session_application(db, hub, application)
     await db.commit()
     await db.refresh(task)
-    logger.info("transcode complete task_id=%s output=%s", task.id, task.output_path)
+    logger.debug("transcode complete task_id=%s output=%s", task.id, task.output_path)
+    await log_safely(
+        "transcode.completed", transcode_task_events.announce_completed(db, task, req.output_path, req.size_bytes)
+    )
+    await log_session_settled(db, application, outcome)
     return task
 
 
@@ -345,8 +356,10 @@ async def fail(
         session=db,
     )
 
-    await settle_session_application(db, hub, application)
+    outcome = await settle_session_application(db, hub, application)
     await db.commit()
     await db.refresh(task)
-    logger.warning("transcode fail task_id=%s last_error=%s", task.id, task.last_error)
+    logger.debug("transcode fail task_id=%s last_error=%s", task.id, task.last_error)
+    await log_safely("transcode.failed", transcode_task_events.announce_failed(db, task, req.last_error))
+    await log_session_settled(db, application, outcome)
     return task

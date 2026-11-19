@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import logging
 import os
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import pytest
@@ -206,6 +208,7 @@ def test_copy_fallback_keeps_the_source_when_the_post_copy_unlink_fails(
     assert src.read_bytes() == b"v" * 10
     assert "post-copy unlink failed" in caplog.text
     assert "will leave source in /raw" in caplog.text
+    assert _only_record(caplog, "post-copy unlink failed").levelno == logging.WARNING
 
 
 def test_cancelled_copy_removes_the_partial_and_keeps_the_source(
@@ -253,21 +256,91 @@ def test_cancelled_tree_copy_removes_the_partial_tree(tmp_path: Path, monkeypatc
     assert not dst.exists() and tree_size(src) == 115
 
 
+@pytest.fixture(autouse=True)
+def _reset_shared_filesystem_advice(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The shared-filesystem advice is once per process; each test starts with none given."""
+    monkeypatch.setattr(fileops, "_shared_filesystem_advised", False)
+
+
+def _only_record(caplog: pytest.LogCaptureFixture, fragment: str) -> logging.LogRecord:
+    matches = [r for r in caplog.records if fragment in r.getMessage()]
+    assert len(matches) == 1, f"expected one record containing {fragment!r}, got {len(matches)}"
+    return matches[0]
+
+
+def test_per_file_detail_lines_log_at_debug(tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
+    """The atomic rename, the passthrough write and the folder move are per-file detail: DEBUG."""
+    with caplog.at_level(logging.DEBUG, logger="arm_common.fileops"):
+        with atomic_output(tmp_path / "out.mkv") as tmp:
+            tmp.write_bytes(b"x")
+        src = tmp_path / "raw" / "t0.mkv"
+        src.parent.mkdir()
+        src.write_bytes(b"y")
+        transcode_none(src, tmp_path / "media" / "t0.mkv")
+        move_tree(_backup_tree(tmp_path / "raw" / "backup"), tmp_path / "media" / "backup")
+    assert _only_record(caplog, "atomic rename").levelno == logging.DEBUG
+    assert _only_record(caplog, "passthrough wrote").levelno == logging.DEBUG
+    assert _only_record(caplog, "passthrough moved folder").levelno == logging.DEBUG
+
+
+def test_passthrough_fallback_keeps_the_rename_failure_at_info(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    src = tmp_path / "raw" / "t0.mkv"
+    src.parent.mkdir()
+    src.write_bytes(b"v" * 10)
+    _no_rename(monkeypatch)
+    with caplog.at_level(logging.DEBUG, logger="arm_common.fileops"):
+        transcode_none(src, tmp_path / "media" / "t0.mkv")
+    assert _only_record(caplog, "passthrough rename failed").levelno == logging.INFO
+
+
 def test_copy_reports_progress_and_hints_at_a_shared_filesystem(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
 ) -> None:
     """The copy reports every chunk, and a copy between two mounts of
-    one filesystem logs the single-parent-mount hint."""
+    one filesystem logs the single-parent-mount hint, at INFO on the first file."""
     src = tmp_path / "raw" / "t0.mkv"
     src.parent.mkdir()
     src.write_bytes(b"v" * 10)
     _no_rename(monkeypatch)
     monkeypatch.setattr(fileops, "COPY_CHUNK_BYTES", 4)
     chunks: list[int] = []
-    with caplog.at_level("INFO", logger="arm_common.fileops"):
+    with caplog.at_level(logging.DEBUG, logger="arm_common.fileops"):
         transcode_none(src, tmp_path / "media" / "t0.mkv", on_bytes=chunks.append)
     assert chunks == [4, 4, 2]
-    assert "share a filesystem" in caplog.text
+    assert _only_record(caplog, "share a filesystem").levelno == logging.INFO
+
+
+def test_shared_filesystem_hint_is_info_once_then_debug(caplog: pytest.LogCaptureFixture) -> None:
+    src = SimpleNamespace(name="t0.mkv", stat=lambda: SimpleNamespace(st_dev=1))
+    dst_dir = SimpleNamespace(stat=lambda: SimpleNamespace(st_dev=1))
+    with caplog.at_level(logging.DEBUG, logger="arm_common.fileops"):
+        fileops._same_device_hint(src, dst_dir)  # type: ignore[arg-type]
+        fileops._same_device_hint(src, dst_dir)  # type: ignore[arg-type]
+    first, second = [r for r in caplog.records if "share a filesystem" in r.getMessage()]
+    assert first.levelno == logging.INFO
+    assert second.levelno == logging.DEBUG
+
+
+def test_same_device_hint_is_silent_when_the_source_cannot_be_stat(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    def _missing() -> None:
+        raise OSError(2, "No such file")
+
+    src = SimpleNamespace(name="t0.mkv", stat=_missing)
+    with caplog.at_level(logging.DEBUG, logger="arm_common.fileops"):
+        fileops._same_device_hint(src, tmp_path)  # type: ignore[arg-type]
+    assert caplog.records == []
+
+
+def test_same_device_hint_is_silent_across_filesystems(caplog: pytest.LogCaptureFixture) -> None:
+    src = SimpleNamespace(name="t0.mkv", stat=lambda: SimpleNamespace(st_dev=1))
+    dst_dir = SimpleNamespace(stat=lambda: SimpleNamespace(st_dev=2))
+    with caplog.at_level(logging.DEBUG, logger="arm_common.fileops"):
+        fileops._same_device_hint(src, dst_dir)  # type: ignore[arg-type]
+    assert caplog.records == []
 
 
 def test_tree_copy_reports_progress(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
