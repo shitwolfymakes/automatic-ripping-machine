@@ -111,7 +111,10 @@ const SECTIONS: Record<string, SettingsSection[]> = {
 		},
 		{ title: 'ISO Ripping', keys: ['max_parallel_iso_rips'] }
 	],
-	Transcoding: [{ title: 'Scheduling', keys: ['transcode_enabled', 'auto_transcode_on_idle'] }]
+	Transcoding: [
+		{ title: 'Transcoding', keys: ['transcode_enabled', 'transcode_capable'], hidden: ['transcode_capable'] },
+		{ title: 'Concurrency', keys: ['max_parallel_transcodes'] }
+	]
 };
 
 /** Maps the four key field keys (the Keys tab's "API keys" and "MakeMKV" sections) to

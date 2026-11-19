@@ -222,12 +222,10 @@
 				</div>
 			{/each}
 
-			<!-- Transcoding Tab: schema-driven (transcode_enabled + auto_transcode_on_idle,
-			 GPU inventory) when this deployment can run transcode containers.
-			 On a ripper-only deployment (not capable), only the disabled
-			 transcode_enabled toggle + a hint shows - GpusCard and the
-			 encode-only fields (auto_transcode_on_idle, max_parallel_transcodes)
-			 stay hidden. -->
+			<!-- Transcoding Tab: the capability pill, then the schema-driven
+			 transcode_enabled toggle, max_parallel_transcodes and the GPU inventory
+			 when this deployment can run transcode containers. On a ripper-only
+			 deployment, the pill and the disabled toggle with its hint only. -->
 			{#if activeTab === 'transcoding'}
 				<TranscodingSettings group={transcodingGroup} config={settings.config} onsaved={onTranscodingSaved} />
 			{/if}
