@@ -256,6 +256,12 @@ def test_cancelled_tree_copy_removes_the_partial_tree(tmp_path: Path, monkeypatc
     assert not dst.exists() and tree_size(src) == 115
 
 
+@pytest.fixture(autouse=True)
+def _reset_shared_filesystem_advice(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The shared-filesystem advice is once per process; each test starts with none given."""
+    monkeypatch.setattr(fileops, "_shared_filesystem_advised", False)
+
+
 def _only_record(caplog: pytest.LogCaptureFixture, fragment: str) -> logging.LogRecord:
     matches = [r for r in caplog.records if fragment in r.getMessage()]
     assert len(matches) == 1, f"expected one record containing {fragment!r}, got {len(matches)}"
@@ -293,7 +299,7 @@ def test_copy_reports_progress_and_hints_at_a_shared_filesystem(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
 ) -> None:
     """D-127: the copy reports every chunk, and a copy between two mounts of
-    one filesystem logs the single-parent-mount hint at DEBUG (it fires per file)."""
+    one filesystem logs the single-parent-mount hint, at INFO on the first file."""
     src = tmp_path / "raw" / "t0.mkv"
     src.parent.mkdir()
     src.write_bytes(b"v" * 10)
@@ -303,7 +309,18 @@ def test_copy_reports_progress_and_hints_at_a_shared_filesystem(
     with caplog.at_level(logging.DEBUG, logger="arm_common.fileops"):
         transcode_none(src, tmp_path / "media" / "t0.mkv", on_bytes=chunks.append)
     assert chunks == [4, 4, 2]
-    assert _only_record(caplog, "share a filesystem").levelno == logging.DEBUG
+    assert _only_record(caplog, "share a filesystem").levelno == logging.INFO
+
+
+def test_shared_filesystem_hint_is_info_once_then_debug(caplog: pytest.LogCaptureFixture) -> None:
+    src = SimpleNamespace(name="t0.mkv", stat=lambda: SimpleNamespace(st_dev=1))
+    dst_dir = SimpleNamespace(stat=lambda: SimpleNamespace(st_dev=1))
+    with caplog.at_level(logging.DEBUG, logger="arm_common.fileops"):
+        fileops._same_device_hint(src, dst_dir)  # type: ignore[arg-type]
+        fileops._same_device_hint(src, dst_dir)  # type: ignore[arg-type]
+    first, second = [r for r in caplog.records if "share a filesystem" in r.getMessage()]
+    assert first.levelno == logging.INFO
+    assert second.levelno == logging.DEBUG
 
 
 def test_same_device_hint_is_silent_when_the_source_cannot_be_stat(

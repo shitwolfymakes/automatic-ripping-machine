@@ -119,17 +119,29 @@ def _copy_file(
     shutil.copystat(src, dst)
 
 
+_shared_filesystem_advised = False
+
+
 def _same_device_hint(src: Path, dst_dir: Path) -> None:
     try:
         same = src.stat().st_dev == dst_dir.stat().st_dev
     except OSError:
         return
     if same:
-        logger.debug(
-            "passthrough is copying %s although source and destination share a filesystem; "
-            "mount their common parent once (raw and media as subfolders) to make this an instant rename",
-            src.name,
-        )
+        _log_shared_filesystem_hint(src.name)
+
+
+def _log_shared_filesystem_hint(name: str) -> None:
+    """The operator advice at INFO once per process; repeats for later files are DEBUG."""
+    global _shared_filesystem_advised
+    level = logging.DEBUG if _shared_filesystem_advised else logging.INFO
+    _shared_filesystem_advised = True
+    logger.log(
+        level,
+        "passthrough is copying %s although source and destination share a filesystem; "
+        "mount their common parent once (raw and media as subfolders) to make this an instant rename",
+        name,
+    )
 
 
 def _copy_across_filesystems(
