@@ -23,11 +23,14 @@ describe('rip feed', () => {
 		expect(feed({ track_id: 't1', progress_pct: 10.2 }, 10_000).etaSeconds).toBeNull();
 	});
 
-	it('resets on a new track', () => {
+	it('keeps its baseline when the rip moves to the next track, since the percentage is for the whole disc', () => {
 		const feed = createRipFeed();
 		feed({ track_id: 't1', progress_pct: 10 }, 0);
 		expect(feed({ track_id: 't1', progress_pct: 20 }, 10_000).etaSeconds).toBe(80);
-		expect(feed({ track_id: 't2', progress_pct: 30 }, 20_000).etaSeconds).toBeNull();
+		// 20 points in 20 s from the first sample → 1 point/s → 70 points left → 70 s.
+		const next = feed({ track_id: 't2', progress_pct: 30 }, 20_000);
+		expect(next.trackId).toBe('t2');
+		expect(next.etaSeconds).toBe(70);
 	});
 
 	it('resets on a backwards jump of more than 1 point', () => {
