@@ -1,30 +1,45 @@
+// Open arms the coverage tool reports that are Svelte's, not the component's:
+// each `{...}` below compiles to `(...) ?? ''` on a value that is never null
+// where it renders. The task's `{job.id}` (a string) in the Task ID cell, both
+// with and without a job link, and in the transcoder link; `{job.job_id}` in
+// the two job links, which render only inside `{#if job.job_id}`; and the
+// detail table's progress percent (a number).
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderComponent, screen, fireEvent, cleanup, waitFor } from '$lib/testing/render';
 import TranscodeCard from '../TranscodeCard.svelte';
 import type { TranscodeTaskView } from '$lib/types/api.gen';
-import type { WSEnvelope } from '$lib/api/ws';
+import type { TaskLive } from '$lib/stores/job-live.svelte';
 
-const wsHandlers = new Map<string, (env: WSEnvelope) => void>();
-vi.mock('$lib/api/ws', () => ({
-	wsClient: {
-		subscribe: vi.fn((topic: string, handler: (env: WSEnvelope) => void) => {
-			wsHandlers.set(topic, handler);
-			return () => wsHandlers.delete(topic);
-		})
-	}
+const h = vi.hoisted(() => ({
+	unfollow: vi.fn(),
+	followTask: vi.fn(),
+	task: vi.fn()
+}));
+vi.mock('$lib/stores/job-live.svelte', () => ({
+	jobLive: { followTask: h.followTask, task: h.task }
 }));
 
-function progressEvent(taskId: string, payload: Record<string, unknown>): WSEnvelope {
+function taskLive(over: Partial<TaskLive> = {}): TaskLive {
 	return {
-		op: 'event',
-		event_id: 'evt_1',
-		event_type: 'transcode.progress',
-		emitted_at: '2025-06-15T12:00:00Z',
-		topic: `transcode.progress.${taskId}`,
-		job_id: null,
-		track_id: null,
-		payload: { task_id: taskId, ...payload }
+		taskId: 't-1',
+		pct: null,
+		etaSeconds: null,
+		fps: null,
+		avgFps: null,
+		pass: null,
+		bytesDone: null,
+		bytesTotal: null,
+		rateBps: null,
+		phase: null,
+		trackId: null,
+		...over
 	};
+}
+
+function resetLive(): void {
+	h.unfollow = vi.fn();
+	h.followTask.mockReset().mockImplementation(() => h.unfollow);
+	h.task.mockReset().mockImplementation(() => taskLive());
 }
 
 function createTranscodeTask(overrides: Partial<TranscodeTaskView> = {}): TranscodeTaskView {
@@ -48,6 +63,7 @@ function createTranscodeTask(overrides: Partial<TranscodeTaskView> = {}): Transc
 
 describe('TranscodeCard', () => {
 	beforeEach(() => {
+		resetLive();
 		vi.useFakeTimers();
 		vi.setSystemTime(new Date('2025-06-15T12:00:00Z'));
 	});
@@ -99,6 +115,15 @@ describe('TranscodeCard', () => {
 	describe('expanded state', () => {
 		beforeEach(() => {
 			vi.useRealTimers(); // slide transition needs real timers
+		});
+
+		it('links no job when the task has none, and still shows its id and the transcoder link', async () => {
+			const { container } = renderComponent(TranscodeCard, { props: { job: createTranscodeTask({ job_id: null }) } });
+			await fireEvent.click(screen.getByText('my_movie.mkv'));
+			await waitFor(() => expect(screen.getByText('Open transcoder')).toBeInTheDocument());
+			expect(screen.queryByText('Open job')).toBeNull();
+			expect(container.querySelector('a[href^="/jobs/"]')).toBeNull();
+			expect(screen.getByText(/#t-1/)).toBeInTheDocument();
 		});
 
 		it('shows Open job + Open transcoder buttons when expanded', async () => {
@@ -160,42 +185,25 @@ describe('TranscodeCard', () => {
 			});
 		});
 	});
-	// D-130: the ETA must not count the time a task sat queued.
+	// D-130: the ETA must not count the time a task sat queued. The store owns
+	// the estimate from started_at; the card shows what task() returns.
 	describe('ETA', () => {
-		it('extrapolates from started_at, not created_at', () => {
-			// Queued at 10:05, claimed at 11:59, 50% at 12:00: one more minute,
-			// not the 1h55m that measuring from created_at would give.
-			renderComponent(TranscodeCard, {
-				props: { job: createTranscodeTask({ progress_pct: 50, started_at: '2025-06-15T11:59:00Z' }) }
-			});
+		it('shows the ETA the store reports, in the coarse form', () => {
+			h.task.mockReturnValue(taskLive({ etaSeconds: 60 }));
+			renderComponent(TranscodeCard, { props: { job: createTranscodeTask() } });
 			expect(screen.getByTitle('Estimated time remaining')).toHaveTextContent('~1m 0s');
 		});
 
-		it('prefers the transcoder-reported eta_seconds from the live progress event', async () => {
-			renderComponent(TranscodeCard, {
-				props: { job: createTranscodeTask({ progress_pct: 50, started_at: '2025-06-15T11:59:00Z' }) }
-			});
-			const handler = wsHandlers.get('transcode.progress.t-1');
-			expect(handler).toBeDefined();
-			handler?.(progressEvent('t-1', { progress_pct: 51, eta_seconds: 1800 }));
-			await waitFor(() => expect(screen.getByTitle('Estimated time remaining')).toHaveTextContent('~30m 0s'));
-			// A tick without an ETA falls back to the local estimate.
-			handler?.(progressEvent('t-1', { progress_pct: 52, eta_seconds: null }));
-			await waitFor(() => expect(screen.getByTitle('Estimated time remaining')).toHaveTextContent('~1m 0s'));
+		it('reads the store for this task, merged over its row', () => {
+			const job = createTranscodeTask({ eta_seconds: 900 });
+			renderComponent(TranscodeCard, { props: { job } });
+			expect(h.task).toHaveBeenCalledWith('t-1', job);
 		});
 
-		it('prefers the persisted eta_seconds from the task row before any live tick arrives', async () => {
-			// D-242: a card that mounts mid-encode shows the heartbeat's ETA, not
-			// the local extrapolation (which would read ~1m here).
-			renderComponent(TranscodeCard, {
-				props: {
-					job: createTranscodeTask({ progress_pct: 50, started_at: '2025-06-15T11:59:00Z', eta_seconds: 900 })
-				}
-			});
-			expect(screen.getByTitle('Estimated time remaining')).toHaveTextContent('~15m 0s');
-			// A live tick replaces it.
-			wsHandlers.get('transcode.progress.t-1')?.(progressEvent('t-1', { progress_pct: 51, eta_seconds: 1800 }));
-			await waitFor(() => expect(screen.getByTitle('Estimated time remaining')).toHaveTextContent('~30m 0s'));
+		it('rounds a long ETA to whole minutes', () => {
+			h.task.mockReturnValue(taskLive({ etaSeconds: 1800 }));
+			renderComponent(TranscodeCard, { props: { job: createTranscodeTask() } });
+			expect(screen.getByTitle('Estimated time remaining')).toHaveTextContent('~30m');
 		});
 
 		it('shows no ETA or elapsed time from created_at when the claim time is unknown', () => {
@@ -203,42 +211,42 @@ describe('TranscodeCard', () => {
 			expect(screen.getByTitle('Estimated time remaining').textContent?.trim()).toBe('-');
 		});
 
-		it('does not subscribe for a task that is not running', () => {
-			wsHandlers.clear();
+		it('does not follow a task that is not running', () => {
 			renderComponent(TranscodeCard, { props: { job: createTranscodeTask({ status: 'queued' }) } });
-			expect(wsHandlers.size).toBe(0);
+			expect(h.followTask).not.toHaveBeenCalled();
 		});
 
-		it('drops the subscription when the card unmounts', () => {
-			wsHandlers.clear();
+		it('follows the running task and unfollows when the card unmounts', () => {
 			renderComponent(TranscodeCard, { props: { job: createTranscodeTask() } });
-			expect(wsHandlers.has('transcode.progress.t-1')).toBe(true);
+			expect(h.followTask).toHaveBeenCalledWith('t-1');
+			expect(h.unfollow).not.toHaveBeenCalled();
 			cleanup();
-			expect(wsHandlers.size).toBe(0);
+			expect(h.unfollow).toHaveBeenCalledTimes(1);
 		});
 	});
 
 	// D-248: the encoder frame rate beside the ETA.
 	describe('frame rate', () => {
-		it('shows the persisted fps and average from the task row', () => {
-			renderComponent(TranscodeCard, { props: { job: createTranscodeTask({ fps: 45.67, avg_fps: 23.46 }) } });
+		it('shows the rate and average the store reports', () => {
+			h.task.mockReturnValue(taskLive({ fps: 45.67, avgFps: 23.46 }));
+			renderComponent(TranscodeCard, { props: { job: createTranscodeTask() } });
 			expect(screen.getByTitle('Encoder frame rate')).toHaveTextContent('45.7 fps (avg 23.5)');
 		});
 
-		it('prefers the live progress event and omits a missing average', async () => {
-			renderComponent(TranscodeCard, { props: { job: createTranscodeTask({ fps: 45.67, avg_fps: 23.46 }) } });
-			wsHandlers.get('transcode.progress.t-1')?.(progressEvent('t-1', { progress_pct: 51, fps: 60, avg_fps: null }));
-			await waitFor(() => expect(screen.getByTitle('Encoder frame rate')).toHaveTextContent('60.0 fps'));
+		it('omits a missing average', () => {
+			h.task.mockReturnValue(taskLive({ fps: 60 }));
+			renderComponent(TranscodeCard, { props: { job: createTranscodeTask() } });
 			expect(screen.getByTitle('Encoder frame rate').textContent).not.toContain('avg');
 		});
 
 		it('renders nothing when no rate has been reported', () => {
-			renderComponent(TranscodeCard, { props: { job: createTranscodeTask({ fps: null, avg_fps: null }) } });
+			renderComponent(TranscodeCard, { props: { job: createTranscodeTask() } });
 			expect(screen.queryByTitle('Encoder frame rate')).not.toBeInTheDocument();
 		});
 
 		it('hides the rate once the task is no longer running', () => {
-			renderComponent(TranscodeCard, { props: { job: createTranscodeTask({ status: 'done', fps: 45.67 }) } });
+			h.task.mockReturnValue(taskLive({ fps: 45.67 }));
+			renderComponent(TranscodeCard, { props: { job: createTranscodeTask({ status: 'done' }) } });
 			expect(screen.queryByTitle('Encoder frame rate')).not.toBeInTheDocument();
 		});
 	});

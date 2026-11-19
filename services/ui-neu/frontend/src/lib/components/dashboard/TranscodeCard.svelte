@@ -3,9 +3,9 @@
 	import StatusBadge from '../shared/StatusBadge.svelte';
 	import ProgressBar from '../shared/ProgressBar.svelte';
 	import { statusAccentVar } from '$lib/jobs/status-format';
-	import { elapsedTime } from '$lib/utils/format';
-	import { etaLabel, fpsLabel } from '$lib/transcode/progress';
-	import { TranscodeLive } from '$lib/stores/transcode-live.svelte';
+	import { elapsedTime, formatDuration } from '$lib/utils/format';
+	import { fpsLabel } from '$lib/transcode/fps';
+	import { jobLive } from '$lib/stores/job-live.svelte';
 	import TimeAgo from '../shared/TimeAgo.svelte';
 	import SkeletonCard from '../shared/SkeletonCard.svelte';
 	import { slide } from 'svelte/transition';
@@ -24,14 +24,20 @@
 	let hasError = $derived(!!job?.last_error);
 	let isActive = $derived(job?.status === 'in_progress');
 	let accentVar = $derived(statusAccentVar(job?.status));
-	const live = new TranscodeLive();
-	let taskId = $derived(isActive ? job?.id : undefined);
+	// Follow exactly when the task id or its running state changes, not on every row update.
+	let followId = $derived(job?.id);
+	let following = $derived(job?.status === 'in_progress');
 	$effect(() => {
-		const id = taskId;
-		if (!id) return;
-		return live.follow(id);
+		const id = followId;
+		if (!id || !following) return;
+		return jobLive.followTask(id);
 	});
-	let liveForJob = $derived(live.sampleFor(job?.id));
+
+	/** An estimate reads "~12m"; under a minute "< 1m" already says it is rough. */
+	function etaLabel(seconds: number): string {
+		const text = formatDuration(seconds, { coarse: true });
+		return text.startsWith('<') ? text : `~${text}`;
+	}
 
 	function toggle(e: MouseEvent) {
 		if ((e.target as HTMLElement).closest('a, button:not(.row-toggle)')) return;
@@ -42,6 +48,8 @@
 {#if !job}
 	<SkeletonCard />
 {:else}
+	{@const live = jobLive.task(job.id, job)}
+	{@const etaSeconds = live?.etaSeconds ?? null}
 	<!-- svelte-ignore a11y_click_events_have_key_events -->
 	<div
 		class="card card-status transcode-card"
@@ -69,13 +77,12 @@
 
 				<!-- Frame rate + ETA (active) or Elapsed (otherwise) -->
 				{#if isActive}
-					{@const fpsDisplay = fpsLabel(job, liveForJob)}
-					{@const etaDisplay = etaLabel(job, liveForJob)}
+					{@const fpsDisplay = fpsLabel(live)}
 					{#if fpsDisplay}
 						<span class="shrink-0 transcode-card-meta" title="Encoder frame rate">{fpsDisplay}</span>
 					{/if}
 					<span class="shrink-0 transcode-card-meta" title="Estimated time remaining">
-						{etaDisplay ? `~${etaDisplay}` : job.started_at ? elapsedTime(job.started_at) : '-'}
+						{etaSeconds !== null ? etaLabel(etaSeconds) : job.started_at ? elapsedTime(job.started_at) : '-'}
 					</span>
 				{:else if job.created_at}
 					<span class="shrink-0 transcode-card-meta">{elapsedTime(job.created_at)}</span>
@@ -127,7 +134,11 @@
 							<tr>
 								<td class="transcode-card-detail-label whitespace-nowrap">Task ID</td>
 								<td class="transcode-card-detail-value">
-									<a href="/jobs/{job.job_id}" class="transcode-card-detail-link">#{job.id}</a>
+									{#if job.job_id}
+										<a href="/jobs/{job.job_id}" class="transcode-card-detail-link">#{job.id}</a>
+									{:else}
+										#{job.id}
+									{/if}
 								</td>
 								<td class="transcode-card-detail-label whitespace-nowrap transcode-card-detail-col2">Status</td>
 								<td class="transcode-card-detail-value"><StatusBadge status={job.status} /></td>
@@ -174,9 +185,11 @@
 						</div>
 					{/if}
 
-					<!-- Link to the owning job via job.job_id. -->
+					<!-- Link to the owning job via job.job_id, when the task has one. -->
 					<div class="cluster transcode-card-detail-actions">
-						<a href="/jobs/{job.job_id}" class="transcode-card-open-job">Open job</a>
+						{#if job.job_id}
+							<a href="/jobs/{job.job_id}" class="transcode-card-open-job">Open job</a>
+						{/if}
 						<a href="/transcoder#task-{job.id}" class="btn btn-sm transcode-card-open-transcoder">Open transcoder</a>
 					</div>
 				</div>

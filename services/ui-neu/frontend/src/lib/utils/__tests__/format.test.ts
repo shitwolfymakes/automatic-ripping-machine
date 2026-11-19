@@ -3,8 +3,7 @@ import {
 	formatBytes,
 	timeAgo,
 	elapsedTime,
-	formatRemaining,
-	formatEta,
+	formatDuration,
 	formatTransfer,
 	formatDateTime,
 	formatShortDateTime,
@@ -56,22 +55,13 @@ describe('elapsedTime', () => {
 		[null, 'N/A'],
 		['2025-06-15T11:59:45Z', '15s'],
 		['2025-06-15T11:57:30Z', '2m 30s'],
-		['2025-06-15T09:45:00Z', '2h 15m']
+		['2025-06-15T09:45:00Z', '2h 15m'],
+		// Uncapped past 24h: an elapsed time has no upper bound.
+		['2025-06-14T11:00:00Z', '25h 0m'],
+		// An unparseable start is as good as none.
+		['garbage', 'N/A']
 	])('elapsedTime(%s) = %s', (input, expected) => {
 		expect(elapsedTime(input)).toBe(expected);
-	});
-});
-
-describe('formatRemaining', () => {
-	it('formats a reported ETA like etaTime does', () => {
-		expect(formatRemaining(42)).toBe('42s');
-		expect(formatRemaining(1800)).toBe('30m 0s');
-		expect(formatRemaining(5400)).toBe('1h 30m');
-	});
-
-	it('clamps negatives to 0s and caps at 24h+', () => {
-		expect(formatRemaining(-5)).toBe('0s');
-		expect(formatRemaining(24 * 3600)).toBe('24h+');
 	});
 });
 
@@ -137,18 +127,42 @@ describe('calendarTimeAgo', () => {
 	});
 });
 
-describe('formatEta', () => {
-	it('returns "< 1m" for sub-minute', () => {
-		expect(formatEta(45)).toBe('< 1m');
+describe('formatDuration', () => {
+	it('formats a reported ETA in full', () => {
+		expect(formatDuration(42)).toBe('42s');
+		expect(formatDuration(1800)).toBe('30m 0s');
+		expect(formatDuration(5400)).toBe('1h 30m');
 	});
-	it('returns minutes+seconds for under 5 minutes', () => {
-		expect(formatEta(150)).toBe('2m 30s');
+
+	it('clamps negatives to 0s and caps at 24h+', () => {
+		expect(formatDuration(-5)).toBe('0s');
+		expect(formatDuration(24 * 3600)).toBe('24h+');
 	});
-	it('returns whole minutes for 5+ minute ETAs', () => {
-		expect(formatEta(720)).toBe('12m');
+
+	it('drops the 24h cap with cap: false', () => {
+		expect(formatDuration(90000, { cap: false })).toBe('25h 0m');
 	});
-	it('returns hours+minutes when over an hour', () => {
-		expect(formatEta(4_350)).toBe('1h 12m');
+
+	it('coarse returns "< 1m" for sub-minute', () => {
+		expect(formatDuration(45, { coarse: true })).toBe('< 1m');
+	});
+	it('coarse returns minutes+seconds for under 5 minutes', () => {
+		expect(formatDuration(150, { coarse: true })).toBe('2m 30s');
+	});
+	it('coarse returns whole minutes for 5+ minute ETAs', () => {
+		expect(formatDuration(720, { coarse: true })).toBe('12m');
+	});
+	it('coarse returns hours+minutes when over an hour', () => {
+		expect(formatDuration(4_350, { coarse: true })).toBe('1h 12m');
+	});
+	it('coarse clamps negatives and still caps at 24h+', () => {
+		expect(formatDuration(-5, { coarse: true })).toBe('< 1m');
+		expect(formatDuration(24 * 3600, { coarse: true })).toBe('24h+');
+	});
+	it.each([NaN, Infinity, -Infinity])('reads %s as 0, never "NaNs"', (value) => {
+		expect(formatDuration(value)).toBe('0s');
+		expect(formatDuration(value, { coarse: true })).toBe('< 1m');
+		expect(formatDuration(value, { cap: false })).toBe('0s');
 	});
 });
 

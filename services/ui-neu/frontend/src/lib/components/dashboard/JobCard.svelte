@@ -2,30 +2,20 @@
 	import type { JobView } from '$lib/types/api.gen';
 	import PosterImage from '../shared/PosterImage.svelte';
 	import StatusBadge from '../shared/StatusBadge.svelte';
-	import ProgressBar from '../shared/ProgressBar.svelte';
 	import { jobPoster } from '$lib/match/poster';
 	import { getVideoTypeConfig, discTypeLabel } from '$lib/jobs/type';
-	import { effectiveJobStatus, isPartialComplete } from '$lib/jobs/status';
-	import { isInProgress } from '$lib/jobs/status-groups';
+	import { effectiveJobStatus } from '$lib/jobs/status';
 	import DiscTypeIcon from '../shared/DiscTypeIcon.svelte';
 	import SkeletonCard from '../shared/SkeletonCard.svelte';
-	import JobLifecycle from '../jobs/JobLifecycle.svelte';
+	import StageRail from '../jobs/StageRail.svelte';
 
 	interface Props {
 		job?: JobView;
-		progress?: number | null;
-		progressStage?: string | null;
 	}
 
-	let { job, progress = null, progressStage = null }: Props = $props();
+	let { job }: Props = $props();
 
 	let typeConfig = $derived(getVideoTypeConfig(null, job?.disc_type ?? null));
-	// The stepper shows only while work is actually happening. isInProgress
-	// is isLive minus the idle post-rip statuses (ripped, ripped_partial,
-	// ripped_awaiting_identify): a job waiting on the operator is still live
-	// but shows no stepper, a transcoding job (effective 'transcoding') does,
-	// and a finished one (effective 'complete') does not.
-	let active = $derived(job ? isInProgress(job) : false);
 </script>
 
 {#if !job}
@@ -51,11 +41,6 @@
 					</h3>
 					<div class="flex shrink-0 items-center gap-1.5">
 						<StatusBadge status={effectiveJobStatus(job)} />
-						{#if isPartialComplete(job)}
-							<span class="badge badge-sm badge-warning"
-								>Done {job.transcode_progress?.tasks_done}/{job.transcode_progress?.tasks_total}</span
-							>
-						{/if}
 					</div>
 				</div>
 
@@ -66,22 +51,7 @@
 					{/if}
 				</div>
 
-				<!-- Row 3: Active → lifecycle/track counts -->
-				<div class="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 job-card-meta">
-					{#if active}
-						<JobLifecycle
-							status={effectiveJobStatus(job)}
-							sourceType={null}
-							size="sm"
-							partial={isPartialComplete(job)}
-						/>
-						{#if job.rip_progress && job.rip_progress.tracks_total > 0}
-							<span>{job.rip_progress.tracks_done} / {job.rip_progress.tracks_total} titles</span>
-						{/if}
-					{/if}
-				</div>
-
-				<!-- Row 4: Type badge, disc type -->
+				<!-- Row 3: Type badge, disc type -->
 				<div class="mt-1.5 flex flex-wrap gap-x-3 gap-y-1 job-card-meta">
 					<span class="job-card-type-pill" style:--jt-bg={typeConfig.badgeBg} style:--jt-text={typeConfig.badgeText}
 						>{typeConfig.label}</span
@@ -95,23 +65,9 @@
 				</div>
 			</div>
 		</div>
-		{#if active}
-			<div class="mt-3 job-card-progress">
-				{#if progress != null && progress > 0}
-					<ProgressBar value={progress} />
-					{#if progressStage}
-						<p class="mt-0.5 job-card-progress-stage">{progressStage}</p>
-					{/if}
-				{:else}
-					<!-- data-indeterminate is the progress vocabulary's state hook;
-				     carried here so themes can reach this shimmer the way they
-				     reach ProgressBar's, without naming scoped classes. -->
-					<div data-indeterminate="true" class="job-card-progress-indeterminate-track">
-						<div class="job-card-progress-indeterminate-fill"></div>
-					</div>
-				{/if}
-			</div>
-		{/if}
+		<div class="job-card-rail">
+			<StageRail {job} />
+		</div>
 	</a>
 {/if}
 
@@ -156,11 +112,6 @@
 		font-size: 0.875rem;
 		line-height: calc(1.25 / 0.875);
 	}
-	.job-card-progress-stage {
-		font-size: 0.75rem;
-		line-height: 1rem;
-		color: var(--color-text-faint);
-	}
 	.job-card-disc-pill {
 		border-radius: var(--radius-sm);
 		padding: 0.125rem 0.375rem;
@@ -173,17 +124,9 @@
 		background: var(--jt-bg);
 		color: var(--jt-text);
 	}
-	.job-card-progress-indeterminate-track {
-		height: 0.625rem;
-		overflow: hidden;
-		border-radius: 9999px;
-		background: var(--color-primary-tint-3);
-	}
-	.job-card-progress-indeterminate-fill {
-		height: 100%;
-		width: 33.3333%;
-		border-radius: 9999px;
-		background: color-mix(in srgb, var(--color-primary) 60%, transparent);
-		animation: var(--animate-indeterminate);
+	.job-card-rail {
+		margin-top: 0.875rem;
+		border-top: 1px solid var(--color-border);
+		padding-top: 0.75rem;
 	}
 </style>

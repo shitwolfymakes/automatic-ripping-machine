@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { effectiveJobStatus, isPartialComplete, isAwaitingAction, countRipping } from '$lib/jobs/status';
+import { effectiveJobStatus, isAwaitingAction, countRipping } from '$lib/jobs/status';
 
 type TP = { state: string; tasks_total: number; tasks_done: number; percent: number } | null;
 const job = (status: string, transcode_progress: TP = null) => ({ status, transcode_progress }) as any;
@@ -37,18 +37,6 @@ describe('effectiveJobStatus', () => {
 		expect(
 			effectiveJobStatus(job('ripping', { state: 'transcoding', tasks_total: 1, tasks_done: 0, percent: 0 }))
 		).toBe('ripping');
-	});
-});
-
-describe('isPartialComplete', () => {
-	it('true only for done_partial', () => {
-		expect(
-			isPartialComplete(job('ripped', { state: 'done_partial', tasks_total: 2, tasks_done: 1, percent: 50 }))
-		).toBe(true);
-		expect(isPartialComplete(job('ripped', { state: 'done', tasks_total: 2, tasks_done: 2, percent: 100 }))).toBe(
-			false
-		);
-		expect(isPartialComplete(job('ripped', null))).toBe(false);
 	});
 });
 

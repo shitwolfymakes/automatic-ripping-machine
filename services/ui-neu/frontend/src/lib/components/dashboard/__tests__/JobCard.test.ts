@@ -1,5 +1,19 @@
+// Open arms the coverage tool reports that are Svelte's, not the component's:
+// the job link's `{job.id}` and the disc-type label each compile to
+// `(...) ?? ''`, and both are strings.
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderComponent, screen, cleanup } from '$lib/testing/render';
+import { EMPTY_LIVE } from '$lib/stores/job-live.svelte';
+
+vi.mock('$lib/stores/job-live.svelte', async (importOriginal) => ({
+	...(await importOriginal<typeof import('$lib/stores/job-live.svelte')>()),
+	jobLive: { watch: () => () => {}, get: () => EMPTY_LIVE }
+}));
+vi.mock('$lib/stores/dashboard', async () => {
+	const { writable } = await import('svelte/store');
+	return { dashboard: writable<unknown>({ review_wait_seconds: 60, ripping_enabled: true }) };
+});
+
 import JobCard from '../JobCard.svelte';
 import { createJob } from '../../../__fixtures__/job';
 
@@ -33,108 +47,64 @@ describe('JobCard', () => {
 		});
 
 		it('renders status badge', () => {
-			renderComponent(JobCard, { props: { job: createJob({ status: 'ripped' }) } });
-			expect(screen.getByText('Ripped')).toBeInTheDocument();
+			const { container } = renderComponent(JobCard, { props: { job: createJob({ status: 'ripped' }) } });
+			// the rail's readout repeats the stage name, so scope to the badge
+			expect(container.querySelector('.status-badge')).toHaveTextContent('Ripped');
 		});
 	});
 
-	describe('props', () => {
-		it('shows track counts for active jobs with rip progress', () => {
-			renderComponent(JobCard, {
+	describe('optional fields', () => {
+		it('omits the year and disc pill when absent', () => {
+			const { container } = renderComponent(JobCard, {
+				props: { job: createJob({ year: null, disc_type: undefined }) }
+			});
+			expect(screen.queryByText('2024')).not.toBeInTheDocument();
+			expect(container.querySelector('.job-card-disc-pill')).toBeNull();
+		});
+
+		it('shows the disc pill and a square poster for a cd', () => {
+			const { container } = renderComponent(JobCard, {
+				props: { job: createJob({ disc_type: 'cd', title: null }) }
+			});
+			expect(container.querySelector('.job-card-disc-pill')).toBeInTheDocument();
+			expect(container.querySelector('.job-card-poster-square')).toBeInTheDocument();
+		});
+	});
+
+	describe('stage rail', () => {
+		it.each(['identifying', 'awaiting_review', 'ripping', 'ripped', 'transcoding', 'success', 'failure'])(
+			'renders the stage rail for every job status (%s)',
+			(status) => {
+				const { container } = renderComponent(JobCard, {
+					props: { job: createJob({ status: status as never }) }
+				});
+				expect(container.querySelector('.job-card-rail ol[aria-label="Job stages"]')).toBeInTheDocument();
+			}
+		);
+
+		it('shows no Done X/Y badge for a partial transcode', () => {
+			const { container } = renderComponent(JobCard, {
 				props: {
 					job: createJob({
-						status: 'ripping',
-						rip_progress: {
-							tracks_total: 5,
-							tracks_done: 1,
-							tracks_failed: 0,
-							current_track_id: null,
-							current_track_index: null
-						}
+						status: 'ripped',
+						transcode_progress: { state: 'done_partial', tasks_total: 3, tasks_done: 2, tasks_failed: 1, percent: 100 }
 					})
 				}
 			});
-			expect(screen.getByText(/1 \/ 5 titles/)).toBeInTheDocument();
-		});
-
-		it('shows progress bar when progress is provided', () => {
-			const { container } = renderComponent(JobCard, {
-				props: { job: createJob(), progress: 50 }
-			});
-			expect(container.querySelector('[data-progress-track]')).toBeInTheDocument();
-		});
-
-		it('shows indeterminate bar when active with no progress', () => {
-			const { container } = renderComponent(JobCard, {
-				props: { job: createJob({ status: 'ripping' }) }
-			});
-			expect(container.querySelector('.job-card-progress-indeterminate-fill')).toBeInTheDocument();
+			expect(screen.queryByText(/Done \d+\/\d+/)).not.toBeInTheDocument();
+			expect(container.querySelector('.badge-warning')).toBeNull();
 		});
 	});
 
 	describe('skeleton', () => {
 		it('renders a SkeletonCard when job prop is omitted', () => {
 			const { container } = renderComponent(JobCard, { props: {} });
-			const skeletonShell = container.querySelector('[aria-busy="true"]');
-			expect(skeletonShell).not.toBeNull();
-		});
-	});
-
-	describe('transcode progress stepper', () => {
-		it('renders the lifecycle stepper for a ripped+transcoding job', () => {
-			renderComponent(JobCard, {
-				props: {
-					job: createJob({
-						status: 'ripped',
-						transcode_progress: {
-							state: 'transcoding',
-							tasks_total: 3,
-							tasks_done: 1,
-							tasks_failed: 0,
-							percent: 33
-						}
-					})
-				}
-			});
-			// sm stepper renders as role="img" aria-label="Job lifecycle"
-			expect(screen.getByRole('img', { name: 'Job lifecycle' })).toBeInTheDocument();
-			// StatusBadge should reflect the effective status (transcoding), not raw 'ripped'
-			expect(screen.getByText('Transcoding')).toBeInTheDocument();
+			expect(container.querySelector('[aria-busy="true"]')).not.toBeNull();
 		});
 
-		it('does NOT render the lifecycle stepper for a ripped job with no transcode session', () => {
-			renderComponent(JobCard, {
-				props: {
-					job: createJob({
-						status: 'ripped',
-						transcode_progress: null
-					})
-				}
-			});
-			expect(screen.queryByRole('img', { name: 'Job lifecycle' })).not.toBeInTheDocument();
-		});
-
-		it('does NOT render the lifecycle stepper for a done (fully transcoded) job', () => {
-			// Regression: a terminal `done` transcode_progress must not be treated
-			// as in-flight — the stepper (which reads as a progress bar) should be
-			// hidden once the job is complete.
-			renderComponent(JobCard, {
-				props: {
-					job: createJob({
-						status: 'ripped',
-						transcode_progress: {
-							state: 'done',
-							tasks_total: 2,
-							tasks_done: 2,
-							tasks_failed: 0,
-							percent: 100
-						}
-					})
-				}
-			});
-			expect(screen.queryByRole('img', { name: 'Job lifecycle' })).not.toBeInTheDocument();
-			// It should still show the Complete badge.
-			expect(screen.getByText('Complete')).toBeInTheDocument();
+		it('renders no stage rail while the job is loading', () => {
+			const { container } = renderComponent(JobCard, { props: {} });
+			expect(container.querySelector('ol[aria-label="Job stages"]')).toBeNull();
 		});
 	});
 });
