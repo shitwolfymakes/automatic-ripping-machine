@@ -182,6 +182,40 @@ async def test_rip_cd_reports_each_track_as_abcde_moves_it_while_abcde_still_run
 
 
 @pytest.mark.asyncio
+async def test_rip_cd_reports_the_wav_bytes_written_so_far_against_the_expected_total(monkeypatch, tmp_path):
+    """While abcde runs, the rip reports the bytes of every WAV written so far: tracks already moved into the output
+    dir plus the one cdparanoia is still writing in abcde's work dir."""
+    monkeypatch.setattr(abcde_rip, "STATUS_POLL_SECONDS", 0.01)
+    exit_now = asyncio.Event()
+    fake = _RunningProc(exit_now)
+
+    async def fake_create(*_a: Any, **_kw: Any) -> _RunningProc:
+        return fake
+
+    monkeypatch.setattr(abcde_rip.asyncio, "create_subprocess_exec", fake_create)
+    seen: list[tuple[int, int | None]] = []
+
+    async def on_progress(done: int, total: int | None) -> None:
+        seen.append((done, total))
+
+    rip = asyncio.create_task(rip_cd("/dev/sr0", tmp_path, [1, 2], on_progress=on_progress, expected_bytes=5000))
+    _write_track_wav(tmp_path, 1, b"a" * 1000)
+    _append_status(tmp_path, "movetrack-01")
+    (tmp_path / "abcde.fc110d12" / "track02.wav").write_bytes(b"b" * 300)
+    await _until(lambda: (1300, 5000) in seen)
+    exit_now.set()
+    await rip
+
+
+@pytest.mark.asyncio
+async def test_rip_cd_without_a_progress_listener_reports_nothing(monkeypatch, tmp_path):
+    _write_track_wav(tmp_path, 1)
+    _stub_subprocess(monkeypatch, lines=["Grabbing entire CD - tracks: 01"])
+    results = await rip_cd("/dev/sr0", tmp_path, [1], expected_bytes=5000)
+    assert results[1].ok
+
+
+@pytest.mark.asyncio
 async def test_rip_cd_streams_per_track_callbacks_in_order(monkeypatch, tmp_path):
     """Happy path: abcde moved all three tracks into place; each is reported once, in track order, with size and
     sha256."""

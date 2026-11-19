@@ -240,22 +240,6 @@ def test_dd_command_device_uses_2k_blocks_with_noerror_sync(tmp_path: Path) -> N
     ]
 
 
-def test_start_reporter_without_a_listener_starts_nothing(tmp_path: Path) -> None:
-    assert data_rip._start_reporter(tmp_path / "dump.iso", None, None) is None
-
-
-async def test_report_size_sends_the_bytes_written_so_far(tmp_path: Path) -> None:
-    out = tmp_path / "dump.iso"
-    out.write_bytes(b"z" * 1234)
-    seen: list[tuple[int, int | None]] = []
-
-    async def on_progress(done: int, total: int | None) -> None:
-        seen.append((done, total))
-
-    await data_rip._report_size(out, 5000, on_progress)
-    assert seen == [(1234, 5000)]
-
-
 async def test_kill_if_running_leaves_finished_proc_alone(tmp_path: Path) -> None:
     proc = _HangProc(tmp_path / "o")
     proc.returncode = 0

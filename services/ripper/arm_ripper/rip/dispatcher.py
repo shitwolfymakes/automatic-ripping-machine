@@ -6,6 +6,7 @@ from arm_common import DiscType
 from arm_common.enums import TrackKind
 from arm_common.schemas import TrackView
 
+from arm_ripper.rip.abcde_output import expected_wav_bytes
 from arm_ripper.rip.abcde_rip import rip_cd
 from arm_ripper.rip.data_rip import rip_data
 from arm_ripper.rip.makemkv_backup import rip_backup
@@ -52,8 +53,10 @@ async def rip_all(
       requested one of those, we report FAILED with a clear reason
       rather than silently ignoring it.
     - Any disc whose tracks are all DISC_BACKUP: one `makemkvcon backup --decrypt` (`rip_backup`) for the first track.
-    - CD: mark all tracks IN_PROGRESS, run abcde once for the whole disc,
-      then emit DONE/FAILED per track from the bulk result.
+    - CD: mark all tracks IN_PROGRESS and run abcde once for the whole
+      disc; each track goes DONE as abcde moves it into place, the WAV
+      bytes written are reported as the first track's progress, and
+      FAILED goes to every track abcde did not produce.
     - DATA: a single dd dump assigned to the first (only) track.
     """
     if tracks and all(t.kind == TrackKind.DISC_BACKUP for t in tracks):
@@ -77,7 +80,7 @@ async def rip_all(
         return
 
     if rip_as == DiscType.CD:
-        await _rip_audio_cd(device_path, tracks, output_dir, on_track_start, on_track_done)
+        await _rip_audio_cd(device_path, tracks, output_dir, on_track_start, on_track_done, on_track_progress)
         return
 
     if rip_as == DiscType.DATA:
@@ -122,8 +125,10 @@ async def _rip_audio_cd(
     output_dir: Path,
     on_track_start: OnTrackStart,
     on_track_done: OnTrackDone,
+    on_track_progress: OnTrackProgress | None,
 ) -> None:
-    """Rip an audio CD with one abcde run: start every track, then report each one as abcde finishes it."""
+    """Rip an audio CD with one abcde run: start every track, then report each one as abcde finishes it, with the WAV
+    bytes written so far as the first track's progress."""
     for track in tracks:
         await on_track_start(track)
     track_by_index = {t.index: t for t in tracks}
@@ -139,6 +144,8 @@ async def _rip_audio_cd(
         output_dir=output_dir,
         track_indexes=[t.index for t in tracks],
         on_track_done=_cd_on_track_done,
+        on_progress=track_byte_progress(tracks[0], on_track_progress) if tracks else None,
+        expected_bytes=expected_wav_bytes([t.expected_duration_seconds for t in tracks]),
     )
     # Defensive: rip_cd's contract is to fire on_track_done for every
     # track index it's given, so this loop is a no-op on the happy

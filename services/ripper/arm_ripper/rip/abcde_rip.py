@@ -8,16 +8,18 @@ from functools import partial
 from pathlib import Path
 from tempfile import NamedTemporaryFile
 
-from arm_ripper.rip.abcde_status import moved_tracks, read_status
+from arm_ripper.rip.abcde_output import moved_tracks, read_workdir_file, wav_bytes_written
 from arm_ripper.rip.hashing import sha256_file
-from arm_ripper.rip.poller import Poller
+from arm_ripper.rip.poller import Poller, start_byte_reporter, stop_all
 from arm_ripper.rip.result import RipResult
+from arm_ripper.rip.track_callbacks import OnByteProgress
 
 logger = logging.getLogger("arm_ripper.rip.abcde")
 
 CD_RIP_TIMEOUT_SECONDS = 90 * 60  # 90 min: worst-case scratched disc, ~60min audio
 
-# How often the rip reads abcde's status file for the tracks abcde has moved into place.
+# How often the rip reads abcde's status file for the tracks it has moved into place, and reports the WAV bytes
+# written so far.
 STATUS_POLL_SECONDS = 2.0
 
 
@@ -152,7 +154,7 @@ class _CdTracks:
 
 async def _finalize_moved_tracks(output_dir: Path, tracks: _CdTracks) -> None:
     """Read abcde's status file and finalize the tracks it has moved into the output dir."""
-    status = await asyncio.to_thread(read_status, output_dir)
+    status = await asyncio.to_thread(read_workdir_file, output_dir, "status")
     await tracks.finalize_moved(moved_tracks(status))
 
 
@@ -196,6 +198,8 @@ async def rip_cd(
     output_dir: Path,
     track_indexes: list[int],
     on_track_done: OnAbcdeTrackDone | None = None,
+    on_progress: OnByteProgress | None = None,
+    expected_bytes: int | None = None,
 ) -> dict[int, RipResult]:
     """Rip a whole audio CD via abcde and map outputs back to track indexes.
 
@@ -205,7 +209,9 @@ async def rip_cd(
     `RipResult` (size + sha256) and `on_track_done` fires. The dispatcher
     plumbs that callback into the per-track WS lifecycle so the UI sees
     tracks tick from IN_PROGRESS to DONE one at a time, rather than the
-    whole disc flipping together at the end.
+    whole disc flipping together at the end. On the same interval,
+    `on_progress` gets the WAV bytes written so far against
+    `expected_bytes`.
 
     Returns a dict mapping every track index in `track_indexes` to its
     final RipResult — every requested track always gets exactly one entry,
@@ -230,8 +236,11 @@ async def rip_cd(
     stderr_buf: list[str] = []
     stderr_task = asyncio.create_task(_drain_stderr(proc.stderr, stderr_buf))
 
-    poller = Poller(STATUS_POLL_SECONDS, partial(_finalize_moved_tracks, output_dir, tracks))
-    poller.start()
+    finalizer = Poller(STATUS_POLL_SECONDS, partial(_finalize_moved_tracks, output_dir, tracks))
+    finalizer.start()
+    reporter = start_byte_reporter(
+        STATUS_POLL_SECONDS, partial(wav_bytes_written, output_dir), expected_bytes, on_progress
+    )
 
     rc: int
     timed_out = False
@@ -244,9 +253,9 @@ async def rip_cd(
         # Cancel-safe: if the parent task was cancelled (abandon flow) or
         # we timed out above, abcde is still running and writing to the raw
         # dir. Kill it and its children before letting CancelledError
-        # propagate / before returning a timeout result. The poller stops
-        # first, so a track it is finalizing reports before abcde is reaped.
-        await poller.stop()
+        # propagate / before returning a timeout result. The pollers stop
+        # first, so a track being finalized reports before abcde is reaped.
+        await stop_all(finalizer, reporter)
         await _stop_abcde(proc, stderr_task, conf_path)
 
     if timed_out:

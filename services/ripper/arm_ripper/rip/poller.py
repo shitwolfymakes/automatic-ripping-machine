@@ -5,6 +5,8 @@ import contextlib
 import logging
 from collections.abc import Awaitable, Callable
 
+from arm_ripper.rip.track_callbacks import OnByteProgress
+
 logger = logging.getLogger("arm_ripper.rip.poller")
 
 PollStep = Callable[[], Awaitable[None]]
@@ -45,3 +47,27 @@ class Poller:
             await self._step()
         except Exception:  # noqa: BLE001 - a poll step is best-effort and never ends the loop
             logger.debug("poll step failed", exc_info=True)
+
+
+def start_byte_reporter(
+    interval: float, measure: Callable[[], int], total: int | None, on_progress: OnByteProgress | None
+) -> Poller | None:
+    """Report `measure()` bytes against `total` every `interval` seconds; None, with nothing started, when nobody
+    listens."""
+    if on_progress is None:
+        return None
+    listener = on_progress
+
+    async def report() -> None:
+        await listener(measure(), total)
+
+    poller = Poller(interval, report)
+    poller.start()
+    return poller
+
+
+async def stop_all(*pollers: Poller | None) -> None:
+    """Stop each poller that was started, in order."""
+    for poller in pollers:
+        if poller is not None:
+            await poller.stop()

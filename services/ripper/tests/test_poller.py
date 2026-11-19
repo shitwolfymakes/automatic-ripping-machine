@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 
-from arm_ripper.rip.poller import Poller
+from arm_ripper.rip.poller import Poller, start_byte_reporter, stop_all
 
 
 async def test_runs_the_step_on_each_interval_until_stopped() -> None:
@@ -72,3 +72,33 @@ async def test_stop_without_start_returns() -> None:
         raise AssertionError("never runs")
 
     await Poller(0.01, step).stop()
+
+
+def test_start_byte_reporter_without_a_listener_starts_nothing() -> None:
+    assert start_byte_reporter(0.01, lambda: 1, 10, None) is None
+
+
+async def test_start_byte_reporter_reports_the_measured_bytes_against_the_total() -> None:
+    seen: list[tuple[int, int | None]] = []
+    measured = iter([100, 250, 400, 400, 400, 400, 400, 400])
+
+    async def on_progress(done: int, total: int | None) -> None:
+        seen.append((done, total))
+
+    reporter = start_byte_reporter(0.01, lambda: next(measured), 1000, on_progress)
+    assert reporter is not None
+    await asyncio.sleep(0.035)
+    await reporter.stop()
+    assert seen[:2] == [(100, 1000), (250, 1000)]
+
+
+async def test_stop_all_stops_each_started_poller_and_skips_none() -> None:
+    async def step() -> None:
+        pass
+
+    first, second = Poller(60, step), Poller(60, step)
+    first.start()
+    second.start()
+    await stop_all(first, None, second)
+    assert first._task is not None and first._task.done()
+    assert second._task is not None and second._task.done()

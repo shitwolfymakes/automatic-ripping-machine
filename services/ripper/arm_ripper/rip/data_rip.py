@@ -2,11 +2,10 @@ import asyncio
 import contextlib
 import logging
 import os
-from functools import partial
 from pathlib import Path
 
 from arm_ripper.rip.hashing import sha256_file
-from arm_ripper.rip.poller import Poller
+from arm_ripper.rip.poller import Poller, start_byte_reporter, stop_all
 from arm_ripper.rip.result import RipResult
 from arm_ripper.rip.track_callbacks import OnByteProgress
 from arm_ripper.rip.subprocess_cleanup import kill_if_running
@@ -30,20 +29,6 @@ def source_size(device_path: str) -> int | None:
     return size or None
 
 
-async def _report_size(output_path: Path, total: int | None, on_progress: OnByteProgress) -> None:
-    """Report the bytes the copy has written so far."""
-    await on_progress(output_path.stat().st_size, total)
-
-
-def _start_reporter(output_path: Path, total: int | None, on_progress: OnByteProgress | None) -> Poller | None:
-    """Start reporting the copy's size every PROGRESS_INTERVAL_SECONDS; None when nobody listens."""
-    if on_progress is None:
-        return None
-    poller = Poller(PROGRESS_INTERVAL_SECONDS, partial(_report_size, output_path, total, on_progress))
-    poller.start()
-    return poller
-
-
 def _dd_command(device_path: str, output_path: Path) -> list[str]:
     """The dd argv: 4 MB blocks for an image file; 2 KB blocks with noerror,sync for a disc."""
     if is_iso_source(device_path):
@@ -63,8 +48,7 @@ async def _wait_for_dd(proc: asyncio.subprocess.Process, reporter: Poller | None
         await proc.wait()
         return RipResult(ok=False, error=f"dd timed out after {DATA_RIP_TIMEOUT_SECONDS}s")
     finally:
-        if reporter is not None:
-            await reporter.stop()
+        await stop_all(reporter)
         await kill_if_running(proc)
     return None
 
@@ -112,7 +96,7 @@ async def rip_data(device_path: str, output_dir: Path, on_progress: OnByteProgre
     except FileNotFoundError as e:
         return RipResult(ok=False, error=f"dd not on PATH: {e}")
 
-    reporter = _start_reporter(output_path, total, on_progress)
+    reporter = start_byte_reporter(PROGRESS_INTERVAL_SECONDS, lambda: output_path.stat().st_size, total, on_progress)
     timed_out = await _wait_for_dd(proc, reporter)
     if timed_out is not None:
         return timed_out

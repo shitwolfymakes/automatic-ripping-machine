@@ -1508,10 +1508,62 @@ async def test_rip_all_cd_starts_every_track_then_reports_what_rip_cd_fires(monk
         ("done", "trk_1", True, None, 1),
         ("done", "trk_2", True, None, 2),
     ]
-    assert set(captured) == {"device_path", "output_dir", "track_indexes", "on_track_done"}
+    assert set(captured) == {
+        "device_path",
+        "output_dir",
+        "track_indexes",
+        "on_track_done",
+        "on_progress",
+        "expected_bytes",
+    }
     assert captured["device_path"] == "/dev/sr0"
     assert captured["output_dir"] == tmp_path
     assert captured["track_indexes"] == [1, 2]
+
+
+async def test_rip_all_cd_reports_wav_bytes_as_the_first_tracks_progress_against_the_expected_total(
+    monkeypatch, tmp_path
+):
+    captured = _stub_rip_cd(monkeypatch)
+    _events, on_start, on_done = _recorders()
+    ticks: list[tuple[str, float, Any]] = []
+
+    async def on_progress(track: TrackView, fraction: float, stats: Any = None) -> None:
+        ticks.append((track.id, fraction, stats))
+
+    first = _track(1).model_copy(update={"expected_duration_seconds": 10})
+    second = _track(2).model_copy(update={"expected_duration_seconds": 30})
+    await rip_all(
+        disc_type=DiscType.CD,
+        device_path="/dev/sr0",
+        tracks=[first, second],
+        output_dir=tmp_path,
+        on_track_start=on_start,
+        on_track_done=on_done,
+        on_track_progress=on_progress,
+    )
+
+    assert captured["expected_bytes"] == 40 * 176_400
+    await captured["on_progress"](1_764_000, captured["expected_bytes"])
+    assert ticks[0][0] == "trk_1"
+    assert ticks[0][1] == 0.25
+    assert ticks[0][2]["bytes_done"] == 1_764_000
+
+
+async def test_rip_all_cd_with_an_unknown_track_length_reports_no_total(monkeypatch, tmp_path):
+    captured = _stub_rip_cd(monkeypatch)
+    _events, on_start, on_done = _recorders()
+
+    await rip_all(
+        disc_type=DiscType.CD,
+        device_path="/dev/sr0",
+        tracks=[_track(1).model_copy(update={"expected_duration_seconds": 10}), _track(2)],
+        output_dir=tmp_path,
+        on_track_start=on_start,
+        on_track_done=on_done,
+    )
+
+    assert captured["expected_bytes"] is None
 
 
 async def test_rip_all_cd_ignores_a_done_index_that_is_not_a_requested_track(monkeypatch, tmp_path):
@@ -1566,6 +1618,7 @@ async def test_rip_all_cd_with_no_tracks_still_calls_rip_cd_and_fires_nothing(mo
 
     assert events == []
     assert captured["track_indexes"] == []
+    assert captured["on_progress"] is None
 
 
 async def test_rip_all_data_with_no_tracks_returns_without_a_callback(monkeypatch, tmp_path):
