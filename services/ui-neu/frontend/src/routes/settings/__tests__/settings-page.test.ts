@@ -137,22 +137,27 @@ const mockSchema = {
 					enum_values: null
 				},
 				{
-					key: 'auto_transcode_on_idle',
-					group: 'Transcoding',
-					tier: 'operator',
-					label: 'Auto-transcode on idle',
-					help: '',
-					type: 'bool',
-					editable: true,
-					enum_values: null
-				},
-				{
 					key: 'max_parallel_transcodes',
 					group: 'Transcoding',
 					tier: 'operator',
 					label: 'Max parallel transcodes',
 					help: '',
 					type: 'int',
+					editable: true,
+					enum_values: null
+				}
+			]
+		},
+		{
+			name: 'Defaults',
+			fields: [
+				{
+					key: 'auto_transcode_on_idle',
+					group: 'Defaults',
+					tier: 'operator',
+					label: 'Apply these defaults automatically after each rip',
+					help: '',
+					type: 'bool',
 					editable: true,
 					enum_values: null
 				}
@@ -859,6 +864,25 @@ describe('Settings Page', () => {
 		});
 	});
 
+	describe('Sessions tab Defaults view', () => {
+		it('shows auto-apply above the routing matrix and folds a save into the page config', async () => {
+			const { saveArmConfig } = await import('$lib/api/settings');
+			vi.mocked(saveArmConfig).mockClear();
+			setTranscoderEnabled(true);
+			await renderAndOpenTab('Sessions');
+			await fireEvent.click(await screen.findByRole('tab', { name: 'Defaults' }));
+			const toggle = await screen.findByRole('checkbox', { name: /apply these defaults/i });
+			expect(toggle).not.toBeChecked();
+			await fireEvent.click(toggle);
+			await fireEvent.click(screen.getByRole('button', { name: /^save/i }));
+			await waitFor(() => expect(vi.mocked(saveArmConfig)).toHaveBeenCalledWith({ auto_transcode_on_idle: true }));
+			// Leave and come back: the view reads the folded config, not the stale value.
+			await fireEvent.click(screen.getByRole('tab', { name: /^sessions \d/i }));
+			await fireEvent.click(screen.getByRole('tab', { name: 'Defaults' }));
+			expect(await screen.findByRole('checkbox', { name: /apply these defaults/i })).toBeChecked();
+		});
+	});
+
 	describe('Transcoding tab', () => {
 		it('keeps the Transcoding tab visible even when the deployment is not transcode-capable', async () => {
 			setTranscoderEnabled(false);
@@ -866,14 +890,19 @@ describe('Settings Page', () => {
 			expect(screen.getByRole('tab', { name: 'Transcoding' })).toBeInTheDocument();
 		});
 
-		it('capable: renders the schema-driven transcode_enabled + auto_transcode_on_idle toggles and the GPU card', async () => {
+		it('capable: opens with the supported pill and the toggle, with the GPU card after the fields', async () => {
 			setTranscoderEnabled(true);
 			await renderAndOpenTab('Transcoding');
 			await waitFor(() => {
 				expect(screen.getByRole('checkbox', { name: /enable transcoding/i })).toBeInTheDocument();
 			});
-			expect(screen.getByRole('checkbox', { name: /enable transcoding/i })).not.toBeDisabled();
-			expect(screen.getByRole('checkbox', { name: /auto-transcode on idle/i })).toBeInTheDocument();
+			const toggle = screen.getByRole('checkbox', { name: /enable transcoding/i });
+			expect(toggle).not.toBeDisabled();
+			const pill = screen.getByTestId('transcode-capability');
+			expect(pill).toHaveTextContent('Transcoding supported');
+			expect(pill.compareDocumentPosition(toggle) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+			// Auto-apply lives on Settings > Sessions > Defaults now.
+			expect(screen.queryByRole('checkbox', { name: /apply these defaults/i })).not.toBeInTheDocument();
 			await waitFor(() => {
 				expect(screen.getByTestId('gpus-card')).toBeInTheDocument();
 			});
@@ -883,16 +912,11 @@ describe('Settings Page', () => {
 			expect(
 				screen.getByTestId('gpus-card').compareDocumentPosition(save) & Node.DOCUMENT_POSITION_FOLLOWING
 			).toBeTruthy();
-			// transcode_capable is a non-editable bool (an infra fact, not a
-			// setting) - it must render read-only, not as a clickable checkbox
-			// that silently no-ops on save.
-			expect(screen.queryByRole('checkbox', { name: /transcode capable/i })).not.toBeInTheDocument();
-			const capableField = screen.getByTestId('setting-transcode_capable');
-			expect(capableField).toHaveTextContent('Transcode capable');
-			expect(capableField).toHaveTextContent('True');
+			// transcode_capable shows as the pill, never as a field row.
+			expect(screen.queryByTestId('setting-transcode_capable')).not.toBeInTheDocument();
 		});
 
-		it('not capable: shows only a locked transcode_enabled toggle with a hint, hides auto_transcode_on_idle and the GPU card', async () => {
+		it('not capable: shows the unsupported pill and a locked transcode_enabled toggle with a hint, hides the GPU card', async () => {
 			vi.mocked(fetchGpus).mockClear();
 			setTranscoderEnabled(false);
 			await renderAndOpenTab('Transcoding');
@@ -906,7 +930,7 @@ describe('Settings Page', () => {
 			const locked = screen.getByRole('switch', { name: 'Enable transcoding' });
 			expect(locked).toBeDisabled();
 			expect(locked).toHaveAttribute('aria-checked', 'false');
-			expect(screen.queryByRole('checkbox', { name: /auto-transcode on idle/i })).not.toBeInTheDocument();
+			expect(screen.getByTestId('transcode-capability')).toHaveTextContent('Transcoding unsupported');
 			expect(screen.queryByTestId('gpus-card')).not.toBeInTheDocument();
 			expect(fetchGpus).not.toHaveBeenCalled();
 		});
@@ -938,9 +962,11 @@ describe('Settings Page', () => {
 			setTranscoderEnabled(true);
 			setTranscodeRuntimeEnabled(false);
 			await renderAndOpenTab('Transcoding');
-			await fireEvent.click(await screen.findByRole('checkbox', { name: /auto-transcode on idle/i }));
+			await fireEvent.input(await screen.findByRole('spinbutton', { name: /max parallel transcodes/i }), {
+				target: { value: '3' }
+			});
 			await fireEvent.click(screen.getByRole('button', { name: /^save/i }));
-			await waitFor(() => expect(vi.mocked(saveArmConfig)).toHaveBeenCalledWith({ auto_transcode_on_idle: true }));
+			await waitFor(() => expect(vi.mocked(saveArmConfig)).toHaveBeenCalledWith({ max_parallel_transcodes: 3 }));
 			expect(get(transcodeRuntimeEnabled)).toBe(false);
 		});
 	});

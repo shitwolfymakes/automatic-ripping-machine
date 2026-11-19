@@ -833,6 +833,13 @@ async def _load_tasks(db: AsyncSession, session_application_id: str) -> list[Tra
     return list(rows)
 
 
+async def _log_skipped_route(db: AsyncSession, job: Job) -> None:
+    """Name the routed session that auto-apply being off kept from applying, if there is one."""
+    session_id = await resolve_routed_session_id(db, job)
+    if session_id is not None:
+        logger.info("auto-apply is off: routed session %s not applied", session_id, extra={"job_id": job.id})
+
+
 async def maybe_auto_apply_session(
     db: AsyncSession,
     job: Job,
@@ -844,9 +851,11 @@ async def maybe_auto_apply_session(
     else the compatibility-gated drive default, else `session_routes`) when
     `auto_apply_allowed` says unattended queueing is permitted: an explicit
     per-rip choice always is; the drive default or a route needs
-    `Config.auto_transcode_on_idle`.
+    `Config.auto_transcode_on_idle`. With the flag off, a routed session that
+    would have applied is named in one info line instead.
     """
     if not await auto_apply_allowed(db, job):
+        await _log_skipped_route(db, job)
         return
     session_id = await resolve_routed_session_id(db, job)
     if session_id is None:

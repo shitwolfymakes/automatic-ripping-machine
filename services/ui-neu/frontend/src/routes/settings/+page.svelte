@@ -57,6 +57,7 @@
 	const keysGroup = $derived(group('Keys'));
 	const rippingGroup = $derived(group('Ripping'));
 	const transcodingGroup = $derived(group('Transcoding'));
+	const defaultsGroup = $derived(group('Defaults'));
 	const systemGroup = $derived(group('System'));
 
 	let activeTab = $state<Tab>(tabFromHash(window.location.hash));
@@ -67,6 +68,11 @@
 	// group wins over the hash's tab, so an old link (#Metadata/tmdb_api_key)
 	// still lands on the tab that now holds the field.
 	let pendingField = $state<string | null>(fieldFromHash(window.location.hash));
+
+	// A deep link to a Defaults field opens the Sessions tab on its Defaults view.
+	const sessionsView = $derived(
+		pendingField && defaultsGroup?.fields.some((f) => f.key === pendingField) ? 'routing' : 'sessions'
+	);
 
 	$effect(() => {
 		const key = pendingField;
@@ -242,19 +248,22 @@
 				</div>
 			{/each}
 
-			<!-- Transcoding Tab: schema-driven (transcode_enabled + auto_transcode_on_idle,
-			 GPU inventory) when this deployment can run transcode containers.
-			 On a ripper-only deployment (not capable), only the disabled
-			 transcode_enabled toggle + a hint shows - GpusCard and the
-			 encode-only fields (auto_transcode_on_idle, max_parallel_transcodes)
-			 stay hidden. -->
+			<!-- Transcoding Tab: the capability pill, then the schema-driven
+			 transcode_enabled toggle, max_parallel_transcodes and the GPU inventory
+			 when this deployment can run transcode containers. On a ripper-only
+			 deployment, the pill and the disabled toggle with its hint only. -->
 			{#if activeTab === 'transcoding'}
 				<TranscodingSettings group={transcodingGroup} config={settings.config} onsaved={onTranscodingSaved} />
 			{/if}
 
 			{#if activeTab === 'sessions'}
 				<div class="space-y-6" data-page-section>
-					<SessionsArea />
+					<SessionsArea
+						{defaultsGroup}
+						config={settings.config}
+						onsaved={loaded.foldSaved}
+						initialView={sessionsView}
+					/>
 				</div>
 			{/if}
 

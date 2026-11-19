@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
+	import { onMount, untrack } from 'svelte';
 	import { createSessionsData, type JoinedSession } from '../../stores/sessions-data.svelte';
 	import { copyName, isRipPreset, ripPresetCopy, transcodePresetCopy } from '../../sessions/session-presets';
 	import SessionsHub from './SessionsHub.svelte';
@@ -35,7 +35,19 @@
 		type View
 	} from '../../sessions/sessions-area-model';
 	import { countByMediaType } from '$lib/sessions/sessions';
-	import type { RipPresetView, SessionView, TranscodePresetView } from '$lib/types/api.gen';
+	import SchemaConfigForm from '$lib/components/settings/SchemaConfigForm.svelte';
+	import type { RipPresetView, SessionView, SettingsGroup, TranscodePresetView } from '$lib/types/api.gen';
+
+	interface Props {
+		/** The Defaults settings group (auto-apply), shown above the matrix on a transcode-capable deployment. */
+		defaultsGroup?: SettingsGroup;
+		config?: Record<string, unknown>;
+		onsaved?: (payload: Record<string, unknown>) => void;
+		/** The view to open on (a deep link to a Defaults field opens Defaults). */
+		initialView?: View;
+	}
+
+	let { defaultsGroup, config = {}, onsaved, initialView = 'sessions' }: Props = $props();
 
 	const data = createSessionsData();
 
@@ -50,10 +62,10 @@
 	);
 	const shownTypeCounts = $derived($transcoderEnabled ? data.typeCounts() : countByMediaType(shownSessions));
 
-	// Active view: the sessions hub, one of the two preset libraries, or routing
-	let view = $state<View>('sessions');
+	// Active view: the sessions hub, one of the two preset libraries, or the defaults
+	let view = $state<View>(untrack(() => initialView));
 
-	// Each list view's count, shown on its tab; Routing has none.
+	// Each list view's count, shown on its tab; Defaults has none.
 	const tabs = $derived(
 		viewTabs({
 			sessions: shownSessions.length,
@@ -310,6 +322,9 @@
 			ondelete={handleDeleteSession}
 		/>
 	{:else if view === 'routing'}
+		{#if $transcoderEnabled && defaultsGroup}
+			<SchemaConfigForm group={defaultsGroup} {config} {onsaved} bare />
+		{/if}
 		<RoutingMatrix />
 	{:else}
 		<PresetLibrary

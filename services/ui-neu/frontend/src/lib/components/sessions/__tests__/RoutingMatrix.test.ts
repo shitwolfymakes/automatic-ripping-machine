@@ -82,7 +82,7 @@ afterEach(async () => {
 describe('RoutingMatrix layout', () => {
 	it('shows the heading, the spec line and the four disc columns', async () => {
 		await renderMatrix();
-		expect(screen.getByRole('heading', { name: 'Routing' })).toBeInTheDocument();
+		expect(screen.getByRole('heading', { name: 'Defaults' })).toBeInTheDocument();
 		expect(
 			screen.getByText(
 				"A route applies the chosen session when a disc's identified media type matches. A drive's default session wins when it fits the disc's media type. A disc-type route (DVD, Blu-ray, CD) beats Any disc."
