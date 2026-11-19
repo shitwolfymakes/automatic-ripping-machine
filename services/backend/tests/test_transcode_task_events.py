@@ -248,25 +248,6 @@ async def test_announce_failed(job_log: LineCapture) -> None:
     assert line["fields"]["error"] == "boom"
 
 
-async def test_log_safely_logs_a_failed_milestone_instead_of_raising(job_log: LineCapture) -> None:
-    async def _broken() -> None:
-        raise RuntimeError("db gone")
-
-    await events.log_safely("transcode.started", _broken())
-    (line,) = job_log.lines(level="error")
-    assert line["msg"] == "could not log the transcode.started milestone" and "db gone" in line["exc"]
-
-
-async def test_log_safely_runs_the_work() -> None:
-    ran: list[bool] = []
-
-    async def _work() -> None:
-        ran.append(True)
-
-    await events.log_safely("transcode.started", _work())
-    assert ran == [True]
-
-
 # --- once-per-wait GPU log -------------------------------------------------
 
 

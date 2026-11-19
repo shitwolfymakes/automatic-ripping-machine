@@ -38,3 +38,8 @@ def track_label(job: Job, track: Track, tracks: Sequence[Track]) -> TrackLabel:
     """Position of `track` by index among all of the job's tracks (excluded ones count), with its title."""
     position = 1 + sum(1 for other in tracks if other.index < track.index)
     return TrackLabel(position, len(tracks), _title(job, track))
+
+
+def track_position(label: TrackLabel) -> str:
+    """`track 1/19`: the label's position among the job's tracks."""
+    return f"track {label.index}/{label.total}"

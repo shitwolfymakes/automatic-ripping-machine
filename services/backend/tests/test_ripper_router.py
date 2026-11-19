@@ -4008,3 +4008,46 @@ def test_identify_music_hit_names_the_artist(job_log: LineCapture) -> None:
     assert resolved["msg"] == (
         "identified: Electric Light Orchestra - The Essential Electric Light Orchestra (2011), MusicBrainz disc ID"
     )
+
+
+def test_rip_start_leaves_the_info_line_to_the_rippers_rip_started(job_log: LineCapture) -> None:
+    db = FakeSession()
+    db.rows["drives"] = [_drive()]
+    db.rows["jobs"] = [_job(status=JobStatus.IDENTIFIED, meta={"scan_result": _scan_dict()})]
+    db.rows["tracks"] = []
+    db.rows["rip_presets"] = [_movie_preset()]
+    with TestClient(_make_app(db, hub=_LoggingHub())) as client:
+        with _patch_select_tracks([_track("trk_new", status=TrackStatus.QUEUED)]):
+            r = client.post(f"/api/ripper/jobs/{_JOB_ID}/rip-start", headers=_OWNER_HEADERS)
+    assert r.status_code == 200
+    assert not [
+        line for line in job_log.lines(logger_prefix="arm_backend.routers.ripper") if "rip-start" in line["msg"]
+    ]
+
+
+def test_rip_complete_leaves_the_info_line_to_rip_completed(
+    monkeypatch: pytest.MonkeyPatch, job_log: LineCapture
+) -> None:
+    db = FakeSession()
+    db.rows["jobs"] = [_job(status=JobStatus.RIPPING)]
+    db.rows["drives"] = [_drive()]
+    db.rows["tracks"] = [_track("t1", status=TrackStatus.DONE)]
+    assert _rip_complete(db, _Hub(), monkeypatch).status_code == 200
+    assert [line["event"] for line in job_log.lines(logger_prefix="arm_backend.routers.ripper")] == []
+    assert len(job_log.lines(event="rip.completed")) == 1
+
+
+def test_rip_complete_survives_a_failing_milestone_log(monkeypatch: pytest.MonkeyPatch, job_log: LineCapture) -> None:
+    def _boom(*_a: Any) -> None:
+        raise RuntimeError("log bug")
+
+    monkeypatch.setattr(ripper_router.job_events, "log_rip_completed", _boom)
+    db = FakeSession()
+    db.rows["jobs"] = [_job(status=JobStatus.RIPPING)]
+    db.rows["drives"] = [_drive()]
+    db.rows["tracks"] = [_track("t1", status=TrackStatus.DONE)]
+    hub = _Hub()
+    r = _rip_complete(db, hub, monkeypatch)
+    assert r.status_code == 200 and r.json()["status"] == "ripped"
+    assert any(e["event_type"] == "rip.completed" for e in hub.events)
+    assert job_log.lines(level="error")[-1]["msg"] == "could not log the rip.completed milestone"

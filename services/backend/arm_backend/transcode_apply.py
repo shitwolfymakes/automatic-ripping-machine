@@ -33,7 +33,7 @@ from arm_backend.path_template import (
     required_tokens,
 )
 from arm_backend.slugify import slugify
-from arm_backend.transcode_task_events import log_safely
+from arm_backend.log_safely import log_safely
 from arm_common import (
     Config,
     Gpu,
@@ -591,12 +591,22 @@ async def emit_task_failed(hub: "WSHub", db: AsyncSession, task: TranscodeTask) 
     )
 
 
-async def settle_session_application(db: AsyncSession, hub: "WSHub", application: SessionApplication) -> None:
+async def settle_session_application(
+    db: AsyncSession, hub: "WSHub", application: SessionApplication
+) -> AggregateOutcome:
     """Recompute the application's status from its tasks and announce a terminal
-    transition; the caller commits."""
+    transition. The caller commits, logs its task's own milestone, then passes the
+    outcome to `log_session_settled`."""
     outcome = await aggregate_session_application(db, application)
     if outcome.event_type is not None:
         await emit_session_outcome(hub, db, application, outcome.event_type)
+    return outcome
+
+
+async def log_session_settled(db: AsyncSession, application: SessionApplication, outcome: AggregateOutcome) -> None:
+    """Log `session.completed` for a committed terminal transition; nothing when the
+    application did not settle. A failure in the logging is logged, never raised."""
+    if outcome.event_type is not None:
         await log_safely("session.completed", _log_session_settled(db, application, outcome))
 
 

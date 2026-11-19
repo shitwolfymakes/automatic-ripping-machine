@@ -3,7 +3,11 @@ from typing import Any
 import pytest
 
 from arm_backend import transcode_apply
-from arm_backend.transcode_apply import aggregate_session_application, settle_session_application
+from arm_backend.transcode_apply import (
+    aggregate_session_application,
+    log_session_settled,
+    settle_session_application,
+)
 from arm_common import (
     DiscType,
     Job,
@@ -123,37 +127,51 @@ async def test_aggregate_counts_the_settled_tasks() -> None:
     assert (outcome.done, outcome.failed, outcome.total) == (2, 1, 3)
 
 
-async def test_settle_logs_session_completed_once(job_log: LineCapture) -> None:
+async def test_settle_logs_nothing_and_returns_the_outcome_once(job_log: LineCapture) -> None:
+    """Settling announces the transition and leaves the job log to the caller's post-commit step."""
     db = _db_with_job(TranscodeTaskStatus.DONE, TranscodeTaskStatus.FAILED)
     app = _app()
     hub = _Hub()
-    await settle_session_application(db, hub, app)  # type: ignore[arg-type]
-    await settle_session_application(db, hub, app)  # type: ignore[arg-type]
-    (line,) = job_log.lines(event="session.completed")
-    assert line["msg"] == "transcode complete: 1/2 (1 failed)"
-    assert line["job_id"] == "job_01JZXR7K3M5Q8N4VWA00000001" and line["session_application_id"] == "sap_x"
+    first = await settle_session_application(db, hub, app)  # type: ignore[arg-type]
+    second = await settle_session_application(db, hub, app)  # type: ignore[arg-type]
+    assert (first.event_type, second.event_type) == ("session.partial", None)
     assert hub.events == ["session.partial"]
-
-
-async def test_settle_with_work_left_logs_nothing(job_log: LineCapture) -> None:
-    db = _db_with_job(TranscodeTaskStatus.DONE, TranscodeTaskStatus.QUEUED)
-    await settle_session_application(db, _Hub(), _app())  # type: ignore[arg-type]
     assert job_log.lines(event="session.completed") == []
 
 
-async def test_settle_survives_a_failed_session_log(job_log: LineCapture, monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_log_session_settled_logs_session_completed(job_log: LineCapture) -> None:
+    db = _db_with_job(TranscodeTaskStatus.DONE, TranscodeTaskStatus.FAILED)
+    app = _app()
+    outcome = await settle_session_application(db, _Hub(), app)  # type: ignore[arg-type]
+    await log_session_settled(db, app, outcome)
+    (line,) = job_log.lines(event="session.completed")
+    assert line["msg"] == "transcode complete: 1/2 (1 failed)"
+    assert line["job_id"] == "job_01JZXR7K3M5Q8N4VWA00000001" and line["session_application_id"] == "sap_x"
+
+
+async def test_log_session_settled_with_work_left_logs_nothing(job_log: LineCapture) -> None:
+    db = _db_with_job(TranscodeTaskStatus.DONE, TranscodeTaskStatus.QUEUED)
+    app = _app()
+    outcome = await settle_session_application(db, _Hub(), app)  # type: ignore[arg-type]
+    await log_session_settled(db, app, outcome)
+    assert job_log.lines(event="session.completed") == []
+
+
+async def test_log_session_settled_survives_a_failed_log(job_log: LineCapture, monkeypatch: pytest.MonkeyPatch) -> None:
     def _broken(*_args: Any, **_kw: Any) -> None:
         raise RuntimeError("log bug")
 
     monkeypatch.setattr(transcode_apply.job_events, "log_session_completed", _broken)
+    db = _db_with_job(TranscodeTaskStatus.DONE)
     app = _app()
-    await settle_session_application(_db_with_job(TranscodeTaskStatus.DONE), _Hub(), app)  # type: ignore[arg-type]
+    await log_session_settled(db, app, await settle_session_application(db, _Hub(), app))  # type: ignore[arg-type]
     assert app.status == SessionApplicationStatus.DONE
     assert job_log.lines(level="error")[0]["msg"] == "could not log the session.completed milestone"
 
 
-async def test_settle_without_the_job_row_logs_nothing(job_log: LineCapture) -> None:
+async def test_log_session_settled_without_the_job_row_logs_nothing(job_log: LineCapture) -> None:
     db = FakeSession()
     db.rows["transcode_tasks"] = [_task(1, TranscodeTaskStatus.DONE)]
-    await settle_session_application(db, _Hub(), _app())  # type: ignore[arg-type]
+    app = _app()
+    await log_session_settled(db, app, await settle_session_application(db, _Hub(), app))  # type: ignore[arg-type]
     assert job_log.lines(event="session.completed") == [] and job_log.lines(level="error") == []

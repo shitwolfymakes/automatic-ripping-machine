@@ -1,13 +1,12 @@
 """Job-log events for a transcode task's milestones, shared by container and in-process passthrough tasks.
 
 Message builders and emitters are pure; the `announce_*` coroutines load the task's job and tracks first.
-`log_safely` keeps a logging failure from undoing the request or run that reached the milestone.
 """
 
 from __future__ import annotations
 
 import logging
-from collections.abc import Awaitable, Sequence
+from collections.abc import Sequence
 from contextlib import AbstractContextManager
 from datetime import UTC, datetime
 from pathlib import PurePosixPath
@@ -16,7 +15,7 @@ from typing import Literal, NamedTuple
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import col, select
 
-from arm_backend.track_labels import TrackLabel, track_label
+from arm_backend.track_labels import TrackLabel, track_label, track_position
 from arm_backend.transcode_queue import resolve_preset_for_task
 from arm_common import Job, SessionApplication, Track, TranscodeTask, TranscodeTaskStatus
 from arm_common.log_format import human_size, quarter_crossed
@@ -29,7 +28,7 @@ GpuWaitState = Literal["waiting", "resumed"]
 
 def _track_ref(label: TrackLabel | None) -> str:
     """`track 1/19`; `an unknown track` when the task's source track is not among the job's tracks."""
-    return f"track {label.index}/{label.total}" if label is not None else "an unknown track"
+    return track_position(label) if label is not None else "an unknown track"
 
 
 def _shown_output(output: str) -> str:
@@ -195,18 +194,6 @@ async def announce_failed(db: AsyncSession, task: TranscodeTask, error: str) -> 
     if subject is None:
         return
     log_transcode_failed(task, *subject, error)
-
-
-async def log_safely(event: str, work: Awaitable[None]) -> None:
-    """Await a milestone log; a Python-level failure in it is logged, never raised into the caller.
-
-    It does not undo a database error inside `work`: on a session that work leaves needing a
-    rollback, so callers run it after their commit where they can.
-    """
-    try:
-        await work
-    except Exception:
-        logger.exception("could not log the %s milestone", event)
 
 
 class _GpuWait(NamedTuple):

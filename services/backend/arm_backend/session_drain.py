@@ -24,6 +24,7 @@ from arm_backend.auto_session import (
     maybe_auto_apply_session,
     media_mismatch_detail,
 )
+from arm_backend.log_safely import log_safely_sync
 from arm_backend.path_template import TemplateValidationError
 from arm_backend.ws import WSHub
 from arm_common import Job, Session, SessionApplication, SessionApplicationStatus, Track, TranscodeTask
@@ -290,7 +291,7 @@ async def drain_parked_applications_after_rip(
         except Exception:  # noqa: BLE001
             logger.warning("%s: reloading job_id=%s after a failed drain failed", trigger, job_id, exc_info=True)
         return []
-    log_queued_applications(job, outcomes)
+    log_safely_sync("session.applied", log_queued_applications, job, outcomes)
     for outcome in outcomes:
         if outcome.skipped_reason is not None:
             logger.warning(

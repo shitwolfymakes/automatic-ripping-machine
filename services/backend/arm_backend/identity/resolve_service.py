@@ -11,6 +11,7 @@ from arm_backend.identity.ids import current_ids
 from arm_backend.identity.pipeline import resolve_job
 from arm_backend.identity.proposals import forget_episode_show_ids, record_manual_job
 from arm_backend.identity.stage_runner import EpisodeStageRunner
+from arm_backend.log_safely import log_safely_sync
 from arm_backend.session_drain import (
     ResolveFanOutOutcome,
     after_rip,
@@ -18,7 +19,7 @@ from arm_backend.session_drain import (
     log_queued_applications,
 )
 from arm_backend.ws import WSHub
-from arm_common import Job, JobStatus, MediaType
+from arm_common import Job, JobStatus, MediaType, with_log_context
 from arm_common.enums import RESOLVABLE_PROMOTE_JOB_STATUSES
 from arm_common.schemas import JobView, ResolveFanOutOutcomeView, ResolveMatch, ResolveRequest, ResolveResponse
 from arm_common.schemas.job_metadata import ExternalIds, JobIdentity, JobMetadata, flag_is_set
@@ -282,7 +283,23 @@ async def resolve_identity(
 
     `before_identity` lets a caller that already changed the job's identity
     (accept) still get the episode stage scheduled: the snapshot is taken
-    here only when the caller passes none."""
+    here only when the caller passes none. Everything it logs carries the job's id."""
+    with with_log_context(job_id=job.id):
+        return await _resolve_identity(
+            session, job, req, hub=hub, stage_runner=stage_runner, before_identity=before_identity
+        )
+
+
+async def _resolve_identity(
+    session: AsyncSession,
+    job: Job,
+    req: ResolveRequest,
+    *,
+    hub: WSHub,
+    stage_runner: EpisodeStageRunner | None,
+    before_identity: tuple[int | None, int | None, MediaType | None, str | None, dict[str, Any]] | None,
+) -> ResolveResponse:
+    """Apply the resolve to the job, commit, run the post-resolve pass and build the response."""
     if before_identity is None:
         before_identity = identity_snapshot(job)
 
@@ -346,8 +363,7 @@ async def resolve_identity(
         unlogged_outcomes = fan_out_outcomes
 
     logger.info(
-        "resolve job_id=%s -> identified title=%s fan_out=%d",
-        job.id,
+        "resolve -> identified title=%s fan_out=%d",
         job.title,
         len(fan_out_outcomes),
     )
@@ -362,7 +378,7 @@ async def resolve_identity(
     await session.refresh(job)
     for outcome in fan_out_outcomes:
         await session.refresh(outcome.application)
-    log_queued_applications(job, unlogged_outcomes)
+    log_safely_sync("session.applied", log_queued_applications, job, unlogged_outcomes)
 
     if stage_runner is not None and identity_snapshot(job) != before_identity:
         stage_runner.schedule(job.id)

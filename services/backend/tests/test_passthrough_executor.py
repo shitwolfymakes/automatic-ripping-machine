@@ -30,7 +30,7 @@ from arm_common import (
 )
 from arm_common.enums import TrackKind
 from tests._fakes import FakeSession
-from tests._logs import LineCapture
+from tests._logs import LineCapture, log_commits
 
 
 def _settings(**overrides: Any) -> Settings:
@@ -974,3 +974,19 @@ async def test_progress_publisher_reports_each_written_percentage(monkeypatch: A
 
     # The copy caps at 99 %: completion, not progress, reports the end.
     assert reported == [(-1, 10), (10, 30), (30, 80), (80, 99)]
+
+
+async def test_passthrough_session_completed_follows_the_commit_and_the_task_line(
+    tmp_path: Path, job_log: LineCapture
+) -> None:
+    raw = tmp_path / "raw" / "job1" / "t0.mkv"
+    raw.parent.mkdir(parents=True)
+    raw.write_bytes(b"data")
+    db = _with_job(_db(track_output_path=str(raw), task_output_path="Title (2020)/t0.mkv"))
+    log_commits(db)
+    hub, _sent = _hub_with_recorder()
+
+    assert await execute_passthrough_task(db, db.rows["transcode_tasks"][0], hub, _settings(MEDIA_ROOT=str(tmp_path)))
+
+    order = job_log.events("commit", "transcode.completed", "session.completed")
+    assert order[-3:] == ["commit", "transcode.completed", "session.completed"]

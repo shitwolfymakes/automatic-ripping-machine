@@ -39,7 +39,7 @@ from arm_common import (
     TranscodeTool,
 )
 from tests._fakes import FakeSession
-from tests._logs import LineCapture
+from tests._logs import LineCapture, log_commits
 
 _HOSTNAME = "arm-transcode-abc123"
 _SERVICE_AUTH = {"Authorization": "Bearer tok-service", "X-ARM-Hostname": _HOSTNAME}
@@ -606,3 +606,38 @@ def test_a_failed_milestone_log_does_not_fail_the_request(
         r = getattr(client, method)(f"/api/transcoder/tasks/txt_1/{path}", json=body, headers=_SERVICE_AUTH)
     assert r.status_code == 200, r.text
     assert job_log.lines(level="error")[-1]["msg"].startswith("could not log the transcode.")
+
+
+_SETTLE_ORDER = ("commit", "transcode.completed", "transcode.failed", "session.completed")
+
+
+@pytest.mark.parametrize(
+    ("path", "body", "task_event"),
+    [
+        ("complete", {"output_path": "a.mkv"}, "transcode.completed"),
+        ("fail", {"last_error": "HandBrakeCLI exited rc=1"}, "transcode.failed"),
+    ],
+)
+def test_session_completed_follows_the_commit_and_the_task_line(
+    job_log: LineCapture, path: str, body: dict[str, Any], task_event: str
+) -> None:
+    """The last task's line comes before the session's, and both only once the transition is committed."""
+    db = FakeSession()
+    _seed(db, task_status=TranscodeTaskStatus.IN_PROGRESS)
+    log_commits(db)
+    with TestClient(_make_app(db)) as client:
+        r = client.patch(f"/api/transcoder/tasks/txt_1/{path}", json=body, headers=_SERVICE_AUTH)
+    assert r.status_code == 200, r.text
+    assert job_log.events(*_SETTLE_ORDER) == ["commit", task_event, "session.completed"]
+
+
+@pytest.mark.parametrize(
+    ("path", "body"), [("complete", {"output_path": "a.mkv"}), ("fail", {"last_error": "HandBrakeCLI exited rc=1"})]
+)
+def test_a_failed_commit_logs_no_session_completed(job_log: LineCapture, path: str, body: dict[str, Any]) -> None:
+    db = FakeSession()
+    _seed(db, task_status=TranscodeTaskStatus.IN_PROGRESS)
+    db.commit_raises = RuntimeError("db gone")
+    with TestClient(_make_app(db)) as client, pytest.raises(RuntimeError, match="db gone"):
+        client.patch(f"/api/transcoder/tasks/txt_1/{path}", json=body, headers=_SERVICE_AUTH)
+    assert job_log.lines(event="session.completed") == []

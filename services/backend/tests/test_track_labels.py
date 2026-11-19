@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from arm_backend.track_labels import TrackLabel, track_label
+from arm_backend.track_labels import TrackLabel, track_label, track_position
 from arm_common import DiscType, Job, JobStatus, Track, TrackKind, TrackStatus
 
 
@@ -72,3 +72,7 @@ def test_unidentified_job_with_a_label_has_no_title() -> None:
     tracks = [_track(1, label="Title 1", episode_name="x")]
     job = _job({"flags": {"unidentified": True}, "music": {"tracks": [{"title": "A"}]}})
     assert track_label(job, tracks[0], tracks).title is None
+
+
+def test_track_position_names_the_index_among_the_total() -> None:
+    assert track_position(TrackLabel(3, 19, "Telephone Line")) == "track 3/19"

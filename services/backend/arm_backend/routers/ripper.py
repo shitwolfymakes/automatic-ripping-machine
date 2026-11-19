@@ -15,6 +15,7 @@ from arm_backend.auth import (
 from arm_backend.session_drain import after_rip, cancel_parked_applications
 from arm_backend.crash_recovery import reset_job_for_recovery
 from arm_backend.db import get_session
+from arm_backend.log_safely import log_safely, log_safely_sync
 from arm_backend.metadata import MetadataDispatcher
 from arm_backend.identify_flow import DiscAlreadyRippedError, IdentifyFlow, RippingPausedError, UnknownDriveError
 from arm_backend.rip_preset_resolution import (
@@ -578,7 +579,7 @@ async def rip_start(
         await _begin_rip(session, job, new_tracks)
 
         refreshed = await _job_tracks(session, job.id)
-        logger.info(
+        logger.debug(
             "rip-start preset=%s tracks=%d",
             preset_id,
             len(refreshed),
@@ -864,14 +865,6 @@ async def _emit_track_event(session: AsyncSession, hub: WSHub, track: Track, new
         await session.commit()
 
 
-async def _log_track_outcome_safely(session: AsyncSession, track: Track, new_status: TrackStatus) -> None:
-    """Log the track milestone; a failure here must not undo the committed update, so it is only logged."""
-    try:
-        await _log_track_outcome(session, track, new_status)
-    except Exception:
-        logger.exception("could not log the track %s milestone", new_status.value)
-
-
 async def _log_track_outcome(session: AsyncSession, track: Track, new_status: TrackStatus) -> None:
     """Log the track's DONE or FAILED milestone; any other target status logs nothing."""
     log = {TrackStatus.DONE: job_events.log_track_ripped, TrackStatus.FAILED: job_events.log_track_failed}.get(
@@ -907,7 +900,7 @@ async def update_track(
         await session.commit()
         await session.refresh(track)
         await _emit_track_event(session, hub, track, new_status)
-        await _log_track_outcome_safely(session, track, new_status)
+        await log_safely(f"track {new_status.value}", _log_track_outcome(session, track, new_status))
 
         return TrackView.model_validate(track)
 
@@ -953,14 +946,14 @@ async def rip_complete(
         job.ripped_at = datetime.now(timezone.utc)
         await session.commit()
         await session.refresh(job)
-        logger.info(
+        logger.debug(
             "rip-complete status=%s done=%d failed=%d total=%d",
             job.status.value,
             done,
             failed,
             total,
         )
-        job_events.log_rip_completed(job, done, failed, total)
+        log_safely_sync("rip.completed", job_events.log_rip_completed, job, done, failed, total)
 
         event_type = {
             JobStatus.RIPPED: "rip.completed",

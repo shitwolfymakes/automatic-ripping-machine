@@ -38,6 +38,7 @@ from arm_backend.gpu_claim import (
     pick_free_gpu,
     release_gpu_for_task,
 )
+from arm_backend.log_safely import log_safely
 from arm_backend.transcode_container_spec import (
     backend_url_for_spawn,
     container_identity_env,
@@ -49,7 +50,7 @@ from arm_backend.transcode_container_spec import (
 from arm_backend.transcode_image_pool import TranscodeImagePool
 from arm_backend.transcode_images import image_for
 from arm_backend.transcode_sweeps import TranscodeSweeps
-from arm_backend.transcode_task_events import GpuWaitLog, log_safely
+from arm_backend.transcode_task_events import GpuWaitLog, announce_failed
 from arm_backend.transcode_queue import max_parallel_transcodes, resolve_preset_for_task
 from arm_common import (
     Gpu,
@@ -660,20 +661,23 @@ class TranscodeDispatcher:
 
     async def _fail_queued_task(self, db: AsyncSession, task: TranscodeTask, reason: str) -> None:
         """Terminal-fail a queued task that can never run as configured, emit
-        `task.failed`, settle its session application, and commit."""
-        from arm_backend.transcode_apply import emit_task_failed, settle_session_application
+        `task.failed`, settle its session application, commit, then log
+        `transcode.failed` and any `session.completed` to the job log."""
+        from arm_backend.transcode_apply import emit_task_failed, log_session_settled, settle_session_application
 
         task.status = TranscodeTaskStatus.FAILED
         task.last_error = reason
-        logger.error("transcode task failed before spawn task_id=%s: %s", task.id, reason)
+        logger.debug("transcode task failed before spawn task_id=%s: %s", task.id, reason)
         await emit_task_failed(self._hub, db, task)
         application = (
             await db.execute(
                 select(SessionApplication).where(col(SessionApplication.id) == task.session_application_id)
             )
         ).scalar_one()
-        await settle_session_application(db, self._hub, application)
+        outcome = await settle_session_application(db, self._hub, application)
         await db.commit()
+        await log_safely("transcode.failed", announce_failed(db, task, reason))
+        await log_session_settled(db, application, outcome)
 
     def host_paths_set(self) -> bool:
         return bool(

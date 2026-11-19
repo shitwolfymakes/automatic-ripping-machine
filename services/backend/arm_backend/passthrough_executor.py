@@ -30,12 +30,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import col, select
 
 from arm_backend.config import Settings
+from arm_backend.log_safely import log_safely
 from arm_backend.transcode_task_events import (
     announce_completed,
     announce_failed,
     announce_progress,
     announce_started,
-    log_safely,
 )
 from arm_common import (
     SessionApplication,
@@ -49,6 +49,7 @@ from arm_common import (
 from arm_common.fileops import CopyCancelled, move_tree, transcode_none, tree_size
 
 if TYPE_CHECKING:
+    from arm_backend.transcode_apply import AggregateOutcome
     from arm_backend.ws.hub import WSHub
 
 logger = logging.getLogger("arm_backend.passthrough_executor")
@@ -312,17 +313,31 @@ class _PassthroughRun:
         previous_pct = fresh_task.progress_pct
         event_type, payload_extra = await self._record_terminal(fresh_task, size, error)
         await self._announce_terminal(event_type, payload_extra)
-        if self._application is not None:
-            from arm_backend.transcode_apply import (  # noqa: PLC0415 - matches dispatcher's lazy import
-                settle_session_application,
-            )
-
-            await settle_session_application(self._db, self._hub, self._application)
+        outcome = await self._settle_application()
         # Commit the terminal state (+ any aggregate transition) as its own
         # transaction, separate from the claim commit above.
         await self._db.commit()
         await self._log_terminal(fresh_task, size, error, previous_pct)
+        await self._log_settled(outcome)
         return error is None
+
+    async def _settle_application(self) -> AggregateOutcome | None:
+        """Recompute the task's application from its tasks; None when the application row is gone."""
+        if self._application is None:
+            return None
+        from arm_backend.transcode_apply import (  # noqa: PLC0415 - matches dispatcher's lazy import
+            settle_session_application,
+        )
+
+        return await settle_session_application(self._db, self._hub, self._application)
+
+    async def _log_settled(self, outcome: AggregateOutcome | None) -> None:
+        """Log the committed settle's `session.completed`, after the task's own line."""
+        if outcome is None or self._application is None:
+            return
+        from arm_backend.transcode_apply import log_session_settled  # noqa: PLC0415 - matches the settle import
+
+        await log_session_settled(self._db, self._application, outcome)
 
     async def _log_terminal(self, task: TranscodeTask, size: int | None, error: str | None, previous_pct: int) -> None:
         """Log the committed terminal state: the last progress quarter and `transcode.completed`, or

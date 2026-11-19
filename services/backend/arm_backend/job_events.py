@@ -7,7 +7,7 @@ from collections.abc import Sequence
 from datetime import datetime, timezone
 from typing import Any
 
-from arm_backend.track_labels import TrackLabel, track_label
+from arm_backend.track_labels import TrackLabel, track_label, track_position
 from arm_common import Job, JobStatus, Track
 from arm_common.log_format import elapsed, human_duration, human_size
 from arm_common.logging import log_event, with_log_context
@@ -98,7 +98,7 @@ def previously_ripped_reason(previous_job_id: str) -> str:
 
 def _track_name(label: TrackLabel) -> str:
     """`track 1/19` with the quoted title when the job's identity gives one."""
-    base = f"track {label.index}/{label.total}"
+    base = track_position(label)
     return f'{base} "{label.title}"' if label.title else base
 
 
