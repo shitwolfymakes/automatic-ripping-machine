@@ -27,6 +27,7 @@ import pytest
 import arm_ripper.drive_status as drive_status_module
 import arm_ripper.rip.dispatcher as dispatcher_module
 import arm_ripper.rip.optical_rip as optical_rip_module
+import arm_ripper.rip.track_callbacks as track_callbacks_module
 from arm_common import DiscType, DriveMediaStatus
 from arm_common.enums import TrackKind, TrackStatus
 from arm_common.schemas import TrackView
@@ -1622,7 +1623,7 @@ async def test_rip_all_data_progress_has_zero_fraction_and_no_rate_for_unknown_t
             return 5.0
 
     monkeypatch.setattr(dispatcher_module, "rip_data", fake_rip_data)
-    monkeypatch.setattr(dispatcher_module, "time", _FrozenTime)
+    monkeypatch.setattr(track_callbacks_module, "time", _FrozenTime)
     ticks: list[tuple[str, float, Any]] = []
 
     async def on_progress(track: TrackView, fraction: float, stats: Any = None) -> None:

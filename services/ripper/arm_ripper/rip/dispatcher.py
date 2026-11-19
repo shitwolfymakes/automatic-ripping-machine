@@ -1,5 +1,4 @@
 import asyncio
-import time
 from collections.abc import Callable, Collection
 from pathlib import Path
 
@@ -12,7 +11,7 @@ from arm_ripper.rip.data_rip import rip_data
 from arm_ripper.rip.makemkv_backup import rip_backup
 from arm_ripper.rip.optical_rip import rip_optical
 from arm_ripper.rip.result import RipResult
-from arm_ripper.rip.track_callbacks import OnTrackDone, OnTrackProgress, OnTrackStart, TransferStats
+from arm_ripper.rip.track_callbacks import OnTrackDone, OnTrackProgress, OnTrackStart, track_byte_progress
 
 # v3 default. 120s drops menu loops and vendor bumpers without cutting
 # the 2–5 minute extras users typically care about. Sessions can
@@ -167,20 +166,9 @@ async def _rip_data_dump(
         return
     first = tracks[0]
     await on_track_start(first)
-    started = time.monotonic()
-
-    async def _on_data_progress(done: int, total: int | None) -> None:
-        if on_track_progress is None:
-            return
-        elapsed = time.monotonic() - started
-        stats: TransferStats = {
-            "bytes_done": done,
-            "bytes_total": total,
-            "rate_bps": done / elapsed if elapsed > 0 else None,
-        }
-        await on_track_progress(first, min(done / total, 1.0) if total else 0.0, stats)
-
-    result = await rip_data(device_path=device_path, output_dir=output_dir, on_progress=_on_data_progress)
+    result = await rip_data(
+        device_path=device_path, output_dir=output_dir, on_progress=track_byte_progress(first, on_track_progress)
+    )
     await on_track_done(first, result)
 
 

@@ -2,13 +2,13 @@ import asyncio
 import contextlib
 import logging
 import os
-from collections.abc import Awaitable, Callable
 from functools import partial
 from pathlib import Path
 
 from arm_ripper.rip.hashing import sha256_file
 from arm_ripper.rip.poller import Poller
 from arm_ripper.rip.result import RipResult
+from arm_ripper.rip.track_callbacks import OnByteProgress
 from arm_ripper.rip.subprocess_cleanup import kill_if_running
 from arm_ripper.source import is_iso_source
 
@@ -18,9 +18,6 @@ DATA_RIP_TIMEOUT_SECONDS = 4 * 60 * 60
 
 # How often the copy reports the bytes written so far while dd runs.
 PROGRESS_INTERVAL_SECONDS = 2.0
-
-# (bytes copied so far, total bytes or None when the source size is unknown)
-OnDataProgress = Callable[[int, int | None], Awaitable[None]]
 
 
 def source_size(device_path: str) -> int | None:
@@ -33,12 +30,12 @@ def source_size(device_path: str) -> int | None:
     return size or None
 
 
-async def _report_size(output_path: Path, total: int | None, on_progress: OnDataProgress) -> None:
+async def _report_size(output_path: Path, total: int | None, on_progress: OnByteProgress) -> None:
     """Report the bytes the copy has written so far."""
     await on_progress(output_path.stat().st_size, total)
 
 
-def _start_reporter(output_path: Path, total: int | None, on_progress: OnDataProgress | None) -> Poller | None:
+def _start_reporter(output_path: Path, total: int | None, on_progress: OnByteProgress | None) -> Poller | None:
     """Start reporting the copy's size every PROGRESS_INTERVAL_SECONDS; None when nobody listens."""
     if on_progress is None:
         return None
@@ -90,7 +87,7 @@ def _empty_output_failure(output_path: Path) -> RipResult | None:
     return None
 
 
-async def rip_data(device_path: str, output_dir: Path, on_progress: OnDataProgress | None = None) -> RipResult:
+async def rip_data(device_path: str, output_dir: Path, on_progress: OnByteProgress | None = None) -> RipResult:
     """Pull a raw image from the disc, or copy an ISO image, via dd.
 
     A physical disc keeps 2 KB blocks so `conv=noerror,sync` pads exactly one
