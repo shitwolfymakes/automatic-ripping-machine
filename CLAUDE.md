@@ -100,6 +100,19 @@ These rules apply to every change in every service. A PR that breaks one is not 
 
 Be ruthless about it. Each module, class, function and component does one thing, and its name says what that thing is. If describing a function takes an "and", split it. Keep I/O, parsing, decisions and side effects in separate functions so each one can be tested alone. New behaviour gets its own function, not another branch in an existing one.
 
+### Reuse and consolidate
+
+Every fix or feature starts by finding what the codebase already has for the job, and the change is scoped to include that consolidation:
+
+- **Reuse before writing.** Use the existing function, callback, payload, component or helper that already does the job (in the same service or `arm_common`). A second path that does the same job reuses the first one's code, never a parallel copy.
+- **Extract at the second use.** When the code you need exists in one place, extract it into a shared helper and move both callers onto it. The extraction is its own commit, before the change that needs it.
+- **Migrate what you touch.** A touched area that still has its own copy of a shared pattern moves onto the shared one in the same PR.
+- **Improve the shared piece.** When a change improves behaviour that a shared piece provides, change the shared piece so every caller gets it.
+- **Same contract everywhere.** A new source of an existing kind of data (a new rip tool, a new provider) emits the existing event, payload and log shape, so consumers need no source-specific handling.
+- **Clean up while there.** Comments in touched code describe the code as it is now; dev-history notes in touched code are removed.
+
+A touched symbol's coverage includes its nested closures: coverage.py and V8 report each one as its own region, so fold them into the named symbol before judging it.
+
 ### Cognitive complexity of 15 or less
 
 No function may have a cognitive complexity greater than 15. Confirm it with the **SonarQube for IDE** extension in the local VS Code: rule S3776 (Python and JavaScript/TypeScript, default threshold 15) reports each violation in the Problems panel for the open file. Open every file the diff touches and clear its S3776 warnings before opening the PR. Claude reads the same diagnostics through the VS Code `getDiagnostics` tool.

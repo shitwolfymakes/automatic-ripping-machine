@@ -70,21 +70,21 @@ describe('rips store', () => {
 		expect(ripProgress.value['job_a'].eta_seconds).toBeNull();
 	});
 
-	it('resets the ETA baseline when the track changes', () => {
+	it('keeps the ETA going when the rip moves to the next track, since the percentage is for the whole disc', () => {
 		onProgress('job_a', progressEnv('job_a', 'trk_1', 5));
 		vi.advanceTimersByTime(10_000);
 		onProgress('job_a', progressEnv('job_a', 'trk_1', 50));
-		expect(ripProgress.value['job_a'].eta_seconds).not.toBeNull();
-		// New track → first tick blanks ETA again.
-		onProgress('job_a', progressEnv('job_a', 'trk_2', 0));
+		vi.advanceTimersByTime(10_000);
+		// 55% in 20s from the first tick → 2.75%/s → 40% remaining → ~15s.
+		onProgress('job_a', progressEnv('job_a', 'trk_2', 60));
 		expect(ripProgress.value['job_a']).toMatchObject({
 			track_id: 'trk_2',
-			progress_pct: 0,
-			eta_seconds: null
+			progress_pct: 60,
+			eta_seconds: 15
 		});
 	});
 
-	it('resets the baseline on a >1pp backward jump under a stable track', () => {
+	it('resets the baseline on a >1pp backward jump', () => {
 		onProgress('job_a', progressEnv('job_a', 'trk_1', 40));
 		vi.advanceTimersByTime(10_000);
 		onProgress('job_a', progressEnv('job_a', 'trk_1', 30)); // backward

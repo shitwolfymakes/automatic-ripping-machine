@@ -27,6 +27,7 @@ import pytest
 import arm_ripper.drive_status as drive_status_module
 import arm_ripper.rip.dispatcher as dispatcher_module
 import arm_ripper.rip.optical_rip as optical_rip_module
+import arm_ripper.rip.track_callbacks as track_callbacks_module
 from arm_common import DiscType, DriveMediaStatus
 from arm_common.enums import TrackKind, TrackStatus
 from arm_common.schemas import TrackView
@@ -217,7 +218,6 @@ def _stub_rip_disc(
         minlength_seconds: int,
         eligible_source_indexes: list[int] | None = None,
         on_title_start: Any | None = None,
-        on_title_progress: Any | None = None,
         on_disc_progress: Any | None = None,
         on_title_done: Any | None = None,
         hash_outputs: bool = True,
@@ -232,17 +232,6 @@ def _stub_rip_disc(
         if fire_per_title_start and on_title_start is not None:
             for idx in fake_result.titles:
                 await on_title_start(idx)
-        # Per-title progress can only fire when the streamer has
-        # established `current_title` from a "Saving title #N" PRGT —
-        # i.e. the same condition that gates `fire_per_title_start`.
-        # `mkv all` mode (fire_per_title_start=False) emits no
-        # per-title PRGT and therefore no per-title progress; skipping
-        # it here keeps the fake's behaviour aligned with the real
-        # streamer in [makemkv_stream.py].
-        if fire_per_title_start and on_title_progress is not None:
-            for idx in fake_result.titles:
-                await on_title_progress(idx, 0.5)
-                await on_title_progress(idx, 1.0)
         if fire_disc_progress is not None and on_disc_progress is not None:
             for frac in fire_disc_progress:
                 await on_disc_progress(frac)
@@ -270,18 +259,12 @@ async def test_rip_all_dvd_single_invocation_per_disc(monkeypatch, tmp_path):
 
     started: list[str] = []
     done: list[tuple[str, bool, str | None]] = []
-    progress: list[tuple[str, float]] = []
 
     async def on_start(track: TrackView) -> None:
         started.append(track.id)
 
     async def on_done(track: TrackView, result: RipResult) -> None:
         done.append((track.id, result.ok, result.error))
-
-    async def on_progress(track: TrackView, fraction: float, stats: Any = None) -> None:
-        if stats is not None and stats.get("phase") == "verifying":
-            return  # the post-rip hash pass; covered by its own tests
-        progress.append((track.id, fraction))
 
     tracks = [_track(0), _track(1), _track(2)]
     await rip_all(
@@ -291,7 +274,6 @@ async def test_rip_all_dvd_single_invocation_per_disc(monkeypatch, tmp_path):
         output_dir=tmp_path,
         on_track_start=on_start,
         on_track_done=on_done,
-        on_track_progress=on_progress,
         min_length_seconds=600,
     )
 
@@ -301,8 +283,6 @@ async def test_rip_all_dvd_single_invocation_per_disc(monkeypatch, tmp_path):
     assert started == ["trk_0", "trk_1", "trk_2"]
     assert [t for t, ok, _ in done] == ["trk_0", "trk_1", "trk_2"]
     assert all(ok for _, ok, _ in done)
-    # Two progress samples per track (0.5 then 1.0) routed through the lookup.
-    assert len(progress) == 6
 
 
 async def test_rip_all_marks_skipped_titles_failed(monkeypatch, tmp_path):
@@ -479,14 +459,73 @@ async def test_rip_all_synthesises_start_when_prgt_misses(monkeypatch, tmp_path)
         assert seq == ["start", "done"], f"track {tid} had bad lifecycle: {seq}"
 
 
+async def test_rip_all_disc_progress_names_the_title_being_ripped(monkeypatch, tmp_path):
+    """Disc-wide progress names the first eligible title MakeMKV has not finished: title 0 until its file is
+    finalised mid-rip, then title 2. The figure stays the disc-wide fraction."""
+
+    async def fake_rip_disc(
+        *, output_dir: Path, on_disc_progress: Any, on_title_done: Any, **_kw: Any
+    ) -> RipDiscResult:
+        await on_disc_progress(0.2)
+        (output_dir / "title_t00.mkv").write_bytes(b"x" * 100)
+        await on_title_done(0)
+        await on_disc_progress(0.6)
+        return RipDiscResult(overall_error=None, titles={})
+
+    monkeypatch.setattr(optical_rip_module, "rip_disc", fake_rip_disc)
+    progress: list[tuple[str, float]] = []
+
+    async def on_progress(track: TrackView, fraction: float, stats: Any = None) -> None:
+        if stats is None:
+            progress.append((track.id, fraction))
+
+    _events, on_start, on_done = _recorders()
+    await rip_all(
+        disc_type=DiscType.BLURAY,
+        device_path="/dev/sr0",
+        tracks=[_track(0), _track(2)],
+        output_dir=tmp_path,
+        on_track_start=on_start,
+        on_track_done=on_done,
+        on_track_progress=on_progress,
+    )
+
+    assert progress == [("trk_0", 0.2), ("trk_2", 0.6)]
+
+
+async def test_rip_all_disc_progress_with_no_eligible_title_reports_nothing(monkeypatch, tmp_path):
+    """Every selected title is below the minimum length, so no title carries the disc-wide progress."""
+
+    async def fake_rip_disc(*, on_disc_progress: Any, **_kw: Any) -> RipDiscResult:
+        await on_disc_progress(0.5)
+        return RipDiscResult(overall_error=None, titles={})
+
+    monkeypatch.setattr(optical_rip_module, "rip_disc", fake_rip_disc)
+    progress: list[float] = []
+
+    async def on_progress(_track: TrackView, fraction: float, stats: Any = None) -> None:
+        progress.append(fraction)
+
+    _events, on_start, on_done = _recorders()
+    await rip_all(
+        disc_type=DiscType.BLURAY,
+        device_path="/dev/sr0",
+        tracks=[_track(0, duration_seconds=30)],
+        output_dir=tmp_path,
+        on_track_start=on_start,
+        on_track_done=on_done,
+        on_track_progress=on_progress,
+        min_length_seconds=120,
+    )
+
+    assert progress == []
+
+
 async def test_rip_all_disc_progress_attributes_to_first_eligible_track(monkeypatch, tmp_path):
-    """`mkv all` emits no per-title PRGT, so `on_title_progress` never
-    fires from the stream. The dispatcher must surface PRGV's
-    `total/max` (disc-overall) channel via `on_disc_progress`,
-    attributed to the first eligible track. The UI's rips store keys
-    live progress by job_id and renders one bar per disc, so the
-    track_id chosen is purely a wire-format detail — what matters is
-    that the bar advances 0 → 100 % across the rip."""
+    """The dispatcher surfaces PRGV's `total/max` (disc-overall)
+    channel via `on_disc_progress`, so the bar advances 0 → 100 %
+    across the rip. No title finishes mid-rip
+    here, so every report names the first eligible track."""
     fake_result = RipDiscResult(
         overall_error=None,
         titles={
@@ -1432,22 +1471,6 @@ async def test_rip_all_cancels_the_hasher_and_propagates_an_exception_raised_mid
     assert len(cancelled) == 1
 
 
-async def test_rip_all_drops_per_title_progress_for_a_title_that_was_not_selected(monkeypatch, tmp_path):
-    """Progress for a title index with no selected track fires no
-    on_track_progress; progress for a selected title does."""
-
-    async def fake_rip_disc(**kwargs: Any) -> RipDiscResult:
-        await kwargs["on_title_progress"](9, 0.25)
-        await kwargs["on_title_progress"](0, 0.5)
-        return RipDiscResult(overall_error=None, titles={})
-
-    monkeypatch.setattr(optical_rip_module, "rip_disc", fake_rip_disc)
-
-    events = await _run_rip_all_recording_events(tmp_path, [_track(0)])
-
-    assert [e for e in events if e[0] == "progress"] == [("progress", "trk_0", 0.5)]
-
-
 # --- rip_all (CD, DATA, fallback, backup progress) ---------------------------
 
 
@@ -1507,10 +1530,93 @@ async def test_rip_all_cd_starts_every_track_then_reports_what_rip_cd_fires(monk
         ("done", "trk_1", True, None, 1),
         ("done", "trk_2", True, None, 2),
     ]
-    assert set(captured) == {"device_path", "output_dir", "track_indexes", "on_track_done"}
+    assert set(captured) == {
+        "device_path",
+        "output_dir",
+        "track_indexes",
+        "on_track_done",
+        "on_progress",
+        "expected_bytes",
+    }
     assert captured["device_path"] == "/dev/sr0"
     assert captured["output_dir"] == tmp_path
     assert captured["track_indexes"] == [1, 2]
+
+
+async def test_rip_all_cd_reports_wav_bytes_as_the_first_tracks_progress_against_the_expected_total(
+    monkeypatch, tmp_path
+):
+    captured = _stub_rip_cd(monkeypatch)
+    _events, on_start, on_done = _recorders()
+    ticks: list[tuple[str, float, Any]] = []
+
+    async def on_progress(track: TrackView, fraction: float, stats: Any = None) -> None:
+        ticks.append((track.id, fraction, stats))
+
+    first = _track(1).model_copy(update={"expected_duration_seconds": 10})
+    second = _track(2).model_copy(update={"expected_duration_seconds": 30})
+    await rip_all(
+        disc_type=DiscType.CD,
+        device_path="/dev/sr0",
+        tracks=[first, second],
+        output_dir=tmp_path,
+        on_track_start=on_start,
+        on_track_done=on_done,
+        on_track_progress=on_progress,
+    )
+
+    assert captured["expected_bytes"] == 40 * 176_400
+    await captured["on_progress"](1_764_000, captured["expected_bytes"])
+    assert ticks[0][0] == "trk_1"
+    assert ticks[0][1] == 0.25
+    assert ticks[0][2]["bytes_done"] == 1_764_000
+
+
+async def test_rip_all_cd_names_the_track_being_read_in_each_progress_report(monkeypatch, tmp_path):
+    """Progress goes to the first track abcde has not finished yet, and stays on the last one once all are done."""
+    ticks: list[str] = []
+
+    async def fake_rip_cd(**kwargs: Any) -> dict[int, RipResult]:
+        await kwargs["on_progress"](10, 100)
+        await kwargs["on_track_done"](1, RipResult(ok=True, size_bytes=1))
+        await kwargs["on_progress"](60, 100)
+        await kwargs["on_track_done"](2, RipResult(ok=True, size_bytes=2))
+        await kwargs["on_progress"](100, 100)
+        return {1: RipResult(ok=True, size_bytes=1), 2: RipResult(ok=True, size_bytes=2)}
+
+    monkeypatch.setattr(dispatcher_module, "rip_cd", fake_rip_cd)
+    _events, on_start, on_done = _recorders()
+
+    async def on_progress(track: TrackView, _fraction: float, _stats: Any = None) -> None:
+        ticks.append(track.id)
+
+    await rip_all(
+        disc_type=DiscType.CD,
+        device_path="/dev/sr0",
+        tracks=[_track(1), _track(2)],
+        output_dir=tmp_path,
+        on_track_start=on_start,
+        on_track_done=on_done,
+        on_track_progress=on_progress,
+    )
+
+    assert ticks == ["trk_1", "trk_2", "trk_2"]
+
+
+async def test_rip_all_cd_with_an_unknown_track_length_reports_no_total(monkeypatch, tmp_path):
+    captured = _stub_rip_cd(monkeypatch)
+    _events, on_start, on_done = _recorders()
+
+    await rip_all(
+        disc_type=DiscType.CD,
+        device_path="/dev/sr0",
+        tracks=[_track(1).model_copy(update={"expected_duration_seconds": 10}), _track(2)],
+        output_dir=tmp_path,
+        on_track_start=on_start,
+        on_track_done=on_done,
+    )
+
+    assert captured["expected_bytes"] is None
 
 
 async def test_rip_all_cd_ignores_a_done_index_that_is_not_a_requested_track(monkeypatch, tmp_path):
@@ -1565,6 +1671,7 @@ async def test_rip_all_cd_with_no_tracks_still_calls_rip_cd_and_fires_nothing(mo
 
     assert events == []
     assert captured["track_indexes"] == []
+    assert captured["on_progress"] is None
 
 
 async def test_rip_all_data_with_no_tracks_returns_without_a_callback(monkeypatch, tmp_path):
@@ -1622,7 +1729,7 @@ async def test_rip_all_data_progress_has_zero_fraction_and_no_rate_for_unknown_t
             return 5.0
 
     monkeypatch.setattr(dispatcher_module, "rip_data", fake_rip_data)
-    monkeypatch.setattr(dispatcher_module, "time", _FrozenTime)
+    monkeypatch.setattr(track_callbacks_module, "time", _FrozenTime)
     ticks: list[tuple[str, float, Any]] = []
 
     async def on_progress(track: TrackView, fraction: float, stats: Any = None) -> None:
@@ -1802,3 +1909,11 @@ def test_effective_disc_type_keeps_the_scan_type_for_mixed_kinds() -> None:
 
 def test_effective_disc_type_keeps_the_scan_type_without_tracks() -> None:
     assert _effective_disc_type(DiscType.DVD, []) == DiscType.DVD
+
+
+def test_active_index_is_the_first_key_not_finished() -> None:
+    assert track_callbacks_module.active_index([3, 5, 9], {3}) == 5
+
+
+def test_active_index_is_the_last_key_once_all_are_finished() -> None:
+    assert track_callbacks_module.active_index([3, 5, 9], {3, 5, 9}) == 9
