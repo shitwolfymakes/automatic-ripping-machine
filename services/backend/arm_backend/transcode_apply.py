@@ -21,6 +21,7 @@ from typing import TYPE_CHECKING, Any, Literal, NamedTuple
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import col, select
 
+from arm_backend import job_events
 from arm_backend.constants import CONFIG_SINGLETON_ID
 from arm_backend.path_sanitize import sanitize_path_component
 from arm_backend.path_template import (
@@ -32,6 +33,7 @@ from arm_backend.path_template import (
     required_tokens,
 )
 from arm_backend.slugify import slugify
+from arm_backend.transcode_task_events import log_safely
 from arm_common import (
     Config,
     Gpu,
@@ -498,6 +500,9 @@ class AggregateOutcome(NamedTuple):
 
     transitioned_to: SessionApplicationStatus | None
     event_type: str | None  # "session.completed" / "session.partial" / "session.failed"
+    done: int = 0  # task counts once the application settled; 0 while it has not
+    failed: int = 0
+    total: int = 0
 
 
 async def aggregate_session_application(
@@ -540,7 +545,13 @@ async def aggregate_session_application(
 
     application.status = target
     application.completed_at = datetime.now(UTC)
-    return AggregateOutcome(transitioned_to=target, event_type=event)
+    return AggregateOutcome(
+        transitioned_to=target,
+        event_type=event,
+        done=done_count,
+        failed=len(statuses) - done_count,
+        total=len(statuses),
+    )
 
 
 async def emit_session_outcome(
@@ -586,3 +597,14 @@ async def settle_session_application(db: AsyncSession, hub: "WSHub", application
     outcome = await aggregate_session_application(db, application)
     if outcome.event_type is not None:
         await emit_session_outcome(hub, db, application, outcome.event_type)
+        await log_safely("session.completed", _log_session_settled(db, application, outcome))
+
+
+async def _log_session_settled(db: AsyncSession, application: SessionApplication, outcome: AggregateOutcome) -> None:
+    """Log `session.completed` with the settled application's task counts."""
+    job = (await db.execute(select(Job).where(col(Job.id) == application.job_id))).scalar_one_or_none()
+    if job is None:
+        return
+    job_events.log_session_completed(
+        job, outcome.done, outcome.failed, outcome.total, session_application_id=application.id
+    )

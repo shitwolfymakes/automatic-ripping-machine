@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 import logging
 import os
 import threading
@@ -30,6 +30,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import col, select
 
 from arm_backend.config import Settings
+from arm_backend.transcode_task_events import (
+    announce_completed,
+    announce_failed,
+    announce_progress,
+    announce_started,
+    log_safely,
+)
 from arm_common import (
     SessionApplication,
     SessionApplicationStatus,
@@ -142,6 +149,7 @@ class _PassthroughRun:
             # move so the tick's FOR UPDATE row locks aren't held across
             # blocking I/O (see docstring).
             await self._db.commit()
+            await log_safely("transcode.started", announce_started(self._db, self._task))
 
             size, error = await self._move_or_reject()
 
@@ -258,6 +266,7 @@ class _PassthroughRun:
                 self._source_track_id,
                 progress,
                 stop_publisher,
+                report=self._report_progress,
             )
         )
         try:
@@ -275,6 +284,10 @@ class _PassthroughRun:
             _cancel_events.pop(self._task_id, None)
             await self._stop_publisher(publisher, stop_publisher)
         return size, error
+
+    async def _report_progress(self, previous_pct: int, current_pct: int) -> None:
+        """Log the quarter a copy's progress write crossed, if any."""
+        await log_safely("transcode.progress", announce_progress(self._db, self._task, previous_pct, current_pct))
 
     async def _stop_publisher(self, publisher: asyncio.Future[None], stop: asyncio.Event) -> None:
         """Stop the progress publisher and wait for it, logging rather than raising its failure."""
@@ -306,7 +319,17 @@ class _PassthroughRun:
         # Commit the terminal state (+ any aggregate transition) as its own
         # transaction, separate from the claim commit above.
         await self._db.commit()
+        await self._log_terminal(fresh_task, size, error)
         return error is None
+
+    async def _log_terminal(self, task: TranscodeTask, size: int | None, error: str | None) -> None:
+        """Log the committed terminal state: `transcode.completed` or `transcode.failed`."""
+        if error is None:
+            await log_safely(
+                "transcode.completed", announce_completed(self._db, task, self._task_output_path or "", size)
+            )
+        else:
+            await log_safely("transcode.failed", announce_failed(self._db, task, error))
 
     async def _refetch_task(self) -> TranscodeTask | None:
         """Re-select the task row, None when a concurrent cancel deleted it."""
@@ -348,12 +371,12 @@ class _PassthroughRun:
                 "task.completed",
                 {"output_path": self._task_output_path, "size_bytes": size},
             )
-            logger.info("passthrough complete task_id=%s output=%s", self._task_id, self._task_output_path)
+            logger.debug("passthrough complete task_id=%s output=%s", self._task_id, self._task_output_path)
         else:
             fresh_task.status = TranscodeTaskStatus.FAILED
             fresh_task.last_error = error
             event_type, payload_extra = "task.failed", {"last_error": error}
-            logger.error("passthrough failed task_id=%s: %s", self._task_id, error)
+            logger.debug("passthrough failed task_id=%s: %s", self._task_id, error)
         await self._db.flush()
         return event_type, payload_extra
 
@@ -424,9 +447,12 @@ async def _publish_progress(
     track_id: str | None,
     progress: _CopyProgress,
     stop: asyncio.Event,
+    *,
+    report: Callable[[int, int], Awaitable[None]],
 ) -> None:
-    """While a copy runs, until `stop` is set, heartbeat `progress_pct` onto the row and publish
-    `transcode.progress.{task_id}`, as a container transcoder does.
+    """While a copy runs, until `stop` is set, heartbeat `progress_pct` onto the row, hand each written
+    percentage and the one before it to `report`, and publish `transcode.progress.{task_id}`, as a
+    container transcoder does.
 
     A Core UPDATE rather than an ORM write: `cancel_running` may delete the
     row at any moment, and an UPDATE of a missing row is a no-op where an
@@ -443,7 +469,7 @@ async def _publish_progress(
         pct = min(99, progress.done * 100 // progress.total)
         if pct == last_pct:
             continue
-        last_pct = pct
+        previous_pct, last_pct = last_pct, pct
         rate = progress.done / max(time.monotonic() - started, 1e-6)
         eta = int((progress.total - progress.done) / rate) if rate > 0 else None
         try:
@@ -459,6 +485,7 @@ async def _publish_progress(
             logger.warning("passthrough progress write failed task_id=%s: %s; no further progress", task_id, exc)
             await db.rollback()
             return
+        await report(previous_pct, pct)
         try:
             await hub.emit(
                 topic=f"transcode.progress.{task_id}",

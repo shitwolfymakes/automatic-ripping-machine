@@ -118,6 +118,20 @@ def rip_completed_message(done: int, total: int, elapsed_seconds: float | None, 
     return f"rip {'failed' if rip_failed else 'complete'}: {done}/{total} tracks{suffix}"
 
 
+def session_applied_message(session_name: str, source: str, task_count: int) -> str:
+    """`Music to FLAC applied (manual): 19 transcodes queued`."""
+    noun = "transcode" if task_count == 1 else "transcodes"
+    return f"{session_name} applied ({source}): {task_count} {noun} queued"
+
+
+def session_completed_message(done: int, failed: int, total: int) -> str:
+    """`transcode complete: 17/19 (2 failed)`; `transcode failed: 0/19` when nothing was transcoded."""
+    if done == 0:
+        return f"transcode failed: {done}/{total}"
+    suffix = f" ({failed} failed)" if failed else ""
+    return f"transcode complete: {done}/{total}{suffix}"
+
+
 def log_identified(job: Job, provider: str, method: str, artist: str | None = None) -> None:
     with with_log_context(job_id=job.id):
         log_event(
@@ -218,4 +232,33 @@ def log_rip_completed(job: Job, done: int, failed: int, total: int) -> None:
             total=total,
             status=job.status.value,
             elapsed_seconds=elapsed_seconds,
+        )
+
+
+def log_session_applied(
+    job: Job, session_name: str, source: str, task_count: int, *, session_application_id: str | None = None
+) -> None:
+    with with_log_context(job_id=job.id, session_application_id=session_application_id):
+        log_event(
+            logger,
+            "session.applied",
+            session_applied_message(session_name, source, task_count),
+            session=session_name,
+            source=source,
+            task_count=task_count,
+        )
+
+
+def log_session_completed(
+    job: Job, done: int, failed: int, total: int, *, session_application_id: str | None = None
+) -> None:
+    with with_log_context(job_id=job.id, session_application_id=session_application_id):
+        log_event(
+            logger,
+            "session.completed",
+            session_completed_message(done, failed, total),
+            level=logging.WARNING if failed else logging.INFO,
+            done=done,
+            failed=failed,
+            total=total,
         )

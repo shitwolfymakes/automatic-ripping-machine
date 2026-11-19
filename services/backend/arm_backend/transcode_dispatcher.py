@@ -49,6 +49,7 @@ from arm_backend.transcode_container_spec import (
 from arm_backend.transcode_image_pool import TranscodeImagePool
 from arm_backend.transcode_images import image_for
 from arm_backend.transcode_sweeps import TranscodeSweeps
+from arm_backend.transcode_task_events import GpuWaitLog, log_safely
 from arm_backend.transcode_queue import max_parallel_transcodes, resolve_preset_for_task
 from arm_common import (
     Gpu,
@@ -137,6 +138,7 @@ class _SpawnPass:
         self.encode_slots = await self._free_encode_slots()
         for task_id in await self._queued_task_ids():
             await self._handle_queued(task_id)
+        await log_safely("transcode.waiting", self._dispatcher.gpu_waits.settle(self._db))
         if self.held_encode:
             logger.debug(
                 "%d encode task(s) held (enabled=%s docker=%s)",
@@ -284,19 +286,19 @@ class _SpawnPass:
         # current and still QUEUED, right before we act on it.
         assignment = await self._dispatcher._claim_gpu_for_task(self._db, task, preset)
         if assignment.action == "queue":
-            self._log_waiting(task, assignment)
+            await self._log_waiting(task, assignment)
             return
+        self._dispatcher.gpu_waits.resumed(task_id)
         if assignment.action == "fail":
             await self._fail_isolated(task, task_id, str(assignment.reason))
             return
         await self._spawn_claimed_task(task, task_id, assignment)
 
-    def _log_waiting(self, task: TranscodeTask, assignment: GpuAssignment) -> None:
-        logger.info(
-            "transcode task waiting for GPU encoder=%s task_id=%s%s",
-            assignment.encoder.id if assignment.encoder is not None else None,
-            task.id,
-            f" ({assignment.reason})" if assignment.reason else "",
+    async def _log_waiting(self, task: TranscodeTask, assignment: GpuAssignment) -> None:
+        """Log the task's GPU wait the first time it queues for one (see `GpuWaitLog`)."""
+        encoder = assignment.encoder.id if assignment.encoder is not None else None
+        await log_safely(
+            "transcode.waiting", self._dispatcher.gpu_waits.waiting(self._db, task, encoder, assignment.reason)
         )
 
     async def _fail_isolated(self, task: TranscodeTask, task_id: str, reason: str) -> None:
@@ -456,6 +458,9 @@ class TranscodeDispatcher:
         # querying live; it is only ever stale for the window between a GPU
         # being enabled and the next tick or claim.
         self._enabled_gpu_vendors: set[GpuVendor] = set()
+        # Tasks logged as waiting for a GPU: each wait logs once on entry and
+        # once when the task spawns, fails or leaves the queue.
+        self.gpu_waits = GpuWaitLog()
 
     @property
     def docker_client(self) -> HealingDockerClient | None:
@@ -762,7 +767,7 @@ class TranscodeDispatcher:
         # A dead ssh transport is rebuilt and the run retried once by the
         # client; a second failure propagates into spawn_pending's handling.
         container = self._docker_client.containers.run(**run_kwargs)
-        logger.info(
+        logger.debug(
             "transcode spawned task_id=%s container=%s image=%s gpu=%s",
             task.id,
             hostname,

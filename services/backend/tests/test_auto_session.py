@@ -42,6 +42,7 @@ from arm_common import (
 )
 
 from tests._fakes import FakeSession
+from tests._logs import LineCapture
 
 
 class CapturingHub:
@@ -965,3 +966,26 @@ async def test_fan_out_transcode_disabled_wins_over_encoder_unavailable(tmp_path
     assert len(outcomes) == 1
     assert outcomes[0].skipped_reason == "transcode_disabled"
     assert outcomes[0].application.status == SessionApplicationStatus.WAITING_IDENTIFY
+
+
+async def test_apply_logs_session_applied(tmp_path: Path, job_log: LineCapture) -> None:
+    _set_media_root(tmp_path)
+    db = FakeSession()
+    job = _seed(db)
+
+    outcome = await apply_session_internal(
+        db,
+        job=job,
+        session_id="ses_x",
+        overwrite=False,
+        created_by_user_id=None,
+        source="manual",
+        hub=CapturingHub(),  # type: ignore[arg-type]
+    )
+
+    assert outcome.application is not None
+    (line,) = job_log.lines(event="session.applied")
+    assert line["msg"] == "My Plex applied (manual): 1 transcode queued"
+    assert line["fields"] == {"session": "My Plex", "source": "manual", "task_count": 1}
+    assert line["job_id"] == job.id and line["session_application_id"] == outcome.application.id
+    assert not [entry for entry in job_log.lines() if "apply session_id=" in entry["msg"]]

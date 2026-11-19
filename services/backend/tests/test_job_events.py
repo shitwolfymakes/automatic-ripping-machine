@@ -275,3 +275,48 @@ def test_log_rip_completed_for_a_failed_rip_warns(job_log: LineCapture) -> None:
     assert line["level"] == "warning"
     assert line["msg"] == "rip failed: 0/6 tracks"
     assert line["fields"]["status"] == "failed"
+
+
+@pytest.mark.parametrize(
+    ("count", "expected"),
+    [
+        (19, "Music to FLAC applied (manual): 19 transcodes queued"),
+        (1, "Music to FLAC applied (manual): 1 transcode queued"),
+    ],
+)
+def test_session_applied_message(count: int, expected: str) -> None:
+    assert job_events.session_applied_message("Music to FLAC", "manual", count) == expected
+
+
+def test_log_session_applied(job_log: LineCapture) -> None:
+    job_events.log_session_applied(_job(), "Music to FLAC", "auto", 19, session_application_id="sap_1")
+    (line,) = job_log.lines(event="session.applied")
+    assert line["msg"] == "Music to FLAC applied (auto): 19 transcodes queued"
+    assert line["job_id"] == "job_1" and line["session_application_id"] == "sap_1"
+    assert line["fields"] == {"session": "Music to FLAC", "source": "auto", "task_count": 19}
+
+
+@pytest.mark.parametrize(
+    ("done", "failed", "expected"),
+    [
+        (19, 0, "transcode complete: 19/19"),
+        (17, 2, "transcode complete: 17/19 (2 failed)"),
+        (0, 19, "transcode failed: 0/19"),
+    ],
+)
+def test_session_completed_message(done: int, failed: int, expected: str) -> None:
+    assert job_events.session_completed_message(done, failed, 19) == expected
+
+
+def test_log_session_completed_all_done_is_info(job_log: LineCapture) -> None:
+    job_events.log_session_completed(_job(), 19, 0, 19, session_application_id="sap_1")
+    (line,) = job_log.lines(event="session.completed")
+    assert line["level"] == "info" and line["msg"] == "transcode complete: 19/19"
+    assert line["session_application_id"] == "sap_1"
+    assert line["fields"] == {"done": 19, "failed": 0, "total": 19}
+
+
+def test_log_session_completed_with_failures_warns(job_log: LineCapture) -> None:
+    job_events.log_session_completed(_job(), 17, 2, 19)
+    (line,) = job_log.lines(event="session.completed")
+    assert line["level"] == "warning" and line["job_id"] == "job_1"
