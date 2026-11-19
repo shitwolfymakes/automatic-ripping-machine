@@ -126,7 +126,9 @@ class JsonFormatter(logging.Formatter):
         return json.dumps(line, default=str)
 
 
-def log_event(logger: logging.Logger, event: str, message: str, *, level: int = logging.INFO, **fields: object) -> None:
+def log_event(
+    logger: logging.Logger, event: str, message: str, /, *, level: int = logging.INFO, **fields: object
+) -> None:
     """Log `message` as the named `event`, carrying `fields` as the line's structured values."""
     logger.log(level, message, extra={"event": event, "fields": fields})
 

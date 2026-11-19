@@ -274,3 +274,11 @@ def test_unusable_log_dir_falls_back_to_stdout_only(tmp_path: Path) -> None:
     assert not (tmp_path / "test-svc.log").exists()
     assert not (blocker / "logs").exists()
 
+
+def test_fields_may_share_a_name_with_log_events_own_parameters(caplog: pytest.LogCaptureFixture) -> None:
+    lg = logging.getLogger("arm_common.tests.positional")
+    with caplog.at_level(logging.INFO, logger=lg.name):
+        log_event(lg, "a.b", "m", logger="ripper", event="eject", message="tray open")
+    row = _format(caplog.records[-1])
+    assert (row["event"], row["msg"]) == ("a.b", "m")
+    assert row["fields"] == {"logger": "ripper", "event": "eject", "message": "tray open"}
