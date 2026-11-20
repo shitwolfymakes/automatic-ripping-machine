@@ -20,8 +20,6 @@
 		isPostRip: boolean;
 		/** Whether the rip can be started from the card. */
 		canStart: boolean;
-		/** Whether the disc waits at the review gate. */
-		isReviewGate: boolean;
 		/** The episode matching state, or null when the card has no episodes. */
 		episodeRow: EpisodeStatus | null;
 		/** Whether this disc matched an earlier rip. */
@@ -34,8 +32,6 @@
 		oncancel: () => void;
 		/** Called when Start rip is pressed. */
 		onstartrip: () => void;
-		/** Called when Identify and start is pressed. */
-		onidentifyandstart: () => void;
 	}
 
 	let {
@@ -46,14 +42,12 @@
 		isMusic,
 		isPostRip,
 		canStart,
-		isReviewGate,
 		episodeRow,
 		previouslyRipped,
 		fromIso,
 		onapplysession,
 		oncancel,
-		onstartrip,
-		onidentifyandstart
+		onstartrip
 	}: Props = $props();
 </script>
 
@@ -118,17 +112,6 @@
 			class="btn btn-danger ml-auto"
 		>
 			{actions.deleting ? 'Deleting...' : 'Delete'}
-		</button>
-	{/if}
-	{#if canStart && isReviewGate && $isAdmin}
-		<button
-			type="button"
-			onclick={onidentifyandstart}
-			disabled={actions.starting}
-			class="btn disc-review-widget-action-btn"
-			title="Save the identity and start ripping this disc"
-		>
-			Identify and start
 		</button>
 	{/if}
 	{#if canStart && $isAdmin}

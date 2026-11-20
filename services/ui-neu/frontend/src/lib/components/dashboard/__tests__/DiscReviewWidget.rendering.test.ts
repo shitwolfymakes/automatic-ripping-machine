@@ -194,22 +194,6 @@ describe('DiscReviewWidget', () => {
 			await waitFor(() => expect(mockStart).toHaveBeenCalledWith('job_9'));
 		});
 
-		it('Identify and start saves, then starts, for an awaiting_review job', async () => {
-			const { resolveJob } = await import('$lib/api/jobs');
-			const mockResolve = vi.mocked(resolveJob);
-			mockResolve.mockClear();
-			renderWidget({ id: 'job_9', status: 'awaiting_review', title: 'Found' });
-			await fireEvent.click(await screen.findByText('Identify and start'));
-			await waitFor(() => expect(mockStart).toHaveBeenCalledWith('job_9'));
-			expect(mockResolve).toHaveBeenCalled();
-		});
-
-		it('hides Identify and start on an awaiting_user_id job', async () => {
-			renderWidget({ id: 'job_u', status: 'awaiting_user_id' });
-			await screen.findByText('Start rip');
-			expect(screen.queryByText('Identify and start')).not.toBeInTheDocument();
-		});
-
 		it('Start rip saves (resolveJob) before starting an awaiting_user_id job', async () => {
 			const { resolveJob } = await import('$lib/api/jobs');
 			const mockResolve = vi.mocked(resolveJob);

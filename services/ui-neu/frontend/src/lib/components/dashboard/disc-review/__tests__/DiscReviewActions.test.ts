@@ -41,7 +41,6 @@ interface Options {
 	isMusic?: boolean;
 	isPostRip?: boolean;
 	canStart?: boolean;
-	isReviewGate?: boolean;
 	episodeRow?: EpisodeStatus | null;
 	previouslyRipped?: boolean;
 	fromIso?: boolean;
@@ -64,7 +63,6 @@ function setup(options: Options = {}) {
 	const onapplysession = vi.fn();
 	const oncancel = vi.fn();
 	const onstartrip = vi.fn();
-	const onidentifyandstart = vi.fn();
 	renderComponent(DiscReviewActions, {
 		job: options.job ?? createJob({ id: 'job_7', actions: actionsFor('ripping') }),
 		sections,
@@ -73,16 +71,14 @@ function setup(options: Options = {}) {
 		isMusic: options.isMusic ?? false,
 		isPostRip: options.isPostRip ?? false,
 		canStart: options.canStart ?? false,
-		isReviewGate: options.isReviewGate ?? false,
 		episodeRow: options.episodeRow ?? null,
 		previouslyRipped: options.previouslyRipped ?? false,
 		fromIso: options.fromIso ?? false,
 		onapplysession,
 		oncancel,
-		onstartrip,
-		onidentifyandstart
+		onstartrip
 	});
-	return { sections, actions, onapplysession, oncancel, onstartrip, onidentifyandstart };
+	return { sections, actions, onapplysession, oncancel, onstartrip };
 }
 
 const btn = (name: string) => screen.getByRole('button', { name });
@@ -260,37 +256,6 @@ describe('DiscReviewActions: Delete', () => {
 		actions.deleting = true;
 		await tick();
 		expect(btn('Deleting...')).toBeDisabled();
-	});
-});
-
-describe('DiscReviewActions: Identify and start', () => {
-	it('shows on a disc in review and calls onidentifyandstart', async () => {
-		const { onidentifyandstart } = setup({ canStart: true, isReviewGate: true });
-		await fireEvent.click(btn('Identify and start'));
-		expect(onidentifyandstart).toHaveBeenCalledTimes(1);
-	});
-
-	it('is hidden off the review gate', () => {
-		setup({ canStart: true, isReviewGate: false });
-		expect(maybeBtn('Identify and start')).toBeNull();
-	});
-
-	it('is hidden when the rip cannot be started', () => {
-		setup({ canStart: false, isReviewGate: true });
-		expect(maybeBtn('Identify and start')).toBeNull();
-	});
-
-	it('is hidden from a non-admin', async () => {
-		await setRole('viewer');
-		setup({ canStart: true, isReviewGate: true });
-		expect(maybeBtn('Identify and start')).toBeNull();
-	});
-
-	it('is disabled while starting', async () => {
-		const { actions } = setup({ canStart: true, isReviewGate: true });
-		actions.starting = true;
-		await tick();
-		expect(btn('Identify and start')).toBeDisabled();
 	});
 });
 
