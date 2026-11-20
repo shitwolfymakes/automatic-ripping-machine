@@ -60,6 +60,13 @@ const OTHER = [
 ];
 
 describe('tokens.css', () => {
+	it('derives the raised surface from the surface in light and dark, so a scheme that sets only --color-surface still themes it', () => {
+		const theme = css.slice(css.indexOf('@theme'), css.indexOf('}', css.indexOf('@theme')));
+		const dark = css.slice(css.indexOf('.dark {'));
+		for (const block of [theme, dark]) {
+			expect(block).toMatch(/--color-surface-raised: color-mix\(in srgb, var\(--color-surface\) \d+%, white\);/);
+		}
+	});
 	it('declares every colour role in @theme', () => {
 		const theme = css.slice(css.indexOf('@theme'), css.indexOf('}', css.indexOf('@theme')));
 		for (const role of COLOR_ROLES) expect(theme, role).toMatch(new RegExp(`--color-${role}:`));
