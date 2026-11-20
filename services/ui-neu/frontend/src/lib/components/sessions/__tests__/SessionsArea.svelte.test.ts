@@ -504,6 +504,35 @@ describe('Defaults view auto-apply', () => {
 		expect(onsave).toHaveBeenCalledWith('miss_media_type', 'tv');
 	});
 
+	it('renders an enum Defaults field with no options and no saved value as an empty select', async () => {
+		setTranscoderEnabled(true);
+		const bare = { ...DEFAULTS.fields[1], enum_values: null, enum_labels: null };
+		renderComponent(SessionsArea, {
+			props: { defaultsGroup: { ...DEFAULTS, fields: [bare] }, config: {}, onsave: vi.fn() }
+		});
+		await screen.findByText('ses Alpha');
+		await fireEvent.click(screen.getByRole('tab', { name: 'Defaults' }));
+		const select = await screen.findByRole('combobox', { name: 'Treat unidentified video discs as' });
+		expect(within(select).queryAllByRole('option')).toHaveLength(0);
+		expect((select as HTMLSelectElement).value).toBe('');
+	});
+
+	it('falls back to the raw value for an enum option that has no label', async () => {
+		setTranscoderEnabled(true);
+		const unlabelled = { ...DEFAULTS.fields[1], enum_labels: null };
+		renderComponent(SessionsArea, {
+			props: { defaultsGroup: { ...DEFAULTS, fields: [unlabelled] }, config: {}, onsave: vi.fn() }
+		});
+		await screen.findByText('ses Alpha');
+		await fireEvent.click(screen.getByRole('tab', { name: 'Defaults' }));
+		const select = await screen.findByRole('combobox', { name: 'Treat unidentified video discs as' });
+		expect(
+			within(select)
+				.getAllByRole('option')
+				.map((o) => o.textContent)
+		).toEqual(['movie', 'tv']);
+	});
+
 	it('hides auto-apply on a ripper-only deployment and keeps the matrix', async () => {
 		setTranscoderEnabled(false);
 		await openDefaults();
