@@ -217,7 +217,7 @@ def test_hold_overrides_the_timed_review_and_a_missed_identify() -> None:
     missed = _db(PreviouslyRippedAction.HOLD, block_on_miss=True)
     out = _identify(missed, _Hub(), miss=True).json()
     assert out["status"] == "awaiting_review"
-    assert out["title"] == "RESIDENT_EVIL_RETRIBUTION"
+    assert out["title"] == "RESIDENT EVIL RETRIBUTION"
 
 
 def test_hold_still_wins_over_a_held_suggestion() -> None:

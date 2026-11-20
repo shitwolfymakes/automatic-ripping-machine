@@ -14,6 +14,7 @@ from arm_backend.disc_dedupe import find_previous_rips, find_reusable_job_for_di
 from arm_backend.metadata import MetadataDispatcher
 from arm_backend.metadata.base import MetadataResult
 from arm_backend.metadata.dispatcher import DISPATCH_TIMEOUT_SECONDS
+from arm_backend.metadata.volume_label import normalize_volume_label
 from arm_backend.rip_preset_resolution import (
     RipPresetUnavailable,
     resolve_rip_preset_for_job,
@@ -110,6 +111,15 @@ def _miss_outcome(job: Job) -> str:
     if job.wait_start_time is None:
         return "it waits for review"
     return "it rips when the review countdown ends"
+
+
+def _video_miss_title(scan: ScanResult, miss_title: str | None) -> str | None:
+    """A missed video disc's title. Its files are named from it, so a miss
+    named by its label takes the label as the lookups searched it
+    (underscores as spaces, format noise and a trailing year removed)."""
+    if not miss_title or miss_title != scan.volume_label:
+        return miss_title
+    return normalize_volume_label(miss_title)[0] or miss_title
 
 
 # A miss stores at most this many dispatcher attempts (metadata_json.identify_attempts).
@@ -533,10 +543,11 @@ class IdentifyFlow:
         return {"dispatch_timeout": True} if self.timed_out else {}
 
     async def _apply_miss(self, job: Job, cfg: Config, scan: ScanResult, miss_title: str | None) -> None:
-        job.title = miss_title
         if scan.disc_type in VIDEO_DISC_TYPES:
+            job.title = _video_miss_title(scan, miss_title)
             await self._park_video_miss(job, cfg, scan)
         else:
+            job.title = miss_title
             self._apply_plain_miss(job, cfg)
 
     def _apply_plain_miss(self, job: Job, cfg: Config) -> None:

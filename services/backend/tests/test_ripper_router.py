@@ -775,11 +775,31 @@ def test_identify_video_miss_keeps_every_title_and_parks_per_setting(
     assert (out.get("wait_start_time") is not None) is countdown
     assert out["metadata_json"]["flags"]["unidentified"] is True
     assert out["media_type"] == "movie"
-    assert out["title"] == "MY_DISC"
+    assert out["title"] == "MY DISC"
     tracks = _added_tracks(db)
     assert {t.source_ref: t.excluded for t in tracks} == {"1": False, "2": False, "3": False, "4": False}
     preset_claims = out["metadata_json"]["identity_claims"]["sources"]["preset"]["tracks"]
     assert {ref: c["selected"] for ref, c in preset_claims.items()} == {"1": True, "2": True, "3": True, "4": True}
+
+
+@pytest.mark.parametrize(("label", "title"), [("2001", "2001"), (None, None)])
+def test_identify_video_miss_keeps_a_label_that_cleans_to_nothing(label: str | None, title: str | None) -> None:
+    """A label the cleaner empties (a bare year) names the miss as written; no label leaves no title."""
+    db = _miss_db(block_on_miss=True)
+    scan = _four_title_scan()
+    scan["volume_label"] = label
+    out = _identify(_make_app(db, dispatcher=_Dispatcher(None)), scan)
+    assert out["title"] == title
+
+
+def test_identify_video_miss_is_named_from_the_cleaned_label() -> None:
+    """A miss is named from the label the lookups searched for, underscores
+    as spaces, so its files never land under the raw label."""
+    db = _miss_db(block_on_miss=True)
+    scan = _four_title_scan()
+    scan["volume_label"] = "SCI_FI_CREATURE_CLASSICS"
+    out = _identify(_make_app(db, dispatcher=_Dispatcher(None)), scan)
+    assert out["title"] == "SCI FI CREATURE CLASSICS"
 
 
 class _StaleCountdownDispatcher(_Dispatcher):
@@ -944,7 +964,7 @@ def test_identify_video_miss_logs_what_happens_next(
     db = _miss_db(block_on_miss=block_on_miss, hold_for_review=hold_for_review)
     with caplog.at_level(logging.INFO, logger="arm_backend.identify_flow"):
         out = _identify(_make_app(db, dispatcher=_Dispatcher(None)), _four_title_scan())
-    assert f"identify job_id={out['id']}: no match for 'MY_DISC'; {outcome}" in caplog.messages
+    assert f"identify job_id={out['id']}: no match for 'MY DISC'; {outcome}" in caplog.messages
 
 
 def test_identify_repost_on_held_disc_leaves_tracks_and_claims_alone(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -3809,14 +3829,14 @@ def test_identify_miss_title_uses_the_bdmt_hint_but_not_the_label_hint() -> None
     bd["volume_label"] = "THE_OFFICE_S1_D2"
     bd["bd_meta"] = {"name": "The Office: Season One"}
     assert _miss(bd) == "The Office: Season One"  # the disc's name as written
-    assert _miss(bd, disc_hint_sources=["label"]) == "THE_OFFICE_S1_D2"  # bd_title off: gate
+    assert _miss(bd, disc_hint_sources=["label"]) == "THE OFFICE S1 D2"  # bd_title off: gate
     dvd = _scan_dict()
     dvd["volume_label"] = "THE_OFFICE_S1_D2"
-    assert _miss(dvd) == "THE_OFFICE_S1_D2"
+    assert _miss(dvd) == "THE OFFICE S1 D2"
 
 
 def test_identify_miss_title_prefers_release_then_label() -> None:
-    """D-4 miss title: TheDiscDB release title → raw label (with every hint off)."""
+    """D-4 miss title: TheDiscDB release title → cleaned label (with every hint off)."""
     # 1. Release title beats the raw label when every lookup misses.
     db = FakeSession()
     db.rows["drives"] = [_drive()]
@@ -3844,7 +3864,7 @@ def test_identify_miss_title_prefers_release_then_label() -> None:
         )
     assert r.status_code == 200 and r.json()["status"] == "awaiting_review"
     assert r.json()["title"] == "Round Midnight"
-    # 2. With every hint off and no match, the raw label is the last resort (review focus 3).
+    # 2. With every hint off and no match, the label is the last resort (review focus 3).
     db2 = FakeSession()
     db2.rows["drives"] = [_drive()]
     db2.rows["config"] = [_config(block_on_miss=True, disc_hint_sources=[])]
@@ -3853,7 +3873,7 @@ def test_identify_miss_title_prefers_release_then_label() -> None:
         r2 = client.post(
             "/api/ripper/identify", json={"drive_id": "drv_x", "scan_result": _scan_dict()}, headers=_SERVICE_AUTH
         )
-    assert r2.json()["title"] == "MY_DISC"
+    assert r2.json()["title"] == "MY DISC"
 
 
 # --- identify: auto-apply switches off -----------------------------------------
