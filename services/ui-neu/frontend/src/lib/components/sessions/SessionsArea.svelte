@@ -314,18 +314,23 @@
 			ondelete={handleDeleteSession}
 		/>
 	{:else if view === 'routing'}
-		{#if $transcoderEnabled && defaultsGroup}
-			{#each defaultsGroup.fields as field (field.key)}
-				<AutoSaveToggle
-					key={field.key}
-					label={field.label}
-					help={field.help}
-					checked={Boolean(config[field.key])}
-					ontoggle={(next) => ontoggle?.(field.key, next)}
-				/>
-			{/each}
-		{/if}
-		<RoutingMatrix />
+		<RoutingMatrix>
+			{#snippet beforeMatrix()}
+				{#if $transcoderEnabled && defaultsGroup}
+					<div class="panel stack stack-sm" data-testid="defaults-auto-apply">
+						{#each defaultsGroup.fields as field (field.key)}
+							<AutoSaveToggle
+								key={field.key}
+								label={field.label}
+								help={field.help}
+								checked={Boolean(config[field.key])}
+								ontoggle={(next) => ontoggle?.(field.key, next)}
+							/>
+						{/each}
+					</div>
+				{/if}
+			{/snippet}
+		</RoutingMatrix>
 	{:else}
 		<PresetLibrary
 			kind={view}
