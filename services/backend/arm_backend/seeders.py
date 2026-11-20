@@ -36,6 +36,7 @@ from arm_common import (
 )
 
 from arm_backend.constants import ADMIN_USERNAME, CONFIG_SINGLETON_ID, GUEST_USERNAME
+from arm_backend.min_title_length import env_min_title_length_seconds
 from arm_backend.notification_dispatcher import DEFAULT_INBOX_EVENT_TYPES
 from arm_backend.notifications.inbox_listener import INBOX_CHANNEL_ID
 
@@ -122,6 +123,7 @@ async def _seed_config_singleton(session: AsyncSession) -> None:
                 # NULL until the next one made Settings show a different cap
                 # from the one the dispatcher used.
                 max_parallel_transcodes=settings.MAX_PARALLEL_TRANSCODES,
+                min_title_length_seconds=env_min_title_length_seconds(),
             )
         )
         await session.flush()
@@ -139,6 +141,14 @@ async def _seed_config_singleton(session: AsyncSession) -> None:
     # the column is authoritative and Settings edits stick.
     if existing.max_parallel_transcodes is None:
         existing.max_parallel_transcodes = settings.MAX_PARALLEL_TRANSCODES
+        session.add(existing)
+        await session.flush()
+
+    # One-shot backfill for the env->DB move of the minimum title length:
+    # NULL means this install has never seen the column, so seed it from the
+    # ripper min-length env value (default 120).
+    if existing.min_title_length_seconds is None:
+        existing.min_title_length_seconds = env_min_title_length_seconds()
         session.add(existing)
         await session.flush()
 

@@ -251,6 +251,7 @@ def test_get_config_returns_flag() -> None:
         "makemkv_sdf_enabled": True,
         "ripping_paused": False,
         "manual_wait_seconds": 60,
+        "min_title_length_seconds": 120,
     }
 
 

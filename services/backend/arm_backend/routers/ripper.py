@@ -29,6 +29,7 @@ from arm_backend.identity.pipeline import resolve_job
 from arm_backend.identity.proposals import record_preset
 from arm_backend.identity.stage_runner import EpisodeStageRunner
 from arm_backend.routers._deps import get_hub, get_stage_runner
+from arm_backend.min_title_length import min_title_length_seconds
 from arm_backend.rip_outcome import kept_tracks, rip_outcome_counts
 from arm_backend.track_selection import DiscBackupNeedsBluray, select_rip_tracks
 from arm_backend.ws import WSHub
@@ -154,6 +155,7 @@ async def get_ripper_config(
         makemkv_sdf_enabled=bool(cfg.makemkv_sdf_enabled),
         ripping_paused=bool(cfg.ripping_paused),
         manual_wait_seconds=int(cfg.manual_wait_seconds) if cfg.manual_wait_seconds is not None else 60,
+        min_title_length_seconds=min_title_length_seconds(cfg),
     )
 
 

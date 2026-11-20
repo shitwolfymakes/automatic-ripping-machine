@@ -120,6 +120,12 @@ class Config(SQLModel, table=True):
     # ISO-source ripping (ephemeral per-ISO virtual drives, docs/developers/
     # architecture/10-iso-source-ripping.md): how many ISO rips may run at once.
     max_parallel_iso_rips: int = Field(default=1, sa_column=Column(Integer, nullable=False, server_default="1"))
+    # Shortest title (seconds) the scan lists and the rip writes (Settings >
+    # Ripping). NULL = not yet seeded: the config seeder fills it once from the
+    # ripper min-length env value, then this column is authoritative.
+    min_title_length_seconds: int | None = Field(
+        default=None, sa_column=Column(Integer, nullable=True, server_default="120")
+    )
     # Runtime transcode switch (Settings > Transcoding). NULL means the row
     # predates the column; every reader treats NULL as enabled and the config
     # seeder backfills it to true on the next boot. Encode-task creation and

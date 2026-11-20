@@ -167,3 +167,6 @@ class RipperConfigView(BaseModel):
     # Defaulted so older backends omitting them still validate (no hold, 60s).
     ripping_paused: bool = False
     manual_wait_seconds: int = 60
+    # Shortest title the scan lists and the rip writes. Defaulted so older
+    # backends omitting it still validate (MakeMKV's own 120 s default).
+    min_title_length_seconds: int = 120
