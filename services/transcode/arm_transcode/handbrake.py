@@ -105,7 +105,7 @@ async def transcode_handbrake(
         encoder_args=encoder_args,
     )
 
-    logger.info("HandBrakeCLI launching: %s", " ".join(cmd))
+    logger.debug("HandBrakeCLI launching: %s", " ".join(cmd))
     proc = await asyncio.create_subprocess_exec(
         *cmd,
         stdout=asyncio.subprocess.PIPE,

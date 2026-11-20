@@ -288,7 +288,7 @@ async def _report_complete(
         size_bytes=size,
         duration_seconds=duration,
     )
-    logger.info("task complete output=%s size=%d", relative, size)
+    logger.debug("task complete output=%s size=%d", relative, size)
 
 
 async def _encode_and_report(
@@ -370,7 +370,7 @@ async def _run_task(*, cfg: TranscoderConfig, api: BackendClient, ssl_ctx: ssl.S
 async def run() -> int:
     cfg = TranscoderConfig()
     configure_service_logging(cfg.service_name, level=cfg.log_level)
-    logger.info("transcoder starting task_id=%s host=%s", cfg.task_id, cfg.hostname)
+    logger.debug("transcoder starting task_id=%s host=%s", cfg.task_id, cfg.hostname)
 
     api = BackendClient(
         base_url=cfg.backend_url,

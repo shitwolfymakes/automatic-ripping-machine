@@ -6,7 +6,7 @@ from typing import Any
 
 import httpx
 
-from arm_common import DiscType, Job, JobStatus, with_log_context
+from arm_common import DiscType, Job, JobStatus, log_event, with_log_context
 from arm_common.schemas import JobView, RipStartResponse, ScanResult, WSEnvelope
 from arm_ripper import raw_dir
 from arm_ripper.backend_client import BackendClient
@@ -18,7 +18,8 @@ from arm_ripper.eject import Ejector
 from arm_ripper.makemkv_prep import MakeMKVPrep
 from arm_ripper.ripper_config import ripper_config_or_none
 from arm_ripper.resolution_wait import IDENTIFY_WAIT, RESOLUTION_TIMEOUT_UNSET, REVIEW_WAIT, ResolutionWaiter, WaitSpec
-from arm_ripper.rip.dispatcher import DEFAULT_MIN_LENGTH_SECONDS
+from arm_ripper.rip.dispatcher import DEFAULT_MIN_LENGTH_SECONDS, NO_RIP_TOOL, rip_tool
+from arm_ripper.rip_events import disc_type_label, rip_started_message
 from arm_ripper.disc_scan import scan_or_none
 from arm_ripper.drive_poll import DriveState, read_drive_status
 from arm_ripper.source import is_file_source
@@ -42,6 +43,25 @@ def _previously_ripped(response: httpx.Response) -> bool:
     except ValueError:
         return False
     return isinstance(detail, dict) and detail.get("reason") == "previously_ripped"
+
+
+def _log_rip_started(disc_type: DiscType, rip_start: RipStartResponse, **extra_fields: Any) -> None:
+    """Log the `rip.started` event for the rip about to run."""
+    track_count = len(rip_start.tracks)
+    tool = rip_tool(disc_type, rip_start.tracks)
+    if tool == NO_RIP_TOOL:
+        logger.warning("rip cannot start: no rip path for %s", disc_type_label(disc_type))
+        return
+    log_event(
+        logger,
+        "rip.started",
+        rip_started_message(disc_type_label(disc_type), track_count, rip_start.rip_preset_id, tool),
+        disc_type=disc_type.value,
+        track_count=track_count,
+        preset=rip_start.rip_preset_id,
+        tool=tool,
+        **extra_fields,
+    )
 
 
 class JobController:
@@ -389,12 +409,7 @@ class JobController:
 
     async def _run_rip(self, job: Job | JobView, device_path: str) -> None:
         rip_start = await self._backend.rip_start(job.id)
-        logger.info(
-            "rip-start job_id=%s preset=%s tracks=%d",
-            job.id,
-            rip_start.rip_preset_id,
-            len(rip_start.tracks),
-        )
+        _log_rip_started(job.disc_type, rip_start)
         await self._execute_rip(
             job_id=job.id,
             disc_type=job.disc_type,
@@ -440,7 +455,7 @@ class JobController:
                 # a rip resumed days after a crash must not run on a stale key.
                 await self._makemkv.prepare()
                 rip_start = await self._client.resume(job.id)
-                logger.info("rip-resume job_id=%s tracks=%d", job.id, len(rip_start.tracks))
+                _log_rip_started(job.disc_type, rip_start, resumed=True)
                 await self._execute_rip(
                     job_id=job.id,
                     disc_type=job.disc_type,

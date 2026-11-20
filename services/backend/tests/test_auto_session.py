@@ -42,6 +42,7 @@ from arm_common import (
 )
 
 from tests._fakes import FakeSession
+from tests._logs import LineCapture
 
 
 class CapturingHub:
@@ -965,3 +966,105 @@ async def test_fan_out_transcode_disabled_wins_over_encoder_unavailable(tmp_path
     assert len(outcomes) == 1
     assert outcomes[0].skipped_reason == "transcode_disabled"
     assert outcomes[0].application.status == SessionApplicationStatus.WAITING_IDENTIFY
+
+
+async def test_apply_logs_session_applied(tmp_path: Path, job_log: LineCapture) -> None:
+    _set_media_root(tmp_path)
+    db = FakeSession()
+    job = _seed(db)
+
+    outcome = await apply_session_internal(
+        db,
+        job=job,
+        session_id="ses_x",
+        overwrite=False,
+        created_by_user_id=None,
+        source="manual",
+        hub=CapturingHub(),  # type: ignore[arg-type]
+    )
+
+    assert outcome.application is not None
+    (line,) = job_log.lines(event="session.applied")
+    assert line["msg"] == "My Plex applied (manual): 1 transcode queued"
+    assert line["fields"] == {"session": "My Plex", "source": "manual", "task_count": 1}
+    assert line["job_id"] == job.id and line["session_application_id"] == outcome.application.id
+    assert not [entry for entry in job_log.lines() if "apply session_id=" in entry["msg"]]
+
+
+async def test_draining_a_parked_application_logs_session_applied_once(tmp_path: Path, job_log: LineCapture) -> None:
+    from arm_backend.session_drain import drain_parked_applications_after_rip
+
+    _set_media_root(tmp_path)
+    db = FakeSession()
+    job = _seed(db)
+    db.rows["session_applications"] = [
+        SessionApplication(
+            id="sap_parked",
+            session_id="ses_x",
+            job_id=job.id,
+            status=SessionApplicationStatus.WAITING_IDENTIFY,
+            overwrite=False,
+        )
+    ]
+
+    outcomes = await drain_parked_applications_after_rip(db, job, CapturingHub())  # type: ignore[arg-type]
+
+    assert [o.skipped_reason for o in outcomes] == [None]
+    (line,) = job_log.lines(event="session.applied")
+    assert line["msg"] == "My Plex applied (manual): 1 transcode queued"
+    assert line["session_application_id"] == "sap_parked" and line["job_id"] == job.id
+    assert not [entry for entry in job_log.lines() if "fanned out parked" in entry["msg"]]
+
+
+async def test_a_drained_application_that_stays_parked_logs_no_session_applied(
+    tmp_path: Path, job_log: LineCapture
+) -> None:
+    from arm_backend.session_drain import drain_parked_applications_after_rip
+
+    _set_media_root(tmp_path)
+    db = FakeSession()
+    job = _seed(db)
+    db.rows["session_applications"] = [
+        SessionApplication(
+            id="sap_parked",
+            session_id="ses_gone",
+            job_id=job.id,
+            status=SessionApplicationStatus.WAITING_IDENTIFY,
+            overwrite=False,
+        )
+    ]
+
+    outcomes = await drain_parked_applications_after_rip(db, job, CapturingHub())  # type: ignore[arg-type]
+
+    assert [o.skipped_reason for o in outcomes] == ["session_missing"]
+    assert job_log.lines(event="session.applied") == []
+    assert job_log.lines(level="warning")[0]["msg"].startswith("after-rip: parked session_application=sap_parked")
+
+
+async def test_draining_survives_a_failing_session_applied_log(
+    tmp_path: Path, job_log: LineCapture, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from arm_backend import job_events
+    from arm_backend.session_drain import drain_parked_applications_after_rip
+
+    def _boom(*_a: Any, **_k: Any) -> None:
+        raise RuntimeError("log bug")
+
+    monkeypatch.setattr(job_events, "log_session_applied", _boom)
+    _set_media_root(tmp_path)
+    db = FakeSession()
+    job = _seed(db)
+    db.rows["session_applications"] = [
+        SessionApplication(
+            id="sap_parked",
+            session_id="ses_x",
+            job_id=job.id,
+            status=SessionApplicationStatus.WAITING_IDENTIFY,
+            overwrite=False,
+        )
+    ]
+
+    outcomes = await drain_parked_applications_after_rip(db, job, CapturingHub())  # type: ignore[arg-type]
+
+    assert [o.skipped_reason for o in outcomes] == [None]
+    assert job_log.lines(level="error")[-1]["msg"] == "could not log the session.applied milestone"

@@ -2,19 +2,28 @@ import asyncio
 import contextlib
 import logging
 import os
+import re
 import signal
 from collections.abc import Awaitable, Callable
 from functools import partial
 from pathlib import Path
 from tempfile import NamedTemporaryFile
 
-from arm_ripper.rip.abcde_output import moved_tracks, read_workdir_file, track_errors, wav_bytes_written
+from arm_ripper.rip.abcde_output import (
+    moved_tracks,
+    read_workdir_file,
+    track_errors,
+    wav_bytes_written,
+    wav_duration_seconds,
+)
 from arm_ripper.rip.hashing import sha256_file
 from arm_ripper.rip.poller import Poller, start_byte_reporter, stop_all
 from arm_ripper.rip.result import RipResult
 from arm_ripper.rip.track_callbacks import OnByteProgress
 
 logger = logging.getLogger("arm_ripper.rip.abcde")
+
+_ABCDE_PROBLEM_LINE = re.compile(r"^\[(ERROR|WARNING)\]")
 
 CD_RIP_TIMEOUT_SECONDS = 90 * 60  # 90 min: worst-case scratched disc, ~60min audio
 
@@ -43,7 +52,7 @@ def _kill_group(proc: asyncio.subprocess.Process) -> None:
 
 
 def _abcde_config(output_dir: Path) -> str:
-    """Force WAV output landing at `output_dir/trackNN.wav`, no CDDB.
+    """Force WAV output landing at `output_dir/trackNN.wav`, no lookup.
 
     abcde's `read` action always stages WAVs as
     `${WAVOUTPUTDIR}/abcde.${CDDBDISCID}/trackNN.wav` regardless of
@@ -57,12 +66,18 @@ def _abcde_config(output_dir: Path) -> str:
     matching abcde's pre-move name (`trackNN.wav`), so `_finalize_track`
     only needs one shape to look for. Without an explicit OUTPUTFORMAT
     the move would try to substitute ARTISTFILE/ALBUMFILE which are
-    empty under CDDBAVAIL=N, producing a `-/-/01.wav`-style path.
+    empty without a lookup, producing a `-/-/01.wav`-style path.
 
-    `CDDBAVAIL=N` skips all metadata lookups (ARM does its own via
-    MusicBrainz upstream). `CDDBMETHOD` still has to parse as a valid
-    method even when lookups are disabled — abcde validates the keyword
-    at startup before consulting `CDDBAVAIL`.
+    abcde does no metadata lookup (ARM does its own via MusicBrainz
+    upstream). Line numbers below are from the abcde 2.9.3 script. The
+    `move` action sets DOCDDB=y (line 4325), which
+    runs the lookup phase (line 5098). That phase loops over
+    `CDDBMETHOD`: the `musicbrainz` method queries the server without
+    ever reading `CDDBAVAIL` (line 2676), while the `cddb` method skips
+    its query when `CDDBAVAIL` is exactly lowercase `n` (lines 2731,
+    2780). So the config sets `CDDBMETHOD="cddb"` and `CDDBAVAIL="n"`
+    (an uppercase `N` never matched); abcde still needs a valid method
+    keyword at startup.
     """
     return (
         f'OUTPUTTYPE="wav"\n'
@@ -71,8 +86,8 @@ def _abcde_config(output_dir: Path) -> str:
         f'ACTIONS="read,move"\n'
         f'FORCE="y"\n'
         f'PADTRACKS="y"\n'
-        f'CDDBAVAIL="N"\n'
-        f'CDDBMETHOD="musicbrainz"\n'
+        f'CDDBAVAIL="n"\n'
+        f'CDDBMETHOD="cddb"\n'
         f'EJECT=""\n'
     )
 
@@ -125,7 +140,9 @@ class _CdTracks:
             logger.warning("stat failed track=%d path=%s err=%s", idx, wav_path, exc)
             return
         digest = await sha256_file(wav_path)
-        result = RipResult(ok=True, output_path=wav_path, size_bytes=size, sha256=digest)
+        result = RipResult(
+            ok=True, output_path=wav_path, size_bytes=size, duration_seconds=wav_duration_seconds(size), sha256=digest
+        )
         self.results[idx] = result
         if self._on_track_done is not None:
             await self._on_track_done(idx, result)
@@ -168,9 +185,10 @@ def _output_line(raw: bytes) -> str:
 
 
 def _log_output(line: str) -> None:
-    """Log a line of abcde output; the backend copies it into the job's log, as it does makemkvcon's milestones."""
+    """Log a line of abcde output at debug, or at warning when it is abcde's own `[ERROR]`/`[WARNING]` line."""
     if line:
-        logger.info("abcde: %s", line)
+        level = logging.WARNING if _ABCDE_PROBLEM_LINE.match(line) else logging.DEBUG
+        logger.log(level, "abcde: %s", line)
 
 
 async def _read_until_exit(proc: asyncio.subprocess.Process) -> int:
@@ -236,7 +254,7 @@ async def rip_cd(
 
     conf_path = _write_config(output_dir)
 
-    logger.info("abcde rip device=%s output_dir=%s", device_path, output_dir)
+    logger.debug("abcde rip device=%s output_dir=%s", device_path, output_dir)
 
     tracks = _CdTracks(output_dir, track_indexes, on_track_done)
 

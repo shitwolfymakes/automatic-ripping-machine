@@ -31,13 +31,17 @@ function logLineEnv(jobId: string, raw: Record<string, unknown>): WSEnvelope {
 }
 
 const ENTRY_A: LogEntry = {
-	timestamp: '2026-09-05T00:00:01Z',
+	ts: '2026-09-05T00:00:01Z',
 	level: 'info',
 	logger: 'arm',
-	event: 'started',
+	msg: 'started',
 	job_id: 'job_a',
-	label: null,
-	service: 'arm-backend'
+	service: 'arm-backend',
+	track_id: null,
+	session_application_id: null,
+	event: null,
+	fields: {},
+	exc: null
 };
 
 beforeEach(() => {
@@ -94,11 +98,12 @@ describe('createJobLog', () => {
 				service: 'arm-ripper-XYZ',
 				job_id: 'job_a',
 				msg: 'drive slow',
-				extra: {}
+				logger: 'arm',
+				fields: {}
 			})
 		);
 		expect(log.entries).toHaveLength(1);
-		expect(log.entries[0].event).toBe('drive slow');
+		expect(log.entries[0].msg).toBe('drive slow');
 		expect(log.entries[0].service).toBe('arm-ripper-XYZ');
 	});
 
@@ -130,13 +135,14 @@ describe('createJobLog', () => {
 					service: 'arm-backend',
 					job_id: 'job_a',
 					msg: `line ${i}`,
-					extra: {}
+					logger: 'arm',
+					fields: {}
 				})
 			);
 		}
 		expect(log.entries).toHaveLength(2000);
-		expect(log.entries[0].event).toBe('line 5');
-		expect(log.entries[1999].event).toBe('line 2004');
+		expect(log.entries[0].msg).toBe('line 5');
+		expect(log.entries[1999].msg).toBe('line 2004');
 	}, 20000);
 
 	it('stop() unsubscribes and sets live false', () => {
@@ -164,19 +170,19 @@ describe('createJobLog', () => {
 
 	it('orders the snapshot by timestamp across services, keeping undated lines in place', async () => {
 		fetchJobLogMock.mockResolvedValueOnce([
-			{ timestamp: '2026-09-05T15:47:01Z', level: 'info', logger: 'x', event: 'backend spawn', service: 'arm-backend' },
+			{ ts: '2026-09-05T15:47:01Z', level: 'info', logger: 'x', msg: 'backend spawn', service: 'arm-backend' },
 			{
-				timestamp: '2026-09-05T15:46:57Z',
+				ts: '2026-09-05T15:46:57Z',
 				level: 'info',
 				logger: 'x',
-				event: 'transcode rename',
+				msg: 'transcode rename',
 				service: 'arm-transcode-1'
 			},
-			{ timestamp: null, level: 'info', logger: 'x', event: 'undated', service: 'arm-ripper-a' }
+			{ ts: null, level: 'info', logger: 'x', msg: 'undated', service: 'arm-ripper-a' }
 		] as never);
 		const { createJobLog } = await import('../jobLog.svelte');
 		const log = createJobLog('job_x', { limit: 10 });
 		await log.load();
-		expect(log.entries.map((e) => e.event)).toEqual(['transcode rename', 'backend spawn', 'undated']);
+		expect(log.entries.map((e) => e.msg)).toEqual(['transcode rename', 'backend spawn', 'undated']);
 	});
 });

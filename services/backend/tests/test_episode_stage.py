@@ -21,6 +21,7 @@ from arm_backend.identity.episodes.model import Episode, TitleIn
 from arm_backend.identity.http import SourceError, SourceMiss
 from arm_backend.identity.proposals import claims_of, forget_episode_show_ids, set_pin
 from tests._fakes import FakeSession
+from tests._logs import LineCapture
 
 CFG = Config(id=1)
 
@@ -1552,3 +1553,48 @@ async def test_scan_seasons_option_ignores_the_job_season() -> None:
     outcomes = await compute_episode_claims(db, job, [provider], CFG, StageOptions(scan_seasons=True))
     assert outcomes[0].claims.job.season == 2
     assert outcomes[0].claims.inputs["season"] is None
+
+
+# ---------------------------------------------------------------------------
+# Job log: context and the episodes.matched event
+# ---------------------------------------------------------------------------
+
+
+async def test_run_episode_stage_logs_in_the_jobs_context_and_emits_matched(job_log: LineCapture) -> None:
+    job = _job(title="Kolchak")
+    db = _db(job, DISC)
+    provider = FakeProvider(seasons={1: _season(1, DISTINCT)})
+
+    await run_episode_stage(db, job, [provider], CFG, StageOptions())  # type: ignore[arg-type]
+
+    emitted = job_log.lines()
+    assert emitted
+    assert {line["job_id"] for line in emitted} == {"job_1"}
+    [matched] = job_log.lines(event="episodes.matched")
+    assert matched["fields"] == {"matched": 4, "unmatched": 0, "series": "Kolchak", "season": 1}
+    assert matched["msg"] == "matched 4 titles to Kolchak S1E3-E6 (0 unmatched)"
+
+
+async def test_run_episode_stage_with_a_failing_source_logs_in_the_jobs_context(
+    job_log: LineCapture,
+) -> None:
+    job = _job()
+    db = _db(job, DISC)
+    provider = FakeProvider(seasons={1: _season(1, DISTINCT)}, error=SourceError("boom"))
+
+    await run_episode_stage(db, job, [provider], CFG, StageOptions())  # type: ignore[arg-type]
+
+    warnings = job_log.lines(level="warning")
+    assert warnings
+    assert {line["job_id"] for line in warnings} == {"job_1"}
+    assert job_log.lines(event="episodes.matched") == []
+
+
+async def test_episodes_matched_is_not_emitted_when_no_title_matched(job_log: LineCapture) -> None:
+    job = _job()
+    db = _db(job, [10, 20, 30, 40])
+    provider = FakeProvider(seasons={1: _season(1, DISTINCT)})
+
+    await run_episode_stage(db, job, [provider], CFG, StageOptions())  # type: ignore[arg-type]
+
+    assert job_log.lines(event="episodes.matched") == []

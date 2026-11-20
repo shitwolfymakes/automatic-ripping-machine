@@ -18,6 +18,7 @@ import arm_ripper.job_controller as jc_module
 import arm_ripper.raw_dir as raw_dir_module
 import arm_ripper.resolution_wait as resolution_wait_module
 import arm_ripper.makemkv_prep as makemkv_prep_module
+from arm_common.enums import TrackKind, TrackStatus
 from arm_common import MediaType, DiscType, Job, JobStatus
 from arm_common.schemas import (
     JobView,
@@ -1882,3 +1883,88 @@ async def test_auto_rip_lookup_failure_proceeds_fail_open(caplog, stub_scan, stu
     assert "auto-rip config lookup failed (down); proceeding fail-open" in warnings
     assert client.rip_start_calls == ["job_test"]
     assert client.rip_complete_calls == ["job_test"]
+
+
+def _rip_started_records(caplog) -> list[logging.LogRecord]:
+    return [r for r in caplog.records if getattr(r, "event", None) == "rip.started"]
+
+
+async def test_run_rip_logs_rip_started_as_an_event(caplog, monkeypatch):
+    async def _noop(self, **kw):
+        return None
+
+    monkeypatch.setattr(JobController, "_execute_rip", _noop)
+    controller = JobController(FakeClient(), "drv_test")
+    with caplog.at_level(logging.INFO, logger="arm_ripper.job_controller"):
+        await controller._run_rip(_view(JobStatus.IDENTIFIED), "/dev/sr0")
+    (record,) = _rip_started_records(caplog)
+    assert record.levelno == logging.INFO
+    assert record.fields == {
+        "disc_type": "dvd",
+        "track_count": 0,
+        "preset": "rpr_builtin_movie_archive",
+        "tool": "makemkv",
+    }
+    assert record.getMessage() == "rip started: DVD, 0 tracks, preset rpr_builtin_movie_archive (makemkv)"
+
+
+def _audio_track(idx: int) -> TrackView:
+    return TrackView(
+        id=f"trk_{idx}",
+        job_id="job_test",
+        kind=TrackKind.AUDIO_TRACK,
+        index=idx,
+        source_ref=str(idx),
+        status=TrackStatus.QUEUED,
+        output_path=None,
+        size_bytes=None,
+        duration_seconds=200,
+        attempts=0,
+        last_error=None,
+    )
+
+
+async def _run_rip_as(disc_type: DiscType, monkeypatch, caplog) -> None:
+    async def _noop(self, **kw):
+        return None
+
+    async def rip_start(job_id: str) -> RipStartResponse:
+        return RipStartResponse(
+            job_id=job_id, rip_preset_id="rpr_builtin_music_standard", tracks=[_audio_track(0), _audio_track(1)]
+        )
+
+    monkeypatch.setattr(JobController, "_execute_rip", _noop)
+    client = FakeClient()
+    client.rip_start = rip_start  # type: ignore[method-assign]
+    controller = JobController(client, "drv_test")
+    with caplog.at_level(logging.INFO, logger="arm_ripper.job_controller"):
+        await controller._run_rip(_view(JobStatus.IDENTIFIED).model_copy(update={"disc_type": disc_type}), "/dev/sr0")
+
+
+async def test_run_rip_names_abcde_for_a_cd(caplog, monkeypatch):
+    await _run_rip_as(DiscType.CD, monkeypatch, caplog)
+    (record,) = _rip_started_records(caplog)
+    assert record.fields["tool"] == "abcde"
+    assert record.fields["disc_type"] == "cd"
+    assert record.getMessage() == "rip started: CD, 2 tracks, preset rpr_builtin_music_standard (abcde)"
+
+
+async def test_run_rip_does_not_claim_a_start_for_an_unknown_disc(caplog, monkeypatch):
+    await _run_rip_as(DiscType.UNKNOWN, monkeypatch, caplog)
+    assert _rip_started_records(caplog) == []
+    (warning,) = [r for r in caplog.records if r.getMessage().startswith("rip cannot start")]
+    assert warning.levelno == logging.WARNING
+    assert warning.getMessage() == "rip cannot start: no rip path for unknown disc"
+
+
+async def test_rip_complete_is_logged_at_debug_only(stub_scan, stub_eject, caplog):
+    """The backend logs rip.completed for the job; the ripper's own rip-complete line is detail."""
+    client = FakeClient()
+    client.identify_responses.append(_job(JobStatus.IDENTIFIED, title="Test Movie"))
+    controller = JobController(client, "drv_test")
+    caplog.set_level("DEBUG")
+
+    await asyncio.wait_for(controller.handle_disc_inserted("/dev/sr0"), timeout=2.0)
+
+    complete = [r for r in caplog.records if r.getMessage().startswith("rip-complete job_id=")]
+    assert [r.levelname for r in complete] == ["DEBUG"]

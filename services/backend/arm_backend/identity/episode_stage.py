@@ -33,13 +33,16 @@ from sqlmodel import col, select
 from arm_common import Config, Job, Track, TrackKind
 from arm_common.enums import MediaType, TrackRole
 from arm_common.schemas import ExternalIds
+from arm_common.logging import with_log_context
 from arm_common.schemas.identity import JobClaim, SourceClaims, TrackClaim
+
+from arm_backend import job_events
 
 from arm_backend.identity.episode_holds import SeasonFit, hold_reasons
 from arm_backend.identity.episode_siblings import episode_range, sibling_discs, sibling_rows, sibling_seasons
 from arm_backend.identity.episodes.continuity import SiblingDisc, align_runs, rank_seasons, start_anchor
 from arm_backend.identity.episodes.matcher import effective_tolerance
-from arm_backend.identity.episodes.model import Episode, MatchResult, TitleIn
+from arm_backend.identity.episodes.model import Episode, MatchResult, TitleIn, TitleMatch
 from arm_backend.identity.episodes.providers.base import EpisodeListProvider
 from arm_backend.identity.http import SourceError, SourceMiss
 from arm_backend.identity.ids import resolve_show_ids
@@ -521,6 +524,25 @@ async def compute_episode_claims(
     return outcomes
 
 
+def _episode_span(matches: Sequence[TitleMatch]) -> tuple[int, int]:
+    """The first and last episode number the matches cover."""
+    return min(m.episode for m in matches), max(m.episode_end or m.episode for m in matches)
+
+
+def _log_matched(job: Job, outcomes: Sequence[SourceOutcome]) -> None:
+    """Log the first outcome that matched at least one title; nothing when none did."""
+    matched = next((o.result for o in outcomes if o.claims.status == "ok" and o.result and o.result.matches), None)
+    if matched is not None:
+        job_events.log_episodes_matched(
+            job,
+            len(matched.matches),
+            len(matched.skipped),
+            job.title,
+            matched.matches[0].season,
+            _episode_span(matched.matches),
+        )
+
+
 async def apply_episode_outcomes(session: AsyncSession, job: Job, outcomes: Sequence[SourceOutcome]) -> ResolveOutcome:
     """Store every outcome with `put_source`, then resolve. Flushes; the
     caller commits.
@@ -538,7 +560,9 @@ async def apply_episode_outcomes(session: AsyncSession, job: Job, outcomes: Sequ
     good "ok" entry stays applicable too, per F8)."""
     for outcome in outcomes:
         put_source(job, outcome.source_id, outcome.claims)
-    return await resolve_job(session, job)
+    resolved = await resolve_job(session, job)
+    _log_matched(job, outcomes)
+    return resolved
 
 
 def found_ids_from_outcomes(outcomes: Sequence[SourceOutcome], providers: Sequence[EpisodeListProvider]) -> ExternalIds:
@@ -573,6 +597,7 @@ async def run_episode_stage(
     opts: StageOptions,
 ) -> tuple[list[SourceOutcome], ResolveOutcome]:
     """Compute, store every outcome, resolve, flush. The caller commits."""
-    outcomes = await compute_episode_claims(session, job, providers, cfg, opts)
-    resolved = await apply_episode_outcomes(session, job, outcomes)
+    with with_log_context(job_id=job.id):
+        outcomes = await compute_episode_claims(session, job, providers, cfg, opts)
+        resolved = await apply_episode_outcomes(session, job, outcomes)
     return outcomes, resolved

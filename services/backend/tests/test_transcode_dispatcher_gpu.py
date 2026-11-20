@@ -36,6 +36,11 @@ from arm_backend.transcode_dispatcher import (
 )
 from arm_backend.ws import WSHub
 from arm_common import (
+    DiscType,
+    Job,
+    JobStatus,
+    Track,
+    TrackKind,
     Gpu,
     GpuStatus,
     GpuVendor,
@@ -48,6 +53,7 @@ from arm_common import (
 )
 from arm_common.enums import ContainerFormat, MediaType, TranscodeTool
 from tests._fakes import FakeSession
+from tests._logs import LineCapture
 
 
 def _settings(**overrides: Any) -> Settings:
@@ -684,18 +690,16 @@ def test_gpu_awaiting_probe_reads_the_active_dispatcher() -> None:
     assert gpu_awaiting_probe(gpu) is False
 
 
-async def test_spawn_pending_keeps_a_task_queued_while_its_device_awaits_a_probe(
-    caplog: pytest.LogCaptureFixture,
-) -> None:
+async def test_spawn_pending_keeps_a_task_queued_while_its_device_awaits_a_probe(job_log: LineCapture) -> None:
     db = _never_probed_db("qsv_h265")
     docker = MagicMock()
     disp = TranscodeDispatcher(_settings(), _db_factory(db), docker, WSHub())
     disp.pending_probe_gpu_ids.add("gpu_0")
-    with caplog.at_level("INFO", logger="arm_backend.transcode_dispatcher"):
-        assert await disp.spawn_pending(db) == 0
+    assert await disp.spawn_pending(db) == 0
     docker.containers.run.assert_not_called()
     assert db.rows["transcode_tasks"][0].status == TranscodeTaskStatus.QUEUED
-    assert "(waiting for GPU probe)" in caplog.text
+    (line,) = job_log.lines(event="transcode.waiting")
+    assert line["fields"]["reason"] == "waiting for GPU probe"
 
 
 async def test_any_encoder_all_eligible_busy_queues() -> None:
@@ -1106,3 +1110,105 @@ async def test_qsv_spawn_uses_override_without_checking_variant_exists() -> None
     await disp.spawn_pending(db)
     assert docker_client.containers.run.call_args.kwargs["image"] == "custom-qsv:latest"
     docker_client.images.get.assert_not_called()
+
+
+# --- once-per-wait GPU log ----------------------------------------------------
+
+
+def _busy_gpu_db(encoder: str = "any_h265") -> FakeSession:
+    db = _build_db(encoder=encoder, gpus=[(GpuVendor.QSV, GpuStatus.BUSY, ["h264", "h265"], "other-task")])
+    db.rows["jobs"] = [
+        Job(
+            id="job_01JZXR7K3M5Q8N4VWA00000001",
+            drive_id="d",
+            disc_type=DiscType.DVD,
+            status=JobStatus.RIPPED,
+            metadata_json={},
+        )
+    ]
+    db.rows["tracks"] = [
+        Track(id="trk_1", job_id="job_01JZXR7K3M5Q8N4VWA00000001", kind=TrackKind.VIDEO_TITLE, index=1, source_ref="1")
+    ]
+    return db
+
+
+def _wait_states(job_log: LineCapture) -> list[str]:
+    return [line["fields"]["state"] for line in job_log.lines(event="transcode.waiting")]
+
+
+async def test_a_gpu_wait_logs_once_and_resumes_when_the_task_spawns(job_log: LineCapture) -> None:
+    db = _busy_gpu_db()
+    disp = TranscodeDispatcher(_settings(), _db_factory(db), MagicMock(), WSHub())
+    for _ in range(3):
+        assert await disp.spawn_pending(db) == 0
+    assert _wait_states(job_log) == ["waiting"]
+    (waiting,) = job_log.lines(event="transcode.waiting")
+    assert waiting["msg"] == "transcode waiting for a GPU encoder (any_h265): track 1/1"
+    assert waiting["job_id"] == "job_01JZXR7K3M5Q8N4VWA00000001"
+
+    gpu = db.rows["gpus"][0]
+    gpu.status, gpu.claimed_by_task_id = GpuStatus.AVAILABLE, None
+    assert await disp.spawn_pending(db) == 1
+    assert _wait_states(job_log) == ["waiting", "resumed"]
+
+
+async def test_a_spawned_task_not_yet_claimed_does_not_wait_again(job_log: LineCapture) -> None:
+    """Until its transcoder claims it the spawned task is still QUEUED, and the next tick finds its GPU
+    busy (claimed by the task itself); that is not a new wait."""
+    db = _busy_gpu_db()
+    disp = TranscodeDispatcher(_settings(), _db_factory(db), MagicMock(), WSHub())
+    await disp.spawn_pending(db)
+    gpu = db.rows["gpus"][0]
+    gpu.status, gpu.claimed_by_task_id = GpuStatus.AVAILABLE, None
+    assert await disp.spawn_pending(db) == 1
+    assert db.rows["transcode_tasks"][0].status == TranscodeTaskStatus.QUEUED
+    assert await disp.spawn_pending(db) == 0
+    assert await disp.spawn_pending(db) == 0
+    assert _wait_states(job_log) == ["waiting", "resumed"]
+
+    # Once the task leaves the queue it is forgotten: queued again later, it waits afresh.
+    db.rows["transcode_tasks"][0].status = TranscodeTaskStatus.IN_PROGRESS
+    await disp.spawn_pending(db)
+    db.rows["transcode_tasks"][0].status = TranscodeTaskStatus.QUEUED
+    await disp.spawn_pending(db)
+    assert _wait_states(job_log) == ["waiting", "resumed", "waiting"]
+
+
+async def test_the_wait_check_runs_after_the_pass_commits(job_log: LineCapture) -> None:
+    db = _busy_gpu_db()
+    disp = TranscodeDispatcher(_settings(), _db_factory(db), MagicMock(), WSHub())
+    await disp.spawn_pending(db)
+    db.call_log.clear()
+    await disp.spawn_pending(db)
+    assert db.call_log[-2:] == ["commit", "execute"]
+
+
+async def test_a_waiting_task_that_is_cancelled_resumes_once(job_log: LineCapture) -> None:
+    db = _busy_gpu_db()
+    disp = TranscodeDispatcher(_settings(), _db_factory(db), MagicMock(), WSHub())
+    await disp.spawn_pending(db)
+    db.rows["transcode_tasks"] = []  # DELETE /api/transcodes/{id}
+    await disp.spawn_pending(db)
+    await disp.spawn_pending(db)
+    assert _wait_states(job_log) == ["waiting", "resumed"]
+    (resumed,) = job_log.lines(event="transcode.waiting")[1:]
+    assert resumed["job_id"] == "job_01JZXR7K3M5Q8N4VWA00000001" and resumed["fields"]["task_id"] == "txt_1"
+
+
+async def test_a_waiting_task_that_then_fails_resumes(job_log: LineCapture) -> None:
+    db = _busy_gpu_db(encoder="qsv_h265")
+    disp = TranscodeDispatcher(_settings(), _db_factory(db), MagicMock(), WSHub())
+    await disp.spawn_pending(db)
+    db.rows["gpus"] = []  # the pinned vendor's GPU is gone: the task can never run
+    await disp.spawn_pending(db)
+    assert db.rows["transcode_tasks"][0].status == TranscodeTaskStatus.FAILED
+    assert _wait_states(job_log) == ["waiting", "resumed"]
+
+
+async def test_the_spawn_line_is_debug(caplog: pytest.LogCaptureFixture) -> None:
+    db = _build_db(encoder="preset", gpus=[])
+    disp = TranscodeDispatcher(_settings(), _db_factory(db), MagicMock(), WSHub())
+    with caplog.at_level("DEBUG", logger="arm_backend.transcode_dispatcher"):
+        assert await disp.spawn_pending(db) == 1
+    (record,) = [r for r in caplog.records if r.getMessage().startswith("transcode spawned")]
+    assert record.levelname == "DEBUG"

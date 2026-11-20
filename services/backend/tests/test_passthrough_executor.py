@@ -19,6 +19,9 @@ from arm_backend.config import Settings
 from arm_backend.passthrough_executor import IN_PROCESS_CLAIMANT, execute_passthrough_task
 from arm_backend.ws import WSHub
 from arm_common import (
+    DiscType,
+    Job,
+    JobStatus,
     SessionApplication,
     SessionApplicationStatus,
     Track,
@@ -27,6 +30,7 @@ from arm_common import (
 )
 from arm_common.enums import TrackKind
 from tests._fakes import FakeSession
+from tests._logs import LineCapture, log_commits
 
 
 def _settings(**overrides: Any) -> Settings:
@@ -778,7 +782,7 @@ async def test_a_crashing_progress_publisher_does_not_change_the_result(
 
     import arm_backend.passthrough_executor as mod
 
-    async def _crashing_publisher(*_args: Any) -> None:
+    async def _crashing_publisher(*_args: Any, **_kw: Any) -> None:
         raise RuntimeError("publisher bug")
 
     monkeypatch.setattr(mod, "_publish_progress", _crashing_publisher)
@@ -813,7 +817,7 @@ async def test_progress_publisher_skips_unknown_totals_and_repeat_percentages(mo
             return 100
 
     db = FakeSession()
-    await mod._publish_progress(db, hub, "txt_1", None, None, _Progress(), stop)  # type: ignore[arg-type]
+    await mod._publish_progress(db, hub, "txt_1", None, None, _Progress(), stop, report=_no_report)  # type: ignore[arg-type]
 
     assert [e["payload"]["progress_pct"] for e in sent] == [50]
     assert db.committed == 1
@@ -839,7 +843,150 @@ async def test_progress_publisher_stops_after_a_failed_write(monkeypatch: Any, c
     progress.add(50)
     progress.total = 100
 
-    await mod._publish_progress(db, hub, "txt_1", None, None, progress, asyncio.Event())
+    await mod._publish_progress(db, hub, "txt_1", None, None, progress, asyncio.Event(), report=_no_report)
 
     assert db.call_log[-1] == "rollback" and sent == []
     assert "progress write failed task_id=txt_1" in caplog.text
+
+
+async def _no_report(_previous: int, _current: int) -> None:
+    return None
+
+
+# --- job-log milestones ----------------------------------------------------
+
+
+def _with_job(db: FakeSession) -> FakeSession:
+    db.rows["jobs"] = [
+        Job(
+            id="job_01JZXR7K3M5Q8N4VWA00000001",
+            drive_id="drv_x",
+            disc_type=DiscType.DVD,
+            title="Title",
+            year=2020,
+            status=JobStatus.RIPPED,
+            metadata_json={},
+        )
+    ]
+    return db
+
+
+async def test_passthrough_task_logs_started_completed_and_the_session(tmp_path: Path, job_log: LineCapture) -> None:
+    raw = tmp_path / "raw" / "job1" / "t0.mkv"
+    raw.parent.mkdir(parents=True)
+    raw.write_bytes(b"data")
+    db = _with_job(_db(track_output_path=str(raw), task_output_path="Title (2020)/t0.mkv"))
+    hub, _sent = _hub_with_recorder()
+
+    ok = await execute_passthrough_task(db, db.rows["transcode_tasks"][0], hub, _settings(MEDIA_ROOT=str(tmp_path)))
+
+    assert ok is True
+    (started,) = job_log.lines(event="transcode.started")
+    assert started["msg"] == "copying track 1/1 as is (no transcode preset)"
+    assert started["job_id"] == "job_01JZXR7K3M5Q8N4VWA00000001" and started["session_application_id"] == "sap_x"
+    (completed,) = job_log.lines(event="transcode.completed")
+    assert completed["fields"]["size_bytes"] == 4 and completed["fields"]["output"] == "Title (2020)/t0.mkv"
+    assert completed["msg"] == "track 1/1 transcoded: .../t0.mkv (4 B)"
+    (session_done,) = job_log.lines(event="session.completed")
+    assert session_done["fields"] == {"done": 1, "failed": 0, "total": 1}
+    assert job_log.lines(logger_prefix="arm_backend.passthrough_executor") == []
+
+
+async def test_passthrough_failure_logs_an_error(tmp_path: Path, job_log: LineCapture) -> None:
+    db = _with_job(_db(track_output_path=str(tmp_path / "gone.mkv"), task_output_path="Title (2020)/t0.mkv"))
+    hub, _sent = _hub_with_recorder()
+
+    ok = await execute_passthrough_task(db, db.rows["transcode_tasks"][0], hub, _settings(MEDIA_ROOT=str(tmp_path)))
+
+    assert ok is False
+    (failed,) = job_log.lines(event="transcode.failed")
+    assert failed["level"] == "error" and "FileNotFoundError" in failed["fields"]["error"]
+    assert [line["event"] for line in job_log.lines(level="error")] == ["transcode.failed"]
+
+
+async def test_passthrough_copy_logs_each_quarter_once(tmp_path: Path, job_log: LineCapture, monkeypatch: Any) -> None:
+    """A copy going 10, 30, 30, 80, 100 % logs 25 and 75 from its progress writes and 100 when it completes."""
+    import threading
+
+    import arm_backend.passthrough_executor as mod
+
+    raw = tmp_path / "raw" / "job1" / "t0.mkv"
+    raw.parent.mkdir(parents=True)
+    raw.write_bytes(b"x" * 100)
+    db = _with_job(_db(track_output_path=str(raw), task_output_path="Title (2020)/t0.mkv"))
+    hub, _sent = _hub_with_recorder()
+    monkeypatch.setattr(mod, "PROGRESS_INTERVAL_SECONDS", 0.01)
+
+    def _stepped_copy(input_path: Path, output_path: Path, *, on_bytes: Any, **_kw: Any) -> int:
+        copied = 0
+        for step in (10, 30, 30, 80, 100):
+            on_bytes(step - copied)
+            copied = step
+            # Hold each step until the row shows it (the copy caps at 99 %).
+            for _ in range(500):
+                if db.rows["transcode_tasks"][0].progress_pct == min(99, step):
+                    break
+                threading.Event().wait(0.01)
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        input_path.rename(output_path)
+        return 100
+
+    monkeypatch.setattr(mod, "transcode_none", _stepped_copy)
+    await execute_passthrough_task(db, db.rows["transcode_tasks"][0], hub, _settings(MEDIA_ROOT=str(tmp_path)))
+
+    progress = job_log.lines(event="transcode.progress")
+    assert [line["fields"]["percent"] for line in progress] == [25, 75, 100]
+    assert [line["event"] for line in job_log.lines(logger_prefix="arm_backend.transcode_task_events")][-2:] == [
+        "transcode.progress",
+        "transcode.completed",
+    ]
+
+
+async def test_progress_publisher_reports_each_written_percentage(monkeypatch: Any) -> None:
+    """The publisher hands every percentage it writes, with the one before it, to `report`."""
+    import asyncio
+
+    import arm_backend.passthrough_executor as mod
+    from arm_backend.passthrough_executor import _CopyProgress
+
+    stop = asyncio.Event()
+    hub, _sent = _hub_with_recorder()
+    progress = _CopyProgress()
+    progress.total = 100
+    steps = iter([10, 30, 30, 80, 100])
+    reported: list[tuple[int, int]] = []
+
+    async def _interval_passes(waited: Any, _timeout: float) -> None:
+        # Each interval the copy reaches its next step; after the last one the copy ends.
+        waited.close()
+        step = next(steps, None)
+        if step is None:
+            stop.set()
+        else:
+            progress.done = step
+        raise TimeoutError
+
+    async def _report(previous: int, current: int) -> None:
+        reported.append((previous, current))
+
+    monkeypatch.setattr(mod.asyncio, "wait_for", _interval_passes)
+    await mod._publish_progress(FakeSession(), hub, "txt_1", None, None, progress, stop, report=_report)
+
+    # The copy caps at 99 %: completion, not progress, reports the end.
+    assert reported == [(-1, 10), (10, 30), (30, 80), (80, 99)]
+
+
+async def test_passthrough_session_completed_follows_the_commit_and_the_task_line(
+    tmp_path: Path, job_log: LineCapture
+) -> None:
+    raw = tmp_path / "raw" / "job1" / "t0.mkv"
+    raw.parent.mkdir(parents=True)
+    raw.write_bytes(b"data")
+    db = _with_job(_db(track_output_path=str(raw), task_output_path="Title (2020)/t0.mkv"))
+    log_commits(db)
+    hub, _sent = _hub_with_recorder()
+
+    assert await execute_passthrough_task(db, db.rows["transcode_tasks"][0], hub, _settings(MEDIA_ROOT=str(tmp_path)))
+
+    order = job_log.events("commit", "transcode.completed", "session.completed")
+    assert order[-3:] == ["commit", "transcode.completed", "session.completed"]

@@ -279,6 +279,32 @@ class _FakeProc:
 
 
 @pytest.mark.asyncio
+async def test_transcode_handbrake_logs_the_command_line_at_debug(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    async def fake_exec(*args: str, **kwargs: object) -> _FakeProc:
+        return _FakeProc([], rc=3)
+
+    async def cb(*_args: object) -> None:  # pragma: no cover - no progress is emitted
+        raise AssertionError("no progress expected")
+
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", fake_exec)
+
+    with caplog.at_level(logging.DEBUG, logger="arm_transcode.handbrake"), pytest.raises(RuntimeError):
+        await transcode_handbrake(
+            input_path=tmp_path / "in.mkv",
+            output_path=tmp_path / "out.mkv",
+            preset_ref="Fast 1080p30",
+            extra_args=None,
+            encoder_args=[],
+            progress_callback=cb,
+        )
+
+    [record] = [r for r in caplog.records if r.getMessage().startswith("HandBrakeCLI launching")]
+    assert record.levelno == logging.DEBUG
+
+
+@pytest.mark.asyncio
 async def test_transcode_handbrake_nonzero_exit_raises_with_only_the_stderr_tail(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:

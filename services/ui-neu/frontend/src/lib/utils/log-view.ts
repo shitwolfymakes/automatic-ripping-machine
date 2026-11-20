@@ -1,9 +1,9 @@
 // Pure helpers for the LogView log terminal.
 import type { LogEntry } from '$lib/api/logs';
-import { logService, serviceLabel, type LogService } from '$lib/utils/log-service';
+import { entryGroup, serviceLabel, type LogService } from '$lib/utils/log-service';
 
-/** A level filter: one level, or every line. */
-export type LogLevelFilter = 'all' | 'error' | 'warning' | 'info' | 'debug';
+/** A level filter: one level and every higher one, or every line. */
+export type LogLevelFilter = 'all' | 'critical' | 'error' | 'warning' | 'info' | 'debug';
 /** A service filter: one service group, or every line. */
 export type LogServiceFilter = 'all' | LogService;
 /** What LogView's toolbar filters by. An empty query matches every line. */
@@ -14,21 +14,37 @@ export interface LogFilter {
 	matchCase: boolean;
 }
 
-function levelOf(entry: LogEntry): string {
-	return (entry.level ?? '').toLowerCase();
+// A Map, not an object literal, so inherited keys such as 'constructor' rank
+// as unknown.
+const LEVEL_RANK = new Map<string, number>([
+	['debug', 0],
+	['info', 1],
+	['warning', 2],
+	['error', 3],
+	['critical', 4]
+]);
+const DEFAULT_RANK = 1;
+
+// A level the filter does not know (or a missing one) ranks as info.
+function levelRank(level: string | null | undefined): number {
+	return LEVEL_RANK.get((level ?? '').toLowerCase()) ?? DEFAULT_RANK;
+}
+
+function passesLevel(entry: LogEntry, level: LogLevelFilter): boolean {
+	return level === 'all' || levelRank(entry.level) >= levelRank(level);
 }
 
 function matchesSearch(entry: LogEntry, query: string, matchCase: boolean): boolean {
 	if (!query) return true;
-	const hay = `${entry.event ?? ''} ${entry.logger ?? ''}`;
+	const hay = [entry.msg, entry.event, entry.logger].filter(Boolean).join(' ');
 	return matchCase ? hay.includes(query) : hay.toLowerCase().includes(query.toLowerCase());
 }
 
 /** The entries that pass the service, level and text filters, in order. */
 export function filterEntries(entries: LogEntry[], filter: LogFilter): LogEntry[] {
 	return entries.filter((e) => {
-		if (filter.service !== 'all' && logService(e.service) !== filter.service) return false;
-		if (filter.level !== 'all' && levelOf(e) !== filter.level) return false;
+		if (filter.service !== 'all' && entryGroup(e) !== filter.service) return false;
+		if (!passesLevel(e, filter.level)) return false;
 		if (!matchesSearch(e, filter.query, filter.matchCase)) return false;
 		return true;
 	});
@@ -111,18 +127,16 @@ export function levelTone(level: string): LogTone {
  * not parse.
  */
 export function entryTimeLabel(entry: LogEntry): string {
-	if (!entry.timestamp) return '';
-	const d = new Date(entry.timestamp);
+	if (!entry.ts) return '';
+	const d = new Date(entry.ts);
 	if (Number.isNaN(d.getTime())) return '';
 	return d.toLocaleTimeString([], { hour12: false });
 }
 
 /**
- * The plain text Copy writes: one "<time> [<service>] <event>" line per
+ * The plain text Copy writes: one "<time> [<service>] <msg>" line per
  * entry.
  */
 export function formatCopyText(entries: LogEntry[]): string {
-	return entries
-		.map((e) => `${entryTimeLabel(e)} [${serviceLabel(logService(e.service))}] ${e.event ?? ''}`)
-		.join('\n');
+	return entries.map((e) => `${entryTimeLabel(e)} [${serviceLabel(entryGroup(e))}] ${e.msg}`).join('\n');
 }
