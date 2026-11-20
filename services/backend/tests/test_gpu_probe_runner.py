@@ -653,6 +653,20 @@ async def test_spawn_kwargs_for_a_qsv_row() -> None:
     assert kw["labels"] == {"arm.gpu_probe": "gpu_1"}
 
 
+@pytest.mark.parametrize(
+    "unset", ["ARM_HOST_RAW_PATH", "ARM_HOST_MEDIA_PATH", "ARM_HOST_LOGS_PATH", "ARM_HOST_CERTS_PATH"]
+)
+async def test_the_probe_mounts_no_folders_while_a_host_path_is_unset(unset: str) -> None:
+    # Without every host path the probe has no real folders to check, so it
+    # verifies the device as it would without mounts instead of failing to start.
+    runner, db, docker, *_ = _build([_gpu()], **{unset: ""})
+    await runner.probe_gpu("gpu_1")
+    assert docker is not None
+    (kw,) = docker.containers.calls
+    assert "volumes" not in kw
+    assert db.rows["gpus"][0].encoder_kinds == ["h265"]
+
+
 async def test_spawn_kwargs_for_an_nvenc_row() -> None:
     runner, _db, docker, *_ = _build(
         [_gpu(vendor=GpuVendor.NVENC, device_path="nvidia://1")],

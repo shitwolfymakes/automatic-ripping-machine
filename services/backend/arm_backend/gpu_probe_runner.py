@@ -387,17 +387,19 @@ class GpuProbeRunner:
             "command": list(PROBE_COMMAND),
             "labels": {PROBE_LABEL_KEY: gpu.id},
             "environment": env,
-            # The task's own folders, so the entrypoint checks they are usable
-            # under the transcoder's identity before the probe runs. The probe
-            # itself still encodes a generated clip in its own scratch space,
-            # writes nothing into them and has no backend access.
-            "volumes": task_volumes(self._settings),
             "network": None,
             "detach": True,
             # Kept until `logs` is read after `wait`; removed in `finally`.
             "auto_remove": False,
         }
         kwargs.update(gpu_run_kwargs(gpu))
+        # The task's own folders, so the entrypoint checks they are usable under
+        # the transcoder's identity before the probe runs. The probe itself
+        # still encodes a generated clip in its own scratch space, writes
+        # nothing into them and has no backend access. Without every host path
+        # there are no real folders to check, so the probe runs without mounts.
+        if self._dispatcher.host_paths_set():
+            kwargs["volumes"] = task_volumes(self._settings)
         return kwargs
 
     async def _run_container(self, docker: Any, gpu: Gpu) -> ProbeOutcome:
