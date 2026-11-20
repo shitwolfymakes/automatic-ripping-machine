@@ -104,6 +104,16 @@ def _episode_label(track: Track) -> str:
     return f"{track.episode_number:02d}"
 
 
+def _track_number(track: Track) -> int:
+    """The track's number in a file name: video titles count from 1, other kinds keep their index."""
+    return track.index + 1 if track.kind == TrackKind.VIDEO_TITLE else track.index
+
+
+def _track_label(track: Track, number: int) -> str:
+    """`Track NN` for a track with no title of its own, empty for a track that names itself."""
+    return "" if track.title else f"Track {number:02d}"
+
+
 def _build_track_ctx(
     job: Job,
     track: Track,
@@ -111,7 +121,7 @@ def _build_track_ctx(
 ) -> dict[str, str]:
     """Build the per-track template context using real (not synthetic) job/track data."""
     metadata: dict[str, object] = job.metadata_json or {}
-    track_index_padded = f"{track.index:02d}"
+    track_number = _track_number(track)
 
     # Music naming reads the typed `music` section (§3.4); the bare
     # top-level keys are the pre-0032 fallback.
@@ -141,7 +151,9 @@ def _build_track_ctx(
         "disc": sanitize_path_component(
             f"{job.disc_number:02d}" if job.disc_number is not None else str(metadata.get("disc") or "")
         ),
-        "track": track_index_padded,
+        "track": f"{track_number:02d}",
+        "track_label": _track_label(track, track_number),
+        "edition": sanitize_path_component(track.edition or ""),
         "episode": episode,
         "episode_title": sanitize_path_component(track.episode_name or ""),
         "duration_human": _format_duration_human(track.expected_duration_seconds or track.duration_seconds),

@@ -5368,6 +5368,10 @@ export type TrackClaim = {
      */
     title?: string | null;
     /**
+     * Edition
+     */
+    edition?: string | null;
+    /**
      * Season
      */
     season?: number | null;
@@ -5420,6 +5424,10 @@ export type TrackEditRequest = {
      */
     year?: number | null;
     /**
+     * Edition
+     */
+    edition?: string | null;
+    /**
      * Imdb Id
      */
     imdb_id?: string | null;
@@ -5455,7 +5463,7 @@ export type TrackEditRequest = {
     /**
      * Revert Fields
      */
-    revert_fields?: Array<'role' | 'title' | 'season' | 'episode_number' | 'episode_number_end' | 'episode_name' | 'custom_filename' | 'excluded'>;
+    revert_fields?: Array<'role' | 'title' | 'edition' | 'season' | 'episode_number' | 'episode_number_end' | 'episode_name' | 'custom_filename' | 'excluded'>;
 };
 
 /**

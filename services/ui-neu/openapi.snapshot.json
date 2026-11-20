@@ -17702,6 +17702,17 @@
             ],
             "title": "Title"
           },
+          "edition": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Edition"
+          },
           "season": {
             "anyOf": [
               {
@@ -17812,6 +17823,17 @@
             ],
             "title": "Year"
           },
+          "edition": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Edition"
+          },
           "imdb_id": {
             "anyOf": [
               {
@@ -17916,6 +17938,7 @@
               "enum": [
                 "role",
                 "title",
+                "edition",
                 "season",
                 "episode_number",
                 "episode_number_end",

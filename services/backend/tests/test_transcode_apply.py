@@ -148,9 +148,9 @@ def test_compute_outputs_archive_multiple_tracks() -> None:
     tracks = [_video_track(1, 7800), _video_track(2, 1200), _video_track(3, 600)]
     resolved = compute_outputs(job, tracks, sess, tp)
     paths = [r.output_path for r in resolved]
-    assert paths[0] == "Iron Man (2008)/Iron Man (2008) - Track 01 (02h10m) - plex-1080p-h-265.mkv"
-    assert paths[1] == "Iron Man (2008)/Iron Man (2008) - Track 02 (00h20m) - plex-1080p-h-265.mkv"
-    assert paths[2] == "Iron Man (2008)/Iron Man (2008) - Track 03 (00h10m) - plex-1080p-h-265.mkv"
+    assert paths[0] == "Iron Man (2008)/Iron Man (2008) - Track 02 (02h10m) - plex-1080p-h-265.mkv"
+    assert paths[1] == "Iron Man (2008)/Iron Man (2008) - Track 03 (00h20m) - plex-1080p-h-265.mkv"
+    assert paths[2] == "Iron Man (2008)/Iron Man (2008) - Track 04 (00h10m) - plex-1080p-h-265.mkv"
 
 
 def test_compute_outputs_tv_with_metadata_season_disc() -> None:
@@ -183,7 +183,7 @@ def test_compute_outputs_tv_with_metadata_season_disc() -> None:
         expected_duration_seconds=2700,
     )
     resolved = compute_outputs(job, [track], sess, tp)
-    assert resolved[0].output_path == ("Battlestar Galactica (2004)/Season 01/S01D02T01 - plex-tv-1080p-h-265.mkv")
+    assert resolved[0].output_path == ("Battlestar Galactica (2004)/Season 01/S01D02T02 - plex-tv-1080p-h-265.mkv")
 
 
 # ── helpers for per-track identity / episode / excluded / custom_filename tests ──
@@ -406,7 +406,7 @@ def test_tv_tokens_prefer_job_columns_over_metadata(tmp_path) -> None:
         expected_duration_seconds=2700,
     )
     resolved = compute_outputs(job, [track], sess, tp)
-    assert resolved[0].output_path.startswith("Battlestar Galactica (2004)/Season 01/S01D02T03 - ")
+    assert resolved[0].output_path.startswith("Battlestar Galactica (2004)/Season 01/S01D02T04 - ")
 
 
 def test_season_token_prefers_track_season() -> None:
@@ -431,7 +431,7 @@ def test_season_token_prefers_track_season() -> None:
         season=3,
     )
     resolved = compute_outputs(job, [track], sess, tp)
-    assert resolved[0].output_path.startswith("Show (2020)/Season 03/Show S03E01 - ")
+    assert resolved[0].output_path.startswith("Show (2020)/Season 03/Show S03E02 - ")
 
 
 def test_season_token_falls_back_to_job_season() -> None:
@@ -456,7 +456,7 @@ def test_season_token_falls_back_to_job_season() -> None:
         season=None,
     )
     resolved = compute_outputs(job, [track], sess, tp)
-    assert resolved[0].output_path.startswith("Show (2020)/Season 02/Show S02E01 - ")
+    assert resolved[0].output_path.startswith("Show (2020)/Season 02/Show S02E02 - ")
 
 
 # ── two-episode {episode} range + role-aware episode-token checks ──
@@ -492,8 +492,8 @@ def test_tv_template_skips_episode_tokens_for_non_episode_titles() -> None:
     assert out["trk_1"] == "Show/Season 01/Show - S01E01 - Pilot.mkv"
     # Distinct paths: the dangling "E" is dropped and the track number is
     # appended (the template has no {track}), so bonus titles never collide.
-    assert out["trk_2"] == "Show/Season 01/Show - S01 - T02.mkv"
-    assert out["trk_3"] == "Show/Season 01/Show - S01 - T03.mkv"
+    assert out["trk_2"] == "Show/Season 01/Show - S01 - T03.mkv"
+    assert out["trk_3"] == "Show/Season 01/Show - S01 - T04.mkv"
 
 
 def test_bonus_title_gets_no_track_suffix_when_template_has_track() -> None:
@@ -504,8 +504,8 @@ def test_bonus_title_gets_no_track_suffix_when_template_has_track() -> None:
     tp = _tv_preset()
     out = {r.track_id: r.output_path for r in compute_outputs(job, tracks, sess, tp)}
     assert out == {
-        "trk_2": "Show/Season 01/Show - S01 - T02.mkv",
-        "trk_3": "Show/Season 01/Show - S01 - T03.mkv",
+        "trk_2": "Show/Season 01/Show - S01 - T03.mkv",
+        "trk_3": "Show/Season 01/Show - S01 - T04.mkv",
     }
 
 
@@ -517,7 +517,7 @@ def test_bonus_title_tidies_only_segments_with_an_empty_episode_token() -> None:
     sess = _tv_session(template)
     tp = _tv_preset()
     out = compute_outputs(job, [_tv_track(4, role=TrackRole.EXTRA)], sess, tp)
-    assert out[0].output_path == "Show  -  Collection/Season 01/Show - S01 - T04.mkv"
+    assert out[0].output_path == "Show  -  Collection/Season 01/Show - S01 - T05.mkv"
 
 
 def test_bonus_title_keeps_e_that_is_not_dangling() -> None:
@@ -528,7 +528,7 @@ def test_bonus_title_keeps_e_that_is_not_dangling() -> None:
     sess = _tv_session(template)
     tp = _tv_preset()
     out = compute_outputs(job, [_tv_track(5, role=TrackRole.EXTRA)], sess, tp)
-    assert out[0].output_path == "Show/S01Extras - T05"
+    assert out[0].output_path == "Show/S01Extras - T06"
 
 
 def test_episode_role_with_empty_episode_still_fails() -> None:
@@ -595,7 +595,7 @@ def test_bonus_title_with_only_an_extension_gets_a_bare_track_name() -> None:
     sess = _tv_session(template)
     tp = _tv_preset()
     out = compute_outputs(job, [_tv_track(6, role=TrackRole.EXTRA)], sess, tp)
-    assert out[0].output_path == "Show/T06.mkv"
+    assert out[0].output_path == "Show/T07.mkv"
 
 
 def test_paths_without_skipped_tokens_are_untouched() -> None:
@@ -631,7 +631,7 @@ def test_bonus_title_with_an_empty_optional_year() -> None:
     out = {r.track_id: r.output_path for r in compute_outputs(job, tracks, sess, tp)}
     assert out == {
         "trk_1": "Show/Season 01/Show - S01E01 - Pilot.mkv",
-        "trk_2": "Show/Season 01/Show - S01 - T02.mkv",
+        "trk_2": "Show/Season 01/Show - S01 - T03.mkv",
     }
 
 
@@ -649,7 +649,7 @@ def test_bonus_title_drops_a_segment_made_only_of_an_empty_optional_token() -> N
     out = {r.track_id: r.output_path for r in compute_outputs(job, tracks, sess, tp)}
     assert out == {
         "trk_1": "Show/Season 01/Show - S01E01 - Pilot.mkv",
-        "trk_2": "Show/Season 01/Show - S01 - T02.mkv",
+        "trk_2": "Show/Season 01/Show - S01 - T03.mkv",
     }
 
 
@@ -678,3 +678,59 @@ def test_compute_outputs_files_a_disc_backup_as_the_title_folder() -> None:
 def test_compute_outputs_disc_backup_without_a_year_drops_the_parentheses() -> None:
     resolved = compute_outputs(_job(title="IRON_MAN", year=None), [_backup_track()], _backup_session(), None)
     assert [r.output_path for r in resolved] == ["IRON_MAN"]
+
+
+_PLEX = "{title} ({year?}) [{edition?}]/{title} ({year?}) [{edition?}] ({track_label?}) - {transcode_slug}.{ext}"
+
+
+def _plex_preset() -> TranscodePreset:
+    tp = _movie_preset()
+    tp.name = "plex-1080p-h265"
+    return tp
+
+
+def test_per_track_movie_drops_the_track_label() -> None:
+    job = _job(title="Sci Fi Creature Classics", year=None)
+    track = _video_track(1)
+    track.title, track.year = "The Mole People", 1956
+    path = compute_outputs(job, [track], _movie_session(_PLEX), _plex_preset())[0].output_path
+    assert path == "The Mole People (1956)/The Mole People (1956) - plex-1080p-h265.mkv"
+
+
+def test_untitled_track_is_numbered_from_one_after_the_disc_title() -> None:
+    job = _job(title="SCI FI CREATURE CLASSICS", year=None)
+    path = compute_outputs(job, [_video_track(2)], _movie_session(_PLEX), _plex_preset())[0].output_path
+    assert path == "SCI FI CREATURE CLASSICS/SCI FI CREATURE CLASSICS (Track 03) - plex-1080p-h265.mkv"
+
+
+def test_edition_names_the_cut() -> None:
+    job = _job(title="Blade Runner", year=1982)
+    track = _video_track(0)
+    track.title, track.year, track.edition = "Blade Runner", 1955, "Director's Cut"
+    path = compute_outputs(job, [track], _movie_session(_PLEX), _plex_preset())[0].output_path
+    assert path == "Blade Runner (1955) [Director's Cut]/Blade Runner (1955) [Director's Cut] - plex-1080p-h265.mkv"
+
+
+def test_no_year_and_no_edition_leave_a_clean_name() -> None:
+    job = _job(title="The Mole People", year=None)
+    track = _video_track(0)
+    track.title = "The Mole People"
+    path = compute_outputs(job, [track], _movie_session(_PLEX), _plex_preset())[0].output_path
+    assert path == "The Mole People/The Mole People - plex-1080p-h265.mkv"
+
+
+def test_a_reincluded_track_gets_an_output() -> None:
+    job = _job()
+    track = _video_track(1)
+    track.excluded = True
+    sess, tp = _movie_session(_PLEX), _plex_preset()
+    assert compute_outputs(job, [track], sess, tp) == []
+    track.excluded = False
+    assert [r.track_id for r in compute_outputs(job, [track], sess, tp)] == ["trk_1"]
+
+
+def test_tv_track_token_is_numbered_from_one() -> None:
+    job = _job(title="Show", year=None)
+    track = _video_track(0)
+    sess = _tv_session("{show}/T{track} - {transcode_slug}.{ext}")
+    assert compute_outputs(job, [track], sess, _plex_preset())[0].output_path == "Show/T01 - plex-1080p-h265.mkv"

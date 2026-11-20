@@ -1576,6 +1576,42 @@ def test_patch_revert_hands_field_back_to_disc_map(signing_key: bytes) -> None:
     assert track.identity_provenance == {"episode_name": "thediscdb"}
 
 
+def test_patch_track_edition_is_stored_as_a_manual_proposal(signing_key: bytes) -> None:
+    db = FakeSession()
+    _seed_job_with_track(db)
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as c:
+        r = c.patch(
+            f"/api/jobs/{_JOB_ID_A}",
+            json={"tracks": [{"track_id": _TRK_ID_A, "edition": "Director's Cut"}]},
+            headers=_auth(token),
+        )
+    assert r.status_code == 200, r.text
+    track = db.rows["tracks"][0]
+    assert track.edition == "Director's Cut"
+    assert track.identity_provenance == {"edition": "manual"}
+
+
+def test_patch_revert_drops_the_manual_edition(signing_key: bytes) -> None:
+    db = FakeSession()
+    _seed_job_with_track(db)
+    db.rows["jobs"][0].metadata_json = {
+        "identity_claims": {"sources": {"manual": {"tracks": {"0": {"edition": "Extended"}}}}}
+    }
+    track = db.rows["tracks"][0]
+    track.edition = "Extended"
+    track.identity_provenance = {"edition": "manual"}
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as c:
+        r = c.patch(
+            f"/api/jobs/{_JOB_ID_A}",
+            json={"tracks": [{"track_id": _TRK_ID_A, "revert_fields": ["edition"]}]},
+            headers=_auth(token),
+        )
+    assert r.status_code == 200, r.text
+    assert db.rows["tracks"][0].edition is None
+
+
 def test_patch_revert_with_no_other_proposer_resets_to_default(signing_key: bytes) -> None:
     db = FakeSession()
     _seed_job_with_track(db)

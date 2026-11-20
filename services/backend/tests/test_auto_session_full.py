@@ -440,8 +440,8 @@ async def test_overwrite_mixed_collision_409_reports_full_collision_list(tmp_pat
             status=TrackStatus.DONE,
         )
     )
-    path_1 = "Iron Man (2008)/Iron Man - 01 - plex-1080p-h-265.mkv"
-    path_2 = "Iron Man (2008)/Iron Man - 02 - plex-1080p-h-265.mkv"
+    path_1 = "Iron Man (2008)/Iron Man - 02 - plex-1080p-h-265.mkv"
+    path_2 = "Iron Man (2008)/Iron Man - 03 - plex-1080p-h-265.mkv"
     other_job_id = "job_01JZXR7K3M5Q8N4VWA0000000J"
     db.rows["session_applications"] = [
         SessionApplication(

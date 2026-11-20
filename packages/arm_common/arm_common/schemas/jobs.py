@@ -313,7 +313,15 @@ class HeldJobView(BaseModel):
 
 
 TrackRevertField = Literal[
-    "role", "title", "season", "episode_number", "episode_number_end", "episode_name", "custom_filename", "excluded"
+    "role",
+    "title",
+    "edition",
+    "season",
+    "episode_number",
+    "episode_number_end",
+    "episode_name",
+    "custom_filename",
+    "excluded",
 ]
 
 
@@ -329,6 +337,7 @@ class TrackEditRequest(BaseModel):
     track_id: str
     title: str | None = None
     year: int | None = None
+    edition: str | None = None
     imdb_id: str | None = None
     poster_url: str | None = None
     role: TrackRole | None = None
