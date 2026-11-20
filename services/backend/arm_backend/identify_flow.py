@@ -37,11 +37,12 @@ from arm_backend.identity.sources.thediscdb import (
 )
 from arm_backend.identity.sources.thediscdb_snapshot import DiscMatch, SnapshotStore
 from arm_backend.identity.stage_runner import EpisodeStageRunner
-from arm_backend.track_selection import DiscBackupNeedsBluray, select_tracks_for_review
+from arm_backend.track_selection import DiscBackupNeedsBluray, select_tracks_for_review, select_tracks_on_miss
 from arm_backend.ws import WSHub
 from arm_common import (
     Config,
     DiscFingerprint,
+    DiscType,
     Drive,
     Job,
     JobStatus,
@@ -49,7 +50,7 @@ from arm_common import (
     RipPreset,
     Session,
 )
-from arm_common.enums import DriveKind, PreviouslyRippedAction
+from arm_common.enums import DriveKind, MissTitlesKept, PreviouslyRippedAction
 from arm_common.models import Track
 from arm_common.schemas import (
     flag_is_set,
@@ -96,6 +97,24 @@ async def _persist_tracks(db: AsyncSession, job: Job, select_tracks: Callable[[R
 async def _persist_review_tracks(db: AsyncSession, job: Job, scan: ScanResult) -> None:
     """Persist the scan's titles as Track rows for the timed review gate (§4.3)."""
     await _persist_tracks(db, job, lambda preset: select_tracks_for_review(job.id, scan, preset))
+
+
+async def _persist_miss_tracks(db: AsyncSession, job: Job, scan: ScanResult, titles_kept: MissTitlesKept) -> None:
+    """Persist the scan's titles as Track rows for a disc that missed identification."""
+    await _persist_tracks(db, job, lambda preset: select_tracks_on_miss(job.id, scan, preset, titles_kept))
+
+
+# The disc types a miss parks with its titles listed; any other miss keeps the plain miss path.
+_VIDEO_DISC_TYPES = frozenset({DiscType.DVD, DiscType.BLURAY})
+
+
+def _miss_outcome(job: Job) -> str:
+    """What happens next to a missed video disc, as its status says."""
+    if job.status != JobStatus.AWAITING_REVIEW:
+        return "it rips now"
+    if job.wait_start_time is None:
+        return "it waits for review"
+    return "it rips when the review countdown ends"
 
 
 # A miss stores at most this many dispatcher attempts (metadata_json.identify_attempts).
@@ -468,10 +487,8 @@ class IdentifyFlow:
 
     async def _apply_hit(self, job: Job, cfg: Config, scan: ScanResult, result: MetadataResult) -> None:
         apply_identity_result(job, result, now=datetime.now(timezone.utc))
-        # Timed review gate: a GENUINELY identified disc (result is not None — not
-        # the block_on_miss=false synthetic "unidentified" IDENTIFIED below) parks
-        # for operator review when hold_for_review is on, stamping the countdown
-        # anchor and persisting the scan's titles as Track rows so the review UI
+        # Timed review gate: an identified disc parks for operator review when
+        # hold_for_review is on, stamping the countdown anchor and persisting the scan's titles as Track rows so the review UI
         # shows the full title list. Otherwise it proceeds straight to rip as
         # today (tracks created at rip-start). (spec §5.1, §4.3)
         if cfg.hold_for_review:
@@ -511,19 +528,50 @@ class IdentifyFlow:
             "several releases fit the track layout" if ambiguous_toc else "auto-apply off",
         )
 
-    def _apply_miss(self, job: Job, cfg: Config, miss_title: str | None) -> None:
-        diagnostic: dict[str, bool] = {}
-        if self.timed_out:
-            diagnostic["dispatch_timeout"] = True
+    def _miss_diagnostic(self) -> dict[str, bool]:
+        return {"dispatch_timeout": True} if self.timed_out else {}
+
+    async def _apply_miss(self, job: Job, cfg: Config, scan: ScanResult, miss_title: str | None) -> None:
+        job.title = miss_title
+        if scan.disc_type in _VIDEO_DISC_TYPES:
+            await self._park_video_miss(job, cfg, scan)
+        else:
+            self._apply_plain_miss(job, cfg)
+
+    def _apply_plain_miss(self, job: Job, cfg: Config) -> None:
+        # A CD (or any non-video disc): blocking waits for the operator to
+        # identify it; otherwise it rips as an unidentified placeholder.
+        diagnostic = self._miss_diagnostic()
         if cfg.block_on_miss:
             job.status = JobStatus.AWAITING_USER_ID
-            job.title = miss_title
             if diagnostic:
                 job.metadata_json = with_flags(job.metadata_json, **diagnostic)
         else:
             job.status = JobStatus.IDENTIFIED
-            job.title = miss_title
             job.metadata_json = with_flags(job.metadata_json, unidentified=True, **diagnostic)
+
+    async def _park_video_miss(self, job: Job, cfg: Config, scan: ScanResult) -> None:
+        # A DVD or Blu-ray that missed keeps its titles listed for review. The
+        # configured media type is the routing input (as a held hit's kind
+        # is), so it is stored before the tracks resolve the routed preset.
+        job.metadata_json = with_flags(job.metadata_json, unidentified=True, **self._miss_diagnostic())
+        job.media_type = MediaType(cfg.miss_media_type)
+        await _persist_miss_tracks(self.session, job, scan, cfg.miss_titles_kept)
+        self._set_video_miss_status(job, cfg)
+        logger.info("identify job_id=%s: no match for %r; %s", job.id, job.title, _miss_outcome(job))
+
+    def _set_video_miss_status(self, job: Job, cfg: Config) -> None:
+        # block_on_miss parks with no countdown (the ripper treats a null
+        # wait_start_time as "no countdown"); hold_for_review alone parks
+        # with the review gate's countdown; neither rips straight away.
+        if cfg.block_on_miss:
+            job.status = JobStatus.AWAITING_REVIEW
+            job.wait_start_time = None
+        elif cfg.hold_for_review:
+            job.status = JobStatus.AWAITING_REVIEW
+            job.wait_start_time = datetime.now(timezone.utc)
+        else:
+            job.status = JobStatus.IDENTIFIED
 
     async def _hold_previously_ripped(self, job: Job, scan: ScanResult, previous: Job) -> None:
         # on_previously_ripped=hold: whatever identify concluded, the disc
@@ -551,7 +599,7 @@ class IdentifyFlow:
         elif result is not None:
             await self._hold_hit(job, scan, result, miss_title, ambiguous_toc)
         else:
-            self._apply_miss(job, cfg, miss_title)
+            await self._apply_miss(job, cfg, scan, miss_title)
 
         if self.previous is not None:
             await self._hold_previously_ripped(job, scan, self.previous)

@@ -48,7 +48,14 @@ from arm_common import (
     TranscodePreset,
     TranscodeTool,
 )
-from arm_common.enums import IdentificationMode, OutputMode, TrackKind, TrackSelection
+from arm_common.enums import (
+    IdentificationMode,
+    MissMediaType,
+    MissTitlesKept,
+    OutputMode,
+    TrackKind,
+    TrackSelection,
+)
 from arm_common.models import Track
 
 from tests._fakes import FakeSession
@@ -146,6 +153,8 @@ def _config(
     movie_auto_apply: bool = True,
     episode_auto_apply: bool = True,
     music_auto_apply: bool = True,
+    miss_media_type: MissMediaType = MissMediaType.MOVIE,
+    miss_titles_kept: MissTitlesKept = MissTitlesKept.ALL,
 ) -> Config:
     return Config(
         id=1,
@@ -160,6 +169,8 @@ def _config(
         movie_auto_apply=movie_auto_apply,
         episode_auto_apply=episode_auto_apply,
         music_auto_apply=music_auto_apply,
+        miss_media_type=miss_media_type,
+        miss_titles_kept=miss_titles_kept,
         **({"disc_hint_sources": disc_hint_sources} if disc_hint_sources is not None else {}),
         manual_wait_seconds=60,
         default_retention_policy=RetentionPolicy.PRUNE_AFTER_SESSION,
@@ -705,24 +716,177 @@ def test_identify_paused_without_hold_still_409s() -> None:
     assert r.status_code == 409
 
 
-def test_identify_unidentified_with_hold_does_not_park(signing_key: bytes) -> None:
-    """hold_for_review on but identify MISSES (block_on_miss off) -> the synthetic
-    IDENTIFIED-unidentified must NOT park in review (audit H5: gate on genuine
-    success, not status==IDENTIFIED)."""
+def _main_feature_default_preset() -> RipPreset:
+    """The disc-type default preset id, selecting only the main feature, so a
+    miss that keeps every title is told apart from one that follows the preset."""
+    return RipPreset(
+        id="rpr_builtin_movie_archive",
+        name="Main feature only",
+        media_type=MediaType.MOVIE,
+        is_builtin=True,
+        track_selection=TrackSelection.MAIN_FEATURE,
+        identification_mode=IdentificationMode.SKIP,
+        output_mode=OutputMode.TRACKS,
+    )
+
+
+def _four_title_scan(disc_type: str = "dvd") -> dict[str, Any]:
+    scan = _scan_dict(disc_type)
+    scan["titles"] = [
+        {"index": 1, "duration_seconds": 4200},
+        {"index": 2, "duration_seconds": 3000},
+        {"index": 3, "duration_seconds": 600},
+        {"index": 4, "duration_seconds": 30},
+    ]
+    return scan
+
+
+def _miss_db(**cfg: Any) -> FakeSession:
     db = FakeSession()
     db.rows["drives"] = [_drive()]
-    db.rows["config"] = [_config(hold_for_review=True, block_on_miss=False)]
-    app = _make_app(db, dispatcher=_Dispatcher(None))
-    with TestClient(app) as client:
-        r = client.post(
-            "/api/ripper/identify",
-            json={"drive_id": "drv_x", "scan_result": _scan_dict()},
-            headers=_SERVICE_AUTH,
-        )
-    assert r.status_code == 200
-    out = r.json()
-    assert out["status"] == "identified"  # not awaiting_review
+    db.rows["config"] = [_config(**cfg)]
+    db.rows["rip_presets"] = [_main_feature_default_preset()]
+    return db
+
+
+def _added_tracks(db: FakeSession) -> list[Track]:
+    return [row for row in db.added if type(row).__name__ == "Track"]
+
+
+@pytest.mark.parametrize(
+    ("block_on_miss", "hold_for_review", "status", "countdown"),
+    [
+        (True, False, "awaiting_review", False),
+        (True, True, "awaiting_review", False),
+        (False, True, "awaiting_review", True),
+        (False, False, "identified", False),
+    ],
+)
+def test_identify_video_miss_keeps_every_title_and_parks_per_setting(
+    block_on_miss: bool, hold_for_review: bool, status: str, countdown: bool
+) -> None:
+    """A DVD that misses: flagged unidentified, the default media type stored,
+    the label as title, every scanned title kept, and the status the
+    block_on_miss / hold_for_review table gives."""
+    db = _miss_db(block_on_miss=block_on_miss, hold_for_review=hold_for_review)
+    out = _identify(_make_app(db, dispatcher=_Dispatcher(None)), _four_title_scan())
+    assert out["status"] == status
+    assert (out.get("wait_start_time") is not None) is countdown
     assert out["metadata_json"]["flags"]["unidentified"] is True
+    assert out["media_type"] == "movie"
+    assert out["title"] == "MY_DISC"
+    tracks = _added_tracks(db)
+    assert {t.source_ref: t.excluded for t in tracks} == {"1": False, "2": False, "3": False, "4": False}
+    preset_claims = out["metadata_json"]["identity_claims"]["sources"]["preset"]["tracks"]
+    assert {ref: c["selected"] for ref, c in preset_claims.items()} == {"1": True, "2": True, "3": True, "4": True}
+
+
+def test_identify_video_miss_blocked_emits_awaiting_review() -> None:
+    db = _miss_db(block_on_miss=True)
+    hub = _Hub()
+    _identify(_make_app(db, dispatcher=_Dispatcher(None), hub=hub), _four_title_scan())
+    assert [e["event_type"] for e in hub.events] == ["rip.awaiting_review"]
+
+
+def test_identify_video_miss_as_tv_routes_the_tracks_through_the_tv_session() -> None:
+    """miss_media_type=tv is stored before the tracks are picked, so the tv
+    route's preset decides them (titles kept = preset, main feature only)."""
+    db = _miss_db(miss_media_type=MissMediaType.TV, miss_titles_kept=MissTitlesKept.PRESET)
+    db.rows["rip_presets"].append(
+        RipPreset(
+            id="rpr_tv_all",
+            name="TV all",
+            media_type=MediaType.TV,
+            is_builtin=False,
+            track_selection=TrackSelection.ALL_TRACKS,
+            identification_mode=IdentificationMode.SKIP,
+            output_mode=OutputMode.TRACKS,
+        )
+    )
+    db.rows["sessions"] = [
+        Session(
+            id="ses_tv",
+            name="TV",
+            media_type=MediaType.TV,
+            is_builtin=False,
+            rip_preset_id="rpr_tv_all",
+            output_path_template="{title}",
+        )
+    ]
+    db.rows["session_routes"] = [SessionRoute(media_type=MediaType.TV, disc_type=DiscType.DVD, session_id="ses_tv")]
+    out = _identify(_make_app(db, dispatcher=_Dispatcher(None)), _four_title_scan())
+    assert out["media_type"] == "tv"
+    # The tv route's ALL_TRACKS preset keeps the three long titles and drops
+    # the 30 s stub; the movie default (main feature only) would keep one.
+    assert {t.source_ref: t.excluded for t in _added_tracks(db)} == {"1": False, "2": False, "3": False, "4": True}
+
+
+def test_identify_cd_miss_keeps_awaiting_user_id_without_tracks() -> None:
+    db = _miss_db(block_on_miss=True)
+    out = _identify(_make_app(db, dispatcher=_Dispatcher(None)), _four_title_scan("cd"))
+    assert out["status"] == "awaiting_user_id"
+    assert out["media_type"] is None
+    assert "unidentified" not in (out["metadata_json"].get("flags") or {})
+    assert _added_tracks(db) == []
+
+
+def test_identify_video_miss_repost_adds_no_duplicate_tracks() -> None:
+    """The ripper re-POSTs identify for the parked disc: the reused job keeps
+    its four tracks and gains no copies."""
+    db = _miss_db(block_on_miss=True)
+    scan = _four_title_scan()
+    scan["fingerprints"] = [{"algo": "crc64", "value": "abc"}]
+    app = _make_app(db, dispatcher=_Dispatcher(None))
+    first = _identify(app, scan)
+    second = _identify(app, scan)
+    assert second["id"] == first["id"]
+    assert second["status"] == "awaiting_review"
+    assert sorted(t.source_ref for t in db.rows["tracks"]) == ["1", "2", "3", "4"]
+
+
+async def test_resolve_on_a_parked_miss_keeps_every_track_and_its_title() -> None:
+    """Identifying the parked disc keeps it in review with all four tracks and
+    the titles the operator gave them."""
+    from arm_backend.identity.proposals import record_manual_track
+    from arm_backend.identity.resolve_service import resolve_identity
+    from arm_common.schemas import ResolveRequest
+
+    db = _miss_db(block_on_miss=True)
+    _identify(_make_app(db, dispatcher=_Dispatcher(None)), _four_title_scan())
+    job = db.rows["jobs"][0]
+    job.resumed_from_crash = False  # the column's server default, which the fake session does not apply
+    for track in db.rows["tracks"]:
+        record_manual_track(job, track, {"title": f"Part {track.source_ref}"})
+        track.title = f"Part {track.source_ref}"
+    out = await resolve_identity(
+        db,  # type: ignore[arg-type]
+        job,
+        ResolveRequest(title="Box Set", year=2001),
+        hub=_Hub(),  # type: ignore[arg-type]
+        stage_runner=None,
+    )
+    assert out.job.status == JobStatus.AWAITING_REVIEW
+    tracks = sorted(db.rows["tracks"], key=lambda t: t.source_ref)
+    assert [(t.source_ref, t.title, t.excluded) for t in tracks] == [
+        (ref, f"Part {ref}", False) for ref in ("1", "2", "3", "4")
+    ]
+
+
+@pytest.mark.parametrize(
+    ("block_on_miss", "hold_for_review", "outcome"),
+    [
+        (True, False, "it waits for review"),
+        (False, True, "it rips when the review countdown ends"),
+        (False, False, "it rips now"),
+    ],
+)
+def test_identify_video_miss_logs_what_happens_next(
+    caplog: pytest.LogCaptureFixture, block_on_miss: bool, hold_for_review: bool, outcome: str
+) -> None:
+    db = _miss_db(block_on_miss=block_on_miss, hold_for_review=hold_for_review)
+    with caplog.at_level(logging.INFO, logger="arm_backend.identify_flow"):
+        out = _identify(_make_app(db, dispatcher=_Dispatcher(None)), _four_title_scan())
+    assert f"identify job_id={out['id']}: no match for 'MY_DISC'; {outcome}" in caplog.messages
 
 
 def test_identify_repost_on_held_disc_leaves_tracks_and_claims_alone(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -837,7 +1001,7 @@ def test_identify_snapshots_drive_serial_onto_job() -> None:
     assert r.json()["drive_serial"] == "SN-ABC"
 
 
-def test_identify_miss_with_block_on_miss_awaits_user(signing_key: bytes) -> None:
+def test_identify_cd_miss_with_block_on_miss_awaits_user(signing_key: bytes) -> None:
     db = FakeSession()
     db.rows["drives"] = [_drive()]
     db.rows["config"] = [_config(block_on_miss=True)]
@@ -846,7 +1010,7 @@ def test_identify_miss_with_block_on_miss_awaits_user(signing_key: bytes) -> Non
     with TestClient(app) as client:
         r = client.post(
             "/api/ripper/identify",
-            json={"drive_id": "drv_x", "scan_result": _scan_dict()},
+            json={"drive_id": "drv_x", "scan_result": _scan_dict("cd")},
             headers=_SERVICE_AUTH,
         )
     assert r.status_code == 200
@@ -855,7 +1019,7 @@ def test_identify_miss_with_block_on_miss_awaits_user(signing_key: bytes) -> Non
     assert any(e["event_type"] == "rip.needs_user_input" for e in hub.events)
 
 
-def test_identify_miss_without_block_marks_identified_unidentified() -> None:
+def test_identify_cd_miss_without_block_marks_identified_unidentified() -> None:
     db = FakeSession()
     db.rows["drives"] = [_drive()]
     db.rows["config"] = [_config(block_on_miss=False)]
@@ -863,7 +1027,7 @@ def test_identify_miss_without_block_marks_identified_unidentified() -> None:
     with TestClient(app) as client:
         r = client.post(
             "/api/ripper/identify",
-            json={"drive_id": "drv_x", "scan_result": _scan_dict()},
+            json={"drive_id": "drv_x", "scan_result": _scan_dict("cd")},
             headers=_SERVICE_AUTH,
         )
     assert r.status_code == 200
@@ -871,7 +1035,8 @@ def test_identify_miss_without_block_marks_identified_unidentified() -> None:
     assert r.json()["metadata_json"]["flags"]["unidentified"] is True
 
 
-def test_identify_timeout_records_diagnostic() -> None:
+@pytest.mark.parametrize(("disc_type", "status"), [("dvd", "awaiting_review"), ("cd", "awaiting_user_id")])
+def test_identify_timeout_records_diagnostic(disc_type: str, status: str) -> None:
     db = FakeSession()
     db.rows["drives"] = [_drive()]
     db.rows["config"] = [_config(block_on_miss=True)]
@@ -879,11 +1044,11 @@ def test_identify_timeout_records_diagnostic() -> None:
     with TestClient(app) as client:
         r = client.post(
             "/api/ripper/identify",
-            json={"drive_id": "drv_x", "scan_result": _scan_dict()},
+            json={"drive_id": "drv_x", "scan_result": _scan_dict(disc_type)},
             headers=_SERVICE_AUTH,
         )
     assert r.status_code == 200
-    assert r.json()["status"] == "awaiting_user_id"
+    assert r.json()["status"] == status
     assert r.json()["metadata_json"]["flags"]["dispatch_timeout"] is True
 
 
@@ -907,7 +1072,7 @@ def test_identify_miss_stores_the_attempts() -> None:
     db.rows["drives"] = [_drive()]
     db.rows["config"] = [_config(block_on_miss=True)]
     out = _identify(_make_app(db, dispatcher=_Dispatcher(None, attempts=[_MISS])))
-    assert out["status"] == "awaiting_user_id"
+    assert out["status"] == "awaiting_review"
     assert out["metadata_json"]["identify_attempts"] == [_MISS]
 
 
@@ -2575,14 +2740,14 @@ def test_identify_tv_kind_sets_media_type_tv() -> None:
     assert db.rows["jobs"][0].media_type == MediaType.TV
 
 
-def test_identify_miss_leaves_media_type_unset() -> None:
-    """An identify miss knows nothing about the kind; the column stays None
+def test_identify_cd_miss_leaves_media_type_unset() -> None:
+    """A missed CD knows nothing about the kind; the column stays None
     for resolve to fill."""
     db = FakeSession()
     db.rows["drives"] = [_drive()]
     db.rows["config"] = [_config()]
     app = _make_app(db, dispatcher=_Dispatcher(None))
-    body = {"drive_id": "drv_x", "scan_result": _scan_dict()}
+    body = {"drive_id": "drv_x", "scan_result": _scan_dict("cd")}
     with TestClient(app) as client:
         r = client.post("/api/ripper/identify", json=body, headers=_SERVICE_AUTH)
     assert r.status_code == 200
@@ -2855,10 +3020,10 @@ def test_identify_reuse_records_no_new_hint_claims() -> None:
     assert "identity_claims" not in (existing.metadata_json or {})
 
 
-def test_identify_awaiting_user_id_still_applies_label_hints() -> None:
+def test_identify_blocked_miss_still_applies_label_hints() -> None:
     """A total identify miss with block_on_miss on still runs disc hints and
     resolve_job: the label-derived season/disc land on the job even though
-    the job parks at AWAITING_USER_ID for the operator to pick a title."""
+    the job parks in review for the operator to identify."""
     db = FakeSession()
     db.rows["drives"] = [_drive()]
     db.rows["config"] = [_config(block_on_miss=True)]
@@ -2869,7 +3034,7 @@ def test_identify_awaiting_user_id_still_applies_label_hints() -> None:
     with TestClient(app) as client:
         r = client.post("/api/ripper/identify", json=body, headers=_SERVICE_AUTH)
     assert r.status_code == 200
-    assert r.json()["status"] == "awaiting_user_id"
+    assert r.json()["status"] == "awaiting_review"
     job = db.rows["jobs"][0]
     assert job.season == 2
     assert job.disc_number == 3
@@ -3502,7 +3667,7 @@ def test_identify_miss_title_uses_the_bdmt_hint_but_not_the_label_hint() -> None
             r = client.post(
                 "/api/ripper/identify", json={"drive_id": "drv_x", "scan_result": scan}, headers=_SERVICE_AUTH
             )
-        assert r.status_code == 200 and r.json()["status"] == "awaiting_user_id"
+        assert r.status_code == 200 and r.json()["status"] == "awaiting_review"
         return str(r.json()["title"])
 
     bd = _scan_dict("bluray")
@@ -3542,7 +3707,7 @@ def test_identify_miss_title_prefers_release_then_label() -> None:
             json={"drive_id": "drv_x", "scan_result": _scan_dict_with_hash()},
             headers=_SERVICE_AUTH,
         )
-    assert r.status_code == 200 and r.json()["status"] == "awaiting_user_id"
+    assert r.status_code == 200 and r.json()["status"] == "awaiting_review"
     assert r.json()["title"] == "Round Midnight"
     # 2. With every hint off and no match, the raw label is the last resort (review focus 3).
     db2 = FakeSession()
