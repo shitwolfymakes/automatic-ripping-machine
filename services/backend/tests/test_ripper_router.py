@@ -1372,6 +1372,47 @@ def test_identify_without_hold_then_rip_start_schedules_episode_stage() -> None:
     assert stage_runner.scheduled == [job_id, job_id]
 
 
+def test_rip_start_of_a_straight_auto_rip_miss_announces_the_rip_and_schedules_the_stage() -> None:
+    """A miss that rips straight away already has its tracks from identify,
+    yet rip-start still emits rip.started (once) and schedules the stage."""
+    db = _miss_db(block_on_miss=False, hold_for_review=False, miss_media_type=MissMediaType.TV)
+    hub = _Hub()
+    app = _make_app(db, dispatcher=_Dispatcher(None), hub=hub)
+    stage_runner = _StageRunner()
+    app.state.episode_stage = stage_runner
+    out = _identify(app, _four_title_scan())
+    assert out["status"] == "identified"
+    db.rows["jobs"][0].resumed_from_crash = False
+    for track in db.rows["tracks"]:  # the column defaults a real insert applies
+        track.status, track.attempts = TrackStatus.QUEUED, 0
+    with TestClient(app) as client:
+        r = client.post(f"/api/ripper/jobs/{out['id']}/rip-start", headers=_OWNER_HEADERS)
+    assert r.status_code == 200
+    assert db.rows["jobs"][0].status == JobStatus.RIPPING
+    assert [e["event_type"] for e in hub.events].count("rip.started") == 1
+    assert stage_runner.scheduled == [out["id"], out["id"]]
+
+
+def test_rip_start_after_the_operators_start_announces_nothing_more() -> None:
+    """The operator's Start moved the job to RIPPING and emitted rip.started;
+    the ripper's rip-start that follows adds no second one."""
+    db = FakeSession()
+    db.rows["drives"] = [_drive()]
+    job = _job(status=JobStatus.RIPPING)
+    job.media_type = MediaType.TV
+    db.rows["jobs"] = [job]
+    db.rows["tracks"] = [_track("trk_1", status=TrackStatus.QUEUED)]
+    hub = _Hub()
+    app = _make_app(db, hub=hub)
+    stage_runner = _StageRunner()
+    app.state.episode_stage = stage_runner
+    with TestClient(app) as client:
+        r = client.post("/api/ripper/jobs/job_01JZXR7K3M5Q8N4VWA00000001/rip-start", headers=_OWNER_HEADERS)
+    assert r.status_code == 200
+    assert "rip.started" not in [e["event_type"] for e in hub.events]
+    assert stage_runner.scheduled == []
+
+
 def test_rip_start_movie_does_not_schedule_episode_stage() -> None:
     db = FakeSession()
     db.rows["drives"] = [_drive()]

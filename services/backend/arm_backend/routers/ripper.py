@@ -555,6 +555,21 @@ async def _emit_rip_started(session: AsyncSession, hub: WSHub, job: Job, preset_
     await session.commit()
 
 
+async def _announce_rip(
+    session: AsyncSession,
+    hub: WSHub,
+    stage_runner: EpisodeStageRunner | None,
+    job: Job,
+    preset_id: str,
+    tracks: Sequence[Track],
+) -> None:
+    """Emit rip.started for a rip this request began and schedule the
+    episode stage when the job may hold episodes."""
+    await _emit_rip_started(session, hub, job, preset_id, len(tracks))
+    if stage_runner is not None and is_tv_candidate(job, tracks):
+        stage_runner.schedule(job.id)
+
+
 @router.post("/jobs/{job_id}/rip-start", response_model=RipStartResponse)
 async def rip_start(
     job: Job = Depends(require_drive_owner_by_job),
@@ -566,7 +581,13 @@ async def rip_start(
 
     existing = await _job_tracks(session, job.id)
     if existing:
+        # An IDENTIFIED job with tracks is a miss that rips straight away:
+        # this request begins its rip. The operator's Start (already RIPPING)
+        # announced its own; a countdown release keeps the review hold's.
+        begins_rip = job.status == JobStatus.IDENTIFIED
         await _ensure_ripping(session, job)
+        if begins_rip:
+            await _announce_rip(session, hub, stage_runner, job, preset_id, existing)
         return _rip_start_response(job, preset_id, existing, min_length_seconds)
 
     _require_startable(job)
@@ -583,12 +604,9 @@ async def rip_start(
         len(refreshed),
     )
 
-    await _emit_rip_started(session, hub, job, preset_id, len(refreshed))
-
-    # C1: without the review hold, identify creates no Track rows, so the
-    # stage it scheduled saw nothing to match. The tracks appear here.
-    if stage_runner is not None and is_tv_candidate(job, new_tracks):
-        stage_runner.schedule(job.id)
+    # Without the review hold, identify creates no Track rows, so the stage
+    # it scheduled saw nothing to match. The tracks appear here.
+    await _announce_rip(session, hub, stage_runner, job, preset_id, refreshed)
 
     return _rip_start_response(job, preset_id, refreshed, min_length_seconds)
 
