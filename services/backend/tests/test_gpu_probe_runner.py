@@ -48,6 +48,10 @@ def _settings(**overrides: Any) -> Settings:
         "ARM_LOG_LEVEL": "info",
         "ARM_DOCKER_NETWORK": "armv3_default",
         "ARM_TRANSCODE_DISPATCH_INTERVAL_SECONDS": 5,
+        "ARM_HOST_RAW_PATH": "/srv/arm/raw",
+        "ARM_HOST_MEDIA_PATH": "/mnt/nas/media",
+        "ARM_HOST_LOGS_PATH": "/srv/arm/logs",
+        "ARM_HOST_CERTS_PATH": "/srv/arm/certs",
     }
     base.update(overrides)
     return Settings.model_construct(**base)
@@ -605,7 +609,14 @@ async def test_spawn_kwargs_for_a_qsv_row() -> None:
         "RENDER_GID": "993",
     }
     assert kw["devices"] == ["/dev/dri/renderD129:/dev/dri/renderD129:rwm"]
-    assert "volumes" not in kw
+    # The task's own folders, by their host paths, so the entrypoint checks
+    # them under the transcoder's identity before the probe runs.
+    assert kw["volumes"] == {
+        "/srv/arm/raw": {"bind": "/raw", "mode": "ro"},
+        "/mnt/nas/media": {"bind": "/media", "mode": "rw"},
+        "/srv/arm/logs": {"bind": "/logs", "mode": "rw"},
+        "/srv/arm/certs/arm-ca.crt": {"bind": "/etc/ssl/arm/arm-ca.crt", "mode": "ro"},
+    }
     assert kw["network"] is None
     assert kw["detach"] is True
     assert kw["auto_remove"] is False

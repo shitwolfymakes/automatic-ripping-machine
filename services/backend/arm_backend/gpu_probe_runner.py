@@ -47,7 +47,7 @@ from sqlalchemy.orm.exc import StaleDataError
 from sqlmodel import col, select
 
 from arm_backend.config import Settings, effective_transcode_capable
-from arm_backend.transcode_container_spec import container_identity_env, gpu_run_kwargs
+from arm_backend.transcode_container_spec import container_identity_env, gpu_run_kwargs, task_volumes
 from arm_backend.transcode_dispatcher import TranscodeDispatcher
 from arm_backend.transcode_images import image_for
 from arm_backend.ws import WSHub
@@ -372,8 +372,11 @@ class GpuProbeRunner:
             "command": list(PROBE_COMMAND),
             "labels": {PROBE_LABEL_KEY: gpu.id},
             "environment": env,
-            # No /raw, /media or backend access: the probe encodes a generated
-            # clip in its own scratch space and reports on stdout.
+            # The task's own folders, so the entrypoint checks they are usable
+            # under the transcoder's identity before the probe runs. The probe
+            # itself still encodes a generated clip in its own scratch space,
+            # writes nothing into them and has no backend access.
+            "volumes": task_volumes(self._settings),
             "network": None,
             "detach": True,
             # Kept until `logs` is read after `wait`; removed in `finally`.
