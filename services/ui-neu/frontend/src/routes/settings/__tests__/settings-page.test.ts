@@ -111,6 +111,16 @@ const mockSchema = {
 					type: 'bool',
 					editable: true,
 					enum_values: null
+				},
+				{
+					key: 'min_title_length_seconds',
+					group: 'Ripping',
+					tier: 'operator',
+					label: 'Minimum title length (seconds)',
+					help: 'Titles shorter than this are not listed or ripped.',
+					type: 'int',
+					editable: true,
+					enum_values: null
 				}
 			]
 		},
@@ -197,6 +207,7 @@ const mockConfig = {
 	tmdb_api_key: '<hidden>',
 	auto_rip_on_insert: true,
 	block_on_miss: true,
+	min_title_length_seconds: 120,
 	// The column's real default: a ripper-only box still has it true, so the
 	// not-capable branch must render the locked toggle off regardless.
 	transcode_enabled: true,
@@ -510,6 +521,14 @@ describe('Settings Page', () => {
 			await renderAndWait();
 			await fireEvent.click(screen.getByRole('tab', { name: 'Ripping' }));
 			await waitFor(() => expect(screen.getByRole('checkbox', { name: /auto-rip on insert/i })).toBeInTheDocument());
+		});
+
+		it('renders the minimum title length on the Ripping tab', async () => {
+			await renderAndWait();
+			await fireEvent.click(screen.getByRole('tab', { name: 'Ripping' }));
+			const input = await screen.findByRole('spinbutton', { name: /minimum title length/i });
+			expect(input).toHaveValue(120);
+			expect(screen.getByRole('heading', { name: 'Disc titles' })).toBeInTheDocument();
 		});
 
 		it('does not render a Music tab', async () => {
