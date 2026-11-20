@@ -89,13 +89,6 @@ export class DiscReviewJobActions {
 		await this.#identifyThenStart(job, j, isReviewGate);
 	};
 
-	// Review "Identify and start": the identify save, then the review gate's
-	// start; a failed save leaves the disc in review.
-	identifyAndStart = async (job: JobView | undefined, detailJob: JobView | undefined): Promise<void> => {
-		if (!job) return;
-		await this.#identifyThenStart(job, detailJob ?? job, () => true);
-	};
-
 	#identifyThenStart = async (job: JobView, j: JobView, isReviewGate: () => boolean): Promise<void> => {
 		const startTitle = (j.title ?? '').trim();
 		if (!startTitle) {
