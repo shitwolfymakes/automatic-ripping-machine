@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import col, select
 
 from arm_backend.config import settings
-from arm_backend.rip_outcome import kept_tracks, rip_outcome_counts
+from arm_backend.rip_outcome import rip_outcome_counts
 from arm_common import (
     DiscFingerprint,
     Job,
@@ -36,15 +36,17 @@ from arm_common.schemas.job_metadata import previously_ripped_job_id
 def _summarize_rip_progress(tracks: list[Track]) -> RipProgressSummary:
     """Aggregate `tracks` (one job's worth) into a `RipProgressSummary`.
 
-    Only kept tracks count: an excluded title is ripped too, but the rip is
-    not for it. `current_track_index` is the 1-based ordinal among the kept
-    tracks sorted by `Track.index` of the row in `IN_PROGRESS`. The dispatcher transitions
+    The done/failed/total counts take only kept tracks: an excluded title is
+    ripped too, but the rip is not for it. The current track is the one being
+    ripped, excluded or not, since MakeMKV reads every title:
+    `current_track_index` is the 1-based ordinal among all tracks sorted by
+    `Track.index` of the row in `IN_PROGRESS`. The dispatcher transitions
     one track at a time, so at most one is `IN_PROGRESS` per job; if more
     than one ever appeared (e.g. mid-rewrite of the dispatcher) we'd pick
     the lowest-index one as a sane default.
     """
-    sorted_tracks = sorted(kept_tracks(tracks), key=lambda t: t.index)
-    done, failed, total = rip_outcome_counts(sorted_tracks)
+    sorted_tracks = sorted(tracks, key=lambda t: t.index)
+    done, failed, total = rip_outcome_counts(tracks)
     current_track_id: str | None = None
     current_track_index: int | None = None
     for ordinal, t in enumerate(sorted_tracks, start=1):

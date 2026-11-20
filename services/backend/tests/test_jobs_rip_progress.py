@@ -181,6 +181,31 @@ def test_ripping_job_summary_counts_only_kept_tracks(signing_key: bytes) -> None
         "tracks_done": 0,
         "tracks_failed": 0,
         "current_track_id": "trk_3",
+        # The ordinal is among all tracks: trk_3 is the third by index.
+        "current_track_index": 3,
+    }
+
+
+def test_ripping_job_summary_points_at_an_excluded_track_being_ripped(signing_key: bytes) -> None:
+    """MakeMKV reads the excluded titles too, so the current track is the one
+    being ripped, excluded or not; the counts stay kept-only."""
+    db = FakeSession()
+    _seed_admin(db)
+    job_id = "job_01JZXR7K3M5Q8N4VWA00000002"
+    db.rows["jobs"] = [_make_job(job_id, status=JobStatus.RIPPING)]
+    dropped = _make_track("trk_1", job_id=job_id, index=1, status=TrackStatus.IN_PROGRESS)
+    dropped.excluded = True
+    main = _make_track("trk_3", job_id=job_id, index=3, status=TrackStatus.QUEUED)
+    db.rows["tracks"] = [dropped, main]
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as client:
+        r = client.get("/api/jobs", headers=_auth(token))
+    assert r.status_code == 200
+    assert r.json()[0]["rip_progress"] == {
+        "tracks_total": 1,
+        "tracks_done": 0,
+        "tracks_failed": 0,
+        "current_track_id": "trk_1",
         "current_track_index": 1,
     }
 
