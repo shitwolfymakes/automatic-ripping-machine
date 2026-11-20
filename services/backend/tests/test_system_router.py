@@ -14,7 +14,8 @@ from fastapi.testclient import TestClient
 from arm_backend.db import get_session
 from arm_backend.jwt_utils import issue_access_token
 from arm_backend.routers import system as system_router
-from arm_common import Config, DiscType, Drive, DriveKind, DriveLifecycle, DriveStatus, Event, Job, JobStatus, User
+from arm_common import Config, DiscType, Drive, DriveKind, DriveLifecycle, DriveStatus, Event, Gpu, Job, JobStatus, User
+from arm_common.enums import GpuVendor
 from arm_common.models.user import GUEST_ROLE
 
 from tests._fakes import FakeSession
@@ -604,6 +605,66 @@ def test_diagnostics_transcoder_warning_when_last_spawn_failed(signing_key: byte
     assert r.status_code == 200, r.text
     check = next(ch for ch in r.json()["checks"] if ch["name"] == "transcoder")
     assert check["status"] == "warning" and "409" in check["detail"]
+
+
+_ACCESS = (
+    "Transcodes will fail: the transcoder runs as user 1000:1000, but its logs folder /srv/arm/logs on this "
+    "machine is owned by 1001:1001. Set ARM_TRANSCODE_PUID=1001 and ARM_TRANSCODE_PGID=1001 in .env, or make "
+    "the folder writable by 1000:1000."
+)
+
+
+def _gpu_row(*, enabled: bool = True, probe_error: str | None = _ACCESS) -> Gpu:
+    return Gpu(id="gpu_1", vendor=GpuVendor.NVENC, device_path="nvidia0", enabled=enabled, probe_error=probe_error)
+
+
+def _transcoder_check(signing_key: bytes, tmp_path, db: FakeSession, **dispatcher: object) -> dict:
+    app, token = _make_app(signing_key, db, tmp=tmp_path)
+    app.state.transcode_dispatcher = _StubDispatcher(host_paths=True, **dispatcher)
+    with TestClient(app) as c:
+        r = c.get("/api/system/diagnostics", headers=_auth(token))
+    assert r.status_code == 200, r.text
+    return next(ch for ch in r.json()["checks"] if ch["name"] == "transcoder")
+
+
+def test_diagnostics_transcoder_warns_when_an_enabled_gpu_reports_a_folder_problem(
+    signing_key: bytes, tmp_path
+) -> None:
+    db = FakeSession()
+    _seed(db)
+    db.rows["gpus"] = [_gpu_row()]
+    check = _transcoder_check(signing_key, tmp_path, db)
+    assert check["status"] == "warning"
+    assert check["detail"] == _ACCESS
+
+
+@pytest.mark.parametrize(
+    "rows",
+    [
+        [],
+        [_gpu_row(enabled=False)],
+        [_gpu_row(probe_error="probe failed (exit 1); the transcode image may predate --probe-device")],
+        [_gpu_row(probe_error=None)],
+    ],
+    ids=["no-gpus", "disabled-gpu", "other-probe-error", "clean-gpu"],
+)
+def test_diagnostics_transcoder_ignores_gpus_without_an_enabled_folder_problem(
+    signing_key: bytes, tmp_path, rows: list[Gpu]
+) -> None:
+    db = FakeSession()
+    _seed(db)
+    db.rows["gpus"] = rows
+    check = _transcoder_check(signing_key, tmp_path, db)
+    assert check["status"] == "ok"
+    assert check["detail"] is None
+
+
+def test_diagnostics_transcoder_spawn_failure_outranks_a_folder_problem(signing_key: bytes, tmp_path) -> None:
+    db = FakeSession()
+    _seed(db)
+    db.rows["gpus"] = [_gpu_row()]
+    check = _transcoder_check(signing_key, tmp_path, db, last_spawn_error="409 name in use")
+    assert check["detail"] == "last spawn failed: 409 name in use"
 
 
 def test_diagnostics_transcoder_warns_about_a_backend_url_check_set_to_warn(signing_key: bytes, tmp_path) -> None:

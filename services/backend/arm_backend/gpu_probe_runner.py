@@ -47,6 +47,7 @@ from sqlalchemy.orm.exc import StaleDataError
 from sqlmodel import col, select
 
 from arm_backend.config import Settings, effective_transcode_capable
+from arm_backend.transcode_access_message import access_failure_message, parse_access_failure
 from arm_backend.transcode_container_spec import container_identity_env, gpu_run_kwargs, task_volumes
 from arm_backend.transcode_dispatcher import TranscodeDispatcher
 from arm_backend.transcode_images import image_for
@@ -417,12 +418,21 @@ class GpuProbeRunner:
             if payload is not None:
                 return probe_outcome(payload)
             stderr = await asyncio.to_thread(container.logs, stdout=False, stderr=True)
-            return [], probe_failure_error(status_code, stderr)
+            return self._no_result_outcome(status_code, stderr)
         finally:
             try:
                 await asyncio.to_thread(container.remove, force=True)
             except Exception as exc:  # noqa: BLE001 - best-effort cleanup
                 logger.warning("gpu probe: could not remove the probe container for %s: %s", gpu.id, exc)
+
+    def _no_result_outcome(self, status_code: int, stderr: bytes | str) -> ProbeOutcome:
+        """A probe that printed no result: a folder the transcoder cannot use
+        verifies nothing either way (the row keeps its encoders); anything
+        else is a failed probe that verified nothing."""
+        failure = parse_access_failure(stderr)
+        if failure is not None:
+            return None, _truncate(access_failure_message(failure, self._settings))
+        return [], probe_failure_error(status_code, stderr)
 
     async def _remove_probe_containers(self, docker: Any, gpu_id: str) -> None:
         """Remove every container labelled as this row's probe. Only called

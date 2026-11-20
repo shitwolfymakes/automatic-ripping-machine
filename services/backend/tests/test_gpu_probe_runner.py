@@ -289,6 +289,36 @@ async def test_stale_image_or_failed_probe_says_to_rebuild(
     assert container.logs_calls == [{"stdout": True, "stderr": False}, {"stdout": False, "stderr": True}]
 
 
+async def test_a_folder_the_transcoder_cannot_write_is_reported_plainly_and_keeps_verified_encoders() -> None:
+    stderr = (
+        b"arm: dropping to 1000:1000\n"
+        b"FATAL: /logs is not writable by arm (PUID:PGID=1000:1000); dir owner is 1001:1001.\n"
+        b"       ARM does not chown user-mounted volumes.\n"
+    )
+    runner, db, _docker, hub, _d = _build([_gpu(encoder_kinds=["h264"])], _Container(status=1, stderr=stderr))
+
+    await runner.probe_gpu("gpu_1")
+
+    row = db.rows["gpus"][0]
+    assert row.encoder_kinds == ["h264"]
+    assert row.probe_error == (
+        "Transcodes will fail: the transcoder runs as user 1000:1000, but its logs folder /srv/arm/logs on this "
+        "machine is owned by 1001:1001. Set ARM_TRANSCODE_PUID=1001 and ARM_TRANSCODE_PGID=1001 in .env, or make "
+        "the folder writable by 1000:1000."
+    )
+    assert hub.events[0][1] == "gpu.probed"
+
+
+async def test_a_raw_folder_the_transcoder_cannot_read_uses_the_read_wording() -> None:
+    stderr = b"FATAL: /raw is not readable by arm (read-only mount) (PUID:PGID=1000:1000); dir owner is 1001:1001.\n"
+    runner, db, *_ = _build([_gpu(encoder_kinds=["h264"])], _Container(status=1, stderr=stderr))
+    await runner.probe_gpu("gpu_1")
+    row = db.rows["gpus"][0]
+    assert row.encoder_kinds == ["h264"]
+    assert row.probe_error is not None
+    assert "cannot read its raw rips folder /srv/arm/raw on this machine" in row.probe_error
+
+
 async def test_exit_3_reports_the_test_clip_failure_with_stderr() -> None:
     stderr = b"line1\nline2\nline3\nline4\nline5\ncould not generate the test clip: \xff libavfilter missing\n"
     runner, db, *_ = _build([_gpu()], _Container(status=3, stderr=stderr))
