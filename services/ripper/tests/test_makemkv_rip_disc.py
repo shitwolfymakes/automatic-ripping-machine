@@ -1297,3 +1297,28 @@ async def test_rip_optical_passes_a_higher_minimum_through(monkeypatch, tmp_path
     await _rip_optical_results(tmp_path, [_view(1, 3000)], 300)
 
     assert "--minlength=300" in captured["argv"]
+
+
+def _scanned_view(idx: int, scan_seconds: int) -> TrackView:
+    """A track as rip-start sends it: the scan length set, the post-rip length not yet known."""
+    return _view(idx, 0).model_copy(update={"duration_seconds": None, "expected_duration_seconds": scan_seconds})
+
+
+async def test_rip_optical_pairs_by_scan_length_when_the_session_minimum_is_above_the_scans(monkeypatch, tmp_path):
+    """Listed at a 60 s minimum, ripped at a session minimum of 300 s: MakeMKV
+    writes only title 2, and the 90 s and 200 s titles are reported too short
+    instead of taking its file."""
+    from arm_ripper.makemkv_minlength import rip_min_length_seconds
+
+    captured = _capture_makemkvcon(monkeypatch)
+    (tmp_path / "DISC_t00.mkv").write_bytes(b"f" * 7200)
+    tracks = [_scanned_view(1, 90), _scanned_view(2, 7200), _scanned_view(3, 200)]
+
+    results = await _rip_optical_results(tmp_path, tracks, rip_min_length_seconds(300, 60))
+
+    assert "--minlength=300" in captured["argv"]
+    assert results["trk_2"].output_path == tmp_path / "DISC_t00.mkv"
+    assert results["trk_1"].output_path is None
+    assert results["trk_1"].error == "track duration 90s below minlength=300s; makemkvcon skipped it"
+    assert results["trk_3"].output_path is None
+    assert results["trk_3"].error == "track duration 200s below minlength=300s; makemkvcon skipped it"
