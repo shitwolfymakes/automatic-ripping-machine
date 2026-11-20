@@ -29,7 +29,7 @@ from arm_backend.identity.pipeline import resolve_job
 from arm_backend.identity.proposals import record_preset
 from arm_backend.identity.stage_runner import EpisodeStageRunner
 from arm_backend.routers._deps import get_hub, get_stage_runner
-from arm_backend.track_selection import DiscBackupNeedsBluray, select_tracks
+from arm_backend.track_selection import DiscBackupNeedsBluray, select_rip_tracks
 from arm_backend.ws import WSHub
 from arm_common import (
     Config,
@@ -505,7 +505,7 @@ async def _select_or_fail(
     # whatever the scan found, so it never lands in the no-titles handling
     # below; a FOLDER preset on anything but a Blu-ray is refused here.
     try:
-        new_tracks = select_tracks(job.id, scan, preset)
+        new_tracks = select_rip_tracks(job.id, scan, preset)
     except DiscBackupNeedsBluray as exc:
         # Fail the job with the reason on its event: the ripper gives up on a
         # 4xx, and the job would otherwise sit IDENTIFIED with nothing to say why.
@@ -521,12 +521,17 @@ async def _select_or_fail(
         reason = FOLDER_NO_TITLES if virtual.source_kind == DriveSourceKind.FOLDER else ISO_NO_TITLES
         await _fail_titleless_source(session, hub, job, reason)
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=reason)
-    if not new_tracks:
+    if not _kept_tracks(new_tracks):
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="track selection produced zero tracks",
         )
     return new_tracks
+
+
+def _kept_tracks(tracks: Sequence[Track]) -> list[Track]:
+    """The tracks the rip is for: every track the selection did not exclude."""
+    return [t for t in tracks if not t.excluded]
 
 
 async def _begin_rip(session: AsyncSession, job: Job, new_tracks: list[Track]) -> None:
@@ -576,18 +581,19 @@ async def rip_start(
     await _begin_rip(session, job, new_tracks)
 
     refreshed = await _job_tracks(session, job.id)
+    kept = _kept_tracks(refreshed)
     logger.info(
         "rip-start job_id=%s preset=%s tracks=%d",
         job.id,
         preset_id,
-        len(refreshed),
+        len(kept),
     )
 
-    await _emit_rip_started(session, hub, job, preset_id, len(refreshed))
+    await _emit_rip_started(session, hub, job, preset_id, len(kept))
 
-    # C1: without the review hold, identify creates no Track rows, so the
-    # stage it scheduled saw nothing to match. The tracks appear here.
-    if stage_runner is not None and is_tv_candidate(job, new_tracks):
+    # Without the review hold, identify creates no Track rows, so the stage
+    # it scheduled saw nothing to match. The tracks appear here.
+    if stage_runner is not None and is_tv_candidate(job, kept):
         stage_runner.schedule(job.id)
 
     return _rip_start_response(job, preset_id, refreshed, min_length_seconds)
