@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from arm_backend.config import Settings
+from arm_backend.stack_identity import stack_identity_env
 from arm_common import Gpu, TranscodeTask
 from arm_common.encoders import EncoderSpec
 from arm_common.enums import GpuVendor
@@ -23,12 +24,12 @@ def container_identity_env(settings: Settings, gpu_vendor: GpuVendor | None) -> 
     # service, so it drops to the stack's PUID/PGID. ARM_TRANSCODE_PUID/PGID
     # override that, e.g. for a remote media export owned by a NAS user.
     # Nothing set at all leaves the entrypoint's default in place.
-    puid = settings.ARM_TRANSCODE_PUID or settings.PUID
-    pgid = settings.ARM_TRANSCODE_PGID or settings.PGID
-    if puid:
-        env["PUID"] = puid
-    if pgid:
-        env["PGID"] = pgid
+    env.update(
+        stack_identity_env(
+            settings,
+            overrides={"PUID": settings.ARM_TRANSCODE_PUID, "PGID": settings.ARM_TRANSCODE_PGID},
+        )
+    )
     # VAAPI/QSV: the entrypoint self-derives the render gid from the
     # mounted node; an explicit ARM_RENDER_GID is a forced OVERRIDE
     # (passed through as RENDER_GID, which wins in the entrypoint).
