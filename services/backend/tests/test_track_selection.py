@@ -7,11 +7,13 @@ from arm_backend.track_selection import (
     MAIN_FEATURE_MIN_SECONDS,
     select_tracks,
     select_tracks_for_review,
+    select_tracks_on_miss,
 )
 from arm_common import (
     DiscType,
     IdentificationMode,
     MediaType,
+    MissTitlesKept,
     OutputMode,
     RipPreset,
     TrackKind,
@@ -223,3 +225,39 @@ def test_review_folder_preset_persists_the_single_backup():
     scan = ScanResult(disc_type=DiscType.BLURAY, titles=[ScanTitle(index=0, duration_seconds=7200)])
     tracks = select_tracks_for_review("job_01JZXR7K3M5Q8N4VWA00000001", scan, _backup_preset())
     assert [(t.kind, t.excluded) for t in tracks] == [(TrackKind.DISC_BACKUP, False)]
+
+
+# --- select_tracks_on_miss (a disc that missed identification) ---
+
+_MISS_JOB = "job_01JZXR7K3M5Q8N4VWA00000001"
+
+
+def test_miss_all_keeps_every_title():
+    scan = _scan(120, 90 * 60, 30, 60 * 60)
+    tracks = select_tracks_on_miss(_MISS_JOB, scan, _preset(TrackSelection.MAIN_FEATURE), MissTitlesKept.ALL)
+    assert [t.index for t in tracks] == [0, 1, 2, 3]
+    assert all(not t.excluded for t in tracks)
+
+
+def test_miss_preset_keeps_the_presets_titles_and_excludes_the_rest():
+    scan = _scan(120, 90 * 60, 30, 60 * 60)
+    tracks = select_tracks_on_miss(_MISS_JOB, scan, _preset(TrackSelection.MAIN_FEATURE), MissTitlesKept.PRESET)
+    assert [t.index for t in tracks] == [0, 1, 2, 3]
+    assert {t.index for t in tracks if not t.excluded} == {1}
+    assert sum(t.excluded for t in tracks) == 3
+
+
+@pytest.mark.parametrize("titles_kept", list(MissTitlesKept))
+def test_miss_data_copy_preset_is_one_full_track(titles_kept: MissTitlesKept):
+    scan = _scan(120, 90 * 60, 30, 60 * 60)
+    tracks = select_tracks_on_miss(_MISS_JOB, scan, _iso_preset(), titles_kept)
+    assert len(tracks) == 1
+    assert tracks[0].source_ref == "full"
+    assert tracks[0].kind == TrackKind.DATA_DUMP
+
+
+def test_miss_all_on_a_cd_keeps_every_audio_track():
+    scan = ScanResult(disc_type=DiscType.CD, titles=[ScanTitle(index=i, duration_seconds=200) for i in range(3)])
+    tracks = select_tracks_on_miss(_MISS_JOB, scan, _preset(TrackSelection.ALL_TRACKS), MissTitlesKept.ALL)
+    assert [t.kind for t in tracks] == [TrackKind.AUDIO_TRACK] * 3
+    assert all(not t.excluded for t in tracks)
