@@ -7,6 +7,7 @@ from pathlib import Path
 
 from arm_common.schemas import TrackView
 
+from arm_ripper.makemkv_minlength import rip_min_length_seconds
 from arm_ripper.rip.makemkv_process import STOPPED_ERROR
 from arm_ripper.rip.makemkv_rip import (
     OUTPUT_FILE_RE,
@@ -58,6 +59,19 @@ def _eligible_source_indexes(track_by_index: dict[int, TrackView], min_length_se
         for idx, t in track_by_index.items()
         if t.duration_seconds is None or t.duration_seconds >= min_length_seconds
     )
+
+
+def _effective_min_length(session_min_length_seconds: int) -> int:
+    """The rip's minimum length, logging when the session's is raised to the scan's."""
+    effective = rip_min_length_seconds(session_min_length_seconds)
+    if effective != session_min_length_seconds:
+        logger.info(
+            "minlength raised from %ds to MakeMKV's %ds scan minimum: "
+            "the rip may not write a title the scan did not list",
+            session_min_length_seconds,
+            effective,
+        )
+    return effective
 
 
 def _first_eligible_track(track_by_index: dict[int, TrackView], eligible: list[int]) -> TrackView | None:
@@ -301,7 +315,8 @@ class _OpticalRip:
         #   the hasher like a live one.
         # - Otherwise: the track was below `min_length_seconds`, so MakeMKV
         #   never attempted it. FAILED with a clear reason so the operator
-        #   can lower minlength and retry.
+        #   can lower the session minimum and retry; the rip never goes
+        #   below MakeMKV's 120 s scan minimum (`rip_min_length_seconds`).
         for title_idx, track in self._track_by_index.items():
             if title_idx in self._done_emitted:
                 continue
@@ -367,8 +382,10 @@ async def rip_optical(
     """Single-invocation DVD/BD rip with per-title attribution.
 
     The makemkvcon invocation rips every title ≥ minlength to
-    `output_dir`. We map title_index → TrackView via `source_ref` and
-    fan the lifecycle callbacks out as MakeMKV's stream announces each
+    `output_dir`, the minlength never below the scan's
+    (`rip_min_length_seconds`) so every file belongs to a listed title.
+    We map title_index → TrackView via `source_ref` and fan the
+    lifecycle callbacks out as MakeMKV's stream announces each
     title. Tracks whose `source_ref` doesn't parse as an int are
     failed up front — same shape as the per-title implementation.
 
@@ -395,7 +412,8 @@ async def rip_optical(
     if not track_by_index:
         return
 
-    eligible_source_indexes = _eligible_source_indexes(track_by_index, min_length_seconds)
+    effective_min_length = _effective_min_length(min_length_seconds)
+    eligible_source_indexes = _eligible_source_indexes(track_by_index, effective_min_length)
 
     # Titles an earlier pass of this job already settled (a resume after the
     # drive dropped off the bus): makemkvcon rips them again, as `mkv all`
@@ -410,7 +428,7 @@ async def rip_optical(
         on_track_start=on_track_start,
         on_track_done=on_track_done,
         on_track_progress=on_track_progress,
-        min_length_seconds=min_length_seconds,
+        min_length_seconds=effective_min_length,
         stop=stop,
         drive_lost=drive_lost,
     ).run()

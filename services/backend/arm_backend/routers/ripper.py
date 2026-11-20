@@ -30,7 +30,8 @@ from arm_backend.identity.pipeline import resolve_job
 from arm_backend.identity.proposals import record_preset
 from arm_backend.identity.stage_runner import EpisodeStageRunner
 from arm_backend.routers._deps import get_hub, get_stage_runner
-from arm_backend.track_selection import DiscBackupNeedsBluray, select_tracks
+from arm_backend.rip_outcome import kept_tracks, rip_outcome_counts
+from arm_backend.track_selection import DiscBackupNeedsBluray, select_rip_tracks
 from arm_backend.ws import WSHub
 from arm_common import (
     Config,
@@ -501,7 +502,7 @@ async def _select_or_fail(
     # whatever the scan found, so it never lands in the no-titles handling
     # below; a FOLDER preset on anything but a Blu-ray is refused here.
     try:
-        new_tracks = select_tracks(job.id, scan, preset)
+        new_tracks = select_rip_tracks(job.id, scan, preset)
     except DiscBackupNeedsBluray as exc:
         # Fail the job with the reason on its event: the ripper gives up on a
         # 4xx, and the job would otherwise sit IDENTIFIED with nothing to say why.
@@ -517,7 +518,7 @@ async def _select_or_fail(
         reason = FOLDER_NO_TITLES if virtual.source_kind == DriveSourceKind.FOLDER else ISO_NO_TITLES
         await _fail_titleless_source(session, hub, job, reason)
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=reason)
-    if not new_tracks:
+    if not kept_tracks(new_tracks):
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="track selection produced zero tracks",
@@ -560,9 +561,11 @@ async def _announce_rip(
     tracks: Sequence[Track],
 ) -> None:
     """Emit rip.started for a rip this request began and schedule the
-    episode stage when the job may hold episodes."""
-    await _emit_rip_started(session, hub, job, preset_id, len(tracks))
-    if stage_runner is not None and is_tv_candidate(job, tracks):
+    episode stage when the job may hold episodes. Both count only the kept
+    tracks: an excluded title is ripped but is not what the rip is for."""
+    kept = kept_tracks(tracks)
+    await _emit_rip_started(session, hub, job, preset_id, len(kept))
+    if stage_runner is not None and is_tv_candidate(job, kept):
         stage_runner.schedule(job.id)
 
 
@@ -597,7 +600,7 @@ async def rip_start(
         logger.debug(
             "rip-start preset=%s tracks=%d",
             preset_id,
-            len(refreshed),
+            len(kept_tracks(refreshed)),
         )
 
         # Without the review hold, identify creates no Track rows, so the stage
@@ -932,10 +935,7 @@ async def rip_complete(
             )
 
         tracks = (await session.execute(select(Track).where(col(Track.job_id) == job.id))).scalars().all()
-
-        done = sum(1 for t in tracks if t.status == TrackStatus.DONE)
-        failed = sum(1 for t in tracks if t.status == TrackStatus.FAILED)
-        total = len(tracks)
+        done, failed, total = rip_outcome_counts(tracks)
 
         job.status = _finished_status(job, done=done, failed=failed, total=total)
         if job.status == JobStatus.FAILED:

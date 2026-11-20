@@ -1374,7 +1374,7 @@ def test_identify_without_hold_then_rip_start_schedules_episode_stage() -> None:
         assert db.rows.get("tracks", []) == []
         db.rows["jobs"][0].resumed_from_crash = False
         new = [_track("trk_new", status=TrackStatus.QUEUED, job_id=job_id)]
-        with _patch_select_tracks(new):
+        with _patch_rip_selection(new):
             r2 = client.post(f"/api/ripper/jobs/{job_id}/rip-start", headers=_OWNER_HEADERS)
     assert r2.status_code == 200
     assert stage_runner.scheduled == [job_id, job_id]
@@ -1432,7 +1432,7 @@ def test_rip_start_movie_does_not_schedule_episode_stage() -> None:
     app = _make_app(db)
     stage_runner = _StageRunner()
     app.state.episode_stage = stage_runner
-    with TestClient(app) as client, _patch_select_tracks([_track("trk_new", status=TrackStatus.QUEUED)]):
+    with TestClient(app) as client, _patch_rip_selection([_track("trk_new", status=TrackStatus.QUEUED)]):
         r = client.post("/api/ripper/jobs/job_01JZXR7K3M5Q8N4VWA00000001/rip-start", headers=_OWNER_HEADERS)
     assert r.status_code == 200
     assert stage_runner.scheduled == []
@@ -2036,7 +2036,7 @@ def test_rip_start_awaiting_review_no_tracks_selects_and_rips() -> None:
     db.rows["tracks"] = []
     db.rows["rip_presets"] = [_movie_preset()]
     new = [_track("trk_new", status=TrackStatus.QUEUED)]
-    with TestClient(_make_app(db)) as client, _patch_select_tracks(new):
+    with TestClient(_make_app(db)) as client, _patch_rip_selection(new):
         r = client.post("/api/ripper/jobs/job_01JZXR7K3M5Q8N4VWA00000001/rip-start", headers=_OWNER_HEADERS)
     assert r.status_code == 200
     assert [t["id"] for t in r.json()["tracks"]] == ["trk_new"]
@@ -2099,7 +2099,7 @@ def test_rip_start_zero_tracks_422() -> None:
     db.rows["jobs"] = [_job(status=JobStatus.IDENTIFIED, meta={"scan_result": _scan_dict()})]
     db.rows["tracks"] = []
     db.rows["rip_presets"] = [_movie_preset()]
-    with TestClient(_make_app(db)) as client, _patch_select_tracks([]):
+    with TestClient(_make_app(db)) as client, _patch_rip_selection([]):
         r = client.post("/api/ripper/jobs/job_01JZXR7K3M5Q8N4VWA00000001/rip-start", headers=_OWNER_HEADERS)
     assert r.status_code == 422
     assert "zero tracks" in r.json()["detail"]
@@ -2114,7 +2114,7 @@ def test_rip_start_success_creates_tracks_and_emits() -> None:
     hub = _Hub()
     app = _make_app(db, hub=hub)
     new = [_track("trk_new", status=TrackStatus.QUEUED)]
-    with TestClient(app) as client, _patch_select_tracks(new):
+    with TestClient(app) as client, _patch_rip_selection(new):
         r = client.post("/api/ripper/jobs/job_01JZXR7K3M5Q8N4VWA00000001/rip-start", headers=_OWNER_HEADERS)
     assert r.status_code == 200
     assert [t["id"] for t in r.json()["tracks"]] == ["trk_new"]
@@ -2138,7 +2138,7 @@ def test_rip_start_applies_stored_thediscdb_claims_to_new_tracks() -> None:
     db.rows["tracks"] = []
     db.rows["rip_presets"] = [_movie_preset()]
     new = [_track("trk_new", status=TrackStatus.QUEUED, index=1)]
-    with TestClient(_make_app(db)) as client, _patch_select_tracks(new):
+    with TestClient(_make_app(db)) as client, _patch_rip_selection(new):
         r = client.post("/api/ripper/jobs/job_01JZXR7K3M5Q8N4VWA00000001/rip-start", headers=_OWNER_HEADERS)
     assert r.status_code == 200
     out_track = r.json()["tracks"][0]
@@ -2148,6 +2148,138 @@ def test_rip_start_applies_stored_thediscdb_claims_to_new_tracks() -> None:
     assert out_track["identity_provenance"]["role"] == "thediscdb"
     stored = db.rows["jobs"][0].metadata_json["identity_claims"]["sources"]
     assert stored["preset"]["tracks"]["1"] == {"selected": True}
+
+
+# --- rip-start stores every video title (MakeMKV output pairing) --------------
+
+
+def _selection_preset(
+    selection: TrackSelection,
+    *,
+    filters: dict[str, Any] | None = None,
+    preset_id: str = "rpr_builtin_movie_archive",
+    media_type: MediaType = MediaType.MOVIE,
+) -> RipPreset:
+    return RipPreset(
+        id=preset_id,
+        name=preset_id,
+        media_type=media_type,
+        is_builtin=True,
+        track_selection=selection,
+        track_filters_json=filters,
+        identification_mode=IdentificationMode.SKIP,
+        output_mode=OutputMode.TRACKS,
+    )
+
+
+def _titled_scan(durations: dict[int, int], disc_type: str = "dvd") -> dict[str, Any]:
+    return {
+        "disc_type": disc_type,
+        "volume_label": "MY_DISC",
+        "titles": [{"index": i, "duration_seconds": d} for i, d in durations.items()],
+        "fingerprints": [],
+        "raw": {},
+    }
+
+
+class _ServerDefaultsSession(FakeSession):
+    """Fills the Track columns Postgres defaults (status, attempts) as rows are added."""
+
+    def add(self, obj: Any) -> None:
+        if isinstance(obj, Track):
+            obj.status = obj.status or TrackStatus.QUEUED
+            obj.attempts = obj.attempts or 0
+        super().add(obj)
+
+
+def _rip_start_with(
+    preset: RipPreset, scan: dict[str, Any], *, disc_type: DiscType = DiscType.DVD
+) -> tuple[Any, FakeSession, _Hub]:
+    db = _ServerDefaultsSession()
+    db.rows["drives"] = [_drive()]
+    db.rows["jobs"] = [_job(status=JobStatus.IDENTIFIED, disc_type=disc_type, meta={"scan_result": scan})]
+    db.rows["tracks"] = []
+    db.rows["rip_presets"] = [preset]
+    hub = _Hub()
+    with TestClient(_make_app(db, hub=hub)) as client:
+        r = client.post("/api/ripper/jobs/job_01JZXR7K3M5Q8N4VWA00000001/rip-start", headers=_OWNER_HEADERS)
+    return r, db, hub
+
+
+def _excluded_by_index(tracks: list[Track]) -> dict[int, bool]:
+    return {t.index: t.excluded for t in tracks}
+
+
+def _response_excluded_by_index(r: Any) -> dict[int, bool]:
+    return {t["index"]: t["excluded"] for t in r.json()["tracks"]}
+
+
+def _rip_started_count(hub: _Hub) -> int:
+    return next(e["payload"]["track_count"] for e in hub.events if e["event_type"] == "rip.started")
+
+
+def test_rip_start_main_feature_stores_every_dvd_title_with_the_rest_excluded(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    preset = _selection_preset(TrackSelection.MAIN_FEATURE)
+    with caplog.at_level(logging.DEBUG, logger=ripper_router.logger.name):
+        r, db, hub = _rip_start_with(preset, _titled_scan({1: 600, 2: 300, 3: 7200}))
+    assert r.status_code == 200, r.text
+    assert _excluded_by_index(db.rows["tracks"]) == {1: True, 2: True, 3: False}
+    assert _response_excluded_by_index(r) == {1: True, 2: True, 3: False}
+    assert _rip_started_count(hub) == 1
+    assert any("tracks=1" in rec.getMessage() for rec in caplog.records if "rip-start" in rec.getMessage())
+
+
+def test_rip_start_custom_preset_keeps_the_titles_around_a_dropped_long_one() -> None:
+    preset = _selection_preset(TrackSelection.CUSTOM, filters={"title_indices_exclude": [2]})
+    r, db, hub = _rip_start_with(preset, _titled_scan({1: 3000, 2: 4000, 3: 5000}))
+    assert r.status_code == 200, r.text
+    assert _excluded_by_index(db.rows["tracks"]) == {1: False, 2: True, 3: False}
+    assert len(r.json()["tracks"]) == 3
+    assert _rip_started_count(hub) == 2
+
+
+def test_rip_start_video_preset_keeping_nothing_is_still_422() -> None:
+    preset = _selection_preset(TrackSelection.CUSTOM, filters={"title_indices": [99]})
+    r, db, _hub = _rip_start_with(preset, _titled_scan({1: 3000, 2: 4000}))
+    assert r.status_code == 422
+    assert r.json()["detail"] == "track selection produced zero tracks"
+    assert db.rows["tracks"] == []
+
+
+def test_rip_start_cd_custom_selection_stores_only_the_selected_tracks() -> None:
+    preset = _selection_preset(
+        TrackSelection.CUSTOM,
+        filters={"title_indices": [1, 3]},
+        preset_id="rpr_builtin_music_standard",
+        media_type=MediaType.MUSIC,
+    )
+    r, db, hub = _rip_start_with(preset, _titled_scan({1: 200, 2: 210, 3: 220}, "cd"), disc_type=DiscType.CD)
+    assert r.status_code == 200, r.text
+    assert _excluded_by_index(db.rows["tracks"]) == {1: False, 3: False}
+    assert _rip_started_count(hub) == 2
+
+
+def test_rip_start_checks_only_the_kept_tracks_for_a_tv_candidate(monkeypatch: pytest.MonkeyPatch) -> None:
+    seen: list[list[int]] = []
+
+    def _record(_job: Any, tracks: Any) -> bool:
+        seen.append(sorted(t.index for t in tracks))
+        return False
+
+    monkeypatch.setattr(ripper_router, "is_tv_candidate", _record)
+    db = _ServerDefaultsSession()
+    db.rows["drives"] = [_drive()]
+    db.rows["jobs"] = [_job(status=JobStatus.IDENTIFIED, meta={"scan_result": _titled_scan({1: 600, 2: 300, 3: 7200})})]
+    db.rows["tracks"] = []
+    db.rows["rip_presets"] = [_selection_preset(TrackSelection.MAIN_FEATURE)]
+    app = _make_app(db)
+    app.state.episode_stage = _StageRunner()
+    with TestClient(app) as client:
+        r = client.post("/api/ripper/jobs/job_01JZXR7K3M5Q8N4VWA00000001/rip-start", headers=_OWNER_HEADERS)
+    assert r.status_code == 200, r.text
+    assert seen == [[3]]
 
 
 # --- /resume (no-default-preset branch; happy path is in test_ripper_resume) --
@@ -2427,22 +2559,37 @@ def test_rip_complete_zero_tracks_failed(monkeypatch: pytest.MonkeyPatch) -> Non
     assert r.json()["status"] == "failed"
 
 
+def test_rip_complete_ignores_an_excluded_track_in_the_outcome_and_totals(monkeypatch: pytest.MonkeyPatch) -> None:
+    db = FakeSession()
+    db.rows["jobs"] = [_job(status=JobStatus.RIPPING)]
+    db.rows["drives"] = [_drive()]
+    dropped = _track("t1", status=TrackStatus.FAILED, index=1)
+    dropped.excluded = True
+    db.rows["tracks"] = [dropped, _track("t3", status=TrackStatus.DONE, index=3)]
+    hub = _Hub()
+    r = _rip_complete(db, hub, monkeypatch)
+    assert r.status_code == 200
+    assert r.json()["status"] == "ripped"
+    payload = next(e["payload"] for e in hub.events if e["event_type"] == "rip.completed")
+    assert (payload["tracks_done"], payload["tracks_failed"], payload["tracks_total"]) == (1, 0, 1)
+
+
 # --- helpers -----------------------------------------------------------------
 
 
-class _patch_select_tracks:
-    """Context manager swapping ripper_router.select_tracks for a fixed list."""
+class _patch_rip_selection:
+    """Context manager swapping ripper_router.select_rip_tracks for a fixed list."""
 
     def __init__(self, tracks: list[Track]) -> None:
         self._tracks = tracks
         self._orig: Any = None
 
     def __enter__(self) -> None:
-        self._orig = ripper_router.select_tracks
-        ripper_router.select_tracks = lambda *_a, **_k: self._tracks  # type: ignore[assignment]
+        self._orig = ripper_router.select_rip_tracks
+        ripper_router.select_rip_tracks = lambda *_a, **_k: self._tracks  # type: ignore[assignment]
 
     def __exit__(self, *_exc: Any) -> None:
-        ripper_router.select_tracks = self._orig  # type: ignore[assignment]
+        ripper_router.select_rip_tracks = self._orig  # type: ignore[assignment]
 
 
 # --- dedupe / reuse (identify wires find_reusable_job_for_disc) ------
@@ -2749,7 +2896,7 @@ def test_rip_start_uses_pending_session_rip_preset() -> None:
     db.rows["sessions"] = [_session_row()]
     db.rows["rip_presets"] = [_movie_preset(), _movie_preset("rpr_session")]
     new = [_track("trk_new", status=TrackStatus.QUEUED)]
-    with TestClient(_make_app(db)) as client, _patch_select_tracks(new):
+    with TestClient(_make_app(db)) as client, _patch_rip_selection(new):
         r = client.post("/api/ripper/jobs/job_01JZXR7K3M5Q8N4VWA00000001/rip-start", headers=_OWNER_HEADERS)
     assert r.status_code == 200, r.text
     assert r.json()["rip_preset_id"] == "rpr_session"
@@ -2784,7 +2931,7 @@ def test_rip_start_resolves_routed_session_exactly_once() -> None:
 
     rip_preset_resolution.resolve_routed_session_id = _counting  # type: ignore[assignment]
     try:
-        with TestClient(_make_app(db)) as client, _patch_select_tracks(new):
+        with TestClient(_make_app(db)) as client, _patch_rip_selection(new):
             r = client.post("/api/ripper/jobs/job_01JZXR7K3M5Q8N4VWA00000001/rip-start", headers=_OWNER_HEADERS)
     finally:
         rip_preset_resolution.resolve_routed_session_id = orig  # type: ignore[assignment]
@@ -2807,7 +2954,7 @@ def test_rip_start_uses_drive_default_session_preset_without_auto_flag() -> None
     db.rows["sessions"] = [_session_row()]
     db.rows["rip_presets"] = [_movie_preset(), _movie_preset("rpr_session")]
     new = [_track("trk_new", status=TrackStatus.QUEUED)]
-    with TestClient(_make_app(db)) as client, _patch_select_tracks(new):
+    with TestClient(_make_app(db)) as client, _patch_rip_selection(new):
         r = client.post("/api/ripper/jobs/job_01JZXR7K3M5Q8N4VWA00000001/rip-start", headers=_OWNER_HEADERS)
     assert r.status_code == 200, r.text
     assert r.json()["rip_preset_id"] == "rpr_session"
@@ -2826,7 +2973,7 @@ def test_rip_start_falls_back_when_routed_session_row_missing() -> None:
     db.rows["sessions"] = []
     db.rows["rip_presets"] = [_movie_preset()]
     new = [_track("trk_new", status=TrackStatus.QUEUED)]
-    with TestClient(_make_app(db)) as client, _patch_select_tracks(new):
+    with TestClient(_make_app(db)) as client, _patch_rip_selection(new):
         r = client.post("/api/ripper/jobs/job_01JZXR7K3M5Q8N4VWA00000001/rip-start", headers=_OWNER_HEADERS)
     assert r.status_code == 200, r.text
     assert r.json()["rip_preset_id"] == "rpr_builtin_movie_archive"
@@ -2907,10 +3054,14 @@ def test_rip_complete_partial_unidentified_video_rip_runs_after_rip(
     db = FakeSession()
     db.rows["jobs"] = [_job(status=JobStatus.RIPPING, meta={"flags": {"unidentified": True}})]
     db.rows["drives"] = [_drive()]
-    failed_track = _track("t2", status=TrackStatus.FAILED, index=2)
-    failed_track.excluded = True
-    db.rows["tracks"] = [_track("t1", status=TrackStatus.DONE, index=1), failed_track]
+    # Only a kept failure makes the rip partial; the template keys on the
+    # track so the two kept tracks resolve distinct output paths.
+    db.rows["tracks"] = [
+        _track("t1", status=TrackStatus.DONE, index=1),
+        _track("t2", status=TrackStatus.FAILED, index=2),
+    ]
     _seed_parked_session(db)
+    db.rows["sessions"][0].output_path_template = "{title} ({year})/{title} - {track} - {transcode_slug}.{ext}"
     r = _rip_complete(db, _Hub(), monkeypatch)
     assert r.status_code == 200, r.text
     assert r.json()["status"] == "ripped_partial"
@@ -2977,15 +3128,9 @@ def test_rip_complete_partial_unidentified_cd_does_not_run_after_rip(
     db = FakeSession()
     db.rows["jobs"] = [_job(status=JobStatus.RIPPING, disc_type=DiscType.CD, meta={"unidentified": True})]
     db.rows["drives"] = [_drive()]
-    failed_track = _track("t2", status=TrackStatus.FAILED, index=2)
-    # Excluded from transcode-output resolution (compute_outputs skips
-    # excluded tracks) so it can't collide on output_path with t1's -- the
-    # movie template doesn't key on track index, only the failed COUNT
-    # matters for RIPPED_PARTIAL here, not which tracks fan out.
-    failed_track.excluded = True
     db.rows["tracks"] = [
         _track("t1", status=TrackStatus.DONE, index=1),
-        failed_track,
+        _track("t2", status=TrackStatus.FAILED, index=2),
     ]
     _seed_parked_session(db)
     hub = _Hub()
@@ -4293,7 +4438,7 @@ def test_rip_start_logs_in_the_jobs_context(job_log: LineCapture) -> None:
     db.rows["rip_presets"] = [_movie_preset()]
     hub = _LoggingHub()
     with TestClient(_make_app(db, hub=hub)) as client:
-        with _patch_select_tracks([_track("trk_new", status=TrackStatus.QUEUED)]):
+        with _patch_rip_selection([_track("trk_new", status=TrackStatus.QUEUED)]):
             r = client.post(f"/api/ripper/jobs/{_JOB_ID}/rip-start", headers=_OWNER_HEADERS)
     assert r.status_code == 200
     assert any(e["event_type"] == "rip.started" for e in hub.events)
@@ -4382,7 +4527,7 @@ def test_rip_start_leaves_the_info_line_to_the_rippers_rip_started(job_log: Line
     db.rows["tracks"] = []
     db.rows["rip_presets"] = [_movie_preset()]
     with TestClient(_make_app(db, hub=_LoggingHub())) as client:
-        with _patch_select_tracks([_track("trk_new", status=TrackStatus.QUEUED)]):
+        with _patch_rip_selection([_track("trk_new", status=TrackStatus.QUEUED)]):
             r = client.post(f"/api/ripper/jobs/{_JOB_ID}/rip-start", headers=_OWNER_HEADERS)
     assert r.status_code == 200
     assert not [
