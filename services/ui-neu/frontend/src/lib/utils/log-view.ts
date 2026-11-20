@@ -1,6 +1,6 @@
 // Pure helpers for the LogView log terminal.
 import type { LogEntry } from '$lib/api/logs';
-import { logService, serviceLabel, type LogService } from '$lib/utils/log-service';
+import { entryGroup, serviceLabel, type LogService } from '$lib/utils/log-service';
 
 /** A level filter: one level and every higher one, or every line. */
 export type LogLevelFilter = 'all' | 'critical' | 'error' | 'warning' | 'info' | 'debug';
@@ -43,7 +43,7 @@ function matchesSearch(entry: LogEntry, query: string, matchCase: boolean): bool
 /** The entries that pass the service, level and text filters, in order. */
 export function filterEntries(entries: LogEntry[], filter: LogFilter): LogEntry[] {
 	return entries.filter((e) => {
-		if (filter.service !== 'all' && logService(e.service) !== filter.service) return false;
+		if (filter.service !== 'all' && entryGroup(e) !== filter.service) return false;
 		if (!passesLevel(e, filter.level)) return false;
 		if (!matchesSearch(e, filter.query, filter.matchCase)) return false;
 		return true;
@@ -138,5 +138,5 @@ export function entryTimeLabel(entry: LogEntry): string {
  * entry.
  */
 export function formatCopyText(entries: LogEntry[]): string {
-	return entries.map((e) => `${entryTimeLabel(e)} [${serviceLabel(logService(e.service))}] ${e.msg}`).join('\n');
+	return entries.map((e) => `${entryTimeLabel(e)} [${serviceLabel(entryGroup(e))}] ${e.msg}`).join('\n');
 }

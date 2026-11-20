@@ -312,3 +312,22 @@ describe('formatCopyText', () => {
 		expect(formatCopyText([])).toBe('');
 	});
 });
+
+describe('filtering by stage', () => {
+	it('shows the backend-written transcode milestones under Transcode and leaves them out of Backend', () => {
+		const lines = [
+			entry({ service: 'arm-backend', event: 'identify.resolved', msg: 'identified' }),
+			entry({ service: 'arm-backend', event: 'transcode.started', msg: 'transcoding track 1/12' }),
+			entry({ service: 'arm-backend', event: 'track.ripped', msg: 'track 1/12 ripped' })
+		];
+		const msgs = (service: LogFilter['service']) => filterEntries(lines, filter({ service })).map((e) => e.msg);
+		expect(msgs('transcode')).toEqual(['transcoding track 1/12']);
+		expect(msgs('ripper')).toEqual(['track 1/12 ripped']);
+		expect(msgs('backend')).toEqual(['identified']);
+	});
+
+	it('labels a copied milestone with its stage', () => {
+		const text = formatCopyText([entry({ service: 'arm-backend', event: 'transcode.completed', msg: 'done' })]);
+		expect(text).toContain('[Transcode] done');
+	});
+});
