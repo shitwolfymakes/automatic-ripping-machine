@@ -57,18 +57,33 @@ def _machine(settings: Settings) -> str:
     return f"on transcode host {host}" if host else "on this machine"
 
 
+_RECHECK = "Then re-probe the GPU in Settings > Transcoding, or restart ARM."
+
+
+def _fix(failure: AccessFailure, verb: str) -> str:
+    """The two fixes; a root-owned folder gets only the second, since matching
+    its owner would run the transcoder as root."""
+    owner_uid, owner_gid = failure.owner.split(":")
+    if owner_uid == "0":
+        return f"Make the folder {verb} by {failure.run_as}."
+    return (
+        f"Set ARM_TRANSCODE_PUID={owner_uid} and ARM_TRANSCODE_PGID={owner_gid} in .env, "
+        f"or make the folder {verb} by {failure.run_as}."
+    )
+
+
 def access_failure_message(failure: AccessFailure, settings: Settings) -> str:
     """What is wrong, where, and how to fix it."""
     folder = f"{_FOLDER_NAMES.get(failure.container_dir, 'folder')} {_host_path(failure.container_dir, settings)}"
     where = f"{folder} {_machine(settings)}"
-    owner_uid, owner_gid = failure.owner.split(":")
-    fix = f"Set ARM_TRANSCODE_PUID={owner_uid} and ARM_TRANSCODE_PGID={owner_gid} in .env, or make the folder"
+    verb = "writable" if failure.mode == "write" else "readable"
+    fix = f"{_fix(failure, verb)} {_RECHECK}"
     if failure.mode == "write":
         return (
             f"{ACCESS_ERROR_PREFIX}the transcoder runs as user {failure.run_as}, but its {where} is owned by "
-            f"{failure.owner}. {fix} writable by {failure.run_as}."
+            f"{failure.owner}. {fix}"
         )
     return (
         f"{ACCESS_ERROR_PREFIX}the transcoder runs as user {failure.run_as} and cannot read its {where}, "
-        f"which is owned by {failure.owner}. {fix} readable by {failure.run_as}."
+        f"which is owned by {failure.owner}. {fix}"
     )

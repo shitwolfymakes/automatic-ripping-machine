@@ -50,7 +50,7 @@ def test_local_write_message() -> None:
     assert msg == (
         "Transcodes will fail: the transcoder runs as user 1000:1000, but its logs folder "
         "/home/nue_arm/arm/logs on this machine is owned by 1001:1001. Set ARM_TRANSCODE_PUID=1001 "
-        "and ARM_TRANSCODE_PGID=1001 in .env, or make the folder writable by 1000:1000."
+        "and ARM_TRANSCODE_PGID=1001 in .env, or make the folder writable by 1000:1000. Then re-probe the GPU in Settings > Transcoding, or restart ARM."
     )
     assert msg.startswith(ACCESS_ERROR_PREFIX)
 
@@ -69,7 +69,7 @@ def test_read_message_for_the_raw_folder() -> None:
     assert msg == (
         "Transcodes will fail: the transcoder runs as user 1000:1000 and cannot read its raw rips folder "
         "/home/nue_arm/arm/raw on this machine, which is owned by 1001:1001. Set ARM_TRANSCODE_PUID=1001 "
-        "and ARM_TRANSCODE_PGID=1001 in .env, or make the folder readable by 1000:1000."
+        "and ARM_TRANSCODE_PGID=1001 in .env, or make the folder readable by 1000:1000. Then re-probe the GPU in Settings > Transcoding, or restart ARM."
     )
 
 
@@ -89,3 +89,14 @@ def test_an_unmapped_folder_falls_back_to_its_container_path() -> None:
     failure = AccessFailure("/data", "write", "1000:1000", "1001:1001")
     msg = access_failure_message(failure, _settings())
     assert "its folder /data on this machine" in msg
+
+
+def test_a_root_owned_folder_never_suggests_running_the_transcoder_as_root() -> None:
+    failure = AccessFailure("/media", "write", "1000:1000", "0:0")
+    msg = access_failure_message(failure, _settings(ARM_HOST_MEDIA_PATH="/mnt/nas/media"))
+    assert "ARM_TRANSCODE_PUID" not in msg
+    assert msg == (
+        "Transcodes will fail: the transcoder runs as user 1000:1000, but its media folder /mnt/nas/media on this "
+        "machine is owned by 0:0. Make the folder writable by 1000:1000. Then re-probe the GPU in Settings > "
+        "Transcoding, or restart ARM."
+    )

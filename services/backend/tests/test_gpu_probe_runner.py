@@ -304,7 +304,7 @@ async def test_a_folder_the_transcoder_cannot_write_is_reported_plainly_and_keep
     assert row.probe_error == (
         "Transcodes will fail: the transcoder runs as user 1000:1000, but its logs folder /srv/arm/logs on this "
         "machine is owned by 1001:1001. Set ARM_TRANSCODE_PUID=1001 and ARM_TRANSCODE_PGID=1001 in .env, or make "
-        "the folder writable by 1000:1000."
+        "the folder writable by 1000:1000. Then re-probe the GPU in Settings > Transcoding, or restart ARM."
     )
     assert hub.events[0][1] == "gpu.probed"
 
@@ -699,6 +699,21 @@ async def test_boot_pass_probes_enabled_unprobed_or_unverified_rows_sequentially
     assert by_id["gpu_c"].probed_at is None
     assert by_id["gpu_d"].encoder_kinds == ["h265"]  # a failed row is retried at boot
     assert by_id["gpu_e"].probed_at == probed
+
+
+async def test_boot_pass_rechecks_a_verified_gpu_that_reported_a_folder_problem() -> None:
+    probed = datetime(2026, 9, 1, tzinfo=UTC)
+    rows = [
+        _gpu("gpu_a", probed_at=probed, encoder_kinds=["h264"], probe_error="Transcodes will fail: old folder problem"),
+        _gpu("gpu_b", GpuVendor.VAAPI, device_path="/dev/dri/renderD129", probed_at=probed, encoder_kinds=["h264"]),
+    ]
+    runner, db, docker, *_ = _build(rows)
+    assert docker is not None
+
+    await runner.probe_unprobed()
+
+    assert [kw["environment"]["ARM_GPU_DEVICE"] for kw in docker.containers.calls] == ["/dev/dri/renderD128"]
+    assert db.rows["gpus"][0].probe_error is None  # fixed folder: the stale advice is gone after a restart
 
 
 async def test_boot_pass_reserves_every_target_before_the_first_probe() -> None:

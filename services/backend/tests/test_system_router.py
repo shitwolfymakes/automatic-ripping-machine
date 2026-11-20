@@ -610,7 +610,7 @@ def test_diagnostics_transcoder_warning_when_last_spawn_failed(signing_key: byte
 _ACCESS = (
     "Transcodes will fail: the transcoder runs as user 1000:1000, but its logs folder /srv/arm/logs on this "
     "machine is owned by 1001:1001. Set ARM_TRANSCODE_PUID=1001 and ARM_TRANSCODE_PGID=1001 in .env, or make "
-    "the folder writable by 1000:1000."
+    "the folder writable by 1000:1000. Then re-probe the GPU in Settings > Transcoding, or restart ARM."
 )
 
 
