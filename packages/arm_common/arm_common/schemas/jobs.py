@@ -414,11 +414,13 @@ class RipStartResponse(BaseModel):
     rip_preset_id: str
     tracks: list[TrackView]
     # Per-rip `--minlength` override resolved from the Session's
-    # `overrides_json["min_length_seconds"]`. None means "use the
-    # ripper's host-side baseline" (`ARM_MIN_LENGTH_SECONDS`, default
-    # 600). Surfaced here so the ripper doesn't have to read Session
-    # state itself.
+    # `overrides_json["min_length_seconds"]`. None means no override.
+    # Surfaced here so the ripper doesn't have to read Session state itself.
     min_length_seconds: int | None = None
+    # The minimum title length the disc's scan listed titles with (the
+    # configured setting for an older scan). The rip never goes below it, so
+    # it writes no title the scan did not list. None from an older backend.
+    min_title_length_seconds: int | None = None
 
 
 # The one definition of apply/fan-out skip reasons — the backend engine

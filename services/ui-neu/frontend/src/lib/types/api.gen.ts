@@ -4208,6 +4208,10 @@ export type RipStartResponse = {
      * Min Length Seconds
      */
     min_length_seconds?: number | null;
+    /**
+     * Min Title Length Seconds
+     */
+    min_title_length_seconds?: number | null;
 };
 
 /**
@@ -4294,6 +4298,10 @@ export type ScanResult = {
      */
     fingerprints?: Array<DiscFingerprintInput>;
     bd_meta?: BdDiscMeta | null;
+    /**
+     * Min Title Length Seconds
+     */
+    min_title_length_seconds?: number | null;
     /**
      * Raw
      */

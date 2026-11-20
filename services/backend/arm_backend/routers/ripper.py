@@ -29,7 +29,7 @@ from arm_backend.identity.pipeline import resolve_job
 from arm_backend.identity.proposals import record_preset
 from arm_backend.identity.stage_runner import EpisodeStageRunner
 from arm_backend.routers._deps import get_hub, get_stage_runner
-from arm_backend.min_title_length import min_title_length_seconds
+from arm_backend.min_title_length import env_min_title_length_seconds, min_title_length_seconds
 from arm_backend.rip_outcome import kept_tracks, rip_outcome_counts
 from arm_backend.track_selection import DiscBackupNeedsBluray, select_rip_tracks
 from arm_backend.ws import WSHub
@@ -444,14 +444,25 @@ async def _job_tracks(session: AsyncSession, job_id: str) -> Sequence[Track]:
     )
 
 
-def _rip_start_response(
-    job: Job, preset_id: str, tracks: Sequence[Track], min_length_seconds: int | None
+async def _title_length_floor(session: AsyncSession, job: Job) -> int:
+    """The minimum title length the job's scan listed titles with, or the configured one for a scan that did not
+    record it."""
+    recorded = ((job.metadata_json or {}).get("scan_result") or {}).get("min_title_length_seconds")
+    if recorded is not None:
+        return int(recorded)
+    cfg = (await session.execute(select(Config).where(col(Config.id) == CONFIG_SINGLETON_ID))).scalar_one_or_none()
+    return env_min_title_length_seconds() if cfg is None else min_title_length_seconds(cfg)
+
+
+async def _rip_start_response(
+    session: AsyncSession, job: Job, preset_id: str, tracks: Sequence[Track], min_length_seconds: int | None
 ) -> RipStartResponse:
     return RipStartResponse(
         job_id=job.id,
         rip_preset_id=preset_id,
         tracks=[TrackView.model_validate(t) for t in tracks],
         min_length_seconds=min_length_seconds,
+        min_title_length_seconds=await _title_length_floor(session, job),
     )
 
 
@@ -570,7 +581,7 @@ async def rip_start(
     existing = await _job_tracks(session, job.id)
     if existing:
         await _ensure_ripping(session, job)
-        return _rip_start_response(job, preset_id, existing, min_length_seconds)
+        return await _rip_start_response(session, job, preset_id, existing, min_length_seconds)
 
     _require_startable(job)
     scan = _scan_of(job)
@@ -594,7 +605,7 @@ async def rip_start(
     if stage_runner is not None and is_tv_candidate(job, kept):
         stage_runner.schedule(job.id)
 
-    return _rip_start_response(job, preset_id, refreshed, min_length_seconds)
+    return await _rip_start_response(session, job, preset_id, refreshed, min_length_seconds)
 
 
 @router.post("/jobs/{job_id}/resume", response_model=RipStartResponse)
@@ -637,7 +648,7 @@ async def resume(
     )
     await session.commit()
 
-    return _rip_start_response(job, preset_id, refreshed, min_length_seconds)
+    return await _rip_start_response(session, job, preset_id, refreshed, min_length_seconds)
 
 
 @router.get(

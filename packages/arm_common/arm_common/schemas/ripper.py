@@ -107,6 +107,10 @@ class ScanResult(BaseModel):
     fingerprints: list[DiscFingerprintInput] = Field(default_factory=list)
     # Studio disc title + set position from the Blu-ray BDMT file, when present.
     bd_meta: BdDiscMeta | None = None
+    # The minimum title length (seconds) MakeMKV listed titles with; the rip
+    # never goes below it. None for a scan that did not use MakeMKV, or from
+    # a ripper that predates the setting.
+    min_title_length_seconds: int | None = None
     raw: dict[str, Any] = Field(default_factory=dict)
 
 

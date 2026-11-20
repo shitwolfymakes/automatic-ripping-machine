@@ -3860,3 +3860,51 @@ def test_identify_single_fuzzy_cd_hit_is_applied_with_music_auto_apply_on() -> N
     out = _identify_with(db, result, _scan_dict("cd")).json()
     assert out["status"] == "identified" and out["title"] == "Album"
     assert out["metadata_json"].get("identity_suggestion") is None
+
+
+# --- rip-start carries the scan's minimum title length (#647) ---------------
+
+
+def _floor_of(db: FakeSession, endpoint: str = "rip-start") -> Any:
+    with TestClient(_make_app(db)) as client:
+        r = client.post(f"/api/ripper/jobs/job_01JZXR7K3M5Q8N4VWA00000001/{endpoint}", headers=_OWNER_HEADERS)
+    assert r.status_code == 200, r.text
+    return r.json()["min_title_length_seconds"]
+
+
+def test_rip_start_returns_the_minimum_the_scan_listed_titles_with() -> None:
+    db = FakeSession()
+    db.rows["drives"] = [_drive()]
+    db.rows["config"] = [_config()]
+    db.rows["config"][0].min_title_length_seconds = 300
+    scan = {**_scan_dict(), "min_title_length_seconds": 60}
+    db.rows["jobs"] = [_job(status=JobStatus.RIPPING, meta={"scan_result": scan})]
+    db.rows["tracks"] = [_track("trk_1", status=TrackStatus.QUEUED)]
+    assert _floor_of(db) == 60
+
+
+def test_rip_start_falls_back_to_the_configured_minimum_for_an_older_scan() -> None:
+    db = FakeSession()
+    db.rows["drives"] = [_drive()]
+    db.rows["config"] = [_config()]
+    db.rows["config"][0].min_title_length_seconds = 90
+    db.rows["jobs"] = [_job(status=JobStatus.RIPPING, meta={"scan_result": _scan_dict()})]
+    db.rows["tracks"] = [_track("trk_1", status=TrackStatus.QUEUED)]
+    assert _floor_of(db) == 90
+
+
+def test_rip_start_without_a_config_row_uses_the_env_seed() -> None:
+    db = FakeSession()
+    db.rows["drives"] = [_drive()]
+    db.rows["jobs"] = [_job(status=JobStatus.RIPPING)]
+    db.rows["tracks"] = [_track("trk_1", status=TrackStatus.QUEUED)]
+    assert _floor_of(db) == 120
+
+
+def test_resume_returns_the_minimum_the_scan_listed_titles_with() -> None:
+    db = FakeSession()
+    db.rows["drives"] = [_drive()]
+    scan = {**_scan_dict(), "min_title_length_seconds": 45}
+    db.rows["jobs"] = [_job(status=JobStatus.RIPPING, meta={"scan_result": scan})]
+    db.rows["tracks"] = [_track("trk_1", status=TrackStatus.QUEUED)]
+    assert _floor_of(db, "resume") == 45

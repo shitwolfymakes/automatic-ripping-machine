@@ -15560,6 +15560,17 @@
               }
             ],
             "title": "Min Length Seconds"
+          },
+          "min_title_length_seconds": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Min Title Length Seconds"
           }
         },
         "type": "object",
@@ -15699,6 +15710,17 @@
                 "type": "null"
               }
             ]
+          },
+          "min_title_length_seconds": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Min Title Length Seconds"
           },
           "raw": {
             "additionalProperties": true,
