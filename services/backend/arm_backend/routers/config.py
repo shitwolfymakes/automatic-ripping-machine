@@ -44,7 +44,7 @@ from arm_backend.key_checks import check_online_key, makemkv_key_status
 from arm_backend.constants import CONFIG_SINGLETON_ID
 from arm_common import Config, Job, JobStatus, User
 from arm_common.config_metadata import CONFIG_FIELD_META
-from arm_common.enums import PreviouslyRippedAction
+from arm_common.enums import MissMediaType, MissTitlesKept, PreviouslyRippedAction
 from arm_common.schemas import (
     ConfigUpdateRequest,
     ConfigView,
@@ -94,6 +94,8 @@ def _to_view(cfg: Config) -> ConfigView:
         hold_for_review=bool(cfg.hold_for_review),
         manual_wait_seconds=int(cfg.manual_wait_seconds) if cfg.manual_wait_seconds is not None else 60,
         on_previously_ripped=cfg.on_previously_ripped or PreviouslyRippedAction.HOLD,
+        miss_media_type=cfg.miss_media_type or MissMediaType.MOVIE,
+        miss_titles_kept=cfg.miss_titles_kept or MissTitlesKept.ALL,
         drive_scan_interval_seconds=int(cfg.drive_scan_interval_seconds or 30),
         drive_detected_prune_days=int(cfg.drive_detected_prune_days or 7),
         # NULL falls back to the env value, exactly as the dispatcher does.

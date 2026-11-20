@@ -241,6 +241,21 @@ class ContainerFormat(StrEnum):
     NONE = "none"
 
 
+class MissMediaType(StrEnum):
+    """The media type a DVD or Blu-ray that misses identification starts with."""
+
+    MOVIE = "movie"
+    TV = "tv"
+
+
+class MissTitlesKept(StrEnum):
+    """Which titles an unidentified disc keeps: every title, or what the routed
+    session's rip preset would keep."""
+
+    ALL = "all"
+    PRESET = "preset"
+
+
 class PreviouslyRippedAction(StrEnum):
     """What identify does with a disc whose fingerprint matches an earlier rip
     (a job in POST_RIP_JOB_STATUSES, on any drive)."""

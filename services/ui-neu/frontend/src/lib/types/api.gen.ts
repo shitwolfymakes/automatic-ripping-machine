@@ -678,6 +678,8 @@ export type ConfigUpdateRequest = {
      */
     manual_wait_seconds?: number | null;
     on_previously_ripped?: PreviouslyRippedAction | null;
+    miss_media_type?: MissMediaType | null;
+    miss_titles_kept?: MissTitlesKept | null;
     /**
      * Notifications Enabled
      */
@@ -823,6 +825,8 @@ export type ConfigView = {
      */
     manual_wait_seconds: number;
     on_previously_ripped: PreviouslyRippedAction;
+    miss_media_type: MissMediaType;
+    miss_titles_kept: MissTitlesKept;
     default_retention_policy: RetentionPolicy;
     /**
      * Notification Apprise Urls
@@ -3412,6 +3416,21 @@ export type MetadataSearchResponse = {
      */
     detail?: string | null;
 };
+
+/**
+ * MissMediaType
+ *
+ * The media type a DVD or Blu-ray that misses identification starts with.
+ */
+export type MissMediaType = 'movie' | 'tv';
+
+/**
+ * MissTitlesKept
+ *
+ * Which titles an unidentified disc keeps: every title, or what the routed
+ * session's rip preset would keep.
+ */
+export type MissTitlesKept = 'all' | 'preset';
 
 /**
  * MkdirRequest

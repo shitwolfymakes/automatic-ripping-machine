@@ -443,25 +443,35 @@ describe('Defaults view auto-apply', () => {
 				type: 'bool',
 				editable: true,
 				enum_values: null
+			},
+			{
+				key: 'miss_media_type',
+				group: 'Defaults',
+				tier: 'operator',
+				label: 'Treat unidentified video discs as',
+				help: 'Starts as this type.',
+				type: 'enum',
+				editable: true,
+				enum_values: ['movie', 'tv']
 			}
 		]
 	} as SettingsGroup;
 	const LABEL = 'Apply these defaults automatically after each rip';
 
-	async function openDefaults(ontoggle = vi.fn()) {
+	async function openDefaults(onsave = vi.fn()) {
 		renderComponent(SessionsArea, {
-			props: { defaultsGroup: DEFAULTS, config: { auto_transcode_on_idle: false }, ontoggle }
+			props: { defaultsGroup: DEFAULTS, config: { auto_transcode_on_idle: false, miss_media_type: 'movie' }, onsave }
 		});
 		await screen.findByText('ses Alpha');
 		await fireEvent.click(screen.getByRole('tab', { name: 'Defaults' }));
-		return ontoggle;
+		return onsave;
 	}
 
 	afterEach(() => setTranscoderEnabled(true));
 
 	it('shows auto-apply as a switch above the matrix that reports its key and value, with no Save button', async () => {
 		setTranscoderEnabled(true);
-		const ontoggle = await openDefaults();
+		const onsave = await openDefaults();
 		const toggle = await screen.findByRole('switch', { name: LABEL });
 		const cell = await screen.findByLabelText('Movie, Any disc');
 		const heading = screen.getByRole('heading', { name: 'Defaults' });
@@ -475,7 +485,17 @@ describe('Defaults view auto-apply', () => {
 		expect(lede.compareDocumentPosition(cell) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 		expect(screen.queryByRole('button', { name: 'Save' })).not.toBeInTheDocument();
 		await fireEvent.click(toggle);
-		expect(ontoggle).toHaveBeenCalledWith('auto_transcode_on_idle', true);
+		expect(onsave).toHaveBeenCalledWith('auto_transcode_on_idle', true);
+	});
+
+	it('shows an enum Defaults field as a select that saves the chosen option', async () => {
+		setTranscoderEnabled(true);
+		const onsave = await openDefaults();
+		const select = await screen.findByRole('combobox', { name: 'Treat unidentified video discs as' });
+		expect(select).toHaveValue('movie');
+		expect(screen.getByTestId('defaults-auto-apply')).toContainElement(select);
+		await fireEvent.change(select, { target: { value: 'tv' } });
+		expect(onsave).toHaveBeenCalledWith('miss_media_type', 'tv');
 	});
 
 	it('hides auto-apply on a ripper-only deployment and keeps the matrix', async () => {
