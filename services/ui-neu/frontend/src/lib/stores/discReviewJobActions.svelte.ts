@@ -13,6 +13,11 @@ export interface JobActionCallbacks {
 	refresh: () => void;
 }
 
+// Whether the job carries an identity a start should save first.
+function hasIdentityToSave(job: JobView): boolean {
+	return job.metadata_json?.flags?.unidentified !== true && (job.title ?? '').trim() !== '';
+}
+
 export class DiscReviewJobActions {
 	cancelling = $state(false);
 	deleting = $state(false);
@@ -64,11 +69,12 @@ export class DiscReviewJobActions {
 		}
 	};
 
-	// Action-row "Start rip": save + start. Resolving the job's current identity
-	// (title/year/disc, preferring the freshly-loaded detail) is the save — it
-	// also unblocks the parked ripper for an awaiting_user_id disc. For an
-	// awaiting_review disc the rip is held by the countdown, so additionally skip
-	// it via rip-start-review. Then dismiss the card; the disc is on its way.
+	// Action-row "Start rip". At the review gate a disc with no identity to save
+	// (no title, or an unidentified miss) starts directly with whatever identity
+	// it has. Otherwise resolving the job's current identity (title/year/disc,
+	// preferring the freshly-loaded detail) is the save — it also unblocks the
+	// parked ripper for an awaiting_user_id disc — and an awaiting_review disc is
+	// then skipped past its countdown via rip-start-review.
 	startRip = async (
 		job: JobView | undefined,
 		detailJob: JobView | undefined,
@@ -76,14 +82,27 @@ export class DiscReviewJobActions {
 	): Promise<void> => {
 		if (!job) return;
 		const j = detailJob ?? job;
+		if (isReviewGate() && !hasIdentityToSave(j)) {
+			await this.#launch(() => startWaitingJob(job.id));
+			return;
+		}
+		await this.#identifyThenStart(job, j, isReviewGate);
+	};
+
+	// Review "Identify and start": the identify save, then the review gate's
+	// start; a failed save leaves the disc in review.
+	identifyAndStart = async (job: JobView | undefined, detailJob: JobView | undefined): Promise<void> => {
+		if (!job) return;
+		await this.#identifyThenStart(job, detailJob ?? job, () => true);
+	};
+
+	#identifyThenStart = async (job: JobView, j: JobView, isReviewGate: () => boolean): Promise<void> => {
 		const startTitle = (j.title ?? '').trim();
 		if (!startTitle) {
 			this.errorMessage = 'A title is required to start. Open Info or Search to set one.';
 			return;
 		}
-		this.starting = true;
-		this.errorMessage = null;
-		try {
+		await this.#launch(async () => {
 			await resolveJob(job.id, {
 				title: startTitle,
 				year: j.year ?? null,
@@ -93,6 +112,16 @@ export class DiscReviewJobActions {
 			if (isReviewGate()) {
 				await startWaitingJob(job.id);
 			}
+		});
+	};
+
+	// Runs a start with the busy flag and error banner, then the card leaves
+	// the dashboard; the disc is on its way.
+	#launch = async (start: () => Promise<unknown>): Promise<void> => {
+		this.starting = true;
+		this.errorMessage = null;
+		try {
+			await start();
 			this.#done.dismiss();
 			this.#done.refresh();
 		} catch (e) {
@@ -101,11 +130,6 @@ export class DiscReviewJobActions {
 			this.starting = false;
 		}
 	};
-
-	// Review "Identify and start": the same identify save as Start rip, then the
-	// review gate's start; a failed save leaves the disc in review.
-	identifyAndStart = (job: JobView | undefined, detailJob: JobView | undefined): Promise<void> =>
-		this.startRip(job, detailJob, () => true);
 
 	setPaused = async (job: JobView | undefined, paused: boolean): Promise<void> => {
 		if (!job) return;
