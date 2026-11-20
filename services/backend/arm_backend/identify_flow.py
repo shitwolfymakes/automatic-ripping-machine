@@ -568,6 +568,7 @@ class IdentifyFlow:
         if cfg.block_on_miss:
             job.status = JobStatus.AWAITING_REVIEW
             job.wait_start_time = None
+            job.metadata_json = with_flags(job.metadata_json, blocked_miss=True)
             self.waits_for_identify = True
         elif cfg.hold_for_review:
             job.status = JobStatus.AWAITING_REVIEW

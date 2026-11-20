@@ -70,6 +70,7 @@ from arm_common.enums import (
 )
 from arm_common.schemas.job_metadata import (
     identity_suggestion_of,
+    no_countdown_reason,
     previously_ripped_job_id,
     with_flags,
     without_flags,
@@ -260,8 +261,9 @@ async def rip_start_review(
 async def _start_held_job(db: AsyncSession, hub: WSHub, job: Job) -> None:
     """AWAITING_REVIEW -> RIPPING, plus the `rip.start` command that unblocks
     the parked ripper. Commits. 422 when every track is excluded. The
-    operator starting the rip counts the disc as matched, so the
-    `unidentified` flag goes and auto-apply runs once the rip finishes."""
+    operator starting the rip counts the disc as matched and releases a
+    blocked miss, so the `unidentified` flag and the blocked-miss marker go
+    and auto-apply runs once the rip finishes."""
     tracks = list((await db.execute(select(Track).where(col(Track.job_id) == job.id))).scalars().all())
     if tracks and all(t.excluded for t in tracks):
         raise HTTPException(
@@ -271,7 +273,7 @@ async def _start_held_job(db: AsyncSession, hub: WSHub, job: Job) -> None:
 
     job.status = JobStatus.RIPPING
     job.started_at = datetime.now(timezone.utc)
-    job.metadata_json = without_flags(job.metadata_json, "unidentified")
+    job.metadata_json = without_flags(job.metadata_json, "unidentified", "blocked_miss")
     db.add(job)
     await db.flush()
 
@@ -379,15 +381,11 @@ async def review_pause(
             status_code=status.HTTP_409_CONFLICT,
             detail=f"review-pause only valid for awaiting_review, got {enum_value_str(job.status)}",
         )
-    if previously_ripped_job_id(job.metadata_json) is not None:
+    no_countdown = no_countdown_reason(job.metadata_json)
+    if no_countdown is not None:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="this disc was ripped before; it has no countdown to pause",
-        )
-    if identity_suggestion_of(job.metadata_json) is not None:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="this disc is waiting for you to confirm its identity; it has no countdown to pause",
+            detail=f"{no_countdown}; it has no countdown to pause",
         )
     job.manual_pause = paused
     if not paused:

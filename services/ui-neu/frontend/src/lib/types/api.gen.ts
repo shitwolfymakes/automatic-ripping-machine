@@ -2679,6 +2679,10 @@ export type JobFlags = {
      * Rerip Allowed
      */
     rerip_allowed?: boolean;
+    /**
+     * Blocked Miss
+     */
+    blocked_miss?: boolean;
     [key: string]: unknown;
 };
 

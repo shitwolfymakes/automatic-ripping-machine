@@ -50,8 +50,7 @@ from arm_common.schemas import (
     ConfigView,
     KeyCheckRequest,
     KeyCheckResponse,
-    identity_suggestion_of,
-    previously_ripped_job_id,
+    no_countdown_reason,
 )
 from arm_common.secrets import HIDDEN_SECRET
 
@@ -210,11 +209,7 @@ async def _restart_held_countdowns(session: AsyncSession) -> None:
     now = datetime.now(timezone.utc)
     held = (await session.execute(select(Job).where(col(Job.status) == JobStatus.AWAITING_REVIEW))).scalars().all()
     for job in held:
-        # A previously-ripped hold and a held suggestion have no countdown to restart.
-        if (
-            previously_ripped_job_id(job.metadata_json) is not None
-            or identity_suggestion_of(job.metadata_json) is not None
-        ):
+        if no_countdown_reason(job.metadata_json) is not None:
             continue
         job.wait_start_time = now
         session.add(job)

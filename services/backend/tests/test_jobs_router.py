@@ -386,11 +386,12 @@ def test_rip_start_review_transitions_to_ripping_and_emits(signing_key: bytes) -
 
 
 def test_rip_start_review_clears_the_unidentified_flag(signing_key: bytes) -> None:
-    """Start on a parked miss counts the disc as matched: the `unidentified`
-    flag goes (both spellings), the other flags stay."""
+    """Start on a parked miss counts the disc as matched and releases it: the
+    `unidentified` flag (both spellings) and the blocked-miss marker go, the
+    other flags stay."""
     db = FakeSession()
     app, token = _make_app(signing_key, db, _Hub())
-    meta = {"unidentified": True, "flags": {"unidentified": True, "dispatch_timeout": True}}
+    meta = {"unidentified": True, "flags": {"unidentified": True, "blocked_miss": True, "dispatch_timeout": True}}
     db.rows["jobs"] = [_job(status=JobStatus.AWAITING_REVIEW, meta=meta)]
     db.rows["tracks"] = [_track("trk_01JZXR7K3M5Q8N4VWA0000T01", status=TrackStatus.QUEUED)]
     with TestClient(app) as client:

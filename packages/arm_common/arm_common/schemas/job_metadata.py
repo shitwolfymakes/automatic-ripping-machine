@@ -114,6 +114,9 @@ class JobFlags(BaseModel):
     # On a ripped job: the operator chose "Rip again", so the next identify of
     # this disc skips the previously-ripped check once (and clears the flag).
     rerip_allowed: bool = False
+    # A missed video disc parked under block_on_miss: it has no review
+    # countdown and only the operator's Start releases it.
+    blocked_miss: bool = False
 
 
 class PreviouslyRipped(BaseModel):
@@ -224,6 +227,18 @@ def identity_suggestion_of(metadata_json: dict[str, Any] | None) -> IdentitySugg
         return IdentitySuggestion.model_validate(section)
     except ValidationError:
         return None
+
+
+def no_countdown_reason(metadata_json: dict[str, Any] | None) -> str | None:
+    """Why a held job waits with no review countdown, or None when it has one:
+    a previously-ripped hold, a held suggestion, or a blocked miss."""
+    if previously_ripped_job_id(metadata_json) is not None:
+        return "this disc was ripped before"
+    if identity_suggestion_of(metadata_json) is not None:
+        return "this disc is waiting for you to confirm its identity"
+    if flag_is_set(metadata_json, "blocked_miss"):
+        return "this disc is waiting for you to start it"
+    return None
 
 
 def without_identity_suggestion(metadata_json: dict[str, Any] | None) -> dict[str, Any]:

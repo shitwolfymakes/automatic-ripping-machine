@@ -12849,6 +12849,11 @@
             "type": "boolean",
             "title": "Rerip Allowed",
             "default": false
+          },
+          "blocked_miss": {
+            "type": "boolean",
+            "title": "Blocked Miss",
+            "default": false
           }
         },
         "additionalProperties": true,

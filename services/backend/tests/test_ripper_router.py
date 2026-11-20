@@ -782,6 +782,36 @@ def test_identify_video_miss_keeps_every_title_and_parks_per_setting(
     assert {ref: c["selected"] for ref, c in preset_claims.items()} == {"1": True, "2": True, "3": True, "4": True}
 
 
+class _StaleCountdownDispatcher(_Dispatcher):
+    """Misses, after stamping a stale countdown on the job being identified."""
+
+    def __init__(self, db: FakeSession) -> None:
+        super().__init__(None)
+        self.db = db
+
+    async def identify(self, _scan: Any, _cfg: Any, **_kw: Any) -> MetadataResult | None:
+        for row in self.db.added:
+            if isinstance(row, Job):
+                row.wait_start_time = datetime(2026, 1, 1, tzinfo=timezone.utc)
+        return await super().identify(_scan, _cfg, **_kw)
+
+
+@pytest.mark.parametrize("hold_for_review", [False, True])
+def test_identify_blocked_video_miss_is_marked_and_has_no_countdown(hold_for_review: bool) -> None:
+    """A blocked miss carries the blocked_miss marker and no countdown, even
+    over a stale one; the marker keeps unpause and resume from starting one."""
+    db = _miss_db(block_on_miss=True, hold_for_review=hold_for_review)
+    out = _identify(_make_app(db, dispatcher=_StaleCountdownDispatcher(db)), _four_title_scan())
+    assert out["wait_start_time"] is None
+    assert out["metadata_json"]["flags"]["blocked_miss"] is True
+
+
+def test_identify_countdown_video_miss_is_not_marked_blocked() -> None:
+    db = _miss_db(block_on_miss=False, hold_for_review=True)
+    out = _identify(_make_app(db, dispatcher=_Dispatcher(None)), _four_title_scan())
+    assert "blocked_miss" not in out["metadata_json"]["flags"]
+
+
 @pytest.mark.parametrize(
     ("block_on_miss", "hold_for_review", "event_type"),
     [
