@@ -781,10 +781,37 @@ def test_identify_video_miss_keeps_every_title_and_parks_per_setting(
     assert {ref: c["selected"] for ref, c in preset_claims.items()} == {"1": True, "2": True, "3": True, "4": True}
 
 
-def test_identify_video_miss_blocked_emits_awaiting_review() -> None:
-    db = _miss_db(block_on_miss=True)
+@pytest.mark.parametrize(
+    ("block_on_miss", "hold_for_review", "event_type"),
+    [
+        (True, False, "rip.needs_user_input"),
+        (True, True, "rip.needs_user_input"),
+        (False, True, "rip.awaiting_review"),
+    ],
+)
+def test_identify_video_miss_parked_emits_the_event_its_wait_needs(
+    block_on_miss: bool, hold_for_review: bool, event_type: str
+) -> None:
+    """A blocked miss waits for the operator with no countdown, so it raises the
+    notifiable rip.needs_user_input; the countdown row is a plain review hold."""
+    db = _miss_db(block_on_miss=block_on_miss, hold_for_review=hold_for_review)
     hub = _Hub()
     _identify(_make_app(db, dispatcher=_Dispatcher(None), hub=hub), _four_title_scan())
+    assert [e["event_type"] for e in hub.events] == [event_type]
+
+
+def test_identify_blocked_video_miss_held_as_previously_ripped_emits_awaiting_review() -> None:
+    """The previously-ripped hold wins over the blocked miss: the disc waits for
+    Rip again or Discard, a review hold."""
+    db = _miss_db(block_on_miss=True)
+    earlier = _job("job_01JZXR7K3M5Q8N4VWA0000PREV", status=JobStatus.RIPPED)
+    db.rows["jobs"] = [earlier]
+    db.rows["disc_fingerprints"] = [DiscFingerprint(job_id=earlier.id, algo="crc64", value="abc")]
+    scan = _four_title_scan()
+    scan["fingerprints"] = [{"algo": "crc64", "value": "abc"}]
+    hub = _Hub()
+    out = _identify(_make_app(db, dispatcher=_Dispatcher(None), hub=hub), scan)
+    assert out["metadata_json"]["previously_ripped"] == {"job_id": earlier.id}
     assert [e["event_type"] for e in hub.events] == ["rip.awaiting_review"]
 
 

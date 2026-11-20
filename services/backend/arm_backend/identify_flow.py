@@ -200,6 +200,7 @@ class IdentifyFlow:
         self.result: MetadataResult | None = None
         self.timed_out = False
         self.attempts: list[dict[str, Any]] = []
+        self.waits_for_identify = False
 
     async def _load_drive(self) -> Drive:
         drive = (
@@ -436,16 +437,21 @@ class IdentifyFlow:
         await self.session.refresh(job)
         logger.info("identify job_id=%s status=%s title=%s", job.id, job.status.value, job.title)
 
+    def _held_event_type(self, job: Job) -> str:
+        # A disc that waits for the operator to identify it (awaiting_user_id, or
+        # a blocked video miss parked in review with no countdown) needs their
+        # input; any other awaiting_review is a review hold. Distinct event
+        # types so the dashboard and notifications can tell them apart.
+        if job.status == JobStatus.AWAITING_USER_ID or self.waits_for_identify:
+            return "rip.needs_user_input"
+        return "rip.awaiting_review"
+
     async def _emit_held_event(self, job: Job, scan: ScanResult) -> None:
         if job.status in (JobStatus.AWAITING_USER_ID, JobStatus.AWAITING_REVIEW):
-            # awaiting_user_id -> needs identification; awaiting_review -> held for the
-            # timed review gate. Distinct event types so the dashboard can label them.
             # WS-transition guard: only emit if this is a real status transition — do
             # not re-emit for a reused job already sitting in the target held status.
             if self.reuse_job is None or self.prior_status != job.status:
-                event_type = (
-                    "rip.needs_user_input" if job.status == JobStatus.AWAITING_USER_ID else "rip.awaiting_review"
-                )
+                event_type = self._held_event_type(job)
                 payload: dict[str, object] = {
                     "job_id": job.id,
                     "drive_id": job.drive_id,
@@ -567,6 +573,7 @@ class IdentifyFlow:
         if cfg.block_on_miss:
             job.status = JobStatus.AWAITING_REVIEW
             job.wait_start_time = None
+            self.waits_for_identify = True
         elif cfg.hold_for_review:
             job.status = JobStatus.AWAITING_REVIEW
             job.wait_start_time = datetime.now(timezone.utc)
@@ -581,6 +588,7 @@ class IdentifyFlow:
             await _persist_review_tracks(self.session, job, scan)
         job.status = JobStatus.AWAITING_REVIEW
         job.wait_start_time = None
+        self.waits_for_identify = False
         job.metadata_json = {
             **(job.metadata_json or {}),
             "previously_ripped": {"job_id": previous.id},
