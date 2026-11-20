@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import logging
 from pathlib import Path
 from typing import Any
 
@@ -1295,3 +1296,24 @@ async def test_rip_optical_keeps_a_session_minimum_above_the_scan_minimum(monkey
     await _rip_optical_results(tmp_path, [_view(1, 3000)], 300)
 
     assert "--minlength=300" in captured["argv"]
+
+
+async def test_rip_optical_logs_when_it_raises_the_session_minimum(monkeypatch, tmp_path, caplog):
+    _capture_makemkvcon(monkeypatch)
+
+    with caplog.at_level(logging.INFO, logger="arm_ripper.rip.dispatcher"):
+        await _rip_optical_results(tmp_path, [_view(1, 3000)], 60)
+
+    raised = [r.getMessage() for r in caplog.records if "raised" in r.getMessage()]
+    assert raised == [
+        "minlength raised from 60s to MakeMKV's 120s scan minimum: the rip may not write a title the scan did not list"
+    ]
+
+
+async def test_rip_optical_does_not_log_a_session_minimum_it_keeps(monkeypatch, tmp_path, caplog):
+    _capture_makemkvcon(monkeypatch)
+
+    with caplog.at_level(logging.INFO, logger="arm_ripper.rip.dispatcher"):
+        await _rip_optical_results(tmp_path, [_view(1, 3000)], 300)
+
+    assert not [r for r in caplog.records if "raised" in r.getMessage()]
