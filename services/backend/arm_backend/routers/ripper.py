@@ -893,6 +893,15 @@ async def update_track(
     return TrackView.model_validate(track)
 
 
+def _rip_outcome_counts(tracks: Sequence[Track]) -> tuple[int, int, int]:
+    """Done, failed and total among the kept tracks: an excluded title is ripped
+    and kept on disk, but it neither makes the rip partial nor counts toward it."""
+    kept = _kept_tracks(tracks)
+    done = sum(1 for t in kept if t.status == TrackStatus.DONE)
+    failed = sum(1 for t in kept if t.status == TrackStatus.FAILED)
+    return done, failed, len(kept)
+
+
 @router.post("/jobs/{job_id}/rip-complete", response_model=JobView)
 async def rip_complete(
     _: JobCompleteRequest,
@@ -907,10 +916,7 @@ async def rip_complete(
         )
 
     tracks = (await session.execute(select(Track).where(col(Track.job_id) == job.id))).scalars().all()
-
-    done = sum(1 for t in tracks if t.status == TrackStatus.DONE)
-    failed = sum(1 for t in tracks if t.status == TrackStatus.FAILED)
-    total = len(tracks)
+    done, failed, total = _rip_outcome_counts(tracks)
 
     if total == 0 or done == 0:
         job.status = JobStatus.FAILED

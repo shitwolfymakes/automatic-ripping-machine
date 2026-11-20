@@ -2167,6 +2167,21 @@ def test_rip_complete_zero_tracks_failed(monkeypatch: pytest.MonkeyPatch) -> Non
     assert r.json()["status"] == "failed"
 
 
+def test_rip_complete_ignores_an_excluded_track_in_the_outcome_and_totals(monkeypatch: pytest.MonkeyPatch) -> None:
+    db = FakeSession()
+    db.rows["jobs"] = [_job(status=JobStatus.RIPPING)]
+    db.rows["drives"] = [_drive()]
+    dropped = _track("t1", status=TrackStatus.FAILED, index=1)
+    dropped.excluded = True
+    db.rows["tracks"] = [dropped, _track("t3", status=TrackStatus.DONE, index=3)]
+    hub = _Hub()
+    r = _rip_complete(db, hub, monkeypatch)
+    assert r.status_code == 200
+    assert r.json()["status"] == "ripped"
+    payload = next(e["payload"] for e in hub.events if e["event_type"] == "rip.completed")
+    assert (payload["tracks_done"], payload["tracks_failed"], payload["tracks_total"]) == (1, 0, 1)
+
+
 # --- helpers -----------------------------------------------------------------
 
 
@@ -2654,15 +2669,9 @@ def test_rip_complete_partial_unidentified_does_not_run_after_rip(
     db = FakeSession()
     db.rows["jobs"] = [_job(status=JobStatus.RIPPING, meta={"unidentified": True})]
     db.rows["drives"] = [_drive()]
-    failed_track = _track("t2", status=TrackStatus.FAILED, index=2)
-    # Excluded from transcode-output resolution (compute_outputs skips
-    # excluded tracks) so it can't collide on output_path with t1's -- the
-    # movie template doesn't key on track index, only the failed COUNT
-    # matters for RIPPED_PARTIAL here, not which tracks fan out.
-    failed_track.excluded = True
     db.rows["tracks"] = [
         _track("t1", status=TrackStatus.DONE, index=1),
-        failed_track,
+        _track("t2", status=TrackStatus.FAILED, index=2),
     ]
     _seed_parked_session(db)
     hub = _Hub()
