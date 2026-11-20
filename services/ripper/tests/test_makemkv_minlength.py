@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import logging
 
 import pytest
@@ -10,34 +9,13 @@ from arm_common.enums import DiscType
 from arm_common.schemas import RipStartResponse
 
 import arm_ripper.disc_rip as disc_rip_module
-from arm_ripper.makemkv_minlength import (
-    DEFAULT_MIN_TITLE_LENGTH_SECONDS,
-    rip_min_length_seconds,
-    scan_min_title_length,
-    scanning_with_min_title_length,
-)
+from arm_ripper.makemkv_minlength import DEFAULT_MIN_TITLE_LENGTH_SECONDS, rip_min_length_seconds
 
 _RAISED = "minlength raised from 60s to the configured minimum title length of 120s: the rip may not write a title the scan did not list"
 
 
-def test_the_scan_minimum_defaults_to_makemkvs_own() -> None:
+def test_the_fallback_minimum_is_makemkvs_own() -> None:
     assert DEFAULT_MIN_TITLE_LENGTH_SECONDS == 120
-    assert scan_min_title_length() == 120
-
-
-def test_the_scan_minimum_is_set_only_inside_its_block() -> None:
-    with scanning_with_min_title_length(60):
-        assert scan_min_title_length() == 60
-    assert scan_min_title_length() == 120
-
-
-async def test_the_scan_minimum_does_not_leak_into_another_task() -> None:
-    async def _other() -> int:
-        return scan_min_title_length()
-
-    with scanning_with_min_title_length(60):
-        pass
-    assert await asyncio.create_task(_other()) == 120
 
 
 @pytest.mark.parametrize(

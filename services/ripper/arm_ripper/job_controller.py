@@ -16,7 +16,7 @@ from arm_ripper.disc_rip import DiscRip
 from arm_ripper.drive_handle import DriveHandle
 from arm_ripper.eject import Ejector
 from arm_ripper.makemkv_prep import MakeMKVPrep
-from arm_ripper.makemkv_minlength import DEFAULT_MIN_TITLE_LENGTH_SECONDS, scanning_with_min_title_length
+from arm_ripper.makemkv_minlength import DEFAULT_MIN_TITLE_LENGTH_SECONDS
 from arm_ripper.ripper_config import ripper_config_or_none
 from arm_ripper.resolution_wait import IDENTIFY_WAIT, RESOLUTION_TIMEOUT_UNSET, REVIEW_WAIT, ResolutionWaiter, WaitSpec
 from arm_ripper.disc_scan import scan_or_none
@@ -303,8 +303,7 @@ class JobController:
             # container up across a beta-key rotation doesn't scan/rip
             # protected discs with a stale key.
             await self._makemkv.prepare()
-            with scanning_with_min_title_length(await self._min_title_length()):
-                scan_result = await scan_or_none(device_path)
+            scan_result = await scan_or_none(device_path, await self._min_title_length())
             if scan_result is None:
                 return
 
