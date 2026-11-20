@@ -116,6 +116,8 @@ def test_schema_puts_auto_apply_in_the_defaults_group():
         "enum",
         ["movie", "tv"],
     )
+    assert media["enum_labels"] == {"movie": "Movie", "tv": "TV"}
+    assert kept["enum_labels"] == {"all": "All titles", "preset": "Same as the rip preset"}
     assert media["help"] == (
         "The media type a DVD or Blu-ray that misses identification starts with. "
         "Flip it on the review screen before you start the rip."

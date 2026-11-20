@@ -396,6 +396,7 @@ CONFIG_FIELD_META: list[ConfigFieldMeta] = [
         "Flip it on the review screen before you start the rip.",
         type="enum",
         enum_values=["movie", "tv"],
+        enum_labels={"movie": "Movie", "tv": "TV"},
         editable=True,
     ),
     ConfigFieldMeta(
@@ -407,6 +408,7 @@ CONFIG_FIELD_META: list[ConfigFieldMeta] = [
         "(for example only the main feature).",
         type="enum",
         enum_values=["all", "preset"],
+        enum_labels={"all": "All titles", "preset": "Same as the rip preset"},
         editable=True,
     ),
     # --- Notifications ---

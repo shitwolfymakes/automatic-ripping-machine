@@ -51,6 +51,12 @@
 
 	let { defaultsGroup, config = {}, onsave, initialView = 'sessions' }: Props = $props();
 
+	// Auto-apply queues transcodes, so a ripper-only deployment hides it; the
+	// other Defaults shape ripping and always show.
+	const visibleDefaults = $derived(
+		(defaultsGroup?.fields ?? []).filter((f) => $transcoderEnabled || f.key !== 'auto_transcode_on_idle')
+	);
+
 	const data = createSessionsData();
 
 	// A ripper-only deployment (not transcode-capable) shows only passthrough
@@ -317,16 +323,16 @@
 	{:else if view === 'routing'}
 		<RoutingMatrix>
 			{#snippet beforeMatrix()}
-				{#if $transcoderEnabled && defaultsGroup}
+				{#if visibleDefaults.length > 0}
 					<div class="panel stack stack-sm" data-testid="defaults-auto-apply">
-						{#each defaultsGroup.fields as field (field.key)}
+						{#each visibleDefaults as field (field.key)}
 							{#if field.type === 'enum'}
 								<AutoSaveSelect
 									key={field.key}
 									label={field.label}
 									help={field.help}
 									value={String(config[field.key] ?? '')}
-									options={(field.enum_values ?? []).map((v) => ({ value: v, label: v }))}
+									options={(field.enum_values ?? []).map((v) => ({ value: v, label: field.enum_labels?.[v] ?? v }))}
 									onchange={(value) => onsave?.(field.key, value)}
 								/>
 							{:else}

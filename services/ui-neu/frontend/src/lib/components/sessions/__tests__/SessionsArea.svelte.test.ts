@@ -452,7 +452,8 @@ describe('Defaults view auto-apply', () => {
 				help: 'Starts as this type.',
 				type: 'enum',
 				editable: true,
-				enum_values: ['movie', 'tv']
+				enum_values: ['movie', 'tv'],
+				enum_labels: { movie: 'Movie', tv: 'TV' }
 			}
 		]
 	} as SettingsGroup;
@@ -493,6 +494,11 @@ describe('Defaults view auto-apply', () => {
 		const onsave = await openDefaults();
 		const select = await screen.findByRole('combobox', { name: 'Treat unidentified video discs as' });
 		expect(select).toHaveValue('movie');
+		expect(
+			within(select)
+				.getAllByRole('option')
+				.map((o) => o.textContent)
+		).toEqual(['Movie', 'TV']);
 		expect(screen.getByTestId('defaults-auto-apply')).toContainElement(select);
 		await fireEvent.change(select, { target: { value: 'tv' } });
 		expect(onsave).toHaveBeenCalledWith('miss_media_type', 'tv');
@@ -503,6 +509,18 @@ describe('Defaults view auto-apply', () => {
 		await openDefaults();
 		expect(await screen.findByLabelText('Movie, Any disc')).toBeInTheDocument();
 		expect(screen.queryByRole('switch', { name: LABEL })).not.toBeInTheDocument();
+		expect(screen.getByRole('combobox', { name: 'Treat unidentified video discs as' })).toBeInTheDocument();
+	});
+
+	it('leaves out the Defaults panel on a ripper-only deployment when auto-apply is its only field', async () => {
+		setTranscoderEnabled(false);
+		renderComponent(SessionsArea, {
+			props: { defaultsGroup: { ...DEFAULTS, fields: [DEFAULTS.fields[0]] }, config: {}, onsave: vi.fn() }
+		});
+		await screen.findByText('ses Alpha');
+		await fireEvent.click(screen.getByRole('tab', { name: 'Defaults' }));
+		expect(await screen.findByLabelText('Movie, Any disc')).toBeInTheDocument();
+		expect(screen.queryByTestId('defaults-auto-apply')).not.toBeInTheDocument();
 	});
 });
 
