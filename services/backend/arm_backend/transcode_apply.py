@@ -88,8 +88,10 @@ def _effective_identity(job: Job, track: Track) -> tuple[str, int | None, int | 
     """Return the track's effective (title, year, season), falling back to the job's."""
     # Per-track identity overrides job-level (null = inherit). Multi-title discs
     # set these; a movie's single track leaves them null and inherits job identity.
+    # A track with its own title is its own identity: its year is its own too
+    # (none when unset), never the disc's.
     eff_title = track.title or job.title or ""
-    eff_year = track.year if track.year is not None else job.year
+    eff_year = track.year if track.title else job.year
     eff_season = track.season if track.season is not None else job.season
     return eff_title, eff_year, eff_season
 

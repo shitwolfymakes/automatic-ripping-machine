@@ -265,7 +265,7 @@ def test_excluded_track_skipped() -> None:
 
 def test_per_track_title_overrides_job() -> None:
     job = _job()  # title="Iron Man"
-    sess = _movie_session("{title} ({year})/{title}.{ext}")
+    sess = _movie_session("{title} ({year?})/{title}.{ext}")
     tp = _movie_preset()
     track = Track(
         id="trk_1",
@@ -695,6 +695,22 @@ def test_per_track_movie_drops_the_track_label() -> None:
     track.title, track.year = "The Mole People", 1956
     path = compute_outputs(job, [track], _movie_session(_PLEX), _plex_preset())[0].output_path
     assert path == "The Mole People (1956)/The Mole People (1956) - plex-1080p-h265.mkv"
+
+
+def test_a_track_named_without_a_year_takes_no_year_from_the_disc() -> None:
+    """A track with its own title names itself: the disc's year belongs to
+    the disc, so a track named by hand with no year has none."""
+    job = _job(title="Box Set", year=2006)
+    track = _video_track(1)
+    track.title, track.year = "The Mole People", None
+    path = compute_outputs(job, [track], _movie_session(_PLEX), _plex_preset())[0].output_path
+    assert path == "The Mole People/The Mole People - plex-1080p-h265.mkv"
+
+
+def test_an_untitled_track_keeps_the_disc_year() -> None:
+    job = _job(title="Box Set", year=2006)
+    path = compute_outputs(job, [_video_track(1)], _movie_session(_PLEX), _plex_preset())[0].output_path
+    assert path == "Box Set (2006)/Box Set (2006) (Track 02) - plex-1080p-h265.mkv"
 
 
 def test_untitled_track_is_numbered_from_one_after_the_disc_title() -> None:
