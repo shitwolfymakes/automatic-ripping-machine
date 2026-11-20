@@ -47,7 +47,7 @@ def test_env_seed_reads_the_ripper_min_length_env(monkeypatch: pytest.MonkeyPatc
 def test_configured_value_wins_over_the_env_seed(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(settings, "ARM_RIPPER_MIN_LENGTH_SECONDS", "90")
     assert min_title_length.min_title_length_seconds(_config(min_title_length_seconds=45)) == 45
-    assert min_title_length.min_title_length_seconds(_config()) == 90
+    assert min_title_length.min_title_length_seconds(_config(min_title_length_seconds=None)) == 90
 
 
 async def test_fresh_config_singleton_seeds_the_min_title_length_from_env(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -58,10 +58,16 @@ async def test_fresh_config_singleton_seeds_the_min_title_length_from_env(monkey
     assert cfg.min_title_length_seconds == 90
 
 
+def test_a_config_built_without_the_field_gets_120() -> None:
+    """An ORM insert outside the seeder never writes NULL."""
+    assert _config().min_title_length_seconds == 120
+
+
 async def test_seed_backfills_an_unseeded_min_title_length_once(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A row loaded NULL (it predates the column) is filled once from env."""
     monkeypatch.setattr(settings, "ARM_RIPPER_MIN_LENGTH_SECONDS", "300")
     db = FakeSession()
-    db.rows["config"] = [_config()]
+    db.rows["config"] = [_config(min_title_length_seconds=None)]
     await _seed_config_singleton(db)
     assert db.rows["config"][0].min_title_length_seconds == 300
 
