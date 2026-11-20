@@ -9,6 +9,12 @@ class DiscType(StrEnum):
     UNKNOWN = "unknown"
 
 
+# Video discs: a miss parks in review with every title listed, and an
+# unidentified rip of one finishes plain ripped. Any other disc that misses
+# keeps the plain miss path.
+VIDEO_DISC_TYPES: frozenset[DiscType] = frozenset({DiscType.DVD, DiscType.BLURAY})
+
+
 class DriveStatus(StrEnum):
     ONLINE = "online"
     OFFLINE = "offline"

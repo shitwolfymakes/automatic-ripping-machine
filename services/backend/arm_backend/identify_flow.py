@@ -42,7 +42,6 @@ from arm_backend.ws import WSHub
 from arm_common import (
     Config,
     DiscFingerprint,
-    DiscType,
     Drive,
     Job,
     JobStatus,
@@ -50,7 +49,7 @@ from arm_common import (
     RipPreset,
     Session,
 )
-from arm_common.enums import DriveKind, MissTitlesKept, PreviouslyRippedAction
+from arm_common.enums import VIDEO_DISC_TYPES, DriveKind, MissTitlesKept, PreviouslyRippedAction
 from arm_common.models import Track
 from arm_common.schemas import (
     flag_is_set,
@@ -102,10 +101,6 @@ async def _persist_review_tracks(db: AsyncSession, job: Job, scan: ScanResult) -
 async def _persist_miss_tracks(db: AsyncSession, job: Job, scan: ScanResult, titles_kept: MissTitlesKept) -> None:
     """Persist the scan's titles as Track rows for a disc that missed identification."""
     await _persist_tracks(db, job, lambda preset: select_tracks_on_miss(job.id, scan, preset, titles_kept))
-
-
-# The disc types a miss parks with its titles listed; any other miss keeps the plain miss path.
-_VIDEO_DISC_TYPES = frozenset({DiscType.DVD, DiscType.BLURAY})
 
 
 def _miss_outcome(job: Job) -> str:
@@ -539,7 +534,7 @@ class IdentifyFlow:
 
     async def _apply_miss(self, job: Job, cfg: Config, scan: ScanResult, miss_title: str | None) -> None:
         job.title = miss_title
-        if scan.disc_type in _VIDEO_DISC_TYPES:
+        if scan.disc_type in VIDEO_DISC_TYPES:
             await self._park_video_miss(job, cfg, scan)
         else:
             self._apply_plain_miss(job, cfg)
