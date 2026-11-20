@@ -464,7 +464,15 @@ describe('Defaults view auto-apply', () => {
 		const ontoggle = await openDefaults();
 		const toggle = await screen.findByRole('switch', { name: LABEL });
 		const cell = await screen.findByLabelText('Movie, Any disc');
-		expect(toggle.compareDocumentPosition(cell) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+		const heading = screen.getByRole('heading', { name: 'Defaults' });
+		const lede = screen.getByText(/These are all optional/);
+		const panel = screen.getByTestId('defaults-auto-apply');
+		expect(panel).toHaveClass('panel');
+		expect(panel).toContainElement(toggle);
+		// Heading, then the auto-apply panel, then the matrix's description and the matrix.
+		expect(heading.compareDocumentPosition(panel) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+		expect(panel.compareDocumentPosition(lede) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+		expect(lede.compareDocumentPosition(cell) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 		expect(screen.queryByRole('button', { name: 'Save' })).not.toBeInTheDocument();
 		await fireEvent.click(toggle);
 		expect(ontoggle).toHaveBeenCalledWith('auto_transcode_on_idle', true);

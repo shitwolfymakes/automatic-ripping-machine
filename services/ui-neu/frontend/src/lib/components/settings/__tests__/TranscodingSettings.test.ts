@@ -3,7 +3,8 @@ import { renderComponent, screen, fireEvent, cleanup, waitFor } from '$lib/testi
 import TranscodingSettings from '../TranscodingSettings.svelte';
 import { saveArmConfig } from '$lib/api/settings';
 import { setTranscoderEnabled } from '$lib/stores/config';
-import type { SettingsGroup } from '$lib/types/api.gen';
+import type { GpuView, SettingsGroup } from '$lib/types/api.gen';
+import { fetchGpus } from '$lib/api/gpus';
 
 vi.mock('$lib/api/settings', () => ({
 	fetchSettings: vi.fn(),
@@ -64,6 +65,24 @@ describe('TranscodingSettings', () => {
 		expect(limit.compareDocumentPosition(gpus) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 		expect(screen.queryByText('Transcode capable')).toBeNull();
 		expect(screen.queryByText(HINT)).toBeNull();
+	});
+
+	it('shows No GPU enabled under the supported status when the GPU list has none enabled', async () => {
+		setTranscoderEnabled(true);
+		render(GROUP);
+		const status = await screen.findByTestId('transcode-capability');
+		await waitFor(() => expect(status).toHaveTextContent('No GPU enabled'));
+		expect(status).toHaveTextContent('CPU encoding enabled');
+	});
+
+	it('shows no CPU line once the GPU list has an enabled GPU', async () => {
+		vi.mocked(fetchGpus).mockResolvedValueOnce([
+			{ id: 'gpu_1', vendor: 'qsv', device_path: '/dev/dri/renderD128', enabled: true } as GpuView
+		]);
+		setTranscoderEnabled(true);
+		render(GROUP);
+		await screen.findByTestId('gpu-row-gpu_1');
+		expect(screen.getByTestId('transcode-capability')).not.toHaveTextContent('No GPU enabled');
 	});
 
 	it('shows the locked toggle on a capable deployment with no group', () => {

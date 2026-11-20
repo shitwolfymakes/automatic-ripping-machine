@@ -2,7 +2,7 @@
 	import { errorMessage } from '$lib/utils/errors';
 	// The Defaults view's matrix: a media-type by disc-type grid, each cell the session
 	// a disc of that kind routes to. Loads and saves its own routes.
-	import { onDestroy, onMount } from 'svelte';
+	import { onDestroy, onMount, type Snippet } from 'svelte';
 	import { isAdmin } from '$lib/stores/auth';
 	import { fetchSessionRoutes, upsertSessionRoute, deleteSessionRoute } from '$lib/api/session-routes';
 	import { fetchSessions } from '$lib/api/sessions';
@@ -23,6 +23,9 @@
 	import { TimedFeedback } from '$lib/stores/timed-feedback.svelte';
 	import FeedbackAlert from '$lib/components/shared/FeedbackAlert.svelte';
 	import MediaPill from '../shared/MediaPill.svelte';
+
+	// Rendered under the Defaults heading, above the matrix and its description.
+	let { beforeMatrix }: { beforeMatrix?: Snippet } = $props();
 
 	let routes = $state<SessionRouteView[]>([]);
 	let sessions = $state<SessionView[]>([]);
@@ -81,13 +84,14 @@
 </script>
 
 <section class="stack stack-sm">
-	<div>
-		<h3 class="routing-title">Defaults</h3>
-		<p class="routing-lede">
-			A route applies the chosen session when a disc's identified media type matches. A drive's default session wins
-			when it fits the disc's media type. A disc-type route (DVD, Blu-ray, CD) beats Any disc.
-		</p>
-	</div>
+	<h3 class="routing-title">Defaults</h3>
+
+	{@render beforeMatrix?.()}
+
+	<p class="routing-lede">
+		These are all optional. Automatically apply a session to a media type and disc type. "Any disc" is overridden by the
+		exact disc type's session when one is set.
+	</p>
 
 	<FeedbackAlert feedback={feedback.current} />
 

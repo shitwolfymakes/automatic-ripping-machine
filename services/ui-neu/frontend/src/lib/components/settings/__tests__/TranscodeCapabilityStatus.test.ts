@@ -20,4 +20,21 @@ describe('TranscodeCapabilityStatus', () => {
 		expect(strip).toHaveAttribute('data-tone', 'muted');
 		expect(strip).toHaveTextContent('Transcoding unsupported');
 	});
+
+	it('adds No GPU enabled, CPU encoding enabled, when no GPU is enabled', () => {
+		renderComponent(TranscodeCapabilityStatus, { props: { capable: true, gpuEnabled: false } });
+		const strips = within(screen.getByTestId('transcode-capability')).getAllByRole('status');
+		expect(strips).toHaveLength(2);
+		expect(strips[1]).toHaveAttribute('data-tone', 'muted');
+		expect(strips[1]).toHaveTextContent('No GPU enabled');
+		expect(strips[1]).toHaveTextContent('CPU encoding enabled');
+	});
+
+	it('adds nothing while the GPU list is unknown or when a GPU is enabled', () => {
+		renderComponent(TranscodeCapabilityStatus, { props: { capable: true } });
+		expect(within(screen.getByTestId('transcode-capability')).getAllByRole('status')).toHaveLength(1);
+		cleanup();
+		renderComponent(TranscodeCapabilityStatus, { props: { capable: true, gpuEnabled: true } });
+		expect(within(screen.getByTestId('transcode-capability')).getAllByRole('status')).toHaveLength(1);
+	});
 });
