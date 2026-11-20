@@ -638,6 +638,10 @@ export type ConfigUpdateRequest = {
      */
     max_parallel_iso_rips?: number | null;
     /**
+     * Min Title Length Seconds
+     */
+    min_title_length_seconds?: number | null;
+    /**
      * Transcode Enabled
      */
     transcode_enabled?: boolean | null;
@@ -780,6 +784,10 @@ export type ConfigView = {
      * Max Parallel Iso Rips
      */
     max_parallel_iso_rips: number;
+    /**
+     * Min Title Length Seconds
+     */
+    min_title_length_seconds: number;
     /**
      * Transcode Enabled
      */
@@ -4437,6 +4445,10 @@ export type RipStartResponse = {
      * Min Length Seconds
      */
     min_length_seconds?: number | null;
+    /**
+     * Min Title Length Seconds
+     */
+    min_title_length_seconds?: number | null;
 };
 
 /**
@@ -4472,6 +4484,10 @@ export type RipperConfigView = {
      * Manual Wait Seconds
      */
     manual_wait_seconds?: number;
+    /**
+     * Min Title Length Seconds
+     */
+    min_title_length_seconds?: number;
 };
 
 /**
@@ -4519,6 +4535,10 @@ export type ScanResult = {
      */
     fingerprints?: Array<DiscFingerprintInput>;
     bd_meta?: BdDiscMeta | null;
+    /**
+     * Min Title Length Seconds
+     */
+    min_title_length_seconds?: number | null;
     /**
      * Raw
      */

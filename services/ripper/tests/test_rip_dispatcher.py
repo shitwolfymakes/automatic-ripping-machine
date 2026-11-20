@@ -39,12 +39,19 @@ from arm_ripper.rip.optical_rip import (
     _finished_file,
     _first_eligible_track,
     _index_tracks,
+    _meets_min_length,
     _no_output_error,
+    _scan_duration,
 )
 from arm_ripper.rip.result import RipResult
 
 
-def _track(idx: int, source_ref: str | None = None, duration_seconds: int | None = 1800) -> TrackView:
+def _track(
+    idx: int,
+    source_ref: str | None = None,
+    duration_seconds: int | None = 1800,
+    expected_duration_seconds: int | None = None,
+) -> TrackView:
     """Default duration is 30 min so the dispatcher's eligibility
     filter (`duration_seconds >= min_length_seconds`) treats it as
     rippable. Pass an explicit duration to test below-minlength
@@ -59,6 +66,7 @@ def _track(idx: int, source_ref: str | None = None, duration_seconds: int | None
         output_path=None,
         size_bytes=None,
         duration_seconds=duration_seconds,
+        expected_duration_seconds=expected_duration_seconds,
         attempts=0,
         last_error=None,
     )
@@ -353,6 +361,32 @@ async def test_rip_all_passes_eligible_source_indexes_to_rip_disc(monkeypatch, t
     )
 
     assert captured["eligible_source_indexes"] == [0, 2, 4]
+
+
+async def test_rip_all_filters_on_the_scan_duration_before_the_rip(monkeypatch, tmp_path):
+    """Before a rip only the scan estimate is known (`duration_seconds` is None). A short extra between two
+    feature-length titles must not be counted as eligible, or the `_tNN` files shift onto the wrong titles
+    (seen on a UHD disc: a 979 s extra was credited with the second 2 h 24 min file)."""
+    fake_result = RipDiscResult(overall_error=None, titles={})
+    captured: dict[str, Any] = {}
+    _stub_rip_disc(monkeypatch, fake_result, captured=captured)
+
+    async def noop(*_args: Any, **_kwargs: Any) -> None:
+        return None
+
+    scanned = [8673, 979, 8673, 8673, 460, 518]
+    tracks = [_track(i, duration_seconds=None, expected_duration_seconds=d) for i, d in enumerate(scanned)]
+    await rip_all(
+        disc_type=DiscType.BLURAY,
+        device_path="/dev/sr0",
+        tracks=tracks,
+        output_dir=tmp_path,
+        on_track_start=noop,
+        on_track_done=noop,
+        min_length_seconds=1100,
+    )
+
+    assert captured["eligible_source_indexes"] == [0, 2, 3]
 
 
 async def test_rip_all_propagates_disc_level_error(monkeypatch, tmp_path):
@@ -1830,6 +1864,40 @@ def test_eligible_source_indexes_keep_a_track_of_unknown_length() -> None:
     assert _eligible_source_indexes({1: _track(1, duration_seconds=None)}, 60) == [1]
 
 
+def test_eligible_source_indexes_leave_out_a_track_whose_scan_estimate_is_too_short() -> None:
+    by_index = {1: _track(1, duration_seconds=None, expected_duration_seconds=59)}
+    assert _eligible_source_indexes(by_index, 60) == []
+
+
+def test_eligible_source_indexes_prefer_the_scan_estimate_over_the_measured_length() -> None:
+    by_index = {1: _track(1, duration_seconds=30, expected_duration_seconds=60)}
+    assert _eligible_source_indexes(by_index, 60) == [1]
+
+
+def test_scan_duration_is_the_scan_estimate_when_known() -> None:
+    assert _scan_duration(_track(1, duration_seconds=10, expected_duration_seconds=20)) == 20
+
+
+def test_scan_duration_falls_back_to_the_measured_length() -> None:
+    assert _scan_duration(_track(1, duration_seconds=10, expected_duration_seconds=None)) == 10
+
+
+def test_scan_duration_is_none_when_nothing_is_known() -> None:
+    assert _scan_duration(_track(1, duration_seconds=None, expected_duration_seconds=None)) is None
+
+
+def test_meets_min_length_counts_an_unknown_length_as_kept() -> None:
+    assert _meets_min_length(None, 60) is True
+
+
+def test_meets_min_length_keeps_a_length_at_the_minimum() -> None:
+    assert _meets_min_length(60, 60) is True
+
+
+def test_meets_min_length_drops_a_length_below_the_minimum() -> None:
+    assert _meets_min_length(59, 60) is False
+
+
 def test_eligible_source_indexes_are_sorted_whatever_the_insertion_order() -> None:
     by_index = {5: _track(5), 2: _track(2), 9: _track(9)}
     assert _eligible_source_indexes(by_index, 60) == [2, 5, 9]
@@ -1847,6 +1915,11 @@ def test_first_eligible_track_is_the_track_of_the_first_eligible_index() -> None
 def test_no_output_error_says_a_too_short_track_was_skipped() -> None:
     track = _track(3, duration_seconds=59)
     assert _no_output_error(3, track, 60, [3]) == "track duration 59s below minlength=60s; makemkvcon skipped it"
+
+
+def test_no_output_error_says_a_track_with_a_too_short_scan_estimate_was_skipped() -> None:
+    track = _track(3, duration_seconds=None, expected_duration_seconds=979)
+    assert _no_output_error(3, track, 1100, [0]) == "track duration 979s below minlength=1100s; makemkvcon skipped it"
 
 
 def test_no_output_error_treats_a_track_at_the_minimum_as_producing_nothing() -> None:

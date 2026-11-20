@@ -4,7 +4,6 @@ from typing import NamedTuple
 
 from arm_common import DiscType
 from arm_common.schemas import DiscFingerprintInput, ScanResult, ScanTitle
-from arm_ripper.makemkv_minlength import MAKEMKV_SCAN_MIN_LENGTH_SECONDS
 from arm_ripper.scan.disc_probe import DiscProbe, probe_disc
 from arm_ripper.scan.makemkv_info import parse_makemkvcon_info
 from arm_ripper.source import makemkv_source_url
@@ -99,7 +98,7 @@ class _InfoRun(NamedTuple):
     returncode: int | None
 
 
-async def _run_info(device_path: str) -> _InfoRun:
+async def _run_info(device_path: str, min_title_length_seconds: int) -> _InfoRun:
     """Run `makemkvcon info` on the device under the scan timeout.
 
     Raises ScanError when makemkvcon is not on PATH or times out.
@@ -108,7 +107,7 @@ async def _run_info(device_path: str) -> _InfoRun:
         "makemkvcon",
         "-r",
         "--cache=1",
-        f"--minlength={MAKEMKV_SCAN_MIN_LENGTH_SECONDS}",
+        f"--minlength={min_title_length_seconds}",
         "info",
         makemkv_source_url(device_path),
     ]
@@ -166,8 +165,9 @@ def _fingerprints(probe: DiscProbe) -> list[DiscFingerprintInput]:
     return fingerprints
 
 
-async def scan_disc(device_path: str) -> ScanResult:
-    run = await _run_info(device_path)
+async def scan_disc(device_path: str, min_title_length_seconds: int) -> ScanResult:
+    """Scan the disc with `makemkvcon info`, listing titles down to `min_title_length_seconds`."""
+    run = await _run_info(device_path, min_title_length_seconds)
 
     _raise_for_failure(run)
 
@@ -191,4 +191,5 @@ async def scan_disc(device_path: str) -> ScanResult:
         titles=titles,
         fingerprints=_fingerprints(probe),
         bd_meta=probe.bd_meta,
+        min_title_length_seconds=min_title_length_seconds,
     )

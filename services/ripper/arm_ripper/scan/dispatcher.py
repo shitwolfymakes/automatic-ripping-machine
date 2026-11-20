@@ -14,7 +14,7 @@ logger = logging.getLogger("arm_ripper.scan")
 __all__ = ["ScanError", "scan"]
 
 
-async def _scan_extracted(device_path: str) -> ScanResult | None:
+async def _scan_extracted(device_path: str, min_title_length_seconds: int) -> ScanResult | None:
     """MakeMKV listed no titles from the image itself: unpack it (`iso_extract`)
     and scan the disc folder instead. None, with the extraction removed, when
     the image can't be unpacked or the folder has no titles either."""
@@ -22,7 +22,7 @@ async def _scan_extracted(device_path: str) -> ScanResult | None:
         return None
     await prepare.report(IsoPreparePhase.SCANNING)
     try:
-        result: ScanResult | None = await scan_makemkv(device_path)
+        result: ScanResult | None = await scan_makemkv(device_path, min_title_length_seconds)
     except ScanError as e:
         logger.warning("makemkv scan of the extracted image failed device=%s err=%s", device_path, e)
         result = None
@@ -45,21 +45,22 @@ async def _scan_extracted(device_path: str) -> ScanResult | None:
     return result
 
 
-async def scan(device_path: str) -> ScanResult:
-    """Heuristic disc scan: MakeMKV first, fall back to MusicBrainz disc-id, then data.
+async def scan(device_path: str, min_title_length_seconds: int) -> ScanResult:
+    """Heuristic disc scan: MakeMKV first (listing titles down to `min_title_length_seconds`), fall back to
+    MusicBrainz disc-id, then data.
 
     An ISO ripper reports this as its "preparing" phase (`prepare`, a no-op
     for a physical drive) until the scan is done and identify takes over."""
     await prepare.report(IsoPreparePhase.SCANNING)
     try:
-        return await _scan(device_path)
+        return await _scan(device_path, min_title_length_seconds)
     finally:
         await prepare.finish()
 
 
-async def _scan(device_path: str) -> ScanResult:
+async def _scan(device_path: str, min_title_length_seconds: int) -> ScanResult:
     try:
-        result = await scan_makemkv(device_path)
+        result = await scan_makemkv(device_path, min_title_length_seconds)
     except ScanError as e:
         logger.info("makemkv scan failed device=%s err=%s", device_path, e)
         result = None
@@ -75,7 +76,7 @@ async def _scan(device_path: str) -> ScanResult:
         return result
 
     if is_iso_source(device_path):
-        rescued = await _scan_extracted(device_path)
+        rescued = await _scan_extracted(device_path, min_title_length_seconds)
         if rescued is not None:
             return rescued
 
