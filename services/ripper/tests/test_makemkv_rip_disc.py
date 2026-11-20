@@ -30,7 +30,11 @@ import arm_ripper.rip.makemkv_process as makemkv_process
 import arm_ripper.rip.makemkv_rip as makemkv_rip
 import arm_ripper.rip.makemkv_stream as makemkv_stream
 import arm_ripper.rip.subprocess_cleanup as subprocess_cleanup
+from arm_common.enums import TrackKind, TrackStatus
+from arm_common.schemas import TrackView
+
 from arm_ripper.rip.makemkv_rip import rip_disc
+from arm_ripper.rip.optical_rip import rip_optical
 from arm_ripper.rip.result import RipResult
 
 
@@ -1194,3 +1198,100 @@ def test_failed_titles_does_not_mutate_ripped():
     ripped = {1: RipResult(ok=True)}
     makemkv_rip._failed_titles(_state_with_reasons(t2="bad"), [3], ripped)
     assert list(ripped) == [1]
+
+
+# --- rip_optical against the faked makemkvcon: pairing and --minlength ------
+
+_RIP_OK_LINES = [
+    'MSG:5036,0,2,"Copy complete. 2 titles saved.","Copy complete. %1 %2","2","titles"',
+]
+
+
+def _view(idx: int, duration_seconds: int, *, excluded: bool = False) -> TrackView:
+    return TrackView(
+        id=f"trk_{idx}",
+        job_id="job_test",
+        kind=TrackKind.VIDEO_TITLE,
+        index=idx,
+        source_ref=str(idx),
+        status=TrackStatus.QUEUED,
+        output_path=None,
+        size_bytes=None,
+        duration_seconds=duration_seconds,
+        attempts=0,
+        last_error=None,
+        excluded=excluded,
+    )
+
+
+def _capture_makemkvcon(monkeypatch) -> dict[str, Any]:
+    """Fake a clean `makemkvcon mkv … all` run and record its argv."""
+    captured: dict[str, Any] = {}
+    encoded = [(line + "\n").encode() for line in _RIP_OK_LINES]
+
+    async def fake_create_subprocess_exec(*args: Any, **_kwargs: Any) -> _FakeProc:
+        captured["argv"] = list(args)
+        return _FakeProc(list(encoded))
+
+    monkeypatch.setattr(makemkv_rip.asyncio, "create_subprocess_exec", fake_create_subprocess_exec)
+    return captured
+
+
+async def _rip_optical_results(
+    tmp_path: Path, tracks: list[TrackView], min_length_seconds: int
+) -> dict[str, RipResult]:
+    results: dict[str, RipResult] = {}
+
+    async def on_start(_track: TrackView) -> None:
+        return None
+
+    async def on_done(track: TrackView, result: RipResult) -> None:
+        results[track.id] = result
+
+    await rip_optical(
+        device_path="/dev/sr0",
+        tracks=tracks,
+        output_dir=tmp_path,
+        on_track_start=on_start,
+        on_track_done=on_done,
+        on_track_progress=None,
+        min_length_seconds=min_length_seconds,
+    )
+    return results
+
+
+async def test_rip_optical_credits_each_title_with_its_own_file_when_one_is_excluded(monkeypatch, tmp_path):
+    """MakeMKV writes `_t00` for title 1 and `_t01` for title 3. Title 1 is
+    excluded but still listed, so title 3 is paired with `_t01`, not `_t00`."""
+    _capture_makemkvcon(monkeypatch)
+    (tmp_path / "DISC_t00.mkv").write_bytes(b"a" * 600)
+    (tmp_path / "DISC_t01.mkv").write_bytes(b"b" * 7200)
+    tracks = [_view(1, 600, excluded=True), _view(3, 7200)]
+
+    results = await _rip_optical_results(tmp_path, tracks, 120)
+
+    assert results["trk_3"].output_path == tmp_path / "DISC_t01.mkv"
+    assert results["trk_3"].size_bytes == 7200
+    assert results["trk_1"].output_path == tmp_path / "DISC_t00.mkv"
+    assert results["trk_1"].size_bytes == 600
+
+
+async def test_rip_optical_never_rips_below_the_scan_minimum(monkeypatch, tmp_path):
+    """A session minimum under the scan's 120 s is raised to 120 s, for the
+    command and for the eligible list alike."""
+    captured = _capture_makemkvcon(monkeypatch)
+    (tmp_path / "DISC_t00.mkv").write_bytes(b"a" * 64)
+
+    results = await _rip_optical_results(tmp_path, [_view(1, 90), _view(2, 3000)], 60)
+
+    assert "--minlength=120" in captured["argv"]
+    assert results["trk_2"].output_path == tmp_path / "DISC_t00.mkv"
+    assert results["trk_1"].error == "track duration 90s below minlength=120s; makemkvcon skipped it"
+
+
+async def test_rip_optical_keeps_a_session_minimum_above_the_scan_minimum(monkeypatch, tmp_path):
+    captured = _capture_makemkvcon(monkeypatch)
+
+    await _rip_optical_results(tmp_path, [_view(1, 3000)], 300)
+
+    assert "--minlength=300" in captured["argv"]

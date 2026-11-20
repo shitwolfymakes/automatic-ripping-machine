@@ -295,3 +295,18 @@ async def test_read_info_stderr_returns_joined_bytes() -> None:
     proc = _KillCountingProc(_Stream(b""), stderr=b"err one\nerr two\n")
 
     assert await _read_info_stderr(proc) == b"err one\nerr two\n"  # type: ignore[arg-type]
+
+
+async def test_info_run_lists_titles_down_to_the_scan_minimum(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The scan passes MakeMKV's 120 s minimum explicitly, the same floor the rip uses."""
+    captured: list[tuple[Any, ...]] = []
+
+    async def _factory(*args: Any, **_kw: Any) -> _Proc:
+        captured.append(args)
+        return _Proc(_Stream(b""))
+
+    monkeypatch.setattr(makemkv_mod.asyncio, "create_subprocess_exec", _factory)
+
+    await makemkv_mod._run_info("/dev/sr0")
+
+    assert "--minlength=120" in captured[0]
