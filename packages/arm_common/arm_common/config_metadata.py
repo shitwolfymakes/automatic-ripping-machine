@@ -346,7 +346,7 @@ CONFIG_FIELD_META: list[ConfigFieldMeta] = [
         tier="operator",
         label="Minimum title length (seconds)",
         help="Titles shorter than this are not listed or ripped. The scan and the rip both use it, so a disc's "
-        "title list and its files always match. A session can raise it but not lower it.",
+        "title list and its files always match. A session can raise it but not lower it. 0 to 3600 seconds.",
         type="int",
         editable=True,
     ),

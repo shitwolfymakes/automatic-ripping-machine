@@ -101,27 +101,35 @@ def test_config_view_shows_the_min_title_length() -> None:
     assert r.json()["min_title_length_seconds"] == 75
 
 
-def test_patch_accepts_a_min_title_length_of_60() -> None:
+@pytest.mark.parametrize("value", [0, 60, 3600])
+def test_patch_accepts_a_min_title_length_from_0_to_3600(value: int) -> None:
     db = FakeSession()
     db.rows["config"] = [_config(min_title_length_seconds=120)]
     app, auth = _config_app(db)
     with TestClient(app) as client:
-        r = client.patch("/api/config", json={"min_title_length_seconds": 60}, headers=auth)
+        r = client.patch("/api/config", json={"min_title_length_seconds": value}, headers=auth)
     assert r.status_code == 200, r.text
-    assert r.json()["min_title_length_seconds"] == 60
-    assert db.rows["config"][0].min_title_length_seconds == 60
+    assert r.json()["min_title_length_seconds"] == value
+    assert db.rows["config"][0].min_title_length_seconds == value
 
 
-@pytest.mark.parametrize("value", [-1, None])
-def test_patch_refuses_a_negative_or_empty_min_title_length(value: int | None) -> None:
+@pytest.mark.parametrize("value", [-1, 3601, None])
+def test_patch_refuses_a_min_title_length_outside_0_to_3600(value: int | None) -> None:
     db = FakeSession()
     db.rows["config"] = [_config(min_title_length_seconds=120)]
     app, auth = _config_app(db)
     with TestClient(app) as client:
         r = client.patch("/api/config", json={"min_title_length_seconds": value}, headers=auth)
     assert r.status_code == 400
-    assert r.json()["detail"] == "min_title_length_seconds must be 0 or a positive integer"
+    assert r.json()["detail"] == "min_title_length_seconds must be 0 to 3600 seconds"
     assert db.rows["config"][0].min_title_length_seconds == 120
+
+
+def test_the_field_help_gives_the_range() -> None:
+    from arm_common.config_metadata import CONFIG_FIELD_META
+
+    (meta,) = [m for m in CONFIG_FIELD_META if m.key == "min_title_length_seconds"]
+    assert "0 to 3600 seconds" in meta.help
 
 
 def test_ripper_config_carries_the_min_title_length() -> None:

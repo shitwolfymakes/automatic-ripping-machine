@@ -68,12 +68,17 @@ def _validate_manual_wait(fields: dict[str, Any]) -> None:
         )
 
 
+MAX_MIN_TITLE_LENGTH_SECONDS = 3600
+
+
 def _validate_min_title_length(fields: dict[str, Any]) -> None:
     value = fields.get("min_title_length_seconds", 0)
-    if value is None or isinstance(value, bool) or value < 0:
-        # 0 is a real choice: list and rip every title MakeMKV finds.
+    # 0 is a real choice: list and rip every title MakeMKV finds. An hour is
+    # the ceiling; anything longer would drop most features.
+    if value is None or not 0 <= value <= MAX_MIN_TITLE_LENGTH_SECONDS:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail="min_title_length_seconds must be 0 or a positive integer"
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"min_title_length_seconds must be 0 to {MAX_MIN_TITLE_LENGTH_SECONDS} seconds",
         )
 
 
