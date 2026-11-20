@@ -21,7 +21,6 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
-import logging
 from pathlib import Path
 from typing import Any
 
@@ -1277,43 +1276,24 @@ async def test_rip_optical_credits_each_title_with_its_own_file_when_one_is_excl
     assert results["trk_1"].size_bytes == 600
 
 
-async def test_rip_optical_never_rips_below_the_scan_minimum(monkeypatch, tmp_path):
-    """A session minimum under the scan's 120 s is raised to 120 s, for the
-    command and for the eligible list alike."""
+async def test_rip_optical_rips_down_to_the_minimum_it_is_given(monkeypatch, tmp_path):
+    """The caller settles the minimum (never below the scan's); rip_optical
+    uses it for the command and for the eligible list alike."""
     captured = _capture_makemkvcon(monkeypatch)
     (tmp_path / "DISC_t00.mkv").write_bytes(b"a" * 64)
+    (tmp_path / "DISC_t01.mkv").write_bytes(b"b" * 64)
 
-    results = await _rip_optical_results(tmp_path, [_view(1, 90), _view(2, 3000)], 60)
+    results = await _rip_optical_results(tmp_path, [_view(1, 30), _view(2, 90), _view(3, 3000)], 60)
 
-    assert "--minlength=120" in captured["argv"]
+    assert "--minlength=60" in captured["argv"]
     assert results["trk_2"].output_path == tmp_path / "DISC_t00.mkv"
-    assert results["trk_1"].error == "track duration 90s below minlength=120s; makemkvcon skipped it"
+    assert results["trk_3"].output_path == tmp_path / "DISC_t01.mkv"
+    assert results["trk_1"].error == "track duration 30s below minlength=60s; makemkvcon skipped it"
 
 
-async def test_rip_optical_keeps_a_session_minimum_above_the_scan_minimum(monkeypatch, tmp_path):
+async def test_rip_optical_passes_a_higher_minimum_through(monkeypatch, tmp_path):
     captured = _capture_makemkvcon(monkeypatch)
 
     await _rip_optical_results(tmp_path, [_view(1, 3000)], 300)
 
     assert "--minlength=300" in captured["argv"]
-
-
-async def test_rip_optical_logs_when_it_raises_the_session_minimum(monkeypatch, tmp_path, caplog):
-    _capture_makemkvcon(monkeypatch)
-
-    with caplog.at_level(logging.INFO, logger="arm_ripper.rip.dispatcher"):
-        await _rip_optical_results(tmp_path, [_view(1, 3000)], 60)
-
-    raised = [r.getMessage() for r in caplog.records if "raised" in r.getMessage()]
-    assert raised == [
-        "minlength raised from 60s to MakeMKV's 120s scan minimum: the rip may not write a title the scan did not list"
-    ]
-
-
-async def test_rip_optical_does_not_log_a_session_minimum_it_keeps(monkeypatch, tmp_path, caplog):
-    _capture_makemkvcon(monkeypatch)
-
-    with caplog.at_level(logging.INFO, logger="arm_ripper.rip.dispatcher"):
-        await _rip_optical_results(tmp_path, [_view(1, 3000)], 300)
-
-    assert not [r for r in caplog.records if "raised" in r.getMessage()]

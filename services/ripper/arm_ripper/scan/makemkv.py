@@ -4,7 +4,7 @@ from typing import NamedTuple
 
 from arm_common import DiscType
 from arm_common.schemas import DiscFingerprintInput, ScanResult, ScanTitle
-from arm_ripper.makemkv_minlength import MAKEMKV_SCAN_MIN_LENGTH_SECONDS
+from arm_ripper.makemkv_minlength import scan_min_title_length
 from arm_ripper.scan.disc_probe import DiscProbe, probe_disc
 from arm_ripper.scan.makemkv_info import parse_makemkvcon_info
 from arm_ripper.source import makemkv_source_url
@@ -108,7 +108,7 @@ async def _run_info(device_path: str) -> _InfoRun:
         "makemkvcon",
         "-r",
         "--cache=1",
-        f"--minlength={MAKEMKV_SCAN_MIN_LENGTH_SECONDS}",
+        f"--minlength={scan_min_title_length()}",
         "info",
         makemkv_source_url(device_path),
     ]
@@ -191,4 +191,5 @@ async def scan_disc(device_path: str) -> ScanResult:
         titles=titles,
         fingerprints=_fingerprints(probe),
         bd_meta=probe.bd_meta,
+        min_title_length_seconds=scan_min_title_length(),
     )

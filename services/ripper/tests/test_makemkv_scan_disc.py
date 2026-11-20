@@ -310,3 +310,29 @@ async def test_info_run_lists_titles_down_to_the_scan_minimum(monkeypatch: pytes
     await makemkv_mod._run_info("/dev/sr0")
 
     assert "--minlength=120" in captured[0]
+
+
+async def test_info_run_lists_titles_down_to_the_configured_minimum(monkeypatch: pytest.MonkeyPatch) -> None:
+    from arm_ripper.makemkv_minlength import scanning_with_min_title_length
+
+    captured: list[tuple[Any, ...]] = []
+
+    async def _factory(*args: Any, **_kw: Any) -> _Proc:
+        captured.append(args)
+        return _Proc(_Stream(b""))
+
+    monkeypatch.setattr(makemkv_mod.asyncio, "create_subprocess_exec", _factory)
+
+    with scanning_with_min_title_length(60):
+        await makemkv_mod._run_info("/dev/sr0")
+
+    assert "--minlength=60" in captured[0]
+
+
+async def test_scan_records_the_minimum_it_listed_titles_with(monkeypatch: pytest.MonkeyPatch) -> None:
+    from arm_ripper.makemkv_minlength import scanning_with_min_title_length
+
+    _run_ok(monkeypatch, b'CINFO:1,6206,"DVD disc"\n', DiscProbe(crc64=None))
+    with scanning_with_min_title_length(45):
+        result = await scan_disc("/dev/sr0")
+    assert result.min_title_length_seconds == 45
