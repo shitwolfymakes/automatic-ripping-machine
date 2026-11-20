@@ -13,16 +13,19 @@
 	}
 
 	let { group, config, onsaved }: Props = $props();
+
+	// Known once the GPU card has loaded its list: whether any GPU is enabled.
+	let gpuEnabled = $state<boolean | undefined>(undefined);
 </script>
 
 <div data-page-section>
 	{#if $transcoderEnabled && group}
 		<SchemaConfigForm {group} {config} {onsaved}>
 			{#snippet beforeSections()}
-				<TranscodeCapabilityStatus capable />
+				<TranscodeCapabilityStatus capable {gpuEnabled} />
 			{/snippet}
 			{#snippet beforeSave()}
-				<GpusCard />
+				<GpusCard ongpus={(gpus) => (gpuEnabled = gpus.some((g) => g.enabled))} />
 			{/snippet}
 		</SchemaConfigForm>
 	{:else}

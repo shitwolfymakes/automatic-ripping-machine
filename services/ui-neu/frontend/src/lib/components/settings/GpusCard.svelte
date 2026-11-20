@@ -25,13 +25,24 @@
 	// step. A probe is a real test encode run in a container (10-60 s); its
 	// result arrives as a `gpu.probed` event, so each device shows its own
 	// in-progress state until that event (or a 2-minute timeout).
-	let { location = null }: { location?: { label: string } | null } = $props();
+	let {
+		location = null,
+		ongpus
+	}: {
+		location?: { label: string } | null;
+		/** The loaded GPU list, again after every change to it. */
+		ongpus?: (gpus: GpuView[]) => void;
+	} = $props();
 
 	let gpus = $state<GpuView[]>([]);
 	let loaded = $state(false);
 	let error = $state<string | null>(null);
 	const pending = new PendingKeys();
 	let probingAll = $state(false);
+
+	$effect(() => {
+		if (loaded) ongpus?.(gpus);
+	});
 	let confirmTarget = $state<GpuView | null>(null);
 	const probes = new ProbeTimers();
 
@@ -143,8 +154,8 @@
 		<p class="gpus-card-note">Loading GPU inventory...</p>
 	{:else if gpus.length === 0}
 		<p class="gpus-card-note" data-testid="gpus-empty">
-			ARM will encode on the CPU. It works, just slower. The inventory seeds from the host probe (ARM_GPUS) when this
-			list is empty and the backend restarts.
+			No GPUs in the inventory yet. It seeds from the host probe (ARM_GPUS) when this list is empty and the backend
+			restarts.
 		</p>
 	{:else}
 		<div class="stack stack-sm gpus-card-list">

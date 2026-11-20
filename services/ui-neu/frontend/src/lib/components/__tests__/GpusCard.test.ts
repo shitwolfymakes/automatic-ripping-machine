@@ -87,13 +87,6 @@ describe('GpusCard', () => {
 		expect(screen.getByText('disabled')).toBeInTheDocument();
 	});
 
-	it('shows the empty state with the reseed explanation', async () => {
-		mockFetchGpus.mockResolvedValue([]);
-		render(GpusCard);
-		await waitFor(() => expect(screen.getByTestId('gpus-empty')).toBeInTheDocument());
-		expect(screen.getByTestId('gpus-empty').textContent).toContain('CPU');
-	});
-
 	it('shows "Not tested" when probed_at is null', async () => {
 		mockFetchGpus.mockResolvedValue([{ ...qsv, probed_at: null }]);
 		render(GpusCard);
@@ -245,10 +238,23 @@ describe('GpusCard', () => {
 			await waitFor(() => expect(startMock).toHaveBeenCalled());
 		});
 
-		it('says the CPU will encode when there are no GPUs', async () => {
+		it('says the list is empty and how it seeds, leaving CPU encoding to the status above it', async () => {
 			mockFetchGpus.mockResolvedValue([]);
 			render(GpusCard);
-			expect(await screen.findByText(/ARM will encode on the CPU\. It works, just slower\./)).toBeInTheDocument();
+			const empty = await screen.findByTestId('gpus-empty');
+			expect(empty).toHaveTextContent('No GPUs in the inventory yet.');
+			expect(empty).toHaveTextContent('ARM_GPUS');
+			expect(empty).not.toHaveTextContent('CPU');
+		});
+
+		it('reports the loaded list and every change to it', async () => {
+			mockFetchGpus.mockResolvedValue([qsv]);
+			mockUpdateGpu.mockResolvedValue({ ...qsv, enabled: false });
+			const ongpus = vi.fn();
+			render(GpusCard, { props: { ongpus } });
+			await waitFor(() => expect(ongpus).toHaveBeenLastCalledWith([qsv]));
+			await fireEvent.click(screen.getByRole('switch'));
+			await waitFor(() => expect(ongpus).toHaveBeenLastCalledWith([{ ...qsv, enabled: false }]));
 		});
 
 		it('lists verified encoders as available chips', async () => {
