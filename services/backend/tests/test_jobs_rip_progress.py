@@ -159,54 +159,29 @@ def test_ripping_job_counts_failed_tracks(signing_key: bytes) -> None:
     assert rp["current_track_index"] == 3
 
 
-def test_ripping_job_summary_counts_only_kept_tracks(signing_key: bytes) -> None:
-    """A no-hold main-feature rip stores every title; the dropped ones are
-    ripped but excluded, so they stay out of the summary."""
+def test_ripping_job_summary_counts_every_title_the_drive_reads(signing_key: bytes) -> None:
+    """Progress covers every title MakeMKV reads, excluded ones included, so
+    "title N of M" stays truthful while the extras rip before the feature."""
     db = FakeSession()
     _seed_admin(db)
     job_id = "job_01JZXR7K3M5Q8N4VWA00000002"
     db.rows["jobs"] = [_make_job(job_id, status=JobStatus.RIPPING)]
     dropped_done = _make_track("trk_1", job_id=job_id, index=1, status=TrackStatus.DONE)
     dropped_done.excluded = True
-    dropped_failed = _make_track("trk_2", job_id=job_id, index=2, status=TrackStatus.FAILED)
-    dropped_failed.excluded = True
-    main = _make_track("trk_3", job_id=job_id, index=3, status=TrackStatus.IN_PROGRESS)
-    db.rows["tracks"] = [dropped_done, dropped_failed, main]
-    app, token = _make_app(signing_key, db)
-    with TestClient(app) as client:
-        r = client.get("/api/jobs", headers=_auth(token))
-    assert r.status_code == 200
-    assert r.json()[0]["rip_progress"] == {
-        "tracks_total": 1,
-        "tracks_done": 0,
-        "tracks_failed": 0,
-        "current_track_id": "trk_3",
-        # The ordinal is among all tracks: trk_3 is the third by index.
-        "current_track_index": 3,
-    }
-
-
-def test_ripping_job_summary_points_at_an_excluded_track_being_ripped(signing_key: bytes) -> None:
-    """MakeMKV reads the excluded titles too, so the current track is the one
-    being ripped, excluded or not; the counts stay kept-only."""
-    db = FakeSession()
-    _seed_admin(db)
-    job_id = "job_01JZXR7K3M5Q8N4VWA00000002"
-    db.rows["jobs"] = [_make_job(job_id, status=JobStatus.RIPPING)]
-    dropped = _make_track("trk_1", job_id=job_id, index=1, status=TrackStatus.IN_PROGRESS)
-    dropped.excluded = True
+    dropped_ripping = _make_track("trk_2", job_id=job_id, index=2, status=TrackStatus.IN_PROGRESS)
+    dropped_ripping.excluded = True
     main = _make_track("trk_3", job_id=job_id, index=3, status=TrackStatus.QUEUED)
-    db.rows["tracks"] = [dropped, main]
+    db.rows["tracks"] = [dropped_done, dropped_ripping, main]
     app, token = _make_app(signing_key, db)
     with TestClient(app) as client:
         r = client.get("/api/jobs", headers=_auth(token))
     assert r.status_code == 200
     assert r.json()[0]["rip_progress"] == {
-        "tracks_total": 1,
-        "tracks_done": 0,
+        "tracks_total": 3,
+        "tracks_done": 1,
         "tracks_failed": 0,
-        "current_track_id": "trk_1",
-        "current_track_index": 1,
+        "current_track_id": "trk_2",
+        "current_track_index": 2,
     }
 
 
