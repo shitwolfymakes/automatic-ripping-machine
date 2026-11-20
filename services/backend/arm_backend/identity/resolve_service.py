@@ -14,7 +14,7 @@ from arm_backend.identity.stage_runner import EpisodeStageRunner
 from arm_backend.session_drain import ResolveFanOutOutcome, after_rip, fan_out_waiting_identify_applications
 from arm_backend.ws import WSHub
 from arm_common import Job, JobStatus, MediaType
-from arm_common.enums import RESOLVABLE_PROMOTE_JOB_STATUSES
+from arm_common.enums import POST_RIP_JOB_STATUSES, RESOLVABLE_PROMOTE_JOB_STATUSES
 from arm_common.schemas import JobView, ResolveFanOutOutcomeView, ResolveMatch, ResolveRequest, ResolveResponse
 from arm_common.schemas.job_metadata import ExternalIds, JobIdentity, JobMetadata, flag_is_set, without_flags
 
@@ -196,6 +196,15 @@ def _clear_spent_markers(new_metadata: dict[str, Any]) -> dict[str, Any]:
     return cleared
 
 
+def _rip_waited_for_identity(job: Job) -> bool:
+    """Whether the job's rip finished before its identity landed: a ripped
+    placeholder, or a ripped (or partial) job still flagged `unidentified`.
+    Its auto-apply waited for a match, so this resolve runs the after-rip pass."""
+    if job.status == JobStatus.RIPPED_AWAITING_IDENTIFY:
+        return True
+    return job.status in POST_RIP_JOB_STATUSES and flag_is_set(job.metadata_json, "unidentified")
+
+
 def _record_manual_disc_fields(job: Job, req: ResolveRequest) -> None:
     # Disc position and season are identity fields: they go through the
     # resolver as manual proposals so provenance is recorded and later
@@ -288,12 +297,8 @@ async def resolve_identity(
     if "media_type" in req.model_fields_set:
         job.media_type = req.media_type
     was_ripped_placeholder = job.status == JobStatus.RIPPED_AWAITING_IDENTIFY
-    # The rip already finished but rip-complete skipped after_rip because the
-    # disc was unidentified: a ripped placeholder, or a partial one (which
-    # keeps RIPPED_PARTIAL). Read the flag now; it is cleared just below.
-    rip_waited_for_identity = was_ripped_placeholder or (
-        job.status == JobStatus.RIPPED_PARTIAL and flag_is_set(job.metadata_json, "unidentified")
-    )
+    # Read before the flag is cleared just below.
+    rip_waited_for_identity = _rip_waited_for_identity(job)
     new_metadata = _clear_spent_markers(new_metadata)
     if job.status in RESOLVABLE_PROMOTE_JOB_STATUSES:
         # A placeholder whose rip already finished becomes RIPPED, not
@@ -322,10 +327,10 @@ async def resolve_identity(
     await session.refresh(job)
 
     if rip_waited_for_identity:
-        # Rip done + identity just landed: run the same post-rip pass
-        # rip-complete runs for identified jobs — drain parked applications
-        # (fan-out uses the just-resolved title) and then the auto-apply
-        # hook. `after_rip` commits its own work and never raises.
+        # Rip done + identity just landed: run the after-rip pass — drain
+        # parked applications (fan-out uses the just-resolved title) and then
+        # the auto-apply hook, which waited on the flag. `after_rip` commits
+        # its own work and never raises.
         fan_out_outcomes = await after_rip(session, job, hub)
     else:
         fan_out_outcomes = await fan_out_waiting_identify_applications(session, job=job, hub=hub)

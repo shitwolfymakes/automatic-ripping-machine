@@ -444,3 +444,48 @@ async def test_after_rip_promoted_parked_application_suppresses_drive_default(tm
     queued_events = [e for e in hub.events if e["event_type"] == "session.queued"]
     assert len(queued_events) == 1
     assert queued_events[0]["payload"]["session_id"] == "ses_y"
+
+
+async def _rip_to_completion(db: FakeSession, job: Job, hub: CapturingHub) -> None:
+    from arm_backend.routers.ripper import rip_complete
+    from arm_common.schemas import JobCompleteRequest
+
+    await rip_complete(JobCompleteRequest(), job=job, session=db, hub=hub)  # type: ignore[arg-type]
+
+
+@pytest.mark.asyncio
+async def test_miss_released_by_start_auto_applies_after_the_rip(tmp_path: Path) -> None:
+    """Start counts a parked miss as matched: once it rips, auto-apply
+    queues the routed session."""
+    from arm_backend.routers.jobs import _start_held_job
+
+    _set_media_root(tmp_path)
+    db = FakeSession()
+    job = _seed(db, job_status=JobStatus.AWAITING_REVIEW)
+    job.metadata_json = {"flags": {"unidentified": True}}
+    job.resumed_from_crash = False
+    hub = CapturingHub()
+
+    await _start_held_job(db, hub, job)  # type: ignore[arg-type]
+    await _rip_to_completion(db, job, hub)
+
+    assert job.status == JobStatus.RIPPED
+    apps = [r for r in db.added if isinstance(r, SessionApplication)]
+    assert [a.session_id for a in apps] == ["ses_x"]
+
+
+@pytest.mark.asyncio
+async def test_miss_released_by_countdown_waits_for_a_match(tmp_path: Path) -> None:
+    """A miss the countdown released rips still unidentified: rip-complete
+    finishes it ripped but queues nothing unattended."""
+    _set_media_root(tmp_path)
+    db = FakeSession()
+    job = _seed(db, job_status=JobStatus.RIPPING)
+    job.metadata_json = {"flags": {"unidentified": True}}
+    job.resumed_from_crash = False
+    hub = CapturingHub()
+
+    await _rip_to_completion(db, job, hub)
+
+    assert job.status == JobStatus.RIPPED
+    assert not [r for r in db.added if isinstance(r, SessionApplication)]

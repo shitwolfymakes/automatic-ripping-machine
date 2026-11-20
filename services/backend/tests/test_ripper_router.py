@@ -57,6 +57,7 @@ from arm_common.enums import (
     TrackSelection,
 )
 from arm_common.models import Track
+from arm_common.schemas.job_metadata import flag_is_set
 
 from tests._fakes import FakeSession
 
@@ -1888,6 +1889,20 @@ def test_rip_start_existing_tracks_transitions_non_ripping() -> None:
     assert db.rows["jobs"][0].started_at is not None
 
 
+def test_rip_start_countdown_release_keeps_the_unidentified_flag() -> None:
+    """The review countdown releasing a parked miss is not the operator
+    matching it: the flag stays, so auto-apply still waits after the rip."""
+    db = FakeSession()
+    db.rows["drives"] = [_drive()]
+    db.rows["jobs"] = [_job(status=JobStatus.AWAITING_REVIEW, meta={"flags": {"unidentified": True}})]
+    db.rows["tracks"] = [_track("trk_1", status=TrackStatus.QUEUED)]
+    with TestClient(_make_app(db)) as client:
+        r = client.post("/api/ripper/jobs/job_01JZXR7K3M5Q8N4VWA00000001/rip-start", headers=_OWNER_HEADERS)
+    assert r.status_code == 200
+    assert db.rows["jobs"][0].status == JobStatus.RIPPING
+    assert flag_is_set(db.rows["jobs"][0].metadata_json, "unidentified")
+
+
 def test_rip_start_existing_tracks_preserves_started_at() -> None:
     """The transition keeps an already-set started_at (covers the started_at-not-
     None branch) rather than overwriting it."""
@@ -2651,18 +2666,81 @@ def test_rip_start_routed_session_preset_not_seeded_500() -> None:
     assert "not seeded" in r.json()["detail"]
 
 
-# --- rip-complete parks unidentified placeholder rips (G-09) -----------------
+# --- rip-complete of unidentified rips (G-09) ----------------------------------
 
 
-def test_rip_complete_unidentified_parks_awaiting_identify(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    """A placeholder rip (identify missed, block_on_miss=false) that ripped
+def test_rip_complete_unidentified_video_rip_finishes_ripped_and_drains(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """An unidentified DVD rip finishes plain ripped and runs after_rip: the
+    operator's parked application fans out (named from the disc title)."""
+    from arm_backend import config as bcfg
+
+    bcfg.settings.MEDIA_ROOT = str(tmp_path)
+    db = FakeSession()
+    db.rows["jobs"] = [_job(status=JobStatus.RIPPING, meta={"flags": {"unidentified": True}})]
+    db.rows["drives"] = [_drive()]
+    db.rows["tracks"] = [_track("t1", status=TrackStatus.DONE)]
+    _seed_parked_session(db)
+    hub = _Hub()
+    r = _rip_complete(db, hub, monkeypatch)
+    assert r.status_code == 200, r.text
+    assert r.json()["status"] == "ripped"
+    assert any(e["event_type"] == "rip.completed" for e in hub.events)
+    assert db.rows["session_applications"][0].status == SessionApplicationStatus.QUEUED
+    assert len(db.rows["transcode_tasks"]) == 1
+
+
+def test_rip_complete_unidentified_video_rip_runs_auto_apply(monkeypatch: pytest.MonkeyPatch) -> None:
+    """after_rip reaches the auto-apply hook for an unidentified video rip;
+    whether it queues anything is auto_apply_allowed's call."""
+    from arm_backend import session_drain as session_drain_mod
+
+    calls: list[str] = []
+
+    async def _record(_db: Any, job: Any, _hub: Any) -> None:
+        calls.append(job.id)
+
+    monkeypatch.setattr(session_drain_mod, "maybe_auto_apply_session", _record)
+    db = FakeSession()
+    db.rows["jobs"] = [_job(status=JobStatus.RIPPING, meta={"flags": {"unidentified": True}})]
+    db.rows["drives"] = [_drive()]
+    db.rows["tracks"] = [_track("t1", status=TrackStatus.DONE)]
+    with TestClient(_make_app(db, hub=_Hub())) as client:
+        r = client.post("/api/ripper/jobs/job_01JZXR7K3M5Q8N4VWA00000001/rip-complete", json={}, headers=_OWNER_HEADERS)
+    assert r.status_code == 200, r.text
+    assert calls == ["job_01JZXR7K3M5Q8N4VWA00000001"]
+
+
+def test_rip_complete_partial_unidentified_video_rip_runs_after_rip(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """A partial unidentified DVD rip stays RIPPED_PARTIAL and runs after_rip too."""
+    from arm_backend import config as bcfg
+
+    bcfg.settings.MEDIA_ROOT = str(tmp_path)
+    db = FakeSession()
+    db.rows["jobs"] = [_job(status=JobStatus.RIPPING, meta={"flags": {"unidentified": True}})]
+    db.rows["drives"] = [_drive()]
+    failed_track = _track("t2", status=TrackStatus.FAILED, index=2)
+    failed_track.excluded = True
+    db.rows["tracks"] = [_track("t1", status=TrackStatus.DONE, index=1), failed_track]
+    _seed_parked_session(db)
+    r = _rip_complete(db, _Hub(), monkeypatch)
+    assert r.status_code == 200, r.text
+    assert r.json()["status"] == "ripped_partial"
+    assert db.rows["session_applications"][0].status == SessionApplicationStatus.QUEUED
+
+
+def test_rip_complete_unidentified_cd_parks_awaiting_identify(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """A CD placeholder rip (identify missed, block_on_miss=false) that ripped
     clean parks at ripped_awaiting_identify: transcode is gated on identity,
     so neither the parked application nor auto-apply may fire yet."""
     from arm_backend import config as bcfg
 
     bcfg.settings.MEDIA_ROOT = str(tmp_path)
     db = FakeSession()
-    db.rows["jobs"] = [_job(status=JobStatus.RIPPING, meta={"unidentified": True})]
+    db.rows["jobs"] = [_job(status=JobStatus.RIPPING, disc_type=DiscType.CD, meta={"unidentified": True})]
     db.rows["drives"] = [_drive()]
     db.rows["tracks"] = [_track("t1", status=TrackStatus.DONE)]
     _seed_parked_session(db)
@@ -2676,7 +2754,7 @@ def test_rip_complete_unidentified_parks_awaiting_identify(monkeypatch: pytest.M
     assert db.rows["transcode_tasks"] == []
 
 
-def test_rip_complete_partial_unidentified_stays_ripped_partial(
+def test_rip_complete_partial_unidentified_cd_stays_ripped_partial(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     """Partiality wins over the placeholder flag: the enum has no
@@ -2686,7 +2764,7 @@ def test_rip_complete_partial_unidentified_stays_ripped_partial(
 
     bcfg.settings.MEDIA_ROOT = str(tmp_path)
     db = FakeSession()
-    db.rows["jobs"] = [_job(status=JobStatus.RIPPING, meta={"unidentified": True})]
+    db.rows["jobs"] = [_job(status=JobStatus.RIPPING, disc_type=DiscType.CD, meta={"unidentified": True})]
     db.rows["drives"] = [_drive()]
     db.rows["tracks"] = [
         _track("t1", status=TrackStatus.DONE, index=1),
@@ -2697,7 +2775,7 @@ def test_rip_complete_partial_unidentified_stays_ripped_partial(
     assert r.json()["status"] == "ripped_partial"
 
 
-def test_rip_complete_partial_unidentified_does_not_run_after_rip(
+def test_rip_complete_partial_unidentified_cd_does_not_run_after_rip(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     """Fix 75-3 regression: a RIPPED_PARTIAL placeholder (identify missed,
@@ -2712,7 +2790,7 @@ def test_rip_complete_partial_unidentified_does_not_run_after_rip(
 
     bcfg.settings.MEDIA_ROOT = str(tmp_path)
     db = FakeSession()
-    db.rows["jobs"] = [_job(status=JobStatus.RIPPING, meta={"unidentified": True})]
+    db.rows["jobs"] = [_job(status=JobStatus.RIPPING, disc_type=DiscType.CD, meta={"unidentified": True})]
     db.rows["drives"] = [_drive()]
     failed_track = _track("t2", status=TrackStatus.FAILED, index=2)
     # Excluded from transcode-output resolution (compute_outputs skips

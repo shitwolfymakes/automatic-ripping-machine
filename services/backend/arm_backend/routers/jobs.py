@@ -72,6 +72,7 @@ from arm_common.schemas.job_metadata import (
     identity_suggestion_of,
     previously_ripped_job_id,
     with_flags,
+    without_flags,
     without_identity_suggestion,
 )
 
@@ -258,7 +259,9 @@ async def rip_start_review(
 
 async def _start_held_job(db: AsyncSession, hub: WSHub, job: Job) -> None:
     """AWAITING_REVIEW -> RIPPING, plus the `rip.start` command that unblocks
-    the parked ripper. Commits. 422 when every track is excluded."""
+    the parked ripper. Commits. 422 when every track is excluded. The
+    operator starting the rip counts the disc as matched, so the
+    `unidentified` flag goes and auto-apply runs once the rip finishes."""
     tracks = list((await db.execute(select(Track).where(col(Track.job_id) == job.id))).scalars().all())
     if tracks and all(t.excluded for t in tracks):
         raise HTTPException(
@@ -268,6 +271,7 @@ async def _start_held_job(db: AsyncSession, hub: WSHub, job: Job) -> None:
 
     job.status = JobStatus.RIPPING
     job.started_at = datetime.now(timezone.utc)
+    job.metadata_json = without_flags(job.metadata_json, "unidentified")
     db.add(job)
     await db.flush()
 

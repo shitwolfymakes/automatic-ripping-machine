@@ -385,6 +385,21 @@ def test_rip_start_review_transitions_to_ripping_and_emits(signing_key: bytes) -
     assert "rip.start" in types and "rip.started" in types
 
 
+def test_rip_start_review_clears_the_unidentified_flag(signing_key: bytes) -> None:
+    """Start on a parked miss counts the disc as matched: the `unidentified`
+    flag goes (both spellings), the other flags stay."""
+    db = FakeSession()
+    app, token = _make_app(signing_key, db, _Hub())
+    meta = {"unidentified": True, "flags": {"unidentified": True, "dispatch_timeout": True}}
+    db.rows["jobs"] = [_job(status=JobStatus.AWAITING_REVIEW, meta=meta)]
+    db.rows["tracks"] = [_track("trk_01JZXR7K3M5Q8N4VWA0000T01", status=TrackStatus.QUEUED)]
+    with TestClient(app) as client:
+        r = client.post("/api/jobs/job_01JZXR7K3M5Q8N4VWA00000001/rip-start-review", headers=_auth(token))
+    assert r.status_code == 200, r.text
+    stored = db.rows["jobs"][0].metadata_json
+    assert stored == {"flags": {"dispatch_timeout": True}}
+
+
 def test_rip_start_review_wrong_status_409(signing_key: bytes) -> None:
     db = FakeSession()
     app, token = _make_app(signing_key, db)

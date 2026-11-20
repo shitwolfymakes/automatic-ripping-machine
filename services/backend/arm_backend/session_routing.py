@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import col, select
 
 from arm_common import Config, DiscType, Drive, Job, MediaType, Session, SessionRoute
+from arm_common.schemas.job_metadata import flag_is_set
 
 logger = logging.getLogger("arm_backend.session_routing")
 
@@ -127,9 +128,12 @@ async def auto_apply_allowed(db: AsyncSession, job: Job) -> bool:
 
     An explicit per-rip choice is the user opting in for that one rip and
     bypasses the flag; everything else (drive default or a route) needs
-    `auto_transcode_on_idle`.
+    `auto_transcode_on_idle` and a disc that is no longer `unidentified`,
+    so nothing is filed under the volume label unattended.
     """
     if _pending_session_id(job) is not None:
         return True
+    if flag_is_set(job.metadata_json, "unidentified"):
+        return False
     config_row = (await db.execute(select(Config).where(col(Config.id) == 1))).scalar_one_or_none()
     return config_row is not None and bool(config_row.auto_transcode_on_idle)
