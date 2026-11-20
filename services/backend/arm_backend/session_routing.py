@@ -8,7 +8,17 @@ import logging
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import col, select
 
-from arm_common import Config, DiscType, Drive, Job, MediaType, Session, SessionRoute
+from arm_common import (
+    Config,
+    DiscType,
+    Drive,
+    Job,
+    MediaType,
+    Session,
+    SessionApplication,
+    SessionApplicationStatus,
+    SessionRoute,
+)
 from arm_common.schemas.job_metadata import flag_is_set
 
 logger = logging.getLogger("arm_backend.session_routing")
@@ -121,16 +131,41 @@ async def route_session_id_for(db: AsyncSession, media_type: MediaType, disc_typ
     return None
 
 
+# Every application status but CANCELLED: the job still carries that choice.
+_LIVE_APPLICATION_STATUSES = tuple(s for s in SessionApplicationStatus if s != SessionApplicationStatus.CANCELLED)
+
+
+async def _has_live_application(db: AsyncSession, job: Job) -> bool:
+    """Whether the job has a session application that is not cancelled."""
+    row = (
+        (
+            await db.execute(
+                select(SessionApplication)
+                .where(col(SessionApplication.job_id) == job.id)
+                .where(col(SessionApplication.status).in_(_LIVE_APPLICATION_STATUSES))
+                .limit(1)
+            )
+        )
+        .scalars()
+        .first()
+    )
+    return row is not None
+
+
 async def auto_apply_allowed(db: AsyncSession, job: Job) -> bool:
     """May rip-complete queue the ROUTED session (`resolve_routed_session_id`
     — pending choice, else the compatibility-gated drive default, else
     `session_routes`) unattended?
 
-    An explicit per-rip choice is the user opting in for that one rip and
-    bypasses the flag; everything else (drive default or a route) needs
-    `auto_transcode_on_idle` and a disc that is no longer `unidentified`,
-    so nothing is filed under the volume label unattended.
+    Never when the job already has a live (non-cancelled) application: a
+    session the operator applied is their choice, and auto-apply adds nothing
+    next to it. Otherwise an explicit per-rip choice is the user opting in
+    for that one rip and bypasses the flag; everything else (drive default or
+    a route) needs `auto_transcode_on_idle` and a disc that is no longer
+    `unidentified`, so nothing is filed under the volume label unattended.
     """
+    if await _has_live_application(db, job):
+        return False
     if _pending_session_id(job) is not None:
         return True
     if flag_is_set(job.metadata_json, "unidentified"):

@@ -489,3 +489,67 @@ async def test_miss_released_by_countdown_waits_for_a_match(tmp_path: Path) -> N
 
     assert job.status == JobStatus.RIPPED
     assert not [r for r in db.added if isinstance(r, SessionApplication)]
+
+
+def _second_session(db: FakeSession, session_id: str) -> None:
+    db.rows["sessions"].append(
+        Session(
+            id=session_id,
+            name="Hand picked",
+            media_type=MediaType.MOVIE,
+            is_builtin=False,
+            rip_preset_id="rpr_x",
+            transcode_preset_id="tpr_x",
+            output_path_template="{title} ({year})/hand/{title} - {transcode_slug}.{ext}",
+        )
+    )
+
+
+@pytest.mark.asyncio
+async def test_resolve_after_a_hand_apply_does_not_auto_apply_the_routed_session(tmp_path: Path) -> None:
+    """A session applied by hand to a ripped, still unidentified disc is the
+    operator's choice: identifying the disc later runs the after-rip step,
+    but auto-apply adds no routed session next to it."""
+    from arm_backend.identity.resolve_service import resolve_identity
+    from arm_common.schemas import ResolveRequest
+
+    _set_media_root(tmp_path)
+    db = FakeSession()
+    job = _seed(db)
+    job.metadata_json = {"flags": {"unidentified": True}}
+    job.resumed_from_crash = False
+    _second_session(db, "ses_hand")
+    hub = CapturingHub()
+
+    await apply_session_internal(  # type: ignore[arg-type]
+        db, job=job, session_id="ses_hand", overwrite=False, created_by_user_id=None, source="manual", hub=hub
+    )
+    await resolve_identity(db, job, ResolveRequest(title="Iron Man", year=2008), hub=hub, stage_runner=None)  # type: ignore[arg-type]
+
+    apps = [r for r in db.added if isinstance(r, SessionApplication)]
+    assert [a.session_id for a in apps] == ["ses_hand"]
+
+
+@pytest.mark.asyncio
+async def test_auto_apply_ignores_a_cancelled_application(tmp_path: Path) -> None:
+    """A cancelled application is no longer the operator's choice for the
+    job, so the routed session still auto-applies."""
+    _set_media_root(tmp_path)
+    db = FakeSession()
+    job = _seed(db)
+    _second_session(db, "ses_hand")
+    db.rows["session_applications"] = [
+        SessionApplication(
+            id="sap_cancelled",
+            session_id="ses_hand",
+            job_id=job.id,
+            status=SessionApplicationStatus.CANCELLED,
+            overwrite=False,
+        )
+    ]
+    hub = CapturingHub()
+
+    await maybe_auto_apply_session(db, job, hub)  # type: ignore[arg-type]
+
+    apps = [r for r in db.added if isinstance(r, SessionApplication)]
+    assert [a.session_id for a in apps] == ["ses_x"]
