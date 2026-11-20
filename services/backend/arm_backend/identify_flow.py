@@ -2,7 +2,7 @@
 
 import asyncio
 import logging
-from collections.abc import Awaitable
+from collections.abc import Awaitable, Callable
 from datetime import datetime, timezone
 from typing import Any
 
@@ -46,6 +46,7 @@ from arm_common import (
     Job,
     JobStatus,
     MediaType,
+    RipPreset,
     Session,
 )
 from arm_common.enums import DriveKind, PreviouslyRippedAction
@@ -60,11 +61,11 @@ from arm_common.schemas import (
 logger = logging.getLogger("arm_backend.identify_flow")
 
 
-async def _persist_review_tracks(db: AsyncSession, job: Job, scan: ScanResult) -> None:
-    """Persist the scan's titles as Track rows for the timed review gate (§4.3).
+async def _persist_tracks(db: AsyncSession, job: Job, select_tracks: Callable[[RipPreset], list[Track]]) -> None:
+    """Persist the titles `select_tracks` picks under the job's routed rip preset as Track rows.
 
-    Uses the default rip preset for the disc type to compute keep/drop defaults
-    (`excluded`); the operator overrides per title in review. Idempotent on
+    The preset's keep/drop defaults (`excluded`) are recorded as its proposal;
+    the operator overrides per title in review. Idempotent on
     `(job_id, source_ref)` so a ripper re-POST of identify on the same held disc
     doesn't double-insert (audit M1) — Track rows have no unique constraint.
     """
@@ -78,11 +79,11 @@ async def _persist_review_tracks(db: AsyncSession, job: Job, scan: ScanResult) -
     }
     added: list[Track] = []
     try:
-        review_tracks = select_tracks_for_review(job.id, scan, preset)
+        selected = select_tracks(preset)
     except DiscBackupNeedsBluray as exc:
         logger.warning("skipping review tracks for job_id=%s: %s", job.id, exc)
         return
-    for track in review_tracks:
+    for track in selected:
         if track.source_ref in existing_refs:
             continue
         db.add(track)
@@ -90,6 +91,11 @@ async def _persist_review_tracks(db: AsyncSession, job: Job, scan: ScanResult) -
     if added:
         record_preset(job, added, now=datetime.now(timezone.utc))
     await db.flush()
+
+
+async def _persist_review_tracks(db: AsyncSession, job: Job, scan: ScanResult) -> None:
+    """Persist the scan's titles as Track rows for the timed review gate (§4.3)."""
+    await _persist_tracks(db, job, lambda preset: select_tracks_for_review(job.id, scan, preset))
 
 
 # A miss stores at most this many dispatcher attempts (metadata_json.identify_attempts).
