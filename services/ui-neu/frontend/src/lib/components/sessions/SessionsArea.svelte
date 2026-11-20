@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
+	import { onMount, untrack } from 'svelte';
 	import { createSessionsData, type JoinedSession } from './sessionsData.svelte';
 	import { copyName, isRipPreset, ripPresetCopy, transcodePresetCopy } from './sessionPresets';
 	import SessionsHub from './SessionsHub.svelte';
@@ -35,7 +35,20 @@
 		type View
 	} from './sessionsAreaModel';
 	import { countByMediaType } from '$lib/utils/sessions';
-	import type { RipPresetView, SessionView, TranscodePresetView } from '$lib/types/api.gen';
+	import AutoSaveToggle from '$lib/components/settings/AutoSaveToggle.svelte';
+	import type { RipPresetView, SessionView, SettingsGroup, TranscodePresetView } from '$lib/types/api.gen';
+
+	interface Props {
+		/** The Defaults settings group (auto-apply), shown above the matrix on a transcode-capable deployment. */
+		defaultsGroup?: SettingsGroup;
+		config?: Record<string, unknown>;
+		/** Saves an on/off Defaults setting as soon as its switch flips. */
+		ontoggle?: (key: string, next: boolean) => void;
+		/** The view to open on (a deep link to a Defaults field opens Defaults). */
+		initialView?: View;
+	}
+
+	let { defaultsGroup, config = {}, ontoggle, initialView = 'sessions' }: Props = $props();
 
 	const data = createSessionsData();
 
@@ -50,10 +63,10 @@
 	);
 	const shownTypeCounts = $derived($transcoderEnabled ? data.typeCounts() : countByMediaType(shownSessions));
 
-	// Active view: the sessions hub, one of the two preset libraries, or routing
-	let view = $state<View>('sessions');
+	// Active view: the sessions hub, one of the two preset libraries, or the defaults
+	let view = $state<View>(untrack(() => initialView));
 
-	// Each list view's count, shown on its tab; Routing has none.
+	// Each list view's count, shown on its tab; Defaults has none.
 	const tabs = $derived(
 		viewTabs({
 			sessions: shownSessions.length,
@@ -301,7 +314,23 @@
 			ondelete={handleDeleteSession}
 		/>
 	{:else if view === 'routing'}
-		<RoutingMatrix />
+		<RoutingMatrix>
+			{#snippet beforeMatrix()}
+				{#if $transcoderEnabled && defaultsGroup}
+					<div class="panel stack stack-sm" data-testid="defaults-auto-apply">
+						{#each defaultsGroup.fields as field (field.key)}
+							<AutoSaveToggle
+								key={field.key}
+								label={field.label}
+								help={field.help}
+								checked={Boolean(config[field.key])}
+								ontoggle={(next) => ontoggle?.(field.key, next)}
+							/>
+						{/each}
+					</div>
+				{/if}
+			{/snippet}
+		</RoutingMatrix>
 	{:else}
 		<PresetLibrary
 			kind={view}

@@ -33,6 +33,10 @@ vi.mock('$lib/api/handbrakeSchema', () => ({
 	refreshHandbrakeSchema: vi.fn()
 }));
 // The preset form's encoders store follows transcode.events; keep jsdom off a real socket.
+vi.mock('$lib/api/settings', () => ({
+	saveArmConfig: vi.fn(() => Promise.resolve({ success: true }))
+}));
+
 vi.mock('$lib/api/ws', () => ({
 	wsClient: { start: vi.fn(), subscribe: vi.fn(() => () => {}) }
 }));
@@ -43,6 +47,7 @@ import { fetchRipPresets, createRipPreset } from '$lib/api/ripPresets';
 import { fetchTranscodePresets, createTranscodePreset } from '$lib/api/transcodePresets';
 import { deleteSession, cloneSession } from '$lib/api/sessions';
 import SessionsArea from '../SessionsArea.svelte';
+import type { SettingsGroup } from '$lib/types/api.gen';
 import { setTranscoderEnabled } from '$lib/stores/config';
 
 const makeSession = (id = 's1', name = 'ses Alpha') => ({
@@ -405,23 +410,79 @@ describe('the page header and view switch', () => {
 			'Sessions 1',
 			'Rip presets 1',
 			'Transcode presets 1',
-			'Routing'
+			'Defaults'
 		]);
 		expect(tabs[0]).toHaveAttribute('aria-selected', 'true');
 		expect(tabs[3]).toHaveAttribute('aria-selected', 'false');
 	});
 
-	it('Routing shows the matrix, with no search, source filter or type chips', async () => {
+	it('Defaults shows the matrix, with no search, source filter or type chips', async () => {
 		renderComponent(SessionsArea);
 		await screen.findByText('ses Alpha');
 		expect(screen.getByRole('searchbox')).toBeInTheDocument();
-		await fireEvent.click(screen.getByRole('tab', { name: 'Routing' }));
-		expect(screen.getByRole('tab', { name: 'Routing' })).toHaveAttribute('aria-selected', 'true');
+		await fireEvent.click(screen.getByRole('tab', { name: 'Defaults' }));
+		expect(screen.getByRole('tab', { name: 'Defaults' })).toHaveAttribute('aria-selected', 'true');
 		expect(await screen.findByLabelText('Movie, Any disc')).toBeInTheDocument();
 		expect(fetchSessionRoutes).toHaveBeenCalled();
 		expect(screen.queryByRole('searchbox')).not.toBeInTheDocument();
 		expect(screen.queryByLabelText('Filter by source')).not.toBeInTheDocument();
 		expect(screen.queryByRole('table', { name: 'Sessions' })).not.toBeInTheDocument();
+	});
+});
+
+describe('Defaults view auto-apply', () => {
+	const DEFAULTS = {
+		name: 'Defaults',
+		fields: [
+			{
+				key: 'auto_transcode_on_idle',
+				group: 'Defaults',
+				tier: 'operator',
+				label: 'Apply these defaults automatically after each rip',
+				help: '',
+				type: 'bool',
+				editable: true,
+				enum_values: null
+			}
+		]
+	} as SettingsGroup;
+	const LABEL = 'Apply these defaults automatically after each rip';
+
+	async function openDefaults(ontoggle = vi.fn()) {
+		renderComponent(SessionsArea, {
+			props: { defaultsGroup: DEFAULTS, config: { auto_transcode_on_idle: false }, ontoggle }
+		});
+		await screen.findByText('ses Alpha');
+		await fireEvent.click(screen.getByRole('tab', { name: 'Defaults' }));
+		return ontoggle;
+	}
+
+	afterEach(() => setTranscoderEnabled(true));
+
+	it('shows auto-apply as a switch above the matrix that reports its key and value, with no Save button', async () => {
+		setTranscoderEnabled(true);
+		const ontoggle = await openDefaults();
+		const toggle = await screen.findByRole('switch', { name: LABEL });
+		const cell = await screen.findByLabelText('Movie, Any disc');
+		const heading = screen.getByRole('heading', { name: 'Defaults' });
+		const lede = screen.getByText(/These are all optional/);
+		const panel = screen.getByTestId('defaults-auto-apply');
+		expect(panel).toHaveClass('panel');
+		expect(panel).toContainElement(toggle);
+		// Heading, then the auto-apply panel, then the matrix's description and the matrix.
+		expect(heading.compareDocumentPosition(panel) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+		expect(panel.compareDocumentPosition(lede) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+		expect(lede.compareDocumentPosition(cell) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+		expect(screen.queryByRole('button', { name: 'Save' })).not.toBeInTheDocument();
+		await fireEvent.click(toggle);
+		expect(ontoggle).toHaveBeenCalledWith('auto_transcode_on_idle', true);
+	});
+
+	it('hides auto-apply on a ripper-only deployment and keeps the matrix', async () => {
+		setTranscoderEnabled(false);
+		await openDefaults();
+		expect(await screen.findByLabelText('Movie, Any disc')).toBeInTheDocument();
+		expect(screen.queryByRole('switch', { name: LABEL })).not.toBeInTheDocument();
 	});
 });
 

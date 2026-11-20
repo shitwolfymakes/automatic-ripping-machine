@@ -16,7 +16,7 @@ const TABS: ReadonlyArray<{ key: View; label: string }> = [
 	{ key: 'sessions', label: 'Sessions' },
 	{ key: 'rip', label: 'Rip presets' },
 	{ key: 'transcode', label: 'Transcode presets' },
-	{ key: 'routing', label: 'Routing' }
+	{ key: 'routing', label: 'Defaults' }
 ];
 
 // Which editors are open: the session builder, and the rip and transcode

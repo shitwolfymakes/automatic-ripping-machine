@@ -38,7 +38,7 @@ describe('LoadedSettings', () => {
 		expect(loaded.settings).toBeNull();
 		expect(loaded.loading).toBe(true);
 		expect(loaded.error).toBeNull();
-		expect(loaded.notifSaving).toBe(false);
+		expect(loaded.isSaving('notifications_enabled')).toBe(false);
 	});
 
 	describe('load', () => {
@@ -102,32 +102,34 @@ describe('LoadedSettings', () => {
 		});
 	});
 
-	describe('toggleNotifications', () => {
+	describe('toggleSetting', () => {
+		const KEY = 'notifications_enabled';
+
 		it('sends nothing when no settings are loaded', async () => {
 			const loaded = new LoadedSettings();
-			await loaded.toggleNotifications(true);
+			await loaded.toggleSetting(KEY, true);
 			expect(mockSave).not.toHaveBeenCalled();
-			expect(loaded.notifSaving).toBe(false);
+			expect(loaded.isSaving(KEY)).toBe(false);
 		});
 
-		it('saves on, showing the new value and notifSaving while pending', async () => {
+		it('saves on, showing the new value and the key as saving while pending', async () => {
 			const loaded = await loadedWith({ notifications_enabled: false });
 			let resolve!: () => void;
 			mockSave.mockReturnValue(new Promise<never>((r) => (resolve = r as () => void)));
-			const pending = loaded.toggleNotifications(true);
+			const pending = loaded.toggleSetting(KEY, true);
 			expect(loaded.settings?.config.notifications_enabled).toBe(true);
-			expect(loaded.notifSaving).toBe(true);
+			expect(loaded.isSaving(KEY)).toBe(true);
 			resolve();
 			await pending;
 			expect(mockSave).toHaveBeenCalledWith({ notifications_enabled: true });
 			expect(loaded.settings?.config.notifications_enabled).toBe(true);
-			expect(loaded.notifSaving).toBe(false);
+			expect(loaded.isSaving(KEY)).toBe(false);
 		});
 
 		it('saves off', async () => {
 			const loaded = await loadedWith({ notifications_enabled: true });
 			mockSave.mockResolvedValue(undefined as never);
-			await loaded.toggleNotifications(false);
+			await loaded.toggleSetting(KEY, false);
 			expect(mockSave).toHaveBeenCalledWith({ notifications_enabled: false });
 			expect(loaded.settings?.config.notifications_enabled).toBe(false);
 		});
@@ -135,26 +137,40 @@ describe('LoadedSettings', () => {
 		it('rolls back to the previous value when the save fails', async () => {
 			const loaded = await loadedWith({ notifications_enabled: true });
 			mockSave.mockRejectedValue(new Error('fail'));
-			await loaded.toggleNotifications(false);
+			await loaded.toggleSetting(KEY, false);
 			expect(loaded.settings?.config.notifications_enabled).toBe(true);
-			expect(loaded.notifSaving).toBe(false);
+			expect(loaded.isSaving(KEY)).toBe(false);
 		});
 
 		it('rolls back to off when the config had no value', async () => {
 			const loaded = await loadedWith({});
 			mockSave.mockRejectedValue(new Error('fail'));
-			await loaded.toggleNotifications(true);
+			await loaded.toggleSetting(KEY, true);
 			expect(loaded.settings?.config.notifications_enabled).toBe(false);
 		});
 
-		it('ignores a second call while a save is in flight', async () => {
+		it('ignores a second call for the same key while its save is in flight', async () => {
 			const loaded = await loadedWith({ notifications_enabled: false });
 			let resolve!: () => void;
 			mockSave.mockReturnValue(new Promise<never>((r) => (resolve = r as () => void)));
-			const first = loaded.toggleNotifications(true);
-			await loaded.toggleNotifications(false);
+			const first = loaded.toggleSetting(KEY, true);
+			await loaded.toggleSetting(KEY, false);
 			expect(mockSave).toHaveBeenCalledTimes(1);
 			expect(loaded.settings?.config.notifications_enabled).toBe(true);
+			resolve();
+			await first;
+		});
+
+		it('saves another key while one is in flight', async () => {
+			const loaded = await loadedWith({ notifications_enabled: false, auto_transcode_on_idle: false });
+			let resolve!: () => void;
+			mockSave.mockReturnValueOnce(new Promise<never>((r) => (resolve = r as () => void)));
+			mockSave.mockResolvedValueOnce(undefined as never);
+			const first = loaded.toggleSetting(KEY, true);
+			await loaded.toggleSetting('auto_transcode_on_idle', true);
+			expect(mockSave).toHaveBeenLastCalledWith({ auto_transcode_on_idle: true });
+			expect(loaded.isSaving('auto_transcode_on_idle')).toBe(false);
+			expect(loaded.isSaving(KEY)).toBe(true);
 			resolve();
 			await first;
 		});

@@ -1,6 +1,6 @@
 <script lang="ts">
 	import NotificationsTab from '$lib/components/notifications/NotificationsTab.svelte';
-	import Toggle from '$lib/components/notifications/Toggle.svelte';
+	import AutoSaveToggle from './AutoSaveToggle.svelte';
 
 	interface Props {
 		enabled: boolean;
@@ -15,11 +15,7 @@
 		<h2 class="settings-page-section-title" data-page-section-title>Notifications</h2>
 		<p class="settings-page-description">Manage notification channels - Discord, Slack, webhooks, scripts, and more.</p>
 	</div>
-	<label class="field field-row settings-page-notif-toggle-row">
-		<Toggle checked={enabled} label="Enable notifications" onchange={ontoggle} />
-		<span class="field-label">Enable notifications</span>
-		<span class="settings-page-inline-hint">(changes save automatically)</span>
-	</label>
+	<AutoSaveToggle key="notifications_enabled" label="Enable notifications" checked={enabled} {ontoggle} />
 	{#if enabled}
 		<NotificationsTab />
 	{:else}
@@ -50,17 +46,5 @@
 		font-size: 0.875rem;
 		line-height: 1.25rem;
 		color: var(--color-text-muted);
-	}
-	/* text-xs text-gray-500 - a plain inline span in the toggle row, not
-	   panel-hint's block-level note (whose own margin-top would misalign
-	   it against its row siblings). */
-	.settings-page-inline-hint {
-		font-size: 0.75rem;
-		line-height: 1rem;
-		color: var(--color-text-muted);
-	}
-	/* the original toggle row was gap-3 (0.75rem), not field-row's 0.5rem. */
-	.settings-page-notif-toggle-row {
-		gap: 0.75rem;
 	}
 </style>

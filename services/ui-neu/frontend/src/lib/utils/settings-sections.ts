@@ -111,7 +111,10 @@ const SECTIONS: Record<string, SettingsSection[]> = {
 		},
 		{ title: 'ISO Ripping', keys: ['max_parallel_iso_rips'] }
 	],
-	Transcoding: [{ title: 'Scheduling', keys: ['transcode_enabled', 'auto_transcode_on_idle'] }]
+	Transcoding: [
+		{ title: 'Transcoding', keys: ['transcode_enabled', 'transcode_capable'], hidden: ['transcode_capable'] },
+		{ title: 'Concurrency', keys: ['max_parallel_transcodes'] }
+	]
 };
 
 /** Maps the four key field keys (the Keys tab's "API keys" and "MakeMKV" sections) to
@@ -148,8 +151,10 @@ export function stepGroup(groups: SettingsGroup[], step: string): SettingsGroup 
 }
 
 /** The Settings tab (a `#<tab>` hash) that renders a schema group: the config
- *  groups keep their own name, the others fold into their lower-case screen tab. */
+ *  groups keep their own name, Defaults renders on the Sessions tab, and the
+ *  others fold into their lower-case screen tab. */
 export function settingsTabFor(groupName: string): string {
+	if (groupName === 'Defaults') return 'sessions';
 	return ['Identification', 'Keys', 'Ripping'].includes(groupName) ? groupName : groupName.toLowerCase();
 }
 

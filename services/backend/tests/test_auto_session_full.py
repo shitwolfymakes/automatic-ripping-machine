@@ -542,3 +542,45 @@ async def test_drain_survives_a_failed_job_reload_after_rollback(
 
     assert await sdx.drain_parked_applications_after_rip(db, job, CapturingHub()) == []  # type: ignore[arg-type]
     assert "after a failed drain failed" in caplog.text
+
+
+async def test_auto_apply_off_logs_the_routed_session_it_skipped(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    """With auto-apply off, a job left at ripped says in its log which default it did not apply."""
+    _media_root(tmp_path)
+    db = FakeSession()
+    job = _seed(db)
+    _drive_default(db)
+    db.rows["config"][0].auto_transcode_on_idle = False
+    applied: list[Any] = []
+
+    async def _apply(*a: Any, **k: Any) -> None:
+        applied.append(k)
+
+    monkeypatch.setattr(asx, "apply_session_internal", _apply)
+    caplog.set_level("INFO", logger="arm_backend.auto_session")
+
+    await maybe_auto_apply_session(db, job, CapturingHub())
+
+    records = [r for r in caplog.records if r.name == "arm_backend.auto_session" and r.levelname == "INFO"]
+    assert len(records) == 1
+    assert "auto-apply is off" in records[0].getMessage()
+    assert "ses_x" in records[0].getMessage()
+    assert records[0].job_id == job.id
+    assert applied == []
+
+
+async def test_auto_apply_off_without_a_route_logs_nothing(tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
+    """An unrouted disc with auto-apply off adds no line."""
+    _media_root(tmp_path)
+    db = FakeSession()
+    job = _seed(db)
+    _drive_default(db)
+    db.rows["config"][0].auto_transcode_on_idle = False
+    db.rows["drives"][0].default_session_id = None
+    caplog.set_level("INFO", logger="arm_backend.auto_session")
+
+    await maybe_auto_apply_session(db, job, CapturingHub())
+
+    assert [r for r in caplog.records if r.name == "arm_backend.auto_session"] == []
