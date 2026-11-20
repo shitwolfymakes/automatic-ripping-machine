@@ -102,6 +102,11 @@ export class DiscReviewJobActions {
 		}
 	};
 
+	// Review "Identify and start": the same identify save as Start rip, then the
+	// review gate's start; a failed save leaves the disc in review.
+	identifyAndStart = (job: JobView | undefined, detailJob: JobView | undefined): Promise<void> =>
+		this.startRip(job, detailJob, () => true);
+
 	setPaused = async (job: JobView | undefined, paused: boolean): Promise<void> => {
 		if (!job) return;
 		this.pauseBusy = true;

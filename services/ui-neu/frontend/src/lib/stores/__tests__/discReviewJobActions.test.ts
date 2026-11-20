@@ -289,6 +289,35 @@ describe('DiscReviewJobActions', () => {
 		});
 	});
 
+	describe('identifyAndStart', () => {
+		it('does nothing without a job', async () => {
+			const a = make();
+			await a.identifyAndStart(undefined, createJob());
+			expect(resolveJobMock).not.toHaveBeenCalled();
+			expect(startWaitingJobMock).not.toHaveBeenCalled();
+		});
+
+		it('saves the identity, then starts the review, then dismisses and refreshes', async () => {
+			const order: string[] = [];
+			resolveJobMock.mockImplementation(async () => order.push('resolve'));
+			startWaitingJobMock.mockImplementation(async () => order.push('start'));
+			await make().identifyAndStart(createJob({ id: 'j1', title: 'Movie', year: 2020 }), undefined);
+			expect(order).toEqual(['resolve', 'start']);
+			expect(resolveJobMock).toHaveBeenCalledWith('j1', expect.objectContaining({ title: 'Movie', year: 2020 }));
+			expect(startWaitingJobMock).toHaveBeenCalledWith('j1');
+			expect(calls).toEqual(['dismiss', 'refresh']);
+		});
+
+		it('does not start when the identify save fails', async () => {
+			resolveJobMock.mockRejectedValue(new Error('nope'));
+			const a = make();
+			await a.identifyAndStart(createJob({ id: 'j1' }), undefined);
+			expect(startWaitingJobMock).not.toHaveBeenCalled();
+			expect(a.errorMessage).toBe('nope');
+			expect(calls).toEqual([]);
+		});
+	});
+
 	describe('setPaused', () => {
 		it('does nothing without a job', async () => {
 			const a = make();

@@ -290,12 +290,14 @@
 			{isMusic}
 			{isPostRip}
 			{canStart}
+			{isReviewGate}
 			{episodeRow}
 			previouslyRipped={!!previousId}
 			fromIso={!!isoName}
 			onapplysession={() => (showApplySession = true)}
 			oncancel={() => actions.cancel(job, isoName)}
 			onstartrip={() => actions.startRip(job, reviewData.detail?.job, () => isReviewGate)}
+			onidentifyandstart={() => actions.identifyAndStart(job, reviewData.detail?.job)}
 		/>
 
 		<!-- Expanded sections -->
