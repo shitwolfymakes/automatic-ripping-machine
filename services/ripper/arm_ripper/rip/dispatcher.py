@@ -7,17 +7,13 @@ from arm_common import DiscType
 from arm_common.enums import TrackKind
 from arm_common.schemas import TrackView
 
+from arm_ripper.makemkv_minlength import DEFAULT_MIN_TITLE_LENGTH_SECONDS
 from arm_ripper.rip.abcde_rip import rip_cd
 from arm_ripper.rip.data_rip import rip_data
 from arm_ripper.rip.makemkv_backup import rip_backup
 from arm_ripper.rip.optical_rip import rip_optical
 from arm_ripper.rip.result import RipResult
 from arm_ripper.rip.track_callbacks import OnTrackDone, OnTrackProgress, OnTrackStart, TransferStats
-
-# v3 default. 120s drops menu loops and vendor bumpers without cutting
-# the 2–5 minute extras users typically care about. Sessions can
-# override per-rip via `Session.overrides_json["min_length_seconds"]`.
-DEFAULT_MIN_LENGTH_SECONDS = 120
 
 
 async def rip_all(
@@ -28,7 +24,7 @@ async def rip_all(
     on_track_start: OnTrackStart,
     on_track_done: OnTrackDone,
     on_track_progress: OnTrackProgress | None = None,
-    min_length_seconds: int = DEFAULT_MIN_LENGTH_SECONDS,
+    min_length_seconds: int = DEFAULT_MIN_TITLE_LENGTH_SECONDS,
     stop: asyncio.Event | None = None,
     skip_track_ids: Collection[str] = (),
     drive_lost: Callable[[], bool] | None = None,

@@ -16,9 +16,9 @@ from arm_ripper.disc_rip import DiscRip
 from arm_ripper.drive_handle import DriveHandle
 from arm_ripper.eject import Ejector
 from arm_ripper.makemkv_prep import MakeMKVPrep
+from arm_ripper.makemkv_minlength import DEFAULT_MIN_TITLE_LENGTH_SECONDS
 from arm_ripper.ripper_config import ripper_config_or_none
 from arm_ripper.resolution_wait import IDENTIFY_WAIT, RESOLUTION_TIMEOUT_UNSET, REVIEW_WAIT, ResolutionWaiter, WaitSpec
-from arm_ripper.rip.dispatcher import DEFAULT_MIN_LENGTH_SECONDS
 from arm_ripper.disc_scan import scan_or_none
 from arm_ripper.drive_poll import DriveState, read_drive_status
 from arm_ripper.source import is_file_source
@@ -54,7 +54,7 @@ class JobController:
         *,
         ws: WSClient | None = None,
         device_path: str | DriveHandle | None = None,
-        default_min_length_seconds: int = DEFAULT_MIN_LENGTH_SECONDS,
+        default_min_length_seconds: int = DEFAULT_MIN_TITLE_LENGTH_SECONDS,
         resolution_timeout: float | None = RESOLUTION_TIMEOUT_UNSET,  # type: ignore[assignment]
     ) -> None:
         self._client = client
@@ -78,12 +78,10 @@ class JobController:
             self._device = DriveHandle.fixed(device_path)
         # Umount/eject is its own job; it reads the same shared handle.
         self._ejector = Ejector(self._device)
-        # Host-side baseline `--minlength` for `makemkvcon mkv all`. The
-        # backend can override per-rip via `RipStartResponse.min_length_seconds`
-        # (resolved from the Session's `overrides_json["min_length_seconds"]`);
-        # when no override is sent we fall back to this value. Injected by
-        # `main.py` from `ARM_MIN_LENGTH_SECONDS`; tests get the dispatcher
-        # default (600).
+        # Host minimum title length, injected by `main.py` from
+        # `ARM_MIN_LENGTH_SECONDS`: it stands in for the backend's minimum
+        # title length setting when the config can't be read before a scan,
+        # or rip-start comes from a backend that sends none.
         self._default_min_length_seconds = default_min_length_seconds
         # Parks a held job until it leaves its gate. `resolution_timeout` is the ceiling on an
         # AWAITING_USER_ID / AWAITING_REVIEW park, in seconds; None means wait indefinitely — source
@@ -291,6 +289,13 @@ class JobController:
         cfg = await ripper_config_or_none(self._client, "auto-rip config lookup", "proceeding fail-open")
         return cfg is None or cfg.auto_rip_on_insert
 
+    async def _min_title_length(self) -> int:
+        """The configured minimum title length the scan lists titles down to, or the host minimum when the config
+        can't be read."""
+        fallback = self._default_min_length_seconds
+        cfg = await ripper_config_or_none(self._client, "minimum title length lookup", f"using {fallback}s")
+        return fallback if cfg is None else cfg.min_title_length_seconds
+
     async def _run_pipeline(self, device_path: str, *, pending_session_id: str | None) -> None:
         async with self._claim(None):
             # Refresh the MakeMKV key before makemkvcon first touches
@@ -298,7 +303,7 @@ class JobController:
             # container up across a beta-key rotation doesn't scan/rip
             # protected discs with a stale key.
             await self._makemkv.prepare()
-            scan_result = await scan_or_none(device_path)
+            scan_result = await scan_or_none(device_path, await self._min_title_length())
             if scan_result is None:
                 return
 

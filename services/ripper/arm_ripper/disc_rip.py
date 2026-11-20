@@ -9,6 +9,7 @@ from arm_common import DiscType, TrackKind, TrackStatus, with_log_context
 from arm_common.schemas import RipStartResponse, TrackView
 from arm_ripper.backend_retry import BackendRetry
 from arm_ripper.drive_handle import DriveHandle
+from arm_ripper.makemkv_minlength import rip_min_length_seconds
 from arm_ripper.drive_poll import DriveErrorKind, DriveState, classify_drive_error, read_drive_status
 from arm_ripper.eject import Ejector
 from arm_ripper.rip import RipResult, rip_all
@@ -121,9 +122,14 @@ class DiscRip:
         self._kept: set[Path] = set()
         # IN_PROGRESS is sent once per track across every pass.
         self._started: set[str] = set()
-        self._min_length_seconds = (
-            rip_start.min_length_seconds if rip_start.min_length_seconds is not None else default_min_length_seconds
+        # The scan's minimum comes back on rip-start; an older backend sends
+        # none, and the host minimum stands in for it.
+        floor = (
+            rip_start.min_title_length_seconds
+            if rip_start.min_title_length_seconds is not None
+            else default_min_length_seconds
         )
+        self._min_length_seconds = rip_min_length_seconds(rip_start.min_length_seconds, floor)
         self._rip_path = device_path
         self._rip_dir = self._output_dir
         self._skip: set[str] = set()

@@ -63,6 +63,7 @@ from arm_backend.identity.ids import current_ids, merge_new_ids
 from arm_backend.identity.proposals import claims_of
 from arm_backend.identity.sources.registry import EPISODE_SOURCE_IDS
 from arm_backend.constants import CONFIG_SINGLETON_ID
+from arm_backend.rip_outcome import kept_tracks
 from arm_backend.ws import WSHub
 from arm_common import Config, Job, JobStatus, Track
 from arm_common.schemas import ExternalIds
@@ -309,7 +310,7 @@ class EpisodeStageRunner:
             tracks = list(
                 (await compute_session.execute(select(Track).where(col(Track.job_id) == job_id))).scalars().all()
             )
-            if not is_tv_candidate(job, tracks):
+            if not is_tv_candidate(job, kept_tracks(tracks)):
                 return None
             cfg = (
                 await compute_session.execute(select(Config).where(col(Config.id) == CONFIG_SINGLETON_ID))

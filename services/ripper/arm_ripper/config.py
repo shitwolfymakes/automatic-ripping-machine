@@ -29,14 +29,11 @@ class Settings(BaseSettings):
     ARM_LOG_LEVEL: str = "info"
     HOSTNAME: str = socket.gethostname()
     POLL_INTERVAL_SECONDS: float = 2.0
-    # Host-side baseline `--minlength` passed to `makemkvcon mkv all`.
-    # Filters very short titles (menu loops, vendor bumpers) without
-    # cutting features that don't quite hit v2's 600s default — the
-    # smallest non-trivial extras on most discs are 2–5 minutes. A
-    # Session can override per-rip via
-    # `Session.overrides_json["min_length_seconds"]`; if the backend
-    # sends a non-null value in `RipStartResponse.min_length_seconds`,
-    # the ripper uses that instead of this baseline.
+    # Host minimum title length. The backend's Settings > Ripping value
+    # (config.min_title_length_seconds, seeded from this env var through
+    # the backend's ARM_RIPPER_MIN_LENGTH_SECONDS) is what the scan and the
+    # rip use; this stands in only when the backend's config can't be read
+    # or an older backend sends none.
     ARM_MIN_LENGTH_SECONDS: int = 120
     # Source mode. When ARM_SOURCE_PATH is set, the ripper skips its poll
     # loop, treats the path as the bound device everywhere (registering it

@@ -498,6 +498,31 @@ async def test_sweep_fails_unfinished_job_and_retires() -> None:
 
 
 @pytest.mark.asyncio
+async def test_sweep_failure_payload_counts_only_kept_tracks() -> None:
+    db = FakeSession()
+    db.rows["drives"] = [_virtual()]
+    db.rows["jobs"] = [_job("job_1", "drv_iso1", JobStatus.RIPPING)]
+    db.rows["tracks"] = [
+        Track(
+            job_id="job_1", kind=TrackKind.VIDEO_TITLE, index=1, source_ref="1", status=TrackStatus.DONE, excluded=True
+        ),
+        Track(
+            job_id="job_1",
+            kind=TrackKind.VIDEO_TITLE,
+            index=2,
+            source_ref="2",
+            status=TrackStatus.FAILED,
+            excluded=True,
+        ),
+        Track(job_id="job_1", kind=TrackKind.VIDEO_TITLE, index=3, source_ref="3", status=TrackStatus.IN_PROGRESS),
+    ]
+    manager, hub = _Manager(), _Hub()
+    assert await virtual_drive_lifecycle.sweep_virtual_drives(db, manager, hub) == 1  # type: ignore[arg-type]
+    payload = hub.events[0]["payload"]
+    assert (payload["tracks_done"], payload["tracks_failed"], payload["tracks_total"]) == (0, 0, 1)
+
+
+@pytest.mark.asyncio
 async def test_sweep_cancels_the_failed_jobs_parked_applications() -> None:
     """D-082 follow-up: the watchdog's fail path cancels parked applications,
     like every other FAILED or ABANDONED transition."""

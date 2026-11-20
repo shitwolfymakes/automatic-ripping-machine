@@ -163,6 +163,13 @@ describe('setup step field selection (setup spec 2026-10-01 §7.2)', () => {
 		expect(keys).not.toContain('hold_for_review');
 	});
 
+	it('puts the minimum title length in its own Disc titles section, not a leftover Ripping one', () => {
+		const out = sectionFields('Ripping', [f('auto_rip_on_insert'), f('min_title_length_seconds', { type: 'int' })]);
+		const titles = out.find((s) => s.fields.some((x) => x.key === 'min_title_length_seconds'));
+		expect(titles?.title).toBe('Disc titles');
+		expect(out.map((s) => s.title)).not.toContain('Ripping');
+	});
+
 	it('puts the ISO rip limit in its own ISO Ripping section, not a leftover Ripping one', () => {
 		const out = sectionFields('Ripping', [f('auto_rip_on_insert'), f('max_parallel_iso_rips', { type: 'int' })]);
 		const iso = out.find((s) => s.fields.some((x) => x.key === 'max_parallel_iso_rips'));

@@ -99,6 +99,7 @@ const SECTIONS: Record<string, SettingsSection[]> = {
 			title: 'On insert',
 			keys: ['auto_rip_on_insert', 'block_on_miss', 'on_previously_ripped', 'ripping_paused']
 		},
+		{ title: 'Disc titles', keys: ['min_title_length_seconds'] },
 		{
 			title: 'Review gate',
 			blurb: 'With "Review first", how long ARM waits for you to check the title before it rips anyway.',
