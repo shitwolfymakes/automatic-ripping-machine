@@ -29,6 +29,7 @@ from arm_backend.identity.pipeline import resolve_job
 from arm_backend.identity.proposals import record_preset
 from arm_backend.identity.stage_runner import EpisodeStageRunner
 from arm_backend.routers._deps import get_hub, get_stage_runner
+from arm_backend.rip_outcome import kept_tracks, rip_outcome_counts
 from arm_backend.track_selection import DiscBackupNeedsBluray, select_rip_tracks
 from arm_backend.ws import WSHub
 from arm_common import (
@@ -521,17 +522,12 @@ async def _select_or_fail(
         reason = FOLDER_NO_TITLES if virtual.source_kind == DriveSourceKind.FOLDER else ISO_NO_TITLES
         await _fail_titleless_source(session, hub, job, reason)
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=reason)
-    if not _kept_tracks(new_tracks):
+    if not kept_tracks(new_tracks):
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="track selection produced zero tracks",
         )
     return new_tracks
-
-
-def _kept_tracks(tracks: Sequence[Track]) -> list[Track]:
-    """The tracks the rip is for: every track the selection did not exclude."""
-    return [t for t in tracks if not t.excluded]
 
 
 async def _begin_rip(session: AsyncSession, job: Job, new_tracks: list[Track]) -> None:
@@ -581,7 +577,7 @@ async def rip_start(
     await _begin_rip(session, job, new_tracks)
 
     refreshed = await _job_tracks(session, job.id)
-    kept = _kept_tracks(refreshed)
+    kept = kept_tracks(refreshed)
     logger.info(
         "rip-start job_id=%s preset=%s tracks=%d",
         job.id,
@@ -893,15 +889,6 @@ async def update_track(
     return TrackView.model_validate(track)
 
 
-def _rip_outcome_counts(tracks: Sequence[Track]) -> tuple[int, int, int]:
-    """Done, failed and total among the kept tracks: an excluded title is ripped
-    and kept on disk, but it neither makes the rip partial nor counts toward it."""
-    kept = _kept_tracks(tracks)
-    done = sum(1 for t in kept if t.status == TrackStatus.DONE)
-    failed = sum(1 for t in kept if t.status == TrackStatus.FAILED)
-    return done, failed, len(kept)
-
-
 @router.post("/jobs/{job_id}/rip-complete", response_model=JobView)
 async def rip_complete(
     _: JobCompleteRequest,
@@ -916,7 +903,7 @@ async def rip_complete(
         )
 
     tracks = (await session.execute(select(Track).where(col(Track.job_id) == job.id))).scalars().all()
-    done, failed, total = _rip_outcome_counts(tracks)
+    done, failed, total = rip_outcome_counts(tracks)
 
     if total == 0 or done == 0:
         job.status = JobStatus.FAILED
