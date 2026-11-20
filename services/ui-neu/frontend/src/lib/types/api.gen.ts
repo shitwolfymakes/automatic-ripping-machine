@@ -678,6 +678,8 @@ export type ConfigUpdateRequest = {
      */
     manual_wait_seconds?: number | null;
     on_previously_ripped?: PreviouslyRippedAction | null;
+    miss_media_type?: MissMediaType | null;
+    miss_titles_kept?: MissTitlesKept | null;
     /**
      * Notifications Enabled
      */
@@ -823,6 +825,8 @@ export type ConfigView = {
      */
     manual_wait_seconds: number;
     on_previously_ripped: PreviouslyRippedAction;
+    miss_media_type: MissMediaType;
+    miss_titles_kept: MissTitlesKept;
     default_retention_policy: RetentionPolicy;
     /**
      * Notification Apprise Urls
@@ -2675,6 +2679,10 @@ export type JobFlags = {
      * Rerip Allowed
      */
     rerip_allowed?: boolean;
+    /**
+     * Blocked Miss
+     */
+    blocked_miss?: boolean;
     [key: string]: unknown;
 };
 
@@ -3412,6 +3420,21 @@ export type MetadataSearchResponse = {
      */
     detail?: string | null;
 };
+
+/**
+ * MissMediaType
+ *
+ * The media type a DVD or Blu-ray that misses identification starts with.
+ */
+export type MissMediaType = 'movie' | 'tv';
+
+/**
+ * MissTitlesKept
+ *
+ * Which titles an unidentified disc keeps: every title, or what the routed
+ * session's rip preset would keep.
+ */
+export type MissTitlesKept = 'all' | 'preset';
 
 /**
  * MkdirRequest
@@ -5349,6 +5372,10 @@ export type TrackClaim = {
      */
     title?: string | null;
     /**
+     * Edition
+     */
+    edition?: string | null;
+    /**
      * Season
      */
     season?: number | null;
@@ -5401,6 +5428,10 @@ export type TrackEditRequest = {
      */
     year?: number | null;
     /**
+     * Edition
+     */
+    edition?: string | null;
+    /**
      * Imdb Id
      */
     imdb_id?: string | null;
@@ -5436,7 +5467,7 @@ export type TrackEditRequest = {
     /**
      * Revert Fields
      */
-    revert_fields?: Array<'role' | 'title' | 'season' | 'episode_number' | 'episode_number_end' | 'episode_name' | 'custom_filename' | 'excluded'>;
+    revert_fields?: Array<'role' | 'title' | 'edition' | 'season' | 'episode_number' | 'episode_number_end' | 'episode_name' | 'custom_filename' | 'excluded'>;
 };
 
 /**

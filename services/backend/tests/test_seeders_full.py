@@ -254,7 +254,7 @@ async def test_run_seeders_syncs_builtin_session_templates(tmp_path: Path, monke
     db = FakeSession()
     await run_seeders(db)
     builtin = next(s for s in db.rows["sessions"] if s.id == "ses_builtin_movie_plex_1080p")
-    old = "{title} ({year})/{title} ({year}) - Track {track} - {transcode_slug}.{ext}"
+    old = "{title} ({year?})/{title} ({year?}) - Track {track} - {transcode_slug}.{ext}"
     builtin.output_path_template = old
     from arm_common import Session
 
@@ -272,8 +272,8 @@ async def test_run_seeders_syncs_builtin_session_templates(tmp_path: Path, monke
 
     await run_seeders(db)
 
-    assert (
-        builtin.output_path_template == "{title} ({year?})/{title} ({year?}) - Track {track} - {transcode_slug}.{ext}"
+    assert builtin.output_path_template == (
+        "{title} ({year?}) [{edition?}]/{title} ({year?}) [{edition?}] ({track_label?}) - {transcode_slug}.{ext}"
     )
     clone = next(s for s in db.rows["sessions"] if s.id == "ses_user_clone")
     assert clone.output_path_template == old
@@ -305,3 +305,11 @@ async def test_run_seeders_adds_the_bd_backup_builtins(tmp_path: Path, monkeypat
     assert session.rip_preset_id == "rpr_builtin_bd_backup"
     assert session.transcode_preset_id == "tpr_builtin_iso_passthrough"
     assert session.output_path_template == "{title} ({year?})"
+
+
+def test_builtin_archive_templates_carry_the_duration() -> None:
+    archive = next(r for r in seeders.SESSIONS if r["id"] == "ses_builtin_movie_archive")
+    assert archive["output_path_template"] == (
+        "{title} ({year?}) [{edition?}]/{title} ({year?}) [{edition?}] ({track_label?})"
+        " ({duration_human}) - {transcode_slug}.{ext}"
+    )

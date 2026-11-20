@@ -44,14 +44,13 @@ from arm_backend.key_checks import check_online_key, makemkv_key_status
 from arm_backend.constants import CONFIG_SINGLETON_ID
 from arm_common import Config, Job, JobStatus, User
 from arm_common.config_metadata import CONFIG_FIELD_META
-from arm_common.enums import PreviouslyRippedAction
+from arm_common.enums import MissMediaType, MissTitlesKept, PreviouslyRippedAction
 from arm_common.schemas import (
     ConfigUpdateRequest,
     ConfigView,
     KeyCheckRequest,
     KeyCheckResponse,
-    identity_suggestion_of,
-    previously_ripped_job_id,
+    no_countdown_reason,
 )
 from arm_common.secrets import HIDDEN_SECRET
 
@@ -94,6 +93,8 @@ def _to_view(cfg: Config) -> ConfigView:
         hold_for_review=bool(cfg.hold_for_review),
         manual_wait_seconds=int(cfg.manual_wait_seconds) if cfg.manual_wait_seconds is not None else 60,
         on_previously_ripped=cfg.on_previously_ripped or PreviouslyRippedAction.HOLD,
+        miss_media_type=cfg.miss_media_type or MissMediaType.MOVIE,
+        miss_titles_kept=cfg.miss_titles_kept or MissTitlesKept.ALL,
         drive_scan_interval_seconds=int(cfg.drive_scan_interval_seconds or 30),
         drive_detected_prune_days=int(cfg.drive_detected_prune_days or 7),
         # NULL falls back to the env value, exactly as the dispatcher does.
@@ -208,11 +209,7 @@ async def _restart_held_countdowns(session: AsyncSession) -> None:
     now = datetime.now(timezone.utc)
     held = (await session.execute(select(Job).where(col(Job.status) == JobStatus.AWAITING_REVIEW))).scalars().all()
     for job in held:
-        # A previously-ripped hold and a held suggestion have no countdown to restart.
-        if (
-            previously_ripped_job_id(job.metadata_json) is not None
-            or identity_suggestion_of(job.metadata_json) is not None
-        ):
+        if no_countdown_reason(job.metadata_json) is not None:
             continue
         job.wait_start_time = now
         session.add(job)

@@ -6,7 +6,7 @@ from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from sqlmodel import Field, SQLModel
 
 from arm_common.models._columns import enum_column, updated_at_column
-from arm_common.enums import PreviouslyRippedAction, RetentionPolicy
+from arm_common.enums import MissMediaType, MissTitlesKept, PreviouslyRippedAction, RetentionPolicy
 
 # MusicBrainz 403s any User-Agent that doesn't follow their etiquette guide's
 # `AppName/version ( contact )` shape — a bare token like `armv3` is rejected.
@@ -109,6 +109,16 @@ class Config(SQLModel, table=True):
             "on_previously_ripped",
             server_default=PreviouslyRippedAction.HOLD.value,
         ),
+    )
+    # What a DVD/Blu-ray that misses identification starts as, and which of its
+    # titles it keeps. VARCHAR, validated app-side by MissMediaType / MissTitlesKept.
+    miss_media_type: MissMediaType = Field(
+        default=MissMediaType.MOVIE,
+        sa_column=enum_column(MissMediaType, "miss_media_type", server_default=MissMediaType.MOVIE.value),
+    )
+    miss_titles_kept: MissTitlesKept = Field(
+        default=MissTitlesKept.ALL,
+        sa_column=enum_column(MissTitlesKept, "miss_titles_kept", server_default=MissTitlesKept.ALL.value),
     )
     # Drive scanner (spec §2). Read on every tick, so edits apply live.
     drive_scan_interval_seconds: int = Field(sa_column=Column(Integer, nullable=False, server_default="30"))

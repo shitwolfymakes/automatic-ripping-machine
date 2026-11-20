@@ -327,6 +327,11 @@ describe('JobTrackRow', () => {
 			expect(screen.getByRole('button', { name: 'Search' })).toBeInTheDocument();
 		});
 
+		it('offers Set by hand while editing', () => {
+			renderRow(pilot(), { editing: true });
+			expect(screen.getByRole('button', { name: 'Set by hand' })).toBeInTheDocument();
+		});
+
 		it('calls oncloseedit from its close button', async () => {
 			renderRow(pilot(), { editing: true });
 			await fireEvent.click(screen.getByTitle('Close'));

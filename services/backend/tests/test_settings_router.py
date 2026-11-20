@@ -99,12 +99,37 @@ def test_schema_puts_auto_apply_in_the_defaults_group():
         groups = c.get("/api/settings/schema", headers=_auth(token)).json()["groups"]
     by_name = {g["name"]: g for g in groups}
     order = [g["name"] for g in groups]
-    assert [f["key"] for f in by_name["Defaults"]["fields"]] == ["auto_transcode_on_idle"]
+    assert [f["key"] for f in by_name["Defaults"]["fields"]] == [
+        "auto_transcode_on_idle",
+        "miss_media_type",
+        "miss_titles_kept",
+    ]
     field = by_name["Defaults"]["fields"][0]
     assert field["label"] == "Apply these defaults automatically after each rip"
     assert field["help"] == (
         "When a rip completes, apply its default session (the drive's default when it fits the disc, "
         "else the media-type route) and queue its transcodes. A session chosen for one rip always applies."
+    )
+    media, kept = by_name["Defaults"]["fields"][1:]
+    assert (media["label"], media["type"], media["enum_values"]) == (
+        "Treat unidentified video discs as",
+        "enum",
+        ["movie", "tv"],
+    )
+    assert media["enum_labels"] == {"movie": "Movie", "tv": "TV"}
+    assert kept["enum_labels"] == {"all": "All titles", "preset": "Same as the rip preset"}
+    assert media["help"] == (
+        "The media type a DVD or Blu-ray that misses identification starts with. "
+        "Flip it on the review screen before you start the rip."
+    )
+    assert (kept["label"], kept["type"], kept["enum_values"]) == (
+        "Titles kept on an unidentified disc",
+        "enum",
+        ["all", "preset"],
+    )
+    assert kept["help"] == (
+        "All keeps every title for you to review. Preset keeps what the routed session's rip preset would "
+        "(for example only the main feature)."
     )
     assert "auto_transcode_on_idle" not in [f["key"] for f in by_name["Transcoding"]["fields"]]
     assert order.index("Defaults") + 1 == order.index("Transcoding")

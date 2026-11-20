@@ -22,6 +22,7 @@ from arm_common import (
     Config,
     Drive,
     DriveStatus,
+    Job,
     SessionApplication,
     SessionApplicationStatus,
     Track,
@@ -440,8 +441,8 @@ async def test_overwrite_mixed_collision_409_reports_full_collision_list(tmp_pat
             status=TrackStatus.DONE,
         )
     )
-    path_1 = "Iron Man (2008)/Iron Man - 01 - plex-1080p-h-265.mkv"
-    path_2 = "Iron Man (2008)/Iron Man - 02 - plex-1080p-h-265.mkv"
+    path_1 = "Iron Man (2008)/Iron Man - 02 - plex-1080p-h-265.mkv"
+    path_2 = "Iron Man (2008)/Iron Man - 03 - plex-1080p-h-265.mkv"
     other_job_id = "job_01JZXR7K3M5Q8N4VWA0000000J"
     db.rows["session_applications"] = [
         SessionApplication(
@@ -569,6 +570,53 @@ async def test_auto_apply_off_logs_the_routed_session_it_skipped(
     assert "ses_x" in records[0].getMessage()
     assert records[0].job_id == job.id
     assert applied == []
+
+
+def _live_application(db: FakeSession, job: Job) -> None:
+    db.rows["session_applications"] = [
+        SessionApplication(
+            id="sap_live", session_id="ses_x", job_id=job.id, status=SessionApplicationStatus.RUNNING, overwrite=False
+        )
+    ]
+
+
+def _unidentified(db: FakeSession, job: Job) -> None:
+    job.metadata_json = {**(job.metadata_json or {}), "flags": {"unidentified": True}}
+
+
+def _auto_apply_off(db: FakeSession, job: Job) -> None:
+    db.rows["config"][0].auto_transcode_on_idle = False
+
+
+@pytest.mark.parametrize(
+    ("hold", "reason"),
+    [
+        (_live_application, "a session is already applied"),
+        (_unidentified, "waiting for the disc to be identified"),
+        (_auto_apply_off, "auto-apply is off"),
+    ],
+)
+async def test_skipped_route_log_names_the_reason(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture, hold: Any, reason: str
+) -> None:
+    """The one skipped-route line says why auto-apply held back, whichever reason it was."""
+    _media_root(tmp_path)
+    db = FakeSession()
+    job = _seed(db)
+    _drive_default(db)
+    db.rows["config"][0].auto_transcode_on_idle = True
+    hold(db, job)
+    monkeypatch.setattr(asx, "apply_session_internal", _never_applied)
+    caplog.set_level("INFO", logger="arm_backend.auto_session")
+
+    await maybe_auto_apply_session(db, job, CapturingHub())
+
+    records = [r for r in caplog.records if r.name == "arm_backend.auto_session" and r.levelname == "INFO"]
+    assert [r.getMessage() for r in records] == [f"{reason}: routed session ses_x not applied"]
+
+
+async def _never_applied(*_a: Any, **_k: Any) -> None:
+    raise AssertionError("auto-apply applied a session it should have held back")
 
 
 async def test_auto_apply_off_without_a_route_logs_nothing(tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:

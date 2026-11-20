@@ -23,6 +23,8 @@ from arm_common import (
     JobStatus,
     MediaType,
     Session,
+    SessionApplication,
+    SessionApplicationStatus,
     SessionRoute,
 )
 
@@ -117,6 +119,52 @@ async def test_auto_apply_pending_choice_bypasses_flag() -> None:
     db = FakeSession()
     _seed(db, default_session_id=None, flag=False)
     assert await auto_apply_allowed(db, _job(pending="ses_chosen")) is True  # type: ignore[arg-type]
+
+
+@pytest.mark.asyncio
+async def test_auto_apply_waits_for_an_unidentified_disc() -> None:
+    """An unidentified disc is never queued unattended under its volume
+    label, even with auto-apply on."""
+    db = FakeSession()
+    _seed(db, default_session_id="ses_default", flag=True)
+    job = _job()
+    job.metadata_json = {"flags": {"unidentified": True}}
+    assert await auto_apply_allowed(db, job) is False  # type: ignore[arg-type]
+
+
+@pytest.mark.asyncio
+async def test_auto_apply_pending_choice_applies_to_an_unidentified_disc() -> None:
+    """The operator's per-rip choice still applies to an unidentified disc."""
+    db = FakeSession()
+    _seed(db, default_session_id=None, flag=False)
+    job = _job(pending="ses_chosen")
+    job.metadata_json = {"flags": {"unidentified": True}}
+    assert await auto_apply_allowed(db, job) is True  # type: ignore[arg-type]
+
+
+def _application(status: SessionApplicationStatus) -> SessionApplication:
+    return SessionApplication(
+        id="sap_1", session_id="ses_hand", job_id="job_01JZXR7K3M5Q8N4VWA00000001", status=status, overwrite=False
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("pending", [None, "ses_chosen"])
+async def test_auto_apply_never_adds_to_a_job_with_an_application(pending: str | None) -> None:
+    """An application the job already has (a hand-applied session) is the
+    operator's choice; auto-apply adds nothing next to it."""
+    db = FakeSession()
+    _seed(db, default_session_id="ses_default", flag=True)
+    db.rows["session_applications"] = [_application(SessionApplicationStatus.QUEUED)]
+    assert await auto_apply_allowed(db, _job(pending=pending)) is False  # type: ignore[arg-type]
+
+
+@pytest.mark.asyncio
+async def test_auto_apply_ignores_cancelled_applications() -> None:
+    db = FakeSession()
+    _seed(db, default_session_id="ses_default", flag=True)
+    db.rows["session_applications"] = [_application(SessionApplicationStatus.CANCELLED)]
+    assert await auto_apply_allowed(db, _job()) is True  # type: ignore[arg-type]
 
 
 # --- G-02/G-17: session_routes table, resolution order 3-4 --------------------

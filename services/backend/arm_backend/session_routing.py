@@ -8,7 +8,18 @@ import logging
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import col, select
 
-from arm_common import Config, DiscType, Drive, Job, MediaType, Session, SessionRoute
+from arm_common import (
+    Config,
+    DiscType,
+    Drive,
+    Job,
+    MediaType,
+    Session,
+    SessionApplication,
+    SessionApplicationStatus,
+    SessionRoute,
+)
+from arm_common.schemas.job_metadata import flag_is_set
 
 logger = logging.getLogger("arm_backend.session_routing")
 
@@ -120,16 +131,53 @@ async def route_session_id_for(db: AsyncSession, media_type: MediaType, disc_typ
     return None
 
 
-async def auto_apply_allowed(db: AsyncSession, job: Job) -> bool:
-    """May rip-complete queue the ROUTED session (`resolve_routed_session_id`
-    — pending choice, else the compatibility-gated drive default, else
-    `session_routes`) unattended?
+# Every application status but CANCELLED: the job still carries that choice.
+_LIVE_APPLICATION_STATUSES = tuple(s for s in SessionApplicationStatus if s != SessionApplicationStatus.CANCELLED)
 
-    An explicit per-rip choice is the user opting in for that one rip and
-    bypasses the flag; everything else (drive default or a route) needs
-    `auto_transcode_on_idle`.
+
+async def _has_live_application(db: AsyncSession, job: Job) -> bool:
+    """Whether the job has a session application that is not cancelled."""
+    row = (
+        (
+            await db.execute(
+                select(SessionApplication)
+                .where(col(SessionApplication.job_id) == job.id)
+                .where(col(SessionApplication.status).in_(_LIVE_APPLICATION_STATUSES))
+                .limit(1)
+            )
+        )
+        .scalars()
+        .first()
+    )
+    return row is not None
+
+
+async def auto_apply_held_back(db: AsyncSession, job: Job) -> str | None:
+    """Why rip-complete may not queue the ROUTED session
+    (`resolve_routed_session_id` — pending choice, else the
+    compatibility-gated drive default, else `session_routes`) unattended,
+    or None when it may.
+
+    Always held back when the job already has a live (non-cancelled)
+    application: a session the operator applied is their choice, and
+    auto-apply adds nothing next to it. Otherwise an explicit per-rip choice
+    is the user opting in for that one rip and bypasses the flag; everything
+    else (drive default or a route) needs a disc that is no longer
+    `unidentified`, so nothing is filed under the volume label unattended,
+    and `auto_transcode_on_idle`.
     """
+    if await _has_live_application(db, job):
+        return "a session is already applied"
     if _pending_session_id(job) is not None:
-        return True
+        return None
+    if flag_is_set(job.metadata_json, "unidentified"):
+        return "waiting for the disc to be identified"
     config_row = (await db.execute(select(Config).where(col(Config.id) == 1))).scalar_one_or_none()
-    return config_row is not None and bool(config_row.auto_transcode_on_idle)
+    if config_row is None or not config_row.auto_transcode_on_idle:
+        return "auto-apply is off"
+    return None
+
+
+async def auto_apply_allowed(db: AsyncSession, job: Job) -> bool:
+    """May rip-complete queue the ROUTED session unattended? (see `auto_apply_held_back`)"""
+    return await auto_apply_held_back(db, job) is None

@@ -9,6 +9,12 @@ class DiscType(StrEnum):
     UNKNOWN = "unknown"
 
 
+# Video discs: a miss parks in review with every title listed, and an
+# unidentified rip of one finishes plain ripped. Any other disc that misses
+# keeps the plain miss path.
+VIDEO_DISC_TYPES: frozenset[DiscType] = frozenset({DiscType.DVD, DiscType.BLURAY})
+
+
 class DriveStatus(StrEnum):
     ONLINE = "online"
     OFFLINE = "offline"
@@ -239,6 +245,21 @@ class ContainerFormat(StrEnum):
     OGG = "ogg"
     ISO = "iso"
     NONE = "none"
+
+
+class MissMediaType(StrEnum):
+    """The media type a DVD or Blu-ray that misses identification starts with."""
+
+    MOVIE = "movie"
+    TV = "tv"
+
+
+class MissTitlesKept(StrEnum):
+    """Which titles an unidentified disc keeps: every title, or what the routed
+    session's rip preset would keep."""
+
+    ALL = "all"
+    PRESET = "preset"
 
 
 class PreviouslyRippedAction(StrEnum):

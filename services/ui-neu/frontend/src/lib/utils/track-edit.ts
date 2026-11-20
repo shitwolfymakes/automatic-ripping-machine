@@ -34,14 +34,15 @@ export function trackOptionsBody(
 
 /**
  * The trimmed title; the year as a number, `undefined` when blank or not a
- * number; role `episode` for Series and `main` for Movie; the trimmed poster,
- * `undefined` when blank.
+ * number; role `episode` for Series and `main` for Movie; the trimmed poster
+ * and edition, `undefined` when blank.
  */
 export function trackTitleBody(f: {
 	title: string;
 	year: string;
 	type: 'movie' | 'series';
 	posterUrl: string;
+	edition: string;
 }): TrackEdit {
 	const yr = f.year.trim() ? Number(f.year.trim()) : undefined;
 	const role = f.type === 'series' ? 'episode' : 'main';
@@ -49,6 +50,7 @@ export function trackTitleBody(f: {
 		title: f.title.trim(),
 		year: Number.isFinite(yr) ? yr : undefined,
 		role,
-		poster_url: f.posterUrl.trim() || undefined
+		poster_url: f.posterUrl.trim() || undefined,
+		edition: f.edition.trim() || undefined
 	};
 }

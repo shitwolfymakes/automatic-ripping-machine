@@ -457,11 +457,19 @@ describe('DiscReviewWidget sections', () => {
 	});
 
 	describe('start rip', () => {
-		it('asks for a title and sends nothing when the job has none', async () => {
-			renderCard({ title: null });
+		it('asks for a title and sends nothing when an identify-only job has none', async () => {
+			renderCard({ title: null, status: 'awaiting_user_id' });
 			await fireEvent.click(await screen.findByRole('button', { name: 'Start rip' }));
 			expect(screen.getByText('A title is required to start. Open Info or Search to set one.')).toBeInTheDocument();
 			expect(resolveJob).not.toHaveBeenCalled();
+		});
+
+		it('starts the review directly, with no identify save, when the job has no title', async () => {
+			const { ondismiss } = renderCard({ title: null });
+			await fireEvent.click(await screen.findByRole('button', { name: 'Start rip' }));
+			await waitFor(() => expect(ondismiss).toHaveBeenCalled());
+			expect(resolveJob).not.toHaveBeenCalled();
+			expect(startWaitingJob).toHaveBeenCalledWith('job_1');
 		});
 
 		it('sends a null year for a job with none', async () => {
