@@ -81,6 +81,7 @@ from arm_common.schemas.job_metadata import (
     identity_suggestion_of,
     previously_ripped_job_id,
     with_flags,
+    without_flags,
     without_identity_suggestion,
 )
 from arm_common.schemas.jobs import (
@@ -378,6 +379,7 @@ __all__ = [
     "without_identity_suggestion",
     "flag_is_set",
     "with_flags",
+    "without_flags",
     "ResolveFanOutOutcomeView",
     "ResolveMatch",
     "ResolveRequest",

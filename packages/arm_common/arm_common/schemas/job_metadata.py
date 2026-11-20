@@ -195,6 +195,17 @@ def with_flags(metadata_json: dict[str, Any] | None, **flags: bool) -> dict[str,
     return md
 
 
+def without_flags(metadata_json: dict[str, Any] | None, *names: str) -> dict[str, Any]:
+    """Return a copy of the bag with the named flags removed from the `flags`
+    section (when it has one) and from the legacy top-level keys."""
+    md = dict(metadata_json or {})
+    for name in names:
+        md.pop(name, None)
+    if isinstance(md.get("flags"), dict):
+        md["flags"] = {k: v for k, v in md["flags"].items() if k not in names}
+    return md
+
+
 def previously_ripped_job_id(metadata_json: dict[str, Any] | None) -> str | None:
     """The earlier rip a held job matched (see PreviouslyRipped), or None."""
     section = (metadata_json or {}).get("previously_ripped")

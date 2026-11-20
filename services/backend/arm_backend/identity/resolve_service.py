@@ -16,7 +16,7 @@ from arm_backend.ws import WSHub
 from arm_common import Job, JobStatus, MediaType
 from arm_common.enums import RESOLVABLE_PROMOTE_JOB_STATUSES
 from arm_common.schemas import JobView, ResolveFanOutOutcomeView, ResolveMatch, ResolveRequest, ResolveResponse
-from arm_common.schemas.job_metadata import ExternalIds, JobIdentity, JobMetadata, flag_is_set
+from arm_common.schemas.job_metadata import ExternalIds, JobIdentity, JobMetadata, flag_is_set, without_flags
 
 logger = logging.getLogger(__name__)
 
@@ -186,21 +186,14 @@ def _apply_match_poster(job: Job, match: ResolveMatch, show_changed: bool) -> No
         job.poster_url_manual = None
 
 
-def _clear_spent_markers(new_metadata: dict[str, Any]) -> None:
-    # Fix 75-6: the spent `unidentified` flag (flags section + the pre-0032
-    # top-level key) must be cleared on BOTH branches, not just PROMOTE. A
-    # resolved RIPPED_PARTIAL placeholder stays in PRESERVE (partiality wins
-    # over the placeholder status — see rip-complete) but has just as much
-    # identity landed as a PROMOTE job; leaving flags.unidentified=true
-    # forever would misreport it after the operator has already identified
-    # it.
-    new_metadata.pop("unidentified", None)
-    # A resolve by any route is the operator identifying the disc: a held suggestion is moot.
-    new_metadata.pop("identity_suggestion", None)
-    # ...and the automatic match's miss reasons no longer apply.
-    new_metadata.pop("identify_attempts", None)
-    if isinstance(new_metadata.get("flags"), dict):
-        new_metadata["flags"] = {k: v for k, v in new_metadata["flags"].items() if k != "unidentified"}
+def _clear_spent_markers(new_metadata: dict[str, Any]) -> dict[str, Any]:
+    """The merged bag without what a resolve makes moot, whatever the job's
+    status: the `unidentified` flag (the operator has identified the disc),
+    a held suggestion, and the automatic match's miss reasons."""
+    cleared = without_flags(new_metadata, "unidentified")
+    cleared.pop("identity_suggestion", None)
+    cleared.pop("identify_attempts", None)
+    return cleared
 
 
 def _record_manual_disc_fields(job: Job, req: ResolveRequest) -> None:
@@ -301,7 +294,7 @@ async def resolve_identity(
     rip_waited_for_identity = was_ripped_placeholder or (
         job.status == JobStatus.RIPPED_PARTIAL and flag_is_set(job.metadata_json, "unidentified")
     )
-    _clear_spent_markers(new_metadata)
+    new_metadata = _clear_spent_markers(new_metadata)
     if job.status in RESOLVABLE_PROMOTE_JOB_STATUSES:
         # A placeholder whose rip already finished becomes RIPPED, not
         # IDENTIFIED — its rip is done (G-09).
