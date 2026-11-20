@@ -24,16 +24,17 @@ export class LoadedSettings {
 
 	isSaving = (key: string): boolean => this.savingKeys.includes(key);
 
-	// An on/off setting that saves on change (no Save button), such as the
-	// notifications master switch: settings.config flips at once so the page
-	// follows it, the key is PATCHed alone, and a failed save rolls it back.
-	toggleSetting = async (key: string, next: boolean): Promise<void> => {
+	// A setting that saves on change (no Save button), such as the notifications
+	// master switch or a Defaults choice: settings.config takes the value at once
+	// so the page follows it, the key is PATCHed alone, and a failed save rolls
+	// it back.
+	saveSetting = async (key: string, value: unknown): Promise<void> => {
 		if (!this.settings || this.isSaving(key)) return;
-		const prev = Boolean((this.settings.config as Record<string, unknown> | undefined)?.[key]);
-		this.#setConfig(key, next);
+		const prev = (this.settings.config as Record<string, unknown> | undefined)?.[key] ?? false;
+		this.#setConfig(key, value);
 		this.savingKeys = [...this.savingKeys, key];
 		try {
-			await saveArmConfig({ [key]: next });
+			await saveArmConfig({ [key]: value });
 		} catch {
 			this.#setConfig(key, prev);
 		} finally {
@@ -41,8 +42,11 @@ export class LoadedSettings {
 		}
 	};
 
+	// An on/off setting: a save of the boolean.
+	toggleSetting = (key: string, next: boolean): Promise<void> => this.saveSetting(key, next);
+
 	// Only called once settings have loaded, and they are never cleared after that.
-	#setConfig(key: string, value: boolean): void {
+	#setConfig(key: string, value: unknown): void {
 		const settings = this.settings as SettingsData;
 		this.settings = { ...settings, config: { ...settings.config, [key]: value } };
 	}

@@ -46,10 +46,16 @@ def identified_message(
     return f"identified: {shown}, {_provider_name(provider)} {_METHOD_NAMES.get(method, method)}"
 
 
-def not_identified_message(provider: str | None, reason: str, *, waiting: bool = True) -> str:
-    """`not identified: <Provider>: <reason>; <what happens next>`: the job waits, or rips as unidentified."""
+# What happens next to a disc that missed identification, as the not-identified line states it.
+MISS_WAITS_FOR_IDENTIFICATION = "waiting for identification"
+MISS_RIPS_UNIDENTIFIED = "ripping as unidentified"
+MISS_WAITS_FOR_REVIEW = "waiting for review"
+MISS_RIPS_AFTER_COUNTDOWN = "ripping when the review countdown ends"
+
+
+def not_identified_message(provider: str | None, reason: str, outcome: str = MISS_WAITS_FOR_IDENTIFICATION) -> str:
+    """`not identified: <Provider>: <reason>; <what happens next>`, the outcome being one of the `MISS_*` phrases."""
     cause = f"{_provider_name(provider)}: {reason}" if provider else reason
-    outcome = "waiting for identification" if waiting else "ripping as unidentified"
     return f"not identified: {cause}; {outcome}"
 
 
@@ -147,12 +153,14 @@ def log_identified(job: Job, provider: str, method: str, artist: str | None = No
         )
 
 
-def log_not_identified(job: Job, provider: str | None, reason: str, *, waiting: bool = True) -> None:
+def log_not_identified(
+    job: Job, provider: str | None, reason: str, outcome: str = MISS_WAITS_FOR_IDENTIFICATION
+) -> None:
     with with_log_context(job_id=job.id):
         log_event(
             logger,
             "identify.missed",
-            not_identified_message(provider, reason, waiting=waiting),
+            not_identified_message(provider, reason, outcome),
             provider=provider,
             reason=reason,
         )

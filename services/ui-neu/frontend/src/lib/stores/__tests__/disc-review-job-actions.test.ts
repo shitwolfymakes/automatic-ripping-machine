@@ -225,7 +225,7 @@ describe('DiscReviewJobActions', () => {
 
 		it.each([['   '], [''], [null]])('refuses a blank title (%j) without a request', async (title) => {
 			const a = make();
-			await a.startRip(createJob({ title }), undefined, () => true);
+			await a.startRip(createJob({ title }), undefined, () => false);
 			expect(a.errorMessage).toBe('A title is required to start. Open Info or Search to set one.');
 			expect(a.starting).toBe(false);
 			expect(resolveJobMock).not.toHaveBeenCalled();
@@ -245,6 +245,46 @@ describe('DiscReviewJobActions', () => {
 				disc_number: null,
 				disc_total: null
 			});
+		});
+
+		it.each([['  '], [null]])(
+			'at the review gate, starts directly with a blank title (%j), no resolve',
+			async (title) => {
+				startWaitingJobMock.mockResolvedValue(undefined);
+				const a = make();
+				await a.startRip(createJob({ id: 'j1', title }), undefined, () => true);
+				expect(resolveJobMock).not.toHaveBeenCalled();
+				expect(startWaitingJobMock).toHaveBeenCalledWith('j1');
+				expect(a.errorMessage).toBeNull();
+				expect(calls).toEqual(['dismiss', 'refresh']);
+			}
+		);
+
+		it('at the review gate, starts directly on an unidentified disc, no resolve', async () => {
+			startWaitingJobMock.mockResolvedValue(undefined);
+			await make().startRip(
+				createJob({ id: 'j1', title: 'SCI_FI_LABEL', metadata_json: { flags: { unidentified: true } } }),
+				undefined,
+				() => true
+			);
+			expect(resolveJobMock).not.toHaveBeenCalled();
+			expect(startWaitingJobMock).toHaveBeenCalledWith('j1');
+		});
+
+		it('at the review gate, a failed direct start shows the error and does not dismiss', async () => {
+			startWaitingJobMock.mockRejectedValue(new Error('nope'));
+			const a = make();
+			await a.startRip(createJob({ id: 'j1', title: '' }), undefined, () => true);
+			expect(a.errorMessage).toBe('nope');
+			expect(calls).toEqual([]);
+		});
+
+		it('at the review gate, an identified disc with a title resolves, then starts', async () => {
+			const order: string[] = [];
+			resolveJobMock.mockImplementation(async () => order.push('resolve'));
+			startWaitingJobMock.mockImplementation(async () => order.push('start'));
+			await make().startRip(createJob({ id: 'j1', title: 'Typed' }), undefined, () => true);
+			expect(order).toEqual(['resolve', 'start']);
 		});
 
 		it('starts the waiting job too when the review gate is on', async () => {
@@ -285,6 +325,59 @@ describe('DiscReviewJobActions', () => {
 			await a.startRip(createJob(), undefined, () => false);
 			expect(a.errorMessage).toBe('Failed to start the rip');
 			expect(a.starting).toBe(false);
+			expect(calls).toEqual([]);
+		});
+	});
+
+	describe('identifyAndStart', () => {
+		it('does nothing without a job', async () => {
+			const a = make();
+			await a.identifyAndStart(undefined, createJob());
+			expect(resolveJobMock).not.toHaveBeenCalled();
+			expect(startWaitingJobMock).not.toHaveBeenCalled();
+		});
+
+		it('saves the identity, then starts the review, then dismisses and refreshes', async () => {
+			const order: string[] = [];
+			resolveJobMock.mockImplementation(async () => order.push('resolve'));
+			startWaitingJobMock.mockImplementation(async () => order.push('start'));
+			await make().identifyAndStart(createJob({ id: 'j1', title: 'Movie', year: 2020 }), undefined);
+			expect(order).toEqual(['resolve', 'start']);
+			expect(resolveJobMock).toHaveBeenCalledWith('j1', expect.objectContaining({ title: 'Movie', year: 2020 }));
+			expect(startWaitingJobMock).toHaveBeenCalledWith('j1');
+			expect(calls).toEqual(['dismiss', 'refresh']);
+		});
+
+		it('still saves the identity first on an unidentified disc', async () => {
+			const order: string[] = [];
+			resolveJobMock.mockImplementation(async () => order.push('resolve'));
+			startWaitingJobMock.mockImplementation(async () => order.push('start'));
+			await make().identifyAndStart(
+				createJob({ id: 'j1', title: 'Typed', metadata_json: { flags: { unidentified: true } } }),
+				undefined
+			);
+			expect(order).toEqual(['resolve', 'start']);
+		});
+
+		it('refuses a blank title without a request', async () => {
+			const a = make();
+			await a.identifyAndStart(createJob({ title: '' }), undefined);
+			expect(a.errorMessage).toBe('A title is required to start. Open Info or Search to set one.');
+			expect(resolveJobMock).not.toHaveBeenCalled();
+			expect(startWaitingJobMock).not.toHaveBeenCalled();
+		});
+
+		it("saves detailJob's identity over job's", async () => {
+			await make().identifyAndStart(createJob({ id: 'j1', title: 'Old' }), createJob({ id: 'j1', title: 'Fresh' }));
+			expect(resolveJobMock).toHaveBeenCalledWith('j1', expect.objectContaining({ title: 'Fresh' }));
+		});
+
+		it('does not start when the identify save fails', async () => {
+			resolveJobMock.mockRejectedValue(new Error('nope'));
+			const a = make();
+			await a.identifyAndStart(createJob({ id: 'j1' }), undefined);
+			expect(startWaitingJobMock).not.toHaveBeenCalled();
+			expect(a.errorMessage).toBe('nope');
 			expect(calls).toEqual([]);
 		});
 	});

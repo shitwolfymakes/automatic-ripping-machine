@@ -72,12 +72,18 @@ describe('trackOptionsBody', () => {
 });
 
 describe('trackTitleBody', () => {
-	const title = { title: ' Alien ', year: ' 1979 ', type: 'movie' as const, posterUrl: ' p.jpg ' };
+	const title = {
+		title: ' Alien ',
+		year: ' 1979 ',
+		type: 'movie' as const,
+		posterUrl: ' p.jpg ',
+		edition: ' Final Cut '
+	};
 
 	it('trims the title and poster, sends the year as a number, role main for Movie', () => {
 		const body = trackTitleBody(title);
-		expect(body).toEqual({ title: 'Alien', year: 1979, role: 'main', poster_url: 'p.jpg' });
-		expect(Object.keys(body)).toEqual(['title', 'year', 'role', 'poster_url']);
+		expect(body).toEqual({ title: 'Alien', year: 1979, role: 'main', poster_url: 'p.jpg', edition: 'Final Cut' });
+		expect(Object.keys(body)).toEqual(['title', 'year', 'role', 'poster_url', 'edition']);
 	});
 
 	it('sends role episode for Series', () => {
@@ -90,6 +96,10 @@ describe('trackTitleBody', () => {
 
 	it('sends an undefined year when it is not a number', () => {
 		expect(trackTitleBody({ ...title, year: 'abc' }).year).toBeUndefined();
+	});
+
+	it('sends an undefined edition when blank', () => {
+		expect(trackTitleBody({ ...title, edition: '  ' }).edition).toBeUndefined();
 	});
 
 	it('sends an undefined poster when blank', () => {

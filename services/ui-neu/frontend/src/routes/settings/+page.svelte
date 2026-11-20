@@ -261,7 +261,7 @@
 					<SessionsArea
 						{defaultsGroup}
 						config={settings.config}
-						ontoggle={loaded.toggleSetting}
+						onsave={loaded.saveSetting}
 						initialView={sessionsView}
 					/>
 				</div>

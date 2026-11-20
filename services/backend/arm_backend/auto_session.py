@@ -5,7 +5,7 @@
   * `_maybe_auto_apply_session` — fired from `rip-complete` when a session is
     ROUTED to the job (`resolve_routed_session_id`: pending choice, else the
     compatibility-gated drive default, else `session_routes`) and
-    `auto_apply_allowed` says unattended queueing is permitted.
+    `auto_apply_held_back` finds nothing holding it back.
 
 Both paths emit a single `session.queued` WS event on success with the
 `source` field set to `"manual"` or `"auto"` so the UI can render where each
@@ -33,7 +33,7 @@ from arm_backend.config import settings
 from arm_backend.path_template import TemplateValidationError
 from arm_backend.session_eviction import evict_colliding_tasks
 from arm_backend.session_routing import (
-    auto_apply_allowed,
+    auto_apply_held_back,
     media_types_compatible,
     resolve_routed_session_id,
     routing_media_type,
@@ -833,11 +833,11 @@ async def _load_tasks(db: AsyncSession, session_application_id: str) -> list[Tra
     return list(rows)
 
 
-async def _log_skipped_route(db: AsyncSession, job: Job) -> None:
-    """Name the routed session that auto-apply being off kept from applying, if there is one."""
+async def _log_skipped_route(db: AsyncSession, job: Job, reason: str) -> None:
+    """Name the routed session auto-apply held back, and why, if there is one."""
     session_id = await resolve_routed_session_id(db, job)
     if session_id is not None:
-        logger.info("auto-apply is off: routed session %s not applied", session_id, extra={"job_id": job.id})
+        logger.info("%s: routed session %s not applied", reason, session_id, extra={"job_id": job.id})
 
 
 async def maybe_auto_apply_session(
@@ -849,13 +849,14 @@ async def maybe_auto_apply_session(
 
     Applies the ROUTED session (`resolve_routed_session_id`: pending choice,
     else the compatibility-gated drive default, else `session_routes`) when
-    `auto_apply_allowed` says unattended queueing is permitted: an explicit
+    `auto_apply_held_back` finds nothing holding it back: an explicit
     per-rip choice always is; the drive default or a route needs
-    `Config.auto_transcode_on_idle`. With the flag off, a routed session that
-    would have applied is named in one info line instead.
+    `Config.auto_transcode_on_idle`. When held back, a routed session that
+    would have applied is named in one info line with the reason instead.
     """
-    if not await auto_apply_allowed(db, job):
-        await _log_skipped_route(db, job)
+    held_back = await auto_apply_held_back(db, job)
+    if held_back is not None:
+        await _log_skipped_route(db, job, held_back)
         return
     session_id = await resolve_routed_session_id(db, job)
     if session_id is None:

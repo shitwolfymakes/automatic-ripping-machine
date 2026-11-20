@@ -102,6 +102,22 @@ describe('LoadedSettings', () => {
 		});
 	});
 
+	describe('saveSetting', () => {
+		it('saves a string value, showing it at once, and rolls it back when the save fails', async () => {
+			const loaded = await loadedWith({ miss_media_type: 'movie' });
+			mockSave.mockRejectedValueOnce(new Error('fail'));
+			const failing = loaded.saveSetting('miss_media_type', 'tv');
+			expect(loaded.settings?.config.miss_media_type).toBe('tv');
+			await failing;
+			expect(mockSave).toHaveBeenCalledWith({ miss_media_type: 'tv' });
+			expect(loaded.settings?.config.miss_media_type).toBe('movie');
+			mockSave.mockResolvedValueOnce(undefined as never);
+			await loaded.saveSetting('miss_media_type', 'tv');
+			expect(loaded.settings?.config.miss_media_type).toBe('tv');
+			expect(loaded.isSaving('miss_media_type')).toBe(false);
+		});
+	});
+
 	describe('toggleSetting', () => {
 		const KEY = 'notifications_enabled';
 
