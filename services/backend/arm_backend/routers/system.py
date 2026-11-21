@@ -17,23 +17,28 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import col, func, select
 
 from arm_backend.auth import require_jwt, require_writer
-from arm_backend.config import settings
+from arm_backend.config import effective_transcode_capable, settings
 from arm_backend.db import get_session
 from arm_backend.constants import CONFIG_SINGLETON_ID
 from arm_backend.identity.sources.thediscdb_refresh import RefreshBusy, refresh as thediscdb_refresh
 from arm_backend.identity.sources.thediscdb_refresh import refresh_running as thediscdb_refresh_running
+from arm_backend.system_environment import build_env_groups, ripper_container_views, transcode_container_views
 from arm_backend.system_diagnostics import collect_diagnostics, online_enrolled_drives, system_roots
 from arm_common import (
     Config,
+    Drive,
     Event,
+    Gpu,
     Job,
     User,
 )
 from arm_common.schemas import (
+    EnvironmentSummary,
     MemoryInfo,
     StatsResponse,
     StorageRoot,
     SystemDiagnosticsResponse,
+    SystemEnvironmentResponse,
     SystemResourcesResponse,
     SystemVersionResponse,
 )
@@ -163,6 +168,28 @@ def _app_version() -> str:
 @router.get("/version", response_model=SystemVersionResponse)
 async def system_version(_: User = Depends(require_jwt)) -> SystemVersionResponse:
     return SystemVersionResponse(version=_app_version())
+
+
+@router.get("/environment", response_model=SystemEnvironmentResponse)
+async def environment(
+    request: Request,
+    _: User = Depends(require_jwt),
+    session: AsyncSession = Depends(get_session),
+) -> SystemEnvironmentResponse:
+    cfg = (await session.execute(select(Config).where(col(Config.id) == CONFIG_SINGLETON_ID))).scalar_one_or_none()
+    drives = list((await session.execute(select(Drive))).scalars().all())
+    gpus = list((await session.execute(select(Gpu))).scalars().all())
+    manager = getattr(request.app.state, "ripper_manager", None)
+    return SystemEnvironmentResponse(
+        version=_app_version(),
+        summary=EnvironmentSummary(
+            host_paths_set=manager.host_paths_set() if manager else None,
+            transcode_capable=effective_transcode_capable(settings),
+            gpus=[f"{g.vendor.value} {g.device_path}" for g in gpus],
+        ),
+        groups=build_env_groups(settings, cfg, len(gpus)),
+        containers=[*ripper_container_views(settings, drives), *transcode_container_views(settings, gpus)],
+    )
 
 
 @router.post("/thediscdb/refresh", dependencies=[Depends(require_writer)])
