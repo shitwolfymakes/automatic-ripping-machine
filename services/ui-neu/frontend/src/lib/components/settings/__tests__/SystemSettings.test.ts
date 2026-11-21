@@ -5,6 +5,7 @@ import { SetupRestart } from '$lib/stores/setupRestart.svelte';
 import { goto } from '$app/navigation';
 import { restartSetup } from '$lib/api/setup';
 import { fetchSystemEnvironment } from '$lib/api/system';
+import { fetchDiagnostics } from '$lib/api/diagnostics';
 import type { SettingsData } from '$lib/api/settings';
 import type { SettingsGroup } from '$lib/types/api.gen';
 
@@ -169,6 +170,19 @@ describe('SystemSettings', () => {
 		}
 		expect(screen.getByTestId('system-summary')).toHaveTextContent('Version 3.1.0');
 		expect(screen.getByRole('button', { name: 'Copy deployment report' })).toBeInTheDocument();
+	});
+
+	it('shows a log-level load error', async () => {
+		vi.mocked(fetchDiagnostics).mockRejectedValueOnce(new Error('nope'));
+		renderSystem();
+		expect(await screen.findByTestId('log-levels-error')).toHaveTextContent('Failed to load log levels');
+	});
+
+	it('still shows log levels when the environment fails', async () => {
+		vi.mocked(fetchSystemEnvironment).mockRejectedValueOnce(new Error('env down'));
+		vi.mocked(fetchDiagnostics).mockResolvedValueOnce({ services: [{ name: 'arm-ripper', log_level: 'INFO' }] });
+		renderSystem();
+		expect(await screen.findByTestId('diag-level-arm-ripper')).toHaveTextContent('INFO');
 	});
 
 	it('shows the environment load error', async () => {

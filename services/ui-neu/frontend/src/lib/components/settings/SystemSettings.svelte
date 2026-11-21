@@ -28,6 +28,7 @@
 	let env = $state<SystemEnvironmentResponse | null>(null);
 	let envError = $state<string | null>(null);
 	let logLevels = $state<DiagnosticsServiceView[]>([]);
+	let logError = $state<string | null>(null);
 	let health: SystemDiagnosticsResponse | null = null;
 
 	// Operator-tier System fields that no other tab edits stay visible here;
@@ -35,16 +36,11 @@
 	const operatorFields = $derived((group?.fields ?? []).filter((f) => f.tier === 'operator'));
 
 	onMount(async () => {
-		try {
-			env = await fetchSystemEnvironment();
-		} catch (e) {
-			envError = e instanceof Error ? e.message : 'Failed to load the environment';
-		}
-		try {
-			logLevels = (await fetchDiagnostics()).services;
-		} catch {
-			logLevels = [];
-		}
+		const [envRes, logRes] = await Promise.allSettled([fetchSystemEnvironment(), fetchDiagnostics()]);
+		if (envRes.status === 'fulfilled') env = envRes.value;
+		else envError = envRes.reason instanceof Error ? envRes.reason.message : 'Failed to load the environment';
+		if (logRes.status === 'fulfilled') logLevels = logRes.value.services;
+		else logError = 'Failed to load log levels';
 	});
 
 	async function getReport(): Promise<string> {
@@ -85,8 +81,11 @@
 		</div>
 
 		{#if env}
-			<EnvironmentSection groups={env.groups} {logLevels} />
+			<EnvironmentSection groups={env.groups} {logLevels} {logError} />
 			<ContainersSection containers={env.containers} />
+		{:else if envError}
+			<!-- Log levels do not depend on the environment endpoint. -->
+			<EnvironmentSection groups={[{ name: 'Logging', vars: [] }]} {logLevels} {logError} />
 		{/if}
 
 		{#if operatorFields.length > 0}

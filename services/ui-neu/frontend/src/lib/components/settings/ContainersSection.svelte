@@ -45,7 +45,7 @@
 					<dd>
 						{#each c.env as e (e.key)}
 							<div class="mono">
-								{e.key}={e.secret ? (e.value === null ? '(not set)' : '(set)') : (e.value ?? '')}
+								{e.key}={e.secret ? '<secret>' : (e.value ?? '')}
 							</div>
 						{:else}
 							none

@@ -10,6 +10,21 @@
 	let busy = $state(false);
 	let fallback = $state<string | null>(null);
 	let area = $state<HTMLTextAreaElement | undefined>();
+	let trigger = $state<HTMLButtonElement | undefined>();
+
+	function closeFallback(): void {
+		fallback = null;
+		trigger?.focus();
+	}
+
+	$effect(() => {
+		if (fallback === null) return;
+		const onKeyDown = (e: KeyboardEvent) => {
+			if (e.key === 'Escape') closeFallback();
+		};
+		window.addEventListener('keydown', onKeyDown);
+		return () => window.removeEventListener('keydown', onKeyDown);
+	});
 
 	async function copy(): Promise<void> {
 		busy = true;
@@ -41,15 +56,11 @@
 	});
 </script>
 
-<button type="button" class="btn" disabled={busy} onclick={copy}>Copy deployment report</button>
+<button type="button" class="btn" disabled={busy} onclick={copy} bind:this={trigger}>Copy deployment report</button>
 
 {#if fallback !== null}
 	<div class="modal">
-		<button
-			type="button"
-			class="copy-report-scrim absolute inset-0"
-			aria-label="Close dialog"
-			onclick={() => (fallback = null)}
+		<button type="button" class="copy-report-scrim absolute inset-0" aria-label="Close dialog" onclick={closeFallback}
 		></button>
 		<div
 			class="modal-panel copy-report-panel relative"
@@ -61,7 +72,7 @@
 			<p class="modal-body">Clipboard access is unavailable. Select all and copy the report below.</p>
 			<textarea class="input copy-report-text mono" readonly value={fallback} bind:this={area}></textarea>
 			<div class="modal-actions">
-				<button type="button" class="btn btn-primary" onclick={() => (fallback = null)}>Close</button>
+				<button type="button" class="btn btn-primary" onclick={closeFallback}>Close</button>
 			</div>
 		</div>
 	</div>

@@ -4,9 +4,18 @@
 	interface Props {
 		groups: EnvGroupView[];
 		logLevels: DiagnosticsServiceView[];
+		logError?: string | null;
 	}
 
-	let { groups, logLevels }: Props = $props();
+	let { groups, logLevels, logError = null }: Props = $props();
+
+	// Log levels come from a separate endpoint; give them a Logging group even
+	// when the environment has none.
+	const shown = $derived(
+		groups.some((g) => g.name === 'Logging') || (logLevels.length === 0 && !logError)
+			? groups
+			: [...groups, { name: 'Logging', vars: [] }]
+	);
 
 	// Groups start open; a name in this set has been collapsed.
 	let collapsed = $state<Record<string, boolean>>({});
@@ -22,7 +31,7 @@
 
 <section class="stack" data-testid="environment-section">
 	<h3 class="environment-section-title">Environment</h3>
-	{#each groups as g (g.name)}
+	{#each shown as g (g.name)}
 		<div class="panel environment-section-group">
 			<button
 				type="button"
@@ -62,6 +71,13 @@
 									<td class="table-cell">{v.source}</td>
 								</tr>
 							{/each}
+							{#if g.name === 'Logging' && logError}
+								<tr class="table-row">
+									<td class="table-cell" colspan="3">
+										<p class="field-error" data-testid="log-levels-error">{logError}</p>
+									</td>
+								</tr>
+							{/if}
 							{#if g.name === 'Logging'}
 								{#each logLevels as s (s.name)}
 									<tr class="table-row" data-testid="diagnostics-row">

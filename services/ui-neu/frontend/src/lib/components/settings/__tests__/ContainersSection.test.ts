@@ -31,7 +31,7 @@ describe('ContainersSection', () => {
 		expect(d).toHaveTextContent('/h : /c (rw)');
 		expect(d).toHaveTextContent('/dev/sr0');
 		expect(d).toHaveTextContent('A=x');
-		expect(d).not.toHaveTextContent('TOKEN=x');
+		expect(d).toHaveTextContent('TOKEN=<secret>');
 	});
 
 	it('renders nothing without containers', () => {
