@@ -6,7 +6,8 @@ import { DriveSessionOptions } from '$lib/stores/driveSessionOptions.svelte';
 import { DriveDiagnostics } from '$lib/stores/driveDiagnostics.svelte';
 import { updateDrive, enrollDrive, rescanDrives } from '$lib/api/drives';
 import type { SettingsData } from '$lib/api/settings';
-import type { DriveView, SessionView } from '$lib/types/api.gen';
+import type { DriveView, SessionView, SettingsGroup } from '$lib/types/api.gen';
+import { saveArmConfig } from '$lib/api/settings';
 
 function drive(over: Partial<DriveView> = {}): DriveView {
 	return {
@@ -53,6 +54,22 @@ vi.mock('$lib/api/drives', () => ({
 	)
 }));
 
+vi.mock('$lib/api/settings', () => ({
+	saveArmConfig: vi.fn(() => Promise.resolve({ success: true }))
+}));
+
+function intField(key: string, label: string) {
+	return { key, group: 'Drives', tier: 'operator', label, help: '', type: 'int', editable: true, enum_values: null };
+}
+
+const drivesGroup = {
+	name: 'Drives',
+	fields: [
+		intField('drive_scan_interval_seconds', 'Drive scan interval (seconds)'),
+		intField('drive_detected_prune_days', 'Forget unseen drives after (days)')
+	]
+} as unknown as SettingsGroup;
+
 function settingsData(over: Partial<SettingsData> = {}): SettingsData {
 	return {
 		config: { auto_rip_on_insert: true },
@@ -87,6 +104,35 @@ afterEach(() => {
 });
 
 describe('DrivesSettings', () => {
+	it('shows the drive scanner tunables as editable fields in a Scanning panel', () => {
+		render({
+			group: drivesGroup,
+			settings: settingsData({ config: { drive_scan_interval_seconds: 30, drive_detected_prune_days: 7 } as never })
+		});
+		const panel = screen.getByTestId('drive-scanning');
+		expect(panel).toHaveTextContent('Scanning');
+		expect(screen.getByLabelText(/Drive scan interval/)).toHaveValue(30);
+		expect(screen.getByLabelText(/Forget unseen drives/)).toHaveValue(7);
+	});
+
+	it('saves an edited scanner tunable and reports it to onsaved', async () => {
+		const onsaved = vi.fn();
+		render({
+			group: drivesGroup,
+			onsaved,
+			settings: settingsData({ config: { drive_scan_interval_seconds: 30, drive_detected_prune_days: 7 } as never })
+		});
+		await fireEvent.input(screen.getByLabelText(/Drive scan interval/), { target: { value: '60' } });
+		await fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+		await waitFor(() => expect(saveArmConfig).toHaveBeenCalledWith({ drive_scan_interval_seconds: 60 }));
+		expect(onsaved).toHaveBeenCalledWith({ drive_scan_interval_seconds: 60 });
+	});
+
+	it('omits the Scanning panel until the schema group is loaded', () => {
+		render();
+		expect(screen.queryByTestId('drive-scanning')).toBeNull();
+	});
+
 	it('shows the error as an alert instead of the drive lists', () => {
 		render({
 			drives: [

@@ -1,9 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import type { SettingsData } from '$lib/api/settings';
-	import type { SettingsGroup } from '$lib/types/api.gen';
 	import type { SetupRestart } from '$lib/stores/setupRestart.svelte';
-	import ConfigSchemaField from '$lib/components/settings/ConfigSchemaField.svelte';
 	import SystemHealth from '$lib/components/settings/SystemHealth.svelte';
 	import EnvironmentSection from '$lib/components/settings/EnvironmentSection.svelte';
 	import ContainersSection from '$lib/components/settings/ContainersSection.svelte';
@@ -18,22 +15,16 @@
 	} from '$lib/types/api.gen';
 
 	interface Props {
-		settings: SettingsData;
-		group: SettingsGroup | undefined;
 		setup: SetupRestart;
 	}
 
-	let { settings, group, setup }: Props = $props();
+	let { setup }: Props = $props();
 
 	let env = $state<SystemEnvironmentResponse | null>(null);
 	let envError = $state<string | null>(null);
 	let logLevels = $state<DiagnosticsServiceView[]>([]);
 	let logError = $state<string | null>(null);
 	let health: SystemDiagnosticsResponse | null = null;
-
-	// Operator-tier System fields that no other tab edits stay visible here;
-	// the infra ones are covered by the Environment section.
-	const operatorFields = $derived((group?.fields ?? []).filter((f) => f.tier === 'operator'));
 
 	onMount(async () => {
 		const [envRes, logRes] = await Promise.allSettled([fetchSystemEnvironment(), fetchDiagnostics()]);
@@ -86,20 +77,6 @@
 		{:else if envError}
 			<!-- Log levels do not depend on the environment endpoint. -->
 			<EnvironmentSection groups={[{ name: 'Logging', vars: [] }]} {logLevels} {logError} />
-		{/if}
-
-		{#if operatorFields.length > 0}
-			<section class="stack" data-testid="operator-settings">
-				<h3 class="settings-page-section-title">Operator settings</h3>
-				<div class="panel stack">
-					{#each operatorFields as f (f.key)}
-						<ConfigSchemaField
-							field={f}
-							value={(settings.config as Record<string, unknown>)?.[f.key] ?? settings.infra?.[f.key]}
-						/>
-					{/each}
-				</div>
-			</section>
 		{/if}
 
 		<!-- First-run walkthrough re-entry (setup spec 5.11) -->
