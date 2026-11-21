@@ -57,6 +57,20 @@ def test_strip_userinfo_passes_non_urls_through():
     assert strip_userinfo("http://host:80/x") == "http://host:80/x"
 
 
+def test_strip_userinfo_username_only_and_ipv6():
+    assert strip_userinfo("ssh://bob@nas") == "ssh://***@nas"
+    assert strip_userinfo("ssh://u:p@[::1]:22") == "ssh://***@[::1]:22"
+
+
+def test_strip_userinfo_malformed_fails_closed():
+    assert strip_userinfo("http://bob:pw@[bad") == "***"
+
+
+def test_malformed_url_var_does_not_break_groups(make_settings):
+    groups = build_env_groups(make_settings(ARM_TRANSCODE_DOCKER_HOST="http://[bad"), Config(id=1), 0)
+    assert _var(groups, "ARM_TRANSCODE_DOCKER_HOST").value == "***"
+
+
 def test_seed_only_shows_effective_db_value(make_settings):
     groups = build_env_groups(make_settings(MAX_PARALLEL_TRANSCODES="2"), Config(id=1, max_parallel_transcodes=4), 0)
     eff = _var(groups, "MAX_PARALLEL_TRANSCODES").effective

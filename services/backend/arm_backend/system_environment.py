@@ -14,8 +14,12 @@ _GPUS_TAB = "Transcoding"
 
 
 def strip_userinfo(url: str) -> str:
-    """Replace any `user:pass@` in a URL with `***@`; non-URLs pass through."""
-    parts = urlsplit(url)
+    """Replace any `user:pass@` in a URL with `***@`; non-URLs pass through, malformed ones are masked."""
+    try:
+        parts = urlsplit(url)
+    except ValueError:
+        # Unparseable: fail closed, the raw string may carry credentials.
+        return "***"
     if "@" not in parts.netloc:
         return url
     host = parts.netloc.rsplit("@", 1)[1]
