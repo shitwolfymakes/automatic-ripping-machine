@@ -13,6 +13,7 @@ function makeEnv(tokenSet = true): SystemEnvironmentResponse {
 				name: 'Paths',
 				vars: [{ key: 'RAW_ROOT', value: '/raw', secret: false, is_set: false, source: 'default' }]
 			},
+			{ name: 'Logging', vars: [{ key: 'LOG_LEVEL', value: 'info', secret: false, is_set: true, source: 'env' }] },
 			{
 				name: 'Security',
 				vars: [
@@ -140,9 +141,47 @@ describe('buildDeploymentReport', () => {
 		expect(buildDeploymentReport(makeEnv(), null, [], now)).not.toContain('### Health');
 	});
 
-	it('log levels appear under Logging, appended when no Logging group exists', () => {
+	it('log levels appear under an existing Logging group after a blank line', () => {
 		const md = buildDeploymentReport(makeEnv(), null, logLevels, now);
-		expect(md).toContain('### Logging');
-		expect(md).toContain('- arm-ripper: debug');
+		expect(md).toContain('### Logging\n```\nLOG_LEVEL=info\n```\n\n- arm-ripper: debug');
+		expect(md.match(/### Logging/g)).toHaveLength(1);
+	});
+
+	it('appends a Logging section when no Logging group exists', () => {
+		const env = makeEnv();
+		env.groups = env.groups.filter((g) => g.name !== 'Logging');
+		const md = buildDeploymentReport(env, null, logLevels, now);
+		expect(md).toContain('### Logging\n\n- arm-ripper: debug');
+	});
+
+	it('leaves a blank line after </summary>', () => {
+		expect(buildDeploymentReport(makeEnv(), null, [], now)).toContain('</summary>\n\n```');
+	});
+
+	it('values with backticks or newlines cannot break the fence or the line', () => {
+		const env = makeEnv();
+		env.groups[0].vars[0].value = 'a\n```\n## injected';
+		env.containers[0].env[0].value = 'x\r\n```` y';
+		const md = buildDeploymentReport(env, null, [], now);
+		expect(md).toContain('RAW_ROOT=a\\n```\\n## injected  (default)');
+		expect(md).toContain('### Paths\n````\nRAW_ROOT=');
+		expect(md).toContain('`````\nimage: arm-ripper:3.1');
+		expect(md).not.toContain('\n## injected');
+	});
+
+	it('escapes HTML in the container summary', () => {
+		const env = makeEnv();
+		env.containers[0].label = 'a</summary><b>&';
+		const md = buildDeploymentReport(env, null, [], now);
+		expect(md).toContain('ripper — a&lt;/summary&gt;&lt;b&gt;&amp; (enrolled, online)</summary>');
+	});
+
+	it('collapses newlines in health details', () => {
+		const h: SystemDiagnosticsResponse = {
+			status: 'error',
+			checks: [{ name: 'config', status: 'error', detail: 'line1\nline2' }],
+			paths: []
+		};
+		expect(buildDeploymentReport(makeEnv(), h, [], now)).toContain('- ❌ Configuration: line1\\nline2');
 	});
 });
