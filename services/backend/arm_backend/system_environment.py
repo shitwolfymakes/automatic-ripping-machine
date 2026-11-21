@@ -1,0 +1,68 @@
+"""Grouped, masked view of the backend's `Settings` for the environment report."""
+
+from urllib.parse import urlsplit, urlunsplit
+
+from arm_common import Config
+from arm_common.config_metadata import CONFIG_FIELD_META
+from arm_common.schemas.system import EnvEffectiveView, EnvGroupView, EnvVarView
+
+from arm_backend.config import Settings
+from arm_backend.env_registry import ENV_GROUP_ORDER, ENV_REGISTRY, EnvVarMeta
+
+# The GPU inventory card lives on the Transcoding settings tab.
+_GPUS_TAB = "Transcoding"
+
+
+def strip_userinfo(url: str) -> str:
+    """Replace any `user:pass@` in a URL with `***@`; non-URLs pass through."""
+    parts = urlsplit(url)
+    if "@" not in parts.netloc:
+        return url
+    host = parts.netloc.rsplit("@", 1)[1]
+    return urlunsplit(parts._replace(netloc=f"***@{host}"))
+
+
+def _stringify(raw: object) -> str:
+    if isinstance(raw, (list, tuple, set, frozenset)):
+        return ",".join(str(i) for i in raw)
+    return str(raw)
+
+
+def _tab_for(setting_key: str) -> str:
+    for meta in CONFIG_FIELD_META:
+        if meta.key == setting_key:
+            return meta.group
+    return _GPUS_TAB
+
+
+def _effective(meta: EnvVarMeta, env_value: str, cfg: Config | None, gpu_count: int) -> EnvEffectiveView | None:
+    key = meta.seed_of
+    if key == "gpus":
+        return EnvEffectiveView(value=f"{gpu_count} device(s) in inventory", setting_key=key, tab=_GPUS_TAB)
+    if key == "max_parallel_transcodes":
+        db_value = cfg.max_parallel_transcodes if cfg is not None else None
+        value = str(db_value) if db_value is not None else env_value
+        return EnvEffectiveView(value=value, setting_key=key, tab=_tab_for(key))
+    return None
+
+
+def _view(key: str, meta: EnvVarMeta, settings: Settings, cfg: Config | None, gpu_count: int) -> EnvVarView:
+    value = _stringify(getattr(settings, key))
+    if meta.url and not meta.secret:
+        value = strip_userinfo(value)
+    return EnvVarView(
+        key=key,
+        value=None if meta.secret else value,
+        secret=meta.secret,
+        is_set=bool(value),
+        source="env" if key in settings.model_fields_set else "default",
+        effective=None if meta.secret else _effective(meta, value, cfg, gpu_count) if meta.seed_of else None,
+    )
+
+
+def build_env_groups(settings: Settings, cfg: Config | None, gpu_count: int) -> list[EnvGroupView]:
+    by_group: dict[str, list[EnvVarView]] = {name: [] for name in ENV_GROUP_ORDER}
+    for key in Settings.model_fields:
+        meta = ENV_REGISTRY[key]
+        by_group[meta.group].append(_view(key, meta, settings, cfg, gpu_count))
+    return [EnvGroupView(name=name, vars=vs) for name, vs in by_group.items() if vs]
