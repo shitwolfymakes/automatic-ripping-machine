@@ -185,7 +185,7 @@ async def environment(
         summary=EnvironmentSummary(
             host_paths_set=manager.host_paths_set() if manager else None,
             transcode_capable=effective_transcode_capable(settings),
-            gpus=[f"{g.vendor.value} {g.device_path}" for g in gpus],
+            gpus=[f"{g.vendor.value} {g.device_path}" for g in gpus if g.probed_at is not None],
         ),
         groups=build_env_groups(settings, cfg, len(gpus)),
         containers=[*ripper_container_views(settings, drives), *transcode_container_views(settings, gpus)],

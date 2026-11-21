@@ -1,6 +1,7 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import { renderComponent, screen, cleanup, fireEvent } from '$lib/test-utils';
 import EnvironmentSection from '../EnvironmentSection.svelte';
+import { tabFromHash } from '$lib/utils/settings-tabs';
 import type { EnvGroupView } from '$lib/types/api.gen';
 
 const groups: EnvGroupView[] = [
@@ -40,10 +41,10 @@ describe('EnvironmentSection', () => {
 
 	it('shows the in-use value with a link to its settings field', () => {
 		renderComponent(EnvironmentSection, { props: { groups, logLevels: [] } });
-		expect(screen.getByRole('link', { name: /in use: 4/ })).toHaveAttribute(
-			'href',
-			'#Transcoding/max_parallel_transcodes'
-		);
+		const link = screen.getByRole('link', { name: /in use: 4/ });
+		expect(link).toHaveAttribute('href', '#transcoding/max_parallel_transcodes');
+		expect(link).toHaveTextContent('Settings, Transcoding');
+		expect(tabFromHash(link.getAttribute('href') ?? '')).toBe('transcoding');
 	});
 
 	it('logging group lists per-service levels', () => {

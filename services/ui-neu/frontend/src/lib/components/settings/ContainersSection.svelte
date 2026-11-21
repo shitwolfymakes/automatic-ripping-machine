@@ -11,8 +11,8 @@
 {#if containers.length > 0}
 	<section class="stack" data-testid="containers-section">
 		<h3 class="containers-section-title">Containers</h3>
-		{#each containers as c (c.kind + c.label)}
-			<details class="panel containers-section-item" data-testid="container-{c.label}">
+		{#each containers as c, i (i)}
+			<details class="panel containers-section-item" data-testid="container-{i}-{c.label}">
 				<summary class="containers-section-summary">
 					<span class="containers-section-name">{c.label}</span>
 					<span class="badge">{c.kind}</span>

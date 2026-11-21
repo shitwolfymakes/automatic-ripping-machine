@@ -137,7 +137,7 @@ describe('buildDeploymentReport', () => {
 		const md = buildDeploymentReport(makeEnv(), health, [], now);
 		expect(md).toContain('### Health');
 		expect(md).toContain('- ✅ Configuration');
-		expect(md).toContain('- ❌ MakeMKV key: key expired');
+		expect(md).toContain('- ❌ MakeMKV key: ` key expired `');
 		expect(buildDeploymentReport(makeEnv(), null, [], now)).not.toContain('### Health');
 	});
 
@@ -182,6 +182,17 @@ describe('buildDeploymentReport', () => {
 			checks: [{ name: 'config', status: 'error', detail: 'line1\nline2' }],
 			paths: []
 		};
-		expect(buildDeploymentReport(makeEnv(), h, [], now)).toContain('- ❌ Configuration: line1\\nline2');
+		expect(buildDeploymentReport(makeEnv(), h, [], now)).toContain('- ❌ Configuration: ` line1\\nline2 `');
+	});
+
+	it('wraps health details in inline code so Markdown specials stay literal', () => {
+		const h: SystemDiagnosticsResponse = {
+			status: 'error',
+			checks: [{ name: 'config', status: 'error', detail: '*bold* [x](http://e) `tick`' }],
+			paths: []
+		};
+		expect(buildDeploymentReport(makeEnv(), h, [], now)).toContain(
+			'- ❌ Configuration: `` *bold* [x](http://e) `tick` ``'
+		);
 	});
 });

@@ -18,13 +18,13 @@ from arm_common.schemas.system import (
 
 from arm_backend.config import Settings
 from arm_backend.env_registry import CONTAINER_PUBLIC_ENV, ENV_GROUP_ORDER, ENV_REGISTRY, EnvVarMeta
-from arm_backend.ripper_container_spec import container_spec
+from arm_backend.ripper_container_spec import container_spec, ripper_volume_pairs
 from arm_backend.transcode_container_spec import (
     backend_url_for_spawn,
     container_identity_env,
     gpu_env,
     gpu_run_kwargs,
-    task_volumes,
+    task_volume_pairs,
 )
 from arm_backend.transcode_images import vendor_override
 
@@ -103,13 +103,29 @@ def mask_container_env(env: Mapping[str, str]) -> list[ContainerEnvView]:
     return out
 
 
-def _mounts(volumes: Mapping[str, Mapping[str, str]]) -> list[ContainerMountView]:
-    return [ContainerMountView(host=host, container=v["bind"], mode=v["mode"]) for host, v in volumes.items()]
+def _mounts(pairs: list[tuple[str, str, str]]) -> list[ContainerMountView]:
+    # An empty host path is a misconfiguration; show it rather than a blank.
+    return [ContainerMountView(host=host or "(unset)", container=bind, mode=mode) for host, bind, mode in pairs]
 
 
 def _ripper_view(settings: Settings, drive: Drive) -> ContainerView:
-    spec: dict[str, Any] = container_spec(settings, drive)
-    mounts = _mounts(spec["volumes"])
+    label = drive.display_name or drive.model or drive.hostname
+    state = f"{drive.lifecycle.value}, {drive.status.value}"
+    try:
+        spec: dict[str, Any] = container_spec(settings, drive)
+    except Exception:  # noqa: BLE001 — one malformed drive must not 500 the report
+        return ContainerView(
+            kind="ripper",
+            label=label,
+            state=f"{state}, spec error",
+            image=settings.ARM_RIPPER_IMAGE,
+            network=settings.ARM_DOCKER_NETWORK,
+            docker_host=None,
+            mounts=[],
+            devices=[],
+            env=[],
+        )
+    mounts = _mounts(ripper_volume_pairs(settings))
     # A virtual (ISO) ripper mounts its ISO as a docker Mount, not a volume.
     for m in spec.get("mounts", []):
         mounts.append(
@@ -117,8 +133,8 @@ def _ripper_view(settings: Settings, drive: Drive) -> ContainerView:
         )
     return ContainerView(
         kind="ripper",
-        label=drive.display_name or drive.model or drive.hostname,
-        state=f"{drive.lifecycle.value}, {drive.status.value}",
+        label=label,
+        state=state,
         image=spec["image"],
         network=spec["network"],
         docker_host=None,
@@ -162,7 +178,7 @@ def _transcode_view(settings: Settings, gpu: Gpu | None) -> ContainerView:
         image=image,
         network=None,
         docker_host=strip_userinfo(settings.ARM_TRANSCODE_DOCKER_HOST) or None,
-        mounts=_mounts(task_volumes(settings)),
+        mounts=_mounts(task_volume_pairs(settings)),
         devices=devices,
         env=mask_container_env(env),
     )

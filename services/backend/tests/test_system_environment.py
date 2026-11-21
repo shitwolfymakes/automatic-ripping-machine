@@ -209,3 +209,33 @@ def test_container_env_keys_all_allowlisted_except_token(make_settings):
         keys |= set(gpu_env(gpu, None))
     keys |= {"ARM_BACKEND_URL", "ARM_SERVICE_TOKEN", "ARM_LOG_LEVEL"}
     assert keys - CONTAINER_PUBLIC_ENV == {"ARM_SERVICE_TOKEN"}
+
+
+def test_empty_host_paths_keep_every_mount_and_show_unset(make_settings):
+    s = make_settings(ARM_HOST_RAW_PATH="", ARM_HOST_MEDIA_PATH="", ARM_HOST_LOGS_PATH="")
+    drive = Drive(
+        id="drv_on0000000000000000000005",
+        hostname="h5",
+        device_path="/dev/sr0",
+        lifecycle=DriveLifecycle.ENROLLED,
+        status=DriveStatus.ONLINE,
+    )
+    [rip] = ripper_container_views(s, [drive])
+    assert {m.container for m in rip.mounts if m.host == "(unset)"} == {"/raw", "/logs"}
+    cpu = transcode_container_views(s, [])[0]
+    assert {m.container for m in cpu.mounts if m.host == "(unset)"} == {"/raw", "/media", "/logs"}
+
+
+def test_spec_error_degrades_to_a_view(make_settings):
+    bad = Drive(
+        id="drv_iso000000000000000000006",
+        hostname="iso6",
+        device_path="/source/x.iso",
+        kind=DriveKind.VIRTUAL,
+        source_path=None,
+        lifecycle=DriveLifecycle.ENROLLED,
+        status=DriveStatus.ONLINE,
+    )
+    [view] = ripper_container_views(make_settings(), [bad])
+    assert view.state == "enrolled, online, spec error"
+    assert view.env == [] and view.mounts == []

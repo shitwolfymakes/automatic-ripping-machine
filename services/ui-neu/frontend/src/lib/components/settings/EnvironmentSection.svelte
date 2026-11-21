@@ -1,5 +1,6 @@
 <script lang="ts">
 	import type { DiagnosticsServiceView, EnvGroupView } from '$lib/types/api.gen';
+	import { settingsTabFor } from '$lib/utils/settings-sections';
 
 	interface Props {
 		groups: EnvGroupView[];
@@ -25,7 +26,8 @@
 	}
 
 	function fieldHref(tab: string, key: string | null): string {
-		return key ? `#${tab}/${key}` : `#${tab}`;
+		const id = settingsTabFor(tab);
+		return key ? `#${id}/${key}` : `#${id}`;
 	}
 </script>
 

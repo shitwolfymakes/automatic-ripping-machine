@@ -18,6 +18,15 @@ function escapeHtml(v: string): string {
 	return oneLine(v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
+// Inline code span for text outside a fence: the delimiter is a backtick run
+// longer than any run inside, so the text cannot close it early.
+function inlineCode(v: string): string {
+	const text = oneLine(v);
+	const longest = Math.max(0, ...(text.match(/`+/g) ?? []).map((r) => r.length));
+	const fence = '`'.repeat(longest + 1);
+	return `${fence} ${text} ${fence}`;
+}
+
 function yesNo(v: boolean | null): string {
 	if (v === null) return 'unknown';
 	return v ? 'yes' : 'no';
@@ -64,13 +73,13 @@ function containerBlock(c: ContainerView): string[] {
 
 function healthSection(health: SystemDiagnosticsResponse): string[] {
 	const lines = health.checks.map((c) =>
-		c.status === 'ok' ? `- ✅ ${checkLabel(c.name)}` : `- ❌ ${checkLabel(c.name)}: ${oneLine(checkDetail(c))}`
+		c.status === 'ok' ? `- ✅ ${checkLabel(c.name)}` : `- ❌ ${checkLabel(c.name)}: ${inlineCode(checkDetail(c))}`
 	);
 	for (const p of health.paths) {
 		lines.push(
 			pathState(p) === 'ok'
 				? `- ✅ ${oneLine(p.name)}: ${oneLine(p.path)}`
-				: `- ❌ ${oneLine(p.name)}: ${oneLine(p.path)}, ${pathDetail(p)}`
+				: `- ❌ ${oneLine(p.name)}: ${oneLine(p.path)}, ${inlineCode(pathDetail(p))}`
 		);
 	}
 	return ['### Health', ...lines, ''];

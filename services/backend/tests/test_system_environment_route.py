@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
+
 import json
 import secrets
 from collections.abc import Iterator
@@ -50,7 +52,16 @@ def _app(monkeypatch: pytest.MonkeyPatch) -> tuple[FastAPI, str]:
             status=DriveStatus.ONLINE,
         )
     ]
-    db.rows["gpus"] = [Gpu(id="gpu_1", vendor=GpuVendor.VAAPI, device_path="/dev/dri/renderD128", enabled=True)]
+    db.rows["gpus"] = [
+        Gpu(
+            id="gpu_1",
+            vendor=GpuVendor.VAAPI,
+            device_path="/dev/dri/renderD128",
+            enabled=True,
+            probed_at=datetime.now(timezone.utc),
+        ),
+        Gpu(id="gpu_2", vendor=GpuVendor.NVENC, device_path="/dev/nvidia0", enabled=True),
+    ]
 
     app = FastAPI()
     key = secrets.token_bytes(32)

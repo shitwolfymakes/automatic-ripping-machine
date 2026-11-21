@@ -25,13 +25,20 @@ describe('ContainersSection', () => {
 
 	it('renders a collapsed details per container with its facts', () => {
 		renderComponent(ContainersSection, { props: { containers } });
-		const d = screen.getByTestId('container-arm-ripper') as HTMLDetailsElement;
+		const d = screen.getByTestId('container-0-arm-ripper') as HTMLDetailsElement;
 		expect(d.open).toBe(false);
 		expect(d).toHaveTextContent('arm:latest');
 		expect(d).toHaveTextContent('/h : /c (rw)');
 		expect(d).toHaveTextContent('/dev/sr0');
 		expect(d).toHaveTextContent('A=x');
 		expect(d).toHaveTextContent('TOKEN=<secret>');
+	});
+
+	it('renders two containers with identical kind and label', () => {
+		const twin = { ...containers[0], label: 'Same Drive' };
+		renderComponent(ContainersSection, { props: { containers: [twin, { ...twin }] } });
+		expect(screen.getByTestId('container-0-Same Drive')).toBeInTheDocument();
+		expect(screen.getByTestId('container-1-Same Drive')).toBeInTheDocument();
 	});
 
 	it('renders nothing without containers', () => {
