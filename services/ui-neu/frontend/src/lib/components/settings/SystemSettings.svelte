@@ -1,10 +1,21 @@
 <script lang="ts">
+	import { onMount } from 'svelte';
 	import type { SettingsData } from '$lib/api/settings';
 	import type { SettingsGroup } from '$lib/types/api.gen';
 	import type { SetupRestart } from '$lib/stores/setupRestart.svelte';
 	import ConfigSchemaField from '$lib/components/settings/ConfigSchemaField.svelte';
 	import SystemHealth from '$lib/components/settings/SystemHealth.svelte';
-	import DiagnosticsSection from '$lib/components/DiagnosticsSection.svelte';
+	import EnvironmentSection from '$lib/components/settings/EnvironmentSection.svelte';
+	import ContainersSection from '$lib/components/settings/ContainersSection.svelte';
+	import CopyReportButton from '$lib/components/settings/CopyReportButton.svelte';
+	import { fetchSystemDiagnostics, fetchSystemEnvironment } from '$lib/api/system';
+	import { fetchDiagnostics } from '$lib/api/diagnostics';
+	import { buildDeploymentReport } from '$lib/utils/deployment-report';
+	import type {
+		DiagnosticsServiceView,
+		SystemDiagnosticsResponse,
+		SystemEnvironmentResponse
+	} from '$lib/types/api.gen';
 
 	interface Props {
 		settings: SettingsData;
@@ -13,14 +24,86 @@
 	}
 
 	let { settings, group, setup }: Props = $props();
+
+	let env = $state<SystemEnvironmentResponse | null>(null);
+	let envError = $state<string | null>(null);
+	let logLevels = $state<DiagnosticsServiceView[]>([]);
+	let health: SystemDiagnosticsResponse | null = null;
+
+	// Operator-tier System fields that no other tab edits stay visible here;
+	// the infra ones are covered by the Environment section.
+	const operatorFields = $derived((group?.fields ?? []).filter((f) => f.tier === 'operator'));
+
+	onMount(async () => {
+		try {
+			env = await fetchSystemEnvironment();
+		} catch (e) {
+			envError = e instanceof Error ? e.message : 'Failed to load the environment';
+		}
+		try {
+			logLevels = (await fetchDiagnostics()).services;
+		} catch {
+			logLevels = [];
+		}
+	});
+
+	async function getReport(): Promise<string> {
+		const current = env ?? (await fetchSystemEnvironment());
+		health ??= await fetchSystemDiagnostics();
+		return buildDeploymentReport(current, health, logLevels, new Date());
+	}
+
+	function yesNo(v: boolean | null): string {
+		if (v === null) return 'unknown';
+		return v ? 'yes' : 'no';
+	}
 </script>
 
 <div class="stack stack-lg" data-page-section>
 	<div class="stack stack-lg">
-		<h2 class="settings-page-section-title" data-page-section-title>System</h2>
+		<div class="settings-page-system-header">
+			<h2 class="settings-page-section-title" data-page-section-title>System</h2>
+			<CopyReportButton {getReport} />
+		</div>
 
-		<!-- Health check (API keys + path permissions) -->
-		<!-- First-run walkthrough re-entry (setup spec §5.11) -->
+		{#if env}
+			<p class="settings-page-system-summary" data-testid="system-summary">
+				Version {env.version} · Host paths set: {yesNo(env.summary.host_paths_set)} · Transcode capable:
+				{yesNo(env.summary.transcode_capable)} · GPUs: {env.summary.gpus.length ? env.summary.gpus.join(', ') : 'none'}
+			</p>
+		{:else if envError}
+			<p class="field-error" data-testid="environment-error">{envError}</p>
+		{/if}
+
+		<div data-testid="system-health-block">
+			<SystemHealth
+				grouped
+				onresult={(r) => {
+					health = r;
+				}}
+			/>
+		</div>
+
+		{#if env}
+			<EnvironmentSection groups={env.groups} {logLevels} />
+			<ContainersSection containers={env.containers} />
+		{/if}
+
+		{#if operatorFields.length > 0}
+			<section class="stack" data-testid="operator-settings">
+				<h3 class="settings-page-section-title">Operator settings</h3>
+				<div class="panel stack">
+					{#each operatorFields as f (f.key)}
+						<ConfigSchemaField
+							field={f}
+							value={(settings.config as Record<string, unknown>)?.[f.key] ?? settings.infra?.[f.key]}
+						/>
+					{/each}
+				</div>
+			</section>
+		{/if}
+
+		<!-- First-run walkthrough re-entry (setup spec 5.11) -->
 		<section class="panel settings-page-setup-again" data-testid="run-setup-again">
 			<div>
 				<h3 class="settings-page-section-title">Setup walkthrough</h3>
@@ -32,32 +115,21 @@
 				{setup.running ? 'Opening...' : 'Run setup again'}
 			</button>
 		</section>
-
-		<SystemHealth grouped />
-
-		<!-- Read-only infra configuration (schema-driven) -->
-		{#if group}
-			<section class="stack">
-				<h3 class="settings-page-section-title">Configuration (read-only)</h3>
-				<div class="panel stack">
-					{#each group.fields as f (f.key)}
-						<ConfigSchemaField
-							field={f}
-							value={(settings.config as Record<string, unknown>)?.[f.key] ?? settings.infra?.[f.key]}
-						/>
-					{/each}
-				</div>
-			</section>
-		{/if}
 	</div>
-
-	<!-- Diagnostics (moved here from the standalone Diagnostics tab) -->
-	<section class="mt-6">
-		<DiagnosticsSection />
-	</section>
 </div>
 
 <style>
+	.settings-page-system-header {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		justify-content: space-between;
+		gap: 0.75rem;
+	}
+	.settings-page-system-summary {
+		font-size: 0.875rem;
+		color: var(--color-text-muted);
+	}
 	.settings-page-section-title {
 		font-size: 1.125rem;
 		line-height: 1.75rem;

@@ -4,6 +4,7 @@ import SystemSettings from '../SystemSettings.svelte';
 import { SetupRestart } from '$lib/stores/setupRestart.svelte';
 import { goto } from '$app/navigation';
 import { restartSetup } from '$lib/api/setup';
+import { fetchSystemEnvironment } from '$lib/api/system';
 import type { SettingsData } from '$lib/api/settings';
 import type { SettingsGroup } from '$lib/types/api.gen';
 
@@ -20,6 +21,26 @@ vi.mock('$lib/api/setup', () => ({
 // so the component renders without a network.
 vi.mock('$lib/api/system', () => ({
 	fetchSystemDiagnostics: vi.fn(() => Promise.reject(new Error('checks unavailable'))),
+	fetchSystemEnvironment: vi.fn(() =>
+		Promise.resolve({
+			version: '3.1.0',
+			summary: { host_paths_set: true, transcode_capable: false, gpus: ['nvidia'] },
+			groups: [{ name: 'Paths', vars: [] }],
+			containers: [
+				{
+					kind: 'ripper',
+					label: 'arm-ripper',
+					state: 'running',
+					image: 'arm',
+					network: null,
+					docker_host: null,
+					mounts: [],
+					devices: [],
+					env: []
+				}
+			]
+		})
+	),
 	fetchSystemVersion: vi.fn()
 }));
 
@@ -110,36 +131,49 @@ describe('SystemSettings', () => {
 		expect(screen.queryByRole('button', { name: 'Run setup again' })).not.toBeInTheDocument();
 	});
 
-	it('omits the Configuration list when there is no group', () => {
-		renderSystem({ group: undefined });
+	it('does not render the old Configuration block', () => {
+		renderSystem();
 		expect(screen.queryByText('Configuration (read-only)')).not.toBeInTheDocument();
 		expect(screen.queryByTestId('setting-RAW_ROOT')).not.toBeInTheDocument();
 	});
 
-	it('lists each group field in the Configuration list when a group is given', () => {
-		renderSystem();
-		expect(screen.getByRole('heading', { name: 'Configuration (read-only)' })).toBeInTheDocument();
-		expect(screen.getByTestId('setting-RAW_ROOT')).toBeInTheDocument();
-		expect(screen.getByTestId('setting-DB_URL')).toBeInTheDocument();
+	it('keeps only operator-tier System fields in a read-only Operator settings block', () => {
+		const g = {
+			name: 'System',
+			fields: [field('RAW_ROOT', 'Raw root'), { ...field('drive_scan_interval_seconds', 'Scan'), tier: 'operator' }]
+		} as unknown as SettingsGroup;
+		renderSystem({ group: g });
+		expect(screen.getByRole('heading', { name: 'Operator settings' })).toBeInTheDocument();
+		expect(screen.getByTestId('setting-drive_scan_interval_seconds')).toBeInTheDocument();
+		expect(screen.queryByTestId('setting-RAW_ROOT')).not.toBeInTheDocument();
 	});
 
-	it('reads a field value from settings.config when the key is present', () => {
+	it('omits Operator settings when there are none', () => {
 		renderSystem();
-		expect(within(screen.getByTestId('setting-RAW_ROOT')).getByText('/from-config')).toBeInTheDocument();
+		expect(screen.queryByTestId('operator-settings')).not.toBeInTheDocument();
 	});
 
-	it('reads a field value from settings.infra when settings.config lacks the key', () => {
+	it('orders summary, health, environment, containers, setup walkthrough', async () => {
 		renderSystem();
-		expect(within(screen.getByTestId('setting-DB_URL')).getByText('postgres://db')).toBeInTheDocument();
+		await screen.findByTestId('environment-section');
+		const ids = [
+			'system-summary',
+			'system-health-block',
+			'environment-section',
+			'containers-section',
+			'run-setup-again'
+		];
+		const els = ids.map((id) => screen.getByTestId(id));
+		for (let i = 1; i < els.length; i++) {
+			expect(els[i - 1].compareDocumentPosition(els[i]) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+		}
+		expect(screen.getByTestId('system-summary')).toHaveTextContent('Version 3.1.0');
+		expect(screen.getByRole('button', { name: 'Copy deployment report' })).toBeInTheDocument();
 	});
 
-	it('reads field values from settings.infra when settings.config is absent', () => {
-		renderSystem({ settings: settingsData({ config: undefined }) });
-		expect(within(screen.getByTestId('setting-RAW_ROOT')).getByText('/from-infra')).toBeInTheDocument();
-	});
-
-	it('renders the Diagnostics section', () => {
+	it('shows the environment load error', async () => {
+		vi.mocked(fetchSystemEnvironment).mockRejectedValueOnce(new Error('env down'));
 		renderSystem();
-		expect(screen.getByRole('heading', { name: 'Diagnostics' })).toBeInTheDocument();
+		expect(await screen.findByTestId('environment-error')).toHaveTextContent('env down');
 	});
 });

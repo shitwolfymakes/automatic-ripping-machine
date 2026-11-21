@@ -213,6 +213,7 @@ vi.mock('$lib/api/setup', () => ({
 // page's tab bodies render without a network.
 vi.mock('$lib/api/system', () => ({
 	fetchSystemDiagnostics: vi.fn(() => Promise.reject(new Error('checks unavailable'))),
+	fetchSystemEnvironment: vi.fn(() => Promise.reject(new Error('environment unavailable'))),
 	fetchSystemVersion: vi.fn()
 }));
 
@@ -674,32 +675,7 @@ describe('Settings page sections', () => {
 			}
 		});
 
-		it('lists the read-only configuration rows from the config value', async () => {
-			settingsOnce({ config: { ...mockConfig, RAW_ROOT: '/from-config' } });
-			await openTab('System');
-			expect(screen.getByText('Configuration (read-only)')).toBeInTheDocument();
-			expect(screen.getByTestId('setting-RAW_ROOT')).toHaveTextContent('/from-config');
-		});
-
-		it('falls back to settings.infra for a row the config does not carry', async () => {
-			await openTab('System');
-			expect(screen.getByTestId('setting-RAW_ROOT')).toHaveTextContent('/raw');
-		});
-
-		it('renders a row with no value when neither the config nor infra has it', async () => {
-			settingsOnce({ infra: undefined });
-			await openTab('System');
-			expect(screen.getByTestId('setting-RAW_ROOT')).not.toHaveTextContent('/raw');
-		});
-
-		it('reads a null config as no value and falls back to infra', async () => {
-			settingsOnce({ config: null, schema: schemaOf('System') });
-			await openTab('System');
-			expect(screen.getByTestId('setting-RAW_ROOT')).toHaveTextContent('/raw');
-		});
-
-		it('shows no configuration rows when the schema has no System group', async () => {
-			settingsOnce({ schema: schemaOf('Identification') });
+		it('no longer lists the old read-only configuration rows', async () => {
 			await openTab('System');
 			expect(screen.getByRole('heading', { level: 2, name: 'System' })).toBeInTheDocument();
 			expect(screen.queryByText('Configuration (read-only)')).toBeNull();
