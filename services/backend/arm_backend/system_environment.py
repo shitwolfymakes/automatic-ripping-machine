@@ -1,13 +1,32 @@
 """Grouped, masked view of the backend's `Settings` for the environment report."""
 
+from collections.abc import Mapping
+from typing import Any
 from urllib.parse import urlsplit, urlunsplit
 
-from arm_common import Config
+from arm_common import Config, Drive, DriveLifecycle, Gpu
 from arm_common.config_metadata import CONFIG_FIELD_META
-from arm_common.schemas.system import EnvEffectiveView, EnvGroupView, EnvVarView
+from arm_common.enums import GpuVendor
+from arm_common.schemas.system import (
+    ContainerEnvView,
+    ContainerMountView,
+    ContainerView,
+    EnvEffectiveView,
+    EnvGroupView,
+    EnvVarView,
+)
 
 from arm_backend.config import Settings
-from arm_backend.env_registry import ENV_GROUP_ORDER, ENV_REGISTRY, EnvVarMeta
+from arm_backend.env_registry import CONTAINER_PUBLIC_ENV, ENV_GROUP_ORDER, ENV_REGISTRY, EnvVarMeta
+from arm_backend.ripper_container_spec import container_spec
+from arm_backend.transcode_container_spec import (
+    backend_url_for_spawn,
+    container_identity_env,
+    gpu_env,
+    gpu_run_kwargs,
+    task_volumes,
+)
+from arm_backend.transcode_images import vendor_override
 
 # The GPU inventory card lives on the Transcoding settings tab.
 _GPUS_TAB = "Transcoding"
@@ -70,3 +89,84 @@ def build_env_groups(settings: Settings, cfg: Config | None, gpu_count: int) -> 
         meta = ENV_REGISTRY[key]
         by_group[meta.group].append(_view(key, meta, settings, cfg, gpu_count))
     return [EnvGroupView(name=name, vars=vs) for name, vs in by_group.items() if vs]
+
+
+def mask_container_env(env: Mapping[str, str]) -> list[ContainerEnvView]:
+    """Container env sorted by key; anything off the public allowlist is masked."""
+    out: list[ContainerEnvView] = []
+    for key in sorted(env):
+        if key not in CONTAINER_PUBLIC_ENV:
+            out.append(ContainerEnvView(key=key, value=None, secret=True))
+            continue
+        value = strip_userinfo(env[key]) if key == "ARM_BACKEND_URL" else env[key]
+        out.append(ContainerEnvView(key=key, value=value, secret=False))
+    return out
+
+
+def _mounts(volumes: Mapping[str, Mapping[str, str]]) -> list[ContainerMountView]:
+    return [ContainerMountView(host=host, container=v["bind"], mode=v["mode"]) for host, v in volumes.items()]
+
+
+def _ripper_view(settings: Settings, drive: Drive) -> ContainerView:
+    spec: dict[str, Any] = container_spec(settings, drive)
+    mounts = _mounts(spec["volumes"])
+    # A virtual (ISO) ripper mounts its ISO as a docker Mount, not a volume.
+    for m in spec.get("mounts", []):
+        mounts.append(
+            ContainerMountView(host=m["Source"], container=m["Target"], mode="ro" if m.get("ReadOnly") else "rw")
+        )
+    return ContainerView(
+        kind="ripper",
+        label=drive.display_name or drive.model or drive.hostname,
+        state=f"{drive.lifecycle.value}, {drive.status.value}",
+        image=spec["image"],
+        network=spec["network"],
+        docker_host=None,
+        mounts=mounts,
+        devices=[],
+        env=mask_container_env(spec["environment"]),
+    )
+
+
+def ripper_container_views(settings: Settings, drives: list[Drive]) -> list[ContainerView]:
+    return [_ripper_view(settings, d) for d in drives if d.lifecycle != DriveLifecycle.RETIRED]
+
+
+def _nvenc_device(request: Any) -> str:
+    ids = getattr(request, "device_ids", None) or (request.get("DeviceIDs") if isinstance(request, dict) else None)
+    return f"nvidia runtime, device {','.join(ids)}" if ids else "nvidia runtime, any device"
+
+
+def _transcode_view(settings: Settings, gpu: Gpu | None) -> ContainerView:
+    vendor: GpuVendor | None = gpu.vendor if gpu is not None else None
+    env = container_identity_env(settings, vendor) | gpu_env(gpu, None)
+    env |= {
+        "ARM_BACKEND_URL": backend_url_for_spawn(settings),
+        "ARM_SERVICE_TOKEN": settings.ARM_SERVICE_TOKEN,
+        "ARM_LOG_LEVEL": settings.ARM_LOG_LEVEL,
+    }
+    devices: list[str] = []
+    image = settings.ARM_TRANSCODE_IMAGE
+    label, state = "CPU", None
+    if gpu is not None and vendor is not None:
+        kwargs = gpu_run_kwargs(gpu)
+        devices = list(kwargs.get("devices", []))
+        devices += [_nvenc_device(r) for r in kwargs.get("device_requests", [])]
+        image = vendor_override(settings, vendor) or image
+        label = f"{vendor.value} {gpu.device_path}"
+        state = ("enabled" if gpu.enabled else "disabled") + (", not probed" if gpu.probed_at is None else "")
+    return ContainerView(
+        kind="transcode",
+        label=label,
+        state=state,
+        image=image,
+        network=None,
+        docker_host=strip_userinfo(settings.ARM_TRANSCODE_DOCKER_HOST) or None,
+        mounts=_mounts(task_volumes(settings)),
+        devices=devices,
+        env=mask_container_env(env),
+    )
+
+
+def transcode_container_views(settings: Settings, gpus: list[Gpu]) -> list[ContainerView]:
+    return [_transcode_view(settings, None), *(_transcode_view(settings, g) for g in gpus)]
