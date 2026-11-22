@@ -5,9 +5,6 @@ import type { SetupView } from '$lib/types/api.gen';
 
 // Pins what NotificationsStep's commit() does with the real ChannelQuickAdd.
 // Only the I/O boundary is faked: the channels and settings api modules.
-// One branch cannot be reached from the rendered step, so nothing here forces
-// it: commit's `if (!quick) return 'skip'`, since `bind:this` sets `quick` at
-// mount, before the wizard can call commit.
 
 const catalog: Catalog = {
 	featured: ['ntfy'],
@@ -31,8 +28,12 @@ type Step = { commit(): Promise<'done' | 'skip' | false> };
 const view = { completed_at: null, progress: {}, current_step: 'notifications' } as unknown as SetupView;
 
 function renderStep(): Step {
-	const { component } = renderComponent(NotificationsStep, { props: { view } });
-	return component as unknown as Step;
+	return renderStepWithUnmount().step;
+}
+
+function renderStepWithUnmount(): { step: Step; unmount: () => void } {
+	const { component, unmount } = renderComponent(NotificationsStep, { props: { view } });
+	return { step: component as unknown as Step, unmount };
 }
 
 async function pickNtfy() {
@@ -56,6 +57,15 @@ describe('NotificationsStep commit', () => {
 	it('skips when no service is picked', async () => {
 		const step = renderStep();
 		await screen.findByRole('button', { name: /select a service/i });
+		expect(await step.commit()).toBe('skip');
+		expect(createChannel).not.toHaveBeenCalled();
+	});
+
+	it('skips without saving when called after the step has unmounted', async () => {
+		// bind:this clears the ChannelQuickAdd reference on teardown.
+		const { step, unmount } = renderStepWithUnmount();
+		await screen.findByRole('button', { name: /select a service/i });
+		unmount();
 		expect(await step.commit()).toBe('skip');
 		expect(createChannel).not.toHaveBeenCalled();
 	});
