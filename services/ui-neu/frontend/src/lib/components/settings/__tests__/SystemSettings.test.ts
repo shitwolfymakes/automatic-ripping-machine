@@ -4,8 +4,8 @@ import SystemSettings from '../SystemSettings.svelte';
 import { SetupRestart } from '$lib/stores/setup-restart.svelte';
 import { goto } from '$app/navigation';
 import { restartSetup } from '$lib/api/setup';
-import type { SettingsData } from '$lib/api/settings';
-import type { SettingsGroup } from '$lib/types/api.gen';
+import { fetchSystemEnvironment } from '$lib/api/system';
+import { fetchDiagnostics } from '$lib/api/diagnostics';
 
 vi.mock('$app/navigation', async (importOriginal) => ({
 	...(await importOriginal<Record<string, unknown>>()),
@@ -16,10 +16,30 @@ vi.mock('$lib/api/setup', () => ({
 	restartSetup: vi.fn(() => Promise.resolve({}))
 }));
 
-// SystemHealth and DiagnosticsSection fetch on mount; their calls are faked
+// SystemHealth and the environment section fetch on mount; their calls are faked
 // so the component renders without a network.
 vi.mock('$lib/api/system', () => ({
 	fetchSystemDiagnostics: vi.fn(() => Promise.reject(new Error('checks unavailable'))),
+	fetchSystemEnvironment: vi.fn(() =>
+		Promise.resolve({
+			version: '3.1.0',
+			summary: { host_paths_set: true, transcode_capable: false, gpus: ['nvidia'] },
+			groups: [{ name: 'Paths', vars: [] }],
+			containers: [
+				{
+					kind: 'ripper',
+					label: 'arm-ripper',
+					state: 'running',
+					image: 'arm',
+					network: null,
+					docker_host: null,
+					mounts: [],
+					devices: [],
+					env: []
+				}
+			]
+		})
+	),
 	fetchSystemVersion: vi.fn()
 }));
 
@@ -31,44 +51,9 @@ vi.mock('$lib/api/diagnostics', () => ({
 	fetchDiagnostics: vi.fn(() => Promise.resolve({ services: [] }))
 }));
 
-function field(key: string, label: string) {
-	return {
-		key,
-		group: 'System',
-		tier: 'infra',
-		label,
-		help: '',
-		type: 'string',
-		editable: false,
-		enum_values: null
-	};
-}
-
-const group = {
-	name: 'System',
-	fields: [field('RAW_ROOT', 'Raw root'), field('DB_URL', 'Database url')]
-} as unknown as SettingsGroup;
-
-function settingsData(over: Record<string, unknown> = {}): SettingsData {
-	return {
-		config: { RAW_ROOT: '/from-config' },
-		schema: { groups: [group] },
-		infra: { RAW_ROOT: '/from-infra', DB_URL: 'postgres://db' },
-		arm_config: {},
-		transcoder_config: null,
-		...over
-	} as unknown as SettingsData;
-}
-
-function renderSystem(over: { settings?: SettingsData; group?: SettingsGroup; setup?: SetupRestart } = {}) {
+function renderSystem(over: { setup?: SetupRestart } = {}) {
 	const setup = over.setup ?? new SetupRestart();
-	renderComponent(SystemSettings, {
-		props: {
-			settings: over.settings ?? settingsData(),
-			group: 'group' in over ? over.group : group,
-			setup
-		}
-	});
+	renderComponent(SystemSettings, { props: { setup } });
 	return setup;
 }
 
@@ -87,6 +72,13 @@ describe('SystemSettings', () => {
 		const card = screen.getByTestId('run-setup-again');
 		expect(within(card).getByRole('heading', { name: 'Setup walkthrough' })).toBeInTheDocument();
 		expect(within(card).getByText(/Your current values are kept/)).toBeInTheDocument();
+	});
+
+	it('heads the health checks and their run button with Diagnostics', () => {
+		renderSystem();
+		const block = screen.getByTestId('system-health-block');
+		expect(within(block).getByRole('heading', { name: 'Diagnostics' })).toBeInTheDocument();
+		expect(block).toHaveAccessibleName('Diagnostics');
 	});
 
 	it('labels the restart button "Run setup again" and enables it when idle', () => {
@@ -110,36 +102,47 @@ describe('SystemSettings', () => {
 		expect(screen.queryByRole('button', { name: 'Run setup again' })).not.toBeInTheDocument();
 	});
 
-	it('omits the Configuration list when there is no group', () => {
-		renderSystem({ group: undefined });
+	it('renders no settings fields (the drive scanner tunables live on the Drives tab)', () => {
+		renderSystem();
 		expect(screen.queryByText('Configuration (read-only)')).not.toBeInTheDocument();
-		expect(screen.queryByTestId('setting-RAW_ROOT')).not.toBeInTheDocument();
+		expect(screen.queryByText('Operator settings')).not.toBeInTheDocument();
+		expect(screen.queryByTestId('setting-drive_scan_interval_seconds')).not.toBeInTheDocument();
 	});
 
-	it('lists each group field in the Configuration list when a group is given', () => {
+	it('orders summary, health, environment, containers, setup walkthrough', async () => {
 		renderSystem();
-		expect(screen.getByRole('heading', { name: 'Configuration (read-only)' })).toBeInTheDocument();
-		expect(screen.getByTestId('setting-RAW_ROOT')).toBeInTheDocument();
-		expect(screen.getByTestId('setting-DB_URL')).toBeInTheDocument();
+		await screen.findByTestId('environment-section');
+		const ids = [
+			'system-summary',
+			'system-health-block',
+			'environment-section',
+			'containers-section',
+			'run-setup-again'
+		];
+		const els = ids.map((id) => screen.getByTestId(id));
+		for (let i = 1; i < els.length; i++) {
+			expect(els[i - 1].compareDocumentPosition(els[i]) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+		}
+		expect(screen.getByTestId('system-summary')).toHaveTextContent('Version 3.1.0');
+		expect(screen.getByRole('button', { name: 'Copy deployment report' })).toBeInTheDocument();
 	});
 
-	it('reads a field value from settings.config when the key is present', () => {
+	it('shows a log-level load error', async () => {
+		vi.mocked(fetchDiagnostics).mockRejectedValueOnce(new Error('nope'));
 		renderSystem();
-		expect(within(screen.getByTestId('setting-RAW_ROOT')).getByText('/from-config')).toBeInTheDocument();
+		expect(await screen.findByTestId('log-levels-error')).toHaveTextContent('Failed to load log levels');
 	});
 
-	it('reads a field value from settings.infra when settings.config lacks the key', () => {
+	it('still shows log levels when the environment fails', async () => {
+		vi.mocked(fetchSystemEnvironment).mockRejectedValueOnce(new Error('env down'));
+		vi.mocked(fetchDiagnostics).mockResolvedValueOnce({ services: [{ name: 'arm-ripper', log_level: 'INFO' }] });
 		renderSystem();
-		expect(within(screen.getByTestId('setting-DB_URL')).getByText('postgres://db')).toBeInTheDocument();
+		expect(await screen.findByTestId('diag-level-arm-ripper')).toHaveTextContent('INFO');
 	});
 
-	it('reads field values from settings.infra when settings.config is absent', () => {
-		renderSystem({ settings: settingsData({ config: undefined }) });
-		expect(within(screen.getByTestId('setting-RAW_ROOT')).getByText('/from-infra')).toBeInTheDocument();
-	});
-
-	it('renders the Diagnostics section', () => {
+	it('shows the environment load error', async () => {
+		vi.mocked(fetchSystemEnvironment).mockRejectedValueOnce(new Error('env down'));
 		renderSystem();
-		expect(screen.getByRole('heading', { name: 'Diagnostics' })).toBeInTheDocument();
+		expect(await screen.findByTestId('environment-error')).toHaveTextContent('env down');
 	});
 });

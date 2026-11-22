@@ -907,9 +907,87 @@ export type ConfigView = {
 };
 
 /**
+ * ContainerEnvView
+ */
+export type ContainerEnvView = {
+    /**
+     * Key
+     */
+    key: string;
+    /**
+     * Value
+     */
+    value: string | null;
+    /**
+     * Secret
+     */
+    secret: boolean;
+};
+
+/**
  * ContainerFormat
  */
 export type ContainerFormat = 'mkv' | 'mp4' | 'webm' | 'flac' | 'mp3' | 'ogg' | 'iso' | 'none';
+
+/**
+ * ContainerMountView
+ */
+export type ContainerMountView = {
+    /**
+     * Host
+     */
+    host: string;
+    /**
+     * Container
+     */
+    container: string;
+    /**
+     * Mode
+     */
+    mode: string;
+};
+
+/**
+ * ContainerView
+ */
+export type ContainerView = {
+    /**
+     * Kind
+     */
+    kind: 'ripper' | 'transcode';
+    /**
+     * Label
+     */
+    label: string;
+    /**
+     * State
+     */
+    state: string | null;
+    /**
+     * Image
+     */
+    image: string;
+    /**
+     * Network
+     */
+    network: string | null;
+    /**
+     * Docker Host
+     */
+    docker_host: string | null;
+    /**
+     * Mounts
+     */
+    mounts: Array<ContainerMountView>;
+    /**
+     * Devices
+     */
+    devices: Array<string>;
+    /**
+     * Env
+     */
+    env: Array<ContainerEnvView>;
+};
 
 /**
  * DiagnosticDetail
@@ -1553,6 +1631,85 @@ export type EncoderAvailabilityView = {
      * Reason
      */
     reason: string | null;
+};
+
+/**
+ * EnvEffectiveView
+ *
+ * The live value of a setting that its env var only seeds.
+ */
+export type EnvEffectiveView = {
+    /**
+     * Value
+     */
+    value: string;
+    /**
+     * Setting Key
+     */
+    setting_key: string | null;
+    /**
+     * Tab
+     */
+    tab: string;
+};
+
+/**
+ * EnvGroupView
+ */
+export type EnvGroupView = {
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Vars
+     */
+    vars: Array<EnvVarView>;
+};
+
+/**
+ * EnvVarView
+ */
+export type EnvVarView = {
+    /**
+     * Key
+     */
+    key: string;
+    /**
+     * Value
+     */
+    value: string | null;
+    /**
+     * Secret
+     */
+    secret: boolean;
+    /**
+     * Is Set
+     */
+    is_set: boolean;
+    /**
+     * Source
+     */
+    source: 'env' | 'default';
+    effective?: EnvEffectiveView | null;
+};
+
+/**
+ * EnvironmentSummary
+ */
+export type EnvironmentSummary = {
+    /**
+     * Host Paths Set
+     */
+    host_paths_set: boolean | null;
+    /**
+     * Transcode Capable
+     */
+    transcode_capable: boolean;
+    /**
+     * Gpus
+     */
+    gpus: Array<string>;
 };
 
 /**
@@ -5369,6 +5526,25 @@ export type SystemDiagnosticsResponse = {
      * Paths
      */
     paths: Array<PathStatus>;
+};
+
+/**
+ * SystemEnvironmentResponse
+ */
+export type SystemEnvironmentResponse = {
+    /**
+     * Version
+     */
+    version: string;
+    summary: EnvironmentSummary;
+    /**
+     * Groups
+     */
+    groups: Array<EnvGroupView>;
+    /**
+     * Containers
+     */
+    containers: Array<ContainerView>;
 };
 
 /**
@@ -10438,6 +10614,22 @@ export type SystemVersionApiSystemVersionGetResponses = {
 };
 
 export type SystemVersionApiSystemVersionGetResponse = SystemVersionApiSystemVersionGetResponses[keyof SystemVersionApiSystemVersionGetResponses];
+
+export type EnvironmentApiSystemEnvironmentGetData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/system/environment';
+};
+
+export type EnvironmentApiSystemEnvironmentGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: SystemEnvironmentResponse;
+};
+
+export type EnvironmentApiSystemEnvironmentGetResponse = EnvironmentApiSystemEnvironmentGetResponses[keyof EnvironmentApiSystemEnvironmentGetResponses];
 
 export type ThediscdbRefreshNowApiSystemThediscdbRefreshPostData = {
     body?: never;

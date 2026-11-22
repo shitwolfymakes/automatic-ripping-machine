@@ -37,7 +37,7 @@
 	{#if st !== 'ok'}
 		{#if folder.host_path}
 			<p class="storage-path-item-hint">
-				Host path <code class="mono">{folder.host_path}</code>. Run this on the server, then press Check again:
+				Host path <code class="mono">{folder.host_path}</code>. Run this on the server, then press Run system check:
 			</p>
 			<CopyBlock text={`sudo chown -R ${folder.uid}:${folder.gid} ${folder.host_path}`} />
 		{:else}
