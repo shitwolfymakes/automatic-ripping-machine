@@ -6,7 +6,7 @@
 	import { onMount } from 'svelte';
 	import MediaTypeChips from './MediaTypeChips.svelte';
 	import { matchesFilters, type SourceFilter } from '../../sessions/list-filters';
-	import { countByMediaType } from '$lib/sessions/sessions';
+	import { countByMediaType, presetFilterMediaType } from '$lib/sessions/sessions';
 
 	interface Props {
 		/** Which preset kind this tab shows. */
@@ -49,7 +49,8 @@
 	let sourceFilter = $state<SourceFilter>('all');
 
 	function matches(p: RipPresetView | TranscodePresetView): boolean {
-		return matchesFilters(p, { type: typeFilter, source: sourceFilter, search });
+		const item = { ...p, media_type: presetFilterMediaType(kind, p.media_type) };
+		return matchesFilters(item, { type: typeFilter, source: sourceFilter, search });
 	}
 
 	/** The preset's usage count, from the active kind's usage function. */
@@ -61,7 +62,9 @@
 	const presets = $derived(kind === 'rip' ? ripPresets : transcodePresets);
 
 	// Derive preset counts per media type for the active kind only
-	const presetTypeCounts = $derived(countByMediaType(presets));
+	const presetTypeCounts = $derived(
+		countByMediaType(presets.map((p) => ({ media_type: presetFilterMediaType(kind, p.media_type) })))
+	);
 
 	// Filtered preset list
 	const visible = $derived(presets.filter(matches));
@@ -136,7 +139,7 @@
 		<!-- Bottom row: TYPE chips + New preset -->
 		<div class="cluster">
 			<span class="eyebrow">Type</span>
-			<MediaTypeChips counts={presetTypeCounts} bind:selected={typeFilter} />
+			<MediaTypeChips counts={presetTypeCounts} bind:selected={typeFilter} videoGroup={kind === 'transcode'} />
 
 			<button
 				type="button"
