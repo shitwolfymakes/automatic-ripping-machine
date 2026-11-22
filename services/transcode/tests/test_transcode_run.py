@@ -15,7 +15,7 @@ import pytest
 
 import arm_transcode.main as m
 from arm_common import ContainerFormat, MediaType, TranscodeTool
-from arm_common.schemas import HardwareCaps, TranscodePresetView, WSEnvelope
+from arm_common.schemas import HardwareCaps, MusicTags, TranscodePresetView, WSEnvelope
 from arm_transcode.heartbeat import ProgressState
 
 
@@ -65,6 +65,7 @@ class Harness:
             transcode_preset=_handbrake_preset(preset_ref="x"),
             raw_input_path="/raw/in.mkv",
             media_root="/media",
+            music_tags=None,
         )
 
     def names(self) -> list[str]:
@@ -199,6 +200,7 @@ async def test_success(h: Harness) -> None:
     assert h.pump_kwargs["ws"] is not None
     assert isinstance(ek["cancel_event"], asyncio.Event)
     assert not ek["cancel_event"].is_set()
+    assert ek["music_tags"] is None
 
     assert h.complete_kwargs == {
         "args": ("t1",),
@@ -209,6 +211,13 @@ async def test_success(h: Harness) -> None:
     assert "fail" not in h.names()
     assert h.names().count("close") == 1
     assert h.names()[-1] == "close"
+
+
+async def test_music_tags_reach_the_encoder(h: Harness) -> None:
+    tags = MusicTags(artist="Radiohead", track_number=1)
+    h.response.music_tags = tags  # type: ignore[assignment]
+    assert await m.run() == 0
+    assert h.encoder_kwargs["music_tags"] is tags
 
 
 async def test_no_preset_uses_tool_none(h: Harness) -> None:

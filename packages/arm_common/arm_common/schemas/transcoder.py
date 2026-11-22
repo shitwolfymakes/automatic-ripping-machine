@@ -37,13 +37,29 @@ class RegisterTranscoderRequest(BaseModel):
     hw_caps: HardwareCaps
 
 
+class MusicTags(BaseModel):
+    """The tags a music track's encoded file carries, from the job's stored
+    MusicBrainz identity. Every field is optional: an unknown one is left
+    out of the file rather than written empty."""
+
+    artist: str | None = None
+    album: str | None = None
+    title: str | None = None
+    year: int | None = None
+    disc_number: int | None = None
+    track_number: int | None = None
+    track_total: int | None = None
+    musicbrainz_release_id: str | None = None
+
+
 class RegisterTranscoderResponse(BaseModel):
     """Bootstrap bundle the transcoder needs before it can claim + run.
 
     `raw_input_path` is the absolute path the transcoder should read from
     (`/raw/<job>/title_tNN.mkv` for video, `/raw/<job>/track_NN.wav` for
     audio, `/raw/<job>/dump.iso` for data). `media_root` plus the task's
-    `output_path` is where the final file lands.
+    `output_path` is where the final file lands. `music_tags` is set for a
+    music job's track only.
     """
 
     task: TranscodeTaskView
@@ -52,6 +68,7 @@ class RegisterTranscoderResponse(BaseModel):
     source_track: TrackView
     raw_input_path: str
     media_root: str
+    music_tags: MusicTags | None = None
 
 
 class ClaimTaskResponse(BaseModel):

@@ -30,6 +30,7 @@ from arm_common import configure_service_logging, with_log_context
 from arm_common.encoders import EncoderSpec
 from arm_common.schemas import (
     HardwareCaps,
+    MusicTags,
     RegisterTranscoderResponse,
     TranscodePresetView,
     WSEnvelope,
@@ -167,8 +168,9 @@ async def _encode_audio(
     final_output: Path,
     duration_seconds: int | None,
     progress_callback: ProgressCallback,
+    music_tags: MusicTags | None,
 ) -> int:
-    """Run the ffmpeg audio engine into an atomic output and return the size written."""
+    """Run the ffmpeg audio engine into an atomic output, tagged with `music_tags`, and return the size written."""
     # The ripper's abcde stage produced .wav files; we re-encode to
     # `preset.container.value` (flac, mp3) here.
     target = preset.preset_ref or preset.container.value
@@ -179,6 +181,7 @@ async def _encode_audio(
             preset_ref=target,
             duration_seconds=duration_seconds,
             progress_callback=progress_callback,
+            tags=music_tags,
         )
 
 
@@ -190,8 +193,9 @@ async def _encode(
     final_output: Path,
     duration_seconds: int | None,
     progress_callback: ProgressCallback,
+    music_tags: MusicTags | None,
 ) -> int:
-    """Run the engine `tool` selects and return the size it wrote."""
+    """Run the engine `tool` selects and return the size it wrote; only the audio engine writes `music_tags`."""
     if tool == TranscodeTool.NONE:
         return transcode_none(raw_input, final_output)
 
@@ -228,6 +232,7 @@ async def _encode(
             final_output=final_output,
             duration_seconds=duration_seconds,
             progress_callback=progress_callback,
+            music_tags=music_tags,
         )
 
     raise RuntimeError(f"unknown transcode tool={tool.value}")
@@ -242,6 +247,7 @@ async def _run_encoder(
     duration_seconds: int | None,
     state: ProgressState,
     cancel_event: asyncio.Event,
+    music_tags: MusicTags | None = None,
 ) -> int:
     """Encode with the engine for `tool`, recording progress on `state`; returns the size written."""
     size = await _encode(
@@ -251,6 +257,7 @@ async def _run_encoder(
         final_output=final_output,
         duration_seconds=duration_seconds,
         progress_callback=_progress_recorder(state, cancel_event),
+        music_tags=music_tags,
     )
     state.pct = 100
     return size
@@ -317,6 +324,7 @@ async def _encode_and_report(
                 duration_seconds=duration,
                 state=state,
                 cancel_event=cancel_event,
+                music_tags=registered.music_tags,
             )
     except CancelRequested:
         await api.fail(task_id, last_error="cancelled by user")

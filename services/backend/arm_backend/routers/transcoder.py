@@ -2,7 +2,8 @@
 
 Five endpoints per `03-protocol.md § Transcode container ↔ Backend`:
 - `POST /register` — bootstrap; transcoder receives the task, session, preset,
-  source track, and the `raw_input_path` it should read from.
+  source track, the `raw_input_path` it should read from, and a music
+  track's tags.
 - `POST /tasks/{task_id}/claim` — atomic CAS to `in_progress`. First claim
   on a session_application also flips the application to RUNNING and emits
   `session.started`.
@@ -27,7 +28,7 @@ from arm_backend.auth import require_service_token
 from arm_backend.db import get_session
 from arm_backend.gpu_claim import release_gpu_for_task
 from arm_backend.routers._deps import get_hub
-from arm_backend.transcode_apply import settle_session_application
+from arm_backend.transcode_apply import music_tags_for, settle_session_application
 from arm_backend.ws import WSHub
 from arm_common import (
     Session,
@@ -37,7 +38,7 @@ from arm_common import (
     TranscodeTask,
     TranscodeTaskStatus,
 )
-from arm_common.models import Track
+from arm_common.models import Job, Track
 from arm_common.schemas import (
     ClaimTaskResponse,
     CompleteTaskRequest,
@@ -111,6 +112,7 @@ async def register(
             detail=f"source track {track.id} has no output_path on disk; rip not yet complete",
         )
 
+    job = (await db.execute(select(Job).where(col(Job.id) == track.job_id))).scalar_one()
     media_root = request_media_root()
     return RegisterTranscoderResponse(
         task=TranscodeTaskView.model_validate(task),
@@ -119,6 +121,7 @@ async def register(
         source_track=TrackView.model_validate(track),
         raw_input_path=track.output_path,
         media_root=media_root,
+        music_tags=music_tags_for(job, track),
     )
 
 

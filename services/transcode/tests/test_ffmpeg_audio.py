@@ -28,6 +28,7 @@ from typing import Any
 import pytest
 
 import arm_transcode.ffmpeg_audio as ffmpeg_audio
+from arm_common.schemas import MusicTags
 from arm_transcode.ffmpeg_audio import build_audio_command, transcode_audio
 
 
@@ -297,10 +298,111 @@ def test_build_audio_command_mp3_full_argv(tmp_path):
         "libmp3lame",
         "-q:a",
         "0",
+        "-id3v2_version",
+        "3",
         "-f",
         "mp3",
         str(tmp_path / "out.mp3"),
     ]
+
+
+_FULL_TAGS = MusicTags(
+    artist="Sigur Rós",
+    album='Ágætis byrjun / "Live"',
+    title="Svefn-g-englar",
+    year=1999,
+    disc_number=1,
+    track_number=4,
+    track_total=10,
+    musicbrainz_release_id="mb-rel-1",
+)
+
+
+def _metadata_pairs(cmd: list[str]) -> list[str]:
+    return [cmd[i + 1] for i, arg in enumerate(cmd) if arg == "-metadata"]
+
+
+def test_build_audio_command_flac_writes_vorbis_comments(tmp_path):
+    out = tmp_path / "out.flac"
+    cmd = build_audio_command(input_path=tmp_path / "in.wav", output_path=out, preset_ref="flac", tags=_FULL_TAGS)
+
+    assert _metadata_pairs(cmd) == [
+        "ARTIST=Sigur Rós",
+        "ALBUMARTIST=Sigur Rós",
+        'ALBUM=Ágætis byrjun / "Live"',
+        "TITLE=Svefn-g-englar",
+        "TRACKNUMBER=4",
+        "TRACKTOTAL=10",
+        "DISCNUMBER=1",
+        "DATE=1999",
+        "MUSICBRAINZ_ALBUMID=mb-rel-1",
+    ]
+    # Each pair is its own argv item, and the output path stays last.
+    assert cmd[-1] == str(out)
+    assert cmd.index("-metadata") > cmd.index("-f")
+
+
+def test_build_audio_command_mp3_writes_id3v2_3_frames(tmp_path):
+    out = tmp_path / "out.mp3"
+    cmd = build_audio_command(input_path=tmp_path / "in.wav", output_path=out, preset_ref="mp3", tags=_FULL_TAGS)
+
+    assert _metadata_pairs(cmd) == [
+        "artist=Sigur Rós",
+        "album_artist=Sigur Rós",
+        'album=Ágætis byrjun / "Live"',
+        "title=Svefn-g-englar",
+        "track=4/10",
+        "disc=1",
+        "date=1999",
+        "MusicBrainz Album Id=mb-rel-1",
+    ]
+    assert cmd[-1] == str(out)
+
+
+def test_build_audio_command_mp3_track_without_total(tmp_path):
+    cmd = build_audio_command(
+        input_path=tmp_path / "in.wav", output_path=tmp_path / "o", preset_ref="mp3", tags=MusicTags(track_number=7)
+    )
+    assert _metadata_pairs(cmd) == ["track=7"]
+
+
+def test_build_audio_command_flac_omits_unknown_fields(tmp_path):
+    cmd = build_audio_command(
+        input_path=tmp_path / "in.wav",
+        output_path=tmp_path / "o",
+        preset_ref="flac",
+        tags=MusicTags(album="Homogenic", track_total=10),
+    )
+    assert _metadata_pairs(cmd) == ["ALBUM=Homogenic", "TRACKTOTAL=10"]
+
+
+def test_build_audio_command_empty_tags_add_nothing(tmp_path):
+    bare = build_audio_command(input_path=tmp_path / "in.wav", output_path=tmp_path / "o", preset_ref="flac")
+    empty = build_audio_command(
+        input_path=tmp_path / "in.wav", output_path=tmp_path / "o", preset_ref="flac", tags=MusicTags()
+    )
+    assert empty == bare
+
+
+@pytest.mark.asyncio
+async def test_transcode_audio_passes_tags_to_ffmpeg(monkeypatch, tmp_path):
+    captured: list[tuple] = []
+    _stub_subprocess(monkeypatch, stdout_lines=_progress_lines([10_000_000]), captured_args=captured)
+    out_path = tmp_path / "out.flac"
+    out_path.write_bytes(b"x")
+
+    async def cb(_p: int, _t: int | None, _n: str | None, _f: float | None, _a: float | None) -> None:
+        return None
+
+    await transcode_audio(
+        input_path=tmp_path / "in.wav",
+        output_path=out_path,
+        preset_ref="flac",
+        duration_seconds=10,
+        progress_callback=cb,
+        tags=MusicTags(title="Hunter"),
+    )
+    assert _metadata_pairs(list(captured[0])) == ["TITLE=Hunter"]
 
 
 def test_build_audio_command_preset_is_case_insensitive(tmp_path):

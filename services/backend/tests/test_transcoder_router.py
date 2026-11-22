@@ -158,6 +158,41 @@ def test_register_returns_bundle() -> None:
     assert body["raw_input_path"] == "/raw/job_01JZXR7K3M5Q8N4VWA00000001/title_t01.mkv"
     assert body["transcode_preset"]["preset_ref"] == "H.265 MKV 1080p30"
     assert body["session"]["id"] == "ses_x"
+    # A video job's track carries no music tags.
+    assert body["music_tags"] is None
+
+
+def test_register_returns_music_tags_for_a_cd_track() -> None:
+    db = FakeSession()
+    _seed(db)
+    job = db.rows["jobs"][0]
+    job.disc_type = DiscType.CD
+    job.media_type = MediaType.MUSIC
+    job.title = "OK Computer"
+    job.year = 1997
+    job.metadata_json = {
+        "identity": {"provider": "musicbrainz", "external_ids": {"musicbrainz_release": "mb-rel-1"}},
+        "music": {"artist": "Radiohead", "album": "OK Computer", "tracks": [{"title": "Airbag"}]},
+    }
+    db.rows["tracks"][0].kind = TrackKind.AUDIO_TRACK
+    app = _make_app(db)
+    with TestClient(app) as client:
+        r = client.post(
+            "/api/transcoder/register",
+            json={"task_id": "txt_1", "hostname": _HOSTNAME, "hw_caps": {"cpu_count": 4}},
+            headers=_SERVICE_AUTH,
+        )
+    assert r.status_code == 200, r.text
+    assert r.json()["music_tags"] == {
+        "artist": "Radiohead",
+        "album": "OK Computer",
+        "title": "Airbag",
+        "year": 1997,
+        "disc_number": None,
+        "track_number": 1,
+        "track_total": 1,
+        "musicbrainz_release_id": "mb-rel-1",
+    }
 
 
 def test_register_refuses_when_track_has_no_output_path() -> None:
