@@ -2,7 +2,8 @@
 	// The preset sidebar's always-visible block: name, media type, tool,
 	// container, encoder, base preset and extra args. Controlled: each change
 	// goes to onfield and the sidebar applies it to its draft. media_type is
-	// immutable on edit. `encoder` is one arm_common.encoders catalog id.
+	// immutable on edit; movie and TV both show as Video, since a preset of
+	// either fits sessions of either. `encoder` is one arm_common.encoders catalog id.
 	import { onMount } from 'svelte';
 	import { encodersStore, PRESET_ENCODER_ID } from '$lib/stores/encoders.svelte';
 	import { encoderGroups } from '$lib/utils/encoder-groups';
@@ -92,13 +93,13 @@
 		<select
 			id="tp-media-type"
 			data-testid="tp-media-type"
-			value={draft.media_type}
+			value={draft.media_type === 'tv' ? 'movie' : draft.media_type}
 			disabled={readonly || editing}
 			onchange={(e) => onfield('media_type', value(e))}
 			{...aria('tp-media-type')}
 		>
-			<option value="movie">Movie</option>
-			<option value="tv">TV</option>
+			<!-- A movie or TV preset fits sessions of either, so one Video choice covers both. -->
+			<option value="movie">Video</option>
 			<option value="music">Music</option>
 			<option value="data">Data</option>
 			<option value="iso">ISO</option>

@@ -10,6 +10,7 @@ import {
 	humanizeTrackSelection
 } from '$lib/utils/preset-labels';
 import { encoderLabel } from '$lib/stores/encoders.svelte';
+import { transcodeMediaGroup } from '$lib/utils/sessions';
 import { settingsCount } from '$lib/handbrake/sidebarModel';
 import type { CellContent, TableColumn } from '$lib/components/dataTable';
 
@@ -31,6 +32,12 @@ function typeCell(preset: { is_builtin: boolean }): CellContent {
 
 function mediaCell(preset: { media_type: MediaType }): CellContent {
 	return { text: humanizeMediaType(preset.media_type), pill: { tone: preset.media_type } };
+}
+
+// A movie or TV transcode preset fits sessions of either, so it reads Video.
+function transcodeMediaCell(preset: { media_type: MediaType }): CellContent {
+	if (transcodeMediaGroup(preset.media_type) === 'movie') return { text: 'Video', pill: { tone: 'movie' } };
+	return mediaCell(preset);
 }
 
 function usedByCell(usage: Record<string, number>, id: string): CellContent {
@@ -93,7 +100,7 @@ function settingsCell(p: TranscodePresetView): CellContent {
 export function transcodePresetColumns(usage: Record<string, number>): TableColumn<TranscodePresetView>[] {
 	return [
 		{ id: 'name', header: 'Preset', cell: nameCell },
-		{ id: 'media', header: 'Media', cell: mediaCell },
+		{ id: 'media', header: 'Media', cell: transcodeMediaCell },
 		{ id: 'type', header: 'Type', cell: typeCell },
 		{ id: 'tool', header: 'Tool', cell: (p) => ({ text: humanizeTool(p.tool) }) },
 		{ id: 'container', header: 'Container', cell: (p) => ({ text: humanizeContainer(p.container) }) },
