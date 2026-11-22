@@ -388,6 +388,7 @@ describe('presets, cloning', () => {
 				media_type: 'movie',
 				tool: 'handbrake',
 				preset_ref: 'Fast 1080p',
+				handbrake_settings: null,
 				container: 'mkv',
 				encoder: 'any_h265',
 				extra_args: '--x'
