@@ -323,6 +323,11 @@
     "form.session.media_type": {
       "none": "Self-explanatory: the kind of disc the item applies to; it cannot change after create."
     },
+    "form.session.music_tags": {
+      "type": "internal",
+      "page": "guide/configuring-arm",
+      "section": "Rip presets, transcode presets, and sessions"
+    },
     "form.session.name": {
       "none": "Self-explanatory: the session's display name."
     },

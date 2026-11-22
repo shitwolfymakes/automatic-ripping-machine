@@ -26,6 +26,7 @@ from sqlmodel import col, select
 from arm_backend.auth import require_jwt, require_writer
 from arm_backend.config import effective_transcode_capable, settings
 from arm_backend.config_effects import reresolve_identity, redrain_parked_applications
+from arm_backend.config_row import load_config_or_none
 from arm_backend.config_validation import reject_non_editable_keys, validate_config_update
 from arm_backend.db import get_session
 from arm_backend.identity.sources.registry import (
@@ -42,7 +43,6 @@ from arm_backend.identity.sources.registry import (
 )
 from arm_backend.key_checks import check_online_key, makemkv_key_status
 from arm_backend.min_title_length import min_title_length_seconds
-from arm_backend.constants import CONFIG_SINGLETON_ID
 from arm_backend.notifications.url_composer import redact_apprise_url
 from arm_common import Config, Job, JobStatus, User
 from arm_common.config_metadata import CONFIG_FIELD_META
@@ -136,7 +136,7 @@ def _to_view(cfg: Config) -> ConfigView:
 
 
 async def _load_config(session: AsyncSession) -> Config:
-    cfg = (await session.execute(select(Config).where(col(Config.id) == CONFIG_SINGLETON_ID))).scalar_one_or_none()
+    cfg = await load_config_or_none(session)
     if cfg is None:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="config singleton missing")
     return cfg

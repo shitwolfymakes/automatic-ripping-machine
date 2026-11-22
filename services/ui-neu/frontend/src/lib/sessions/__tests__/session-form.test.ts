@@ -5,6 +5,7 @@ import {
 	sessionErrors,
 	sessionUpdate,
 	sessionCreate,
+	showsMusicTags,
 	type SessionForm
 } from '../session-form';
 
@@ -14,7 +15,9 @@ const form: SessionForm = {
 	ripId: 'rip-1',
 	tcId: 'tc-1',
 	template: '{title}',
-	overrides: { a: 1 }
+	overrides: { a: 1 },
+	// Set on purpose: a movie session must not send it.
+	musicTags: ['artist']
 };
 
 describe('parseOverrides', () => {
@@ -48,6 +51,30 @@ describe('sessionUpdate', () => {
 
 	it('sends a null transcode preset for a blank tcId', () => {
 		expect(sessionUpdate({ ...form, tcId: '' }).transcode_preset_id).toBeNull();
+	});
+
+	it('sends the music tags for a music session', () => {
+		const music: SessionForm = { ...form, mediaType: 'music', musicTags: ['title', 'cover'] };
+		expect(sessionUpdate(music).music_tag_fields).toEqual(['title', 'cover']);
+		expect(sessionCreate(music)).toMatchObject({ media_type: 'music', music_tag_fields: ['title', 'cover'] });
+	});
+
+	it('sends an empty list when a music session writes no tags', () => {
+		expect(sessionUpdate({ ...form, mediaType: 'music', musicTags: [] }).music_tag_fields).toEqual([]);
+	});
+});
+
+describe('showsMusicTags', () => {
+	it('shows for a music session that encodes', () => {
+		expect(showsMusicTags('music', 'tc-1')).toBe(true);
+	});
+
+	it('hides for a rip-only music session, which writes no tags', () => {
+		expect(showsMusicTags('music', '')).toBe(false);
+	});
+
+	it('hides for every other media type', () => {
+		for (const mt of ['movie', 'tv', 'data', 'iso'] as const) expect(showsMusicTags(mt, 'tc-1')).toBe(false);
 	});
 });
 

@@ -209,6 +209,22 @@ class MediaType(StrEnum):
     ISO = "iso"
 
 
+class MusicTagField(StrEnum):
+    """What a music session writes into each encoded track: one value per
+    `MusicTags` field, then the embedded cover. Settings order."""
+
+    ARTIST = "artist"
+    ALBUM_ARTIST = "album_artist"
+    ALBUM = "album"
+    TITLE = "title"
+    TRACK_NUMBER = "track_number"
+    TRACK_TOTAL = "track_total"
+    DISC_NUMBER = "disc_number"
+    YEAR = "year"
+    MUSICBRAINZ_RELEASE_ID = "musicbrainz_release_id"
+    COVER = "cover"
+
+
 # Encoding settings do not depend on whether a video is a film or an episode,
 # so a movie and a TV transcode preset are interchangeable.
 VIDEO_MEDIA_TYPES: frozenset[MediaType] = frozenset({MediaType.MOVIE, MediaType.TV})

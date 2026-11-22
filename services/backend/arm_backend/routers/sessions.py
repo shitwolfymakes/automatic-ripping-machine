@@ -6,6 +6,8 @@ every shipped field, `name` included, and re-syncs it on each boot), and
 produces a fresh non-builtin row owned by the caller.
 """
 
+from typing import Any
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import col, select
@@ -19,7 +21,7 @@ from arm_backend.path_template import (
 )
 from arm_backend.routers._template_validation import validate_template_or_http
 from arm_common import Drive, RipPreset, Session, SessionApplication, TranscodePreset, User
-from arm_common.enums import transcode_preset_media_types
+from arm_common.enums import MediaType, transcode_preset_media_types
 from arm_common.schemas import (
     SessionCloneRequest,
     SessionCreateRequest,
@@ -53,6 +55,22 @@ async def _load_transcode_preset(db: AsyncSession, transcode_preset_id: str | No
     return tp
 
 
+def _validate_music_tag_fields(media_type: MediaType, fields: dict[str, Any]) -> None:
+    """`music_tag_fields`, when the request sets it: a list with no repeats, on a music session.
+    Unknown values never get this far; the request schema rejects them."""
+    if "music_tag_fields" not in fields:
+        return
+    if media_type != MediaType.MUSIC:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="music_tag_fields applies to music sessions only"
+        )
+    values = fields["music_tag_fields"]
+    if values is None:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="music_tag_fields must be a list")
+    if len(set(values)) != len(values):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="music_tag_fields: duplicate values")
+
+
 @router.get("", response_model=list[SessionView])
 async def list_sessions(
     _: User = Depends(require_jwt),
@@ -80,6 +98,7 @@ async def create_session(
     user: User = Depends(require_writer),
     db: AsyncSession = Depends(get_session),
 ) -> Session:
+    _validate_music_tag_fields(req.media_type, req.model_dump(exclude_unset=True))
     rip_preset = await _load_rip_preset(db, req.rip_preset_id)
     if rip_preset.media_type != req.media_type:
         raise HTTPException(
@@ -115,6 +134,8 @@ async def create_session(
         overrides_json=req.overrides_json,
         created_by_user_id=user.id,
     )
+    if req.music_tag_fields is not None:
+        row.music_tag_fields = [choice.value for choice in req.music_tag_fields]
     db.add(row)
     await db.commit()
     await db.refresh(row)
@@ -132,12 +153,14 @@ async def update_session(
     if row is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown session_id: {session_id}")
 
-    fields = req.model_dump(exclude_unset=True)
+    # JSON mode, so enum values (music_tag_fields) are stored as plain strings.
+    fields = req.model_dump(exclude_unset=True, mode="json")
     if row.is_builtin and fields:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="built-in session is read-only; clone it to customise",
         )
+    _validate_music_tag_fields(row.media_type, fields)
 
     new_rip_preset_id = fields.get("rip_preset_id", row.rip_preset_id)
     if "rip_preset_id" in fields:
@@ -241,6 +264,7 @@ async def clone_session(
         transcode_preset_id=src.transcode_preset_id,
         output_path_template=src.output_path_template,
         overrides_json=dict(src.overrides_json) if src.overrides_json is not None else None,
+        music_tag_fields=list(src.music_tag_fields),
         created_by_user_id=user.id,
     )
     db.add(clone)

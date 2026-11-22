@@ -48,16 +48,21 @@ def _identified_metadata() -> dict[str, Any]:
 def test_identified_cd_track_gets_every_tag() -> None:
     job = _cd_job(_identified_metadata(), title="OK Computer", year=1997, disc_number=1, media_type=MediaType.MUSIC)
 
-    assert music_tags_for(job, _audio_track(2)) == MusicTags(
-        artist="Radiohead",
-        album="OK Computer",
-        title="Paranoid Android",
-        year=1997,
-        disc_number=1,
-        track_number=2,
-        track_total=3,
-        musicbrainz_release_id=_RELEASE,
-    )
+    tags = music_tags_for(job, _audio_track(2))
+
+    # A plain dict, so a field the model would silently drop fails the comparison.
+    assert tags is not None
+    assert tags.model_dump() == {
+        "artist": "Radiohead",
+        "album_artist": "Radiohead",
+        "album": "OK Computer",
+        "title": "Paranoid Android",
+        "year": 1997,
+        "disc_number": 1,
+        "track_number": 2,
+        "track_total": 3,
+        "musicbrainz_release_id": _RELEASE,
+    }
 
 
 def test_unidentified_cd_track_gets_only_its_track_number() -> None:
@@ -100,7 +105,15 @@ def test_pre_0032_top_level_keys_still_tag() -> None:
 
     tags = music_tags_for(_cd_job(md), _audio_track(1))
 
-    assert tags == MusicTags(artist="Björk", album="Homogenic", title="Hunter", track_number=1, track_total=1)
+    assert tags is not None
+    assert tags.model_dump(exclude_none=True) == {
+        "artist": "Björk",
+        "album_artist": "Björk",
+        "album": "Homogenic",
+        "title": "Hunter",
+        "track_number": 1,
+        "track_total": 1,
+    }
 
 
 def test_malformed_identity_section_drops_only_the_release_id() -> None:

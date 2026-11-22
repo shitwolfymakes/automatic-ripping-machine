@@ -10,8 +10,9 @@ Progress is parsed from `-progress pipe:1`, which ffmpeg emits as
 `key=value` lines roughly every second. `out_time_us` (microseconds) +
 the source's `duration_seconds` → percent.
 
-A music track's tags (`MusicTags`, from the Backend's register response)
-go in as `-metadata key=value` pairs, one argv item each, so any title is
+A music track's tags (`MusicTags`, from the Backend's register response,
+holding only the tags the operator has switched on) go in as
+`-metadata key=value` pairs, one argv item each, so any title is
 safe without shell quoting. FLAC gets Vorbis comment names; MP3 gets the
 ffmpeg ID3v2 keys, written as ID3v2.3 for the widest player support.
 The cover, when there is one, is a second input copied in untouched as
@@ -46,7 +47,7 @@ _CODEC_FLAGS: dict[str, list[str]] = {
 def _flac_tags(tags: MusicTags) -> list[tuple[str, object]]:
     return [
         ("ARTIST", tags.artist),
-        ("ALBUMARTIST", tags.artist),
+        ("ALBUMARTIST", tags.album_artist),
         ("ALBUM", tags.album),
         ("TITLE", tags.title),
         ("TRACKNUMBER", tags.track_number),
@@ -63,7 +64,7 @@ def _mp3_tags(tags: MusicTags) -> list[tuple[str, object]]:
         track = f"{track}/{tags.track_total}"
     return [
         ("artist", tags.artist),
-        ("album_artist", tags.artist),
+        ("album_artist", tags.album_artist),
         ("album", tags.album),
         ("title", tags.title),
         ("track", track),

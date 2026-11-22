@@ -3507,6 +3507,14 @@ export type MusicMeta = {
 };
 
 /**
+ * MusicTagField
+ *
+ * What a music session writes into each encoded track: one value per
+ * `MusicTags` field, then the embedded cover. Settings order.
+ */
+export type MusicTagField = 'artist' | 'album_artist' | 'album' | 'title' | 'track_number' | 'track_total' | 'disc_number' | 'year' | 'musicbrainz_release_id' | 'cover';
+
+/**
  * MusicTags
  *
  * The tags a music track's encoded file carries, from the job's stored
@@ -3518,6 +3526,10 @@ export type MusicTags = {
      * Artist
      */
     artist?: string | null;
+    /**
+     * Album Artist
+     */
+    album_artist?: string | null;
     /**
      * Album
      */
@@ -4779,6 +4791,10 @@ export type SessionCreateRequest = {
     overrides_json?: {
         [key: string]: unknown;
     } | null;
+    /**
+     * Music Tag Fields
+     */
+    music_tag_fields?: Array<MusicTagField> | null;
 };
 
 /**
@@ -4843,6 +4859,10 @@ export type SessionUpdateRequest = {
     overrides_json?: {
         [key: string]: unknown;
     } | null;
+    /**
+     * Music Tag Fields
+     */
+    music_tag_fields?: Array<MusicTagField> | null;
 };
 
 /**
@@ -4880,6 +4900,10 @@ export type SessionView = {
     overrides_json: {
         [key: string]: unknown;
     } | null;
+    /**
+     * Music Tag Fields
+     */
+    music_tag_fields: Array<MusicTagField>;
     /**
      * Created By User Id
      */

@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { errorMessage } from '$lib/utils/errors';
-	import type { MediaType, SessionView, RipPresetView, TranscodePresetView } from '$lib/types/api.gen';
+	import type { MediaType, MusicTagField, SessionView, RipPresetView, TranscodePresetView } from '$lib/types/api.gen';
 	import { transcodePresetFits } from '$lib/sessions/sessions';
 	import type { JoinedSession } from '../../stores/sessions-data.svelte';
 	import { createSession, updateSession } from '$lib/api/sessions';
@@ -8,6 +8,8 @@
 	import OutputPathField from './OutputPathField.svelte';
 	import { errorId, focusFirstInvalid, invalidAttrs } from '$lib/ui/form-validation';
 	import FieldLabel from '$lib/components/shared/FieldLabel.svelte';
+	import CheckListField from '$lib/components/shared/CheckListField.svelte';
+	import { ALL_MUSIC_TAGS, MUSIC_TAG_OPTIONS } from '$lib/sessions/music-tags';
 	import {
 		FIELD_IDS,
 		SESSION_FIELDS,
@@ -16,6 +18,7 @@
 		sessionErrors,
 		sessionUpdate,
 		sessionCreate,
+		showsMusicTags,
 		type SessionForm
 	} from '../../sessions/session-form';
 
@@ -62,6 +65,7 @@
 	let tcId = $state(session?.transcode_preset_id ?? '');
 	let template = $state(session?.output_path_template ?? '');
 	let overridesJson = $state(session?.overrides_json ? JSON.stringify(session.overrides_json, null, 2) : '');
+	let musicTags = $state<MusicTagField[]>([...(session?.music_tag_fields ?? ALL_MUSIC_TAGS)]);
 	// The Advanced section opens itself when Save sends focus to the overrides field inside it.
 	let advancedOpen = $state(false);
 	let submitError = $state<string | null>(null);
@@ -134,7 +138,15 @@
 		if (await focusFirstInvalid(found, SESSION_FIELD_ORDER)) return;
 		submitError = null;
 
-		const form: SessionForm = { name, mediaType, ripId, tcId, template, overrides: parseOverrides(overridesJson) };
+		const form: SessionForm = {
+			name,
+			mediaType,
+			ripId,
+			tcId,
+			template,
+			overrides: parseOverrides(overridesJson),
+			musicTags
+		};
 
 		submitting = true;
 		try {
@@ -239,6 +251,24 @@
 			/>
 			{@render fieldError(SESSION_FIELDS.path)}
 		</div>
+
+		<!-- Music file tags: a music session that encodes -->
+		{#if showsMusicTags(mediaType, tcId)}
+			<div class="field" data-testid="sb-music-tags">
+				<FieldLabel label="Music file tags" docsId={FIELD_IDS.music_tags} />
+				<CheckListField
+					options={MUSIC_TAG_OPTIONS}
+					bind:value={musicTags}
+					legend="Music file tags"
+					idPrefix="sb-music-tag"
+					helpId="sb-music-tags-help"
+					disabled={readOnly}
+				/>
+				<p class="field-help" id="sb-music-tags-help">
+					What this session writes into each track it encodes. An unticked tag is left out of the file.
+				</p>
+			</div>
+		{/if}
 
 		<!-- Advanced (collapsed) -->
 		<details class="session-builder-advanced" bind:open={advancedOpen}>

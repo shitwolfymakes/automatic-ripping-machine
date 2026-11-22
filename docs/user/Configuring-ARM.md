@@ -139,6 +139,15 @@ transcoded as reusable objects you manage in the UI:
 - **Sessions** — a named bundle of transcode work you apply to a job; a drive
   can have a default session so finished rips transcode automatically.
 
+A music session that encodes also picks the tags ARM writes into each track
+(**Music file tags** in the session editor): artist, album artist, album,
+track title, track number, track total, disc number, year, MusicBrainz release
+ID, and the embedded cover art. A new session writes them all; a tag that is
+not ticked is left out of the file. Built-in sessions can't be edited, so clone
+one (Music to FLAC, say) to change its tags, and keep a clone for each
+behaviour you want. In an MP3 the track total is written as part of the track
+number (`4/12`), so it is only written when the track number is too.
+
 ARM seeds sensible built-in presets on first boot, so you don't have to create
 any to get started. See [Web UI](Web-UI) for the pages that manage them.
 

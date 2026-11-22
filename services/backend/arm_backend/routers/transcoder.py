@@ -3,10 +3,10 @@
 The endpoints per `03-protocol.md § Transcode container ↔ Backend`:
 - `POST /register` — bootstrap; transcoder receives the task, session, preset,
   source track, the `raw_input_path` it should read from, and a music
-  track's tags.
+  track's tags (only those the task's session switches on).
 - `GET /tasks/{task_id}/cover-art` — a music track's cover to embed: the
   operator's poster override, else the automatic cover; 404 when neither
-  can be fetched as a JPEG or PNG.
+  can be fetched as a JPEG or PNG, or the cover is switched off.
 - `POST /tasks/{task_id}/claim` — atomic CAS to `in_progress`. First claim
   on a session_application also flips the application to RUNNING and emits
   `session.started`.
@@ -39,6 +39,7 @@ from arm_backend.preset_views import preset_view
 from arm_backend.routers._deps import get_hub, get_schema_runner
 from arm_backend.routers.images import ImageUnavailable, fetch_allowed_image
 from arm_backend.session_routing import routing_media_type
+from arm_backend.music_tag_settings import music_tag_fields_setting, session_music_tags
 from arm_backend.transcode_apply import log_session_settled, music_tags_for, settle_session_application
 from arm_backend.ws import WSHub
 from arm_common import (
@@ -52,6 +53,7 @@ from arm_common import (
     TranscodeTaskStatus,
 )
 from arm_common.models import Job, Track
+from arm_common.music_tags import COVER
 from arm_common.schemas import (
     ClaimTaskResponse,
     CompleteTaskRequest,
@@ -74,6 +76,14 @@ async def _load_task(db: AsyncSession, task_id: str) -> TranscodeTask:
     if row is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown transcode_task_id: {task_id}")
     return row
+
+
+async def _load_task_session(db: AsyncSession, task: TranscodeTask) -> Session:
+    """The session whose application queued this task."""
+    application = (
+        await db.execute(select(SessionApplication).where(col(SessionApplication.id) == task.session_application_id))
+    ).scalar_one()
+    return (await db.execute(select(Session).where(col(Session.id) == application.session_id))).scalar_one()
 
 
 def _require_owner(task: TranscodeTask, hostname: str | None) -> None:
@@ -129,10 +139,7 @@ async def register(
             detail=f"task is claimed by a different host: {task.claimed_by}",
         )
 
-    application = (
-        await db.execute(select(SessionApplication).where(col(SessionApplication.id) == task.session_application_id))
-    ).scalar_one()
-    sess = (await db.execute(select(Session).where(col(Session.id) == application.session_id))).scalar_one()
+    sess = await _load_task_session(db, task)
     transcode_preset: TranscodePreset | None = None
     if sess.transcode_preset_id is not None:
         transcode_preset = (
@@ -158,7 +165,7 @@ async def register(
         source_track=TrackView.model_validate(track),
         raw_input_path=track.output_path,
         media_root=media_root,
-        music_tags=music_tags_for(job, track),
+        music_tags=session_music_tags(music_tags_for(job, track), sess),
     )
 
 
@@ -171,19 +178,31 @@ async def cover_art(task_id: str, db: AsyncSession = Depends(get_session)) -> Re
     task = await _load_task(db, task_id)
     track = (await db.execute(select(Track).where(col(Track.id) == task.source_track_id))).scalar_one()
     job = (await db.execute(select(Job).where(col(Job.id) == track.job_id))).scalar_one()
-    if routing_media_type(job) == MediaType.MUSIC:
-        # Override first, then the automatic cover: the first one that can be
-        # fetched as an embeddable image wins.
-        for url in cover_art_urls(job):
-            try:
-                content, media_type = await fetch_allowed_image(url)
-            except ImageUnavailable as e:
-                logger.info("cover art task_id=%s url=%s skipped: %s", task_id, url, e.detail)
-                continue
-            if media_type in _EMBEDDABLE_COVER_TYPES:
-                return Response(content=content, media_type=media_type)
-            logger.info("cover art task_id=%s url=%s skipped: type %s", task_id, url, media_type)
-    raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="no cover art")
+    if routing_media_type(job) != MediaType.MUSIC:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="no cover art")
+    sess = await _load_task_session(db, task)
+    if COVER not in music_tag_fields_setting(sess):
+        logger.info("cover art task_id=%s skipped: switched off in session %s", task_id, sess.id)
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="cover art switched off")
+    cover = await _first_embeddable_cover(task_id, job)
+    if cover is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="no cover art")
+    return cover
+
+
+async def _first_embeddable_cover(task_id: str, job: Job) -> Response | None:
+    """The override, else the automatic cover: the first that can be fetched as an
+    embeddable image. None when neither can."""
+    for url in cover_art_urls(job):
+        try:
+            content, media_type = await fetch_allowed_image(url)
+        except ImageUnavailable as e:
+            logger.info("cover art task_id=%s url=%s skipped: %s", task_id, url, e.detail)
+            continue
+        if media_type in _EMBEDDABLE_COVER_TYPES:
+            return Response(content=content, media_type=media_type)
+        logger.info("cover art task_id=%s url=%s skipped: type %s", task_id, url, media_type)
+    return None
 
 
 def request_media_root() -> str:

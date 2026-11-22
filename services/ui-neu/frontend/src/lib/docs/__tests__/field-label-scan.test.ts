@@ -73,6 +73,11 @@ const LABEL_ELEMENTS: Allowance[] = [
 		reason: 'a sub-control of the rotate field, whose FieldLabel carries the docs link'
 	},
 	{
+		file: '/src/lib/components/shared/CheckListField.svelte',
+		text: 'check-list-field-option',
+		reason: 'one option of a checkbox group; the group itself is labelled by its FieldLabel'
+	},
+	{
 		file: '/src/lib/components/notifications/ChannelTypePicker.svelte',
 		text: 'channel-type-option',
 		reason: 'one option card of the delivery type radio group'

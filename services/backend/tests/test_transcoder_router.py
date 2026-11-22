@@ -6,6 +6,7 @@ Service-token auth (no JWT plumbing required).
 
 from __future__ import annotations
 
+import logging
 from datetime import UTC, datetime
 from typing import Any, AsyncIterator
 
@@ -201,6 +202,7 @@ def test_register_returns_music_tags_for_a_cd_track() -> None:
     assert r.status_code == 200, r.text
     assert r.json()["music_tags"] == {
         "artist": "Radiohead",
+        "album_artist": "Radiohead",
         "album": "OK Computer",
         "title": "Airbag",
         "year": 1997,
@@ -208,6 +210,36 @@ def test_register_returns_music_tags_for_a_cd_track() -> None:
         "track_number": 1,
         "track_total": 1,
         "musicbrainz_release_id": "mb-rel-1",
+    }
+
+
+def test_register_sends_only_the_switched_on_tags() -> None:
+    db = FakeSession()
+    _seed(db)
+    db.rows["sessions"][0].music_tag_fields = ["title", "track_number"]
+    job = db.rows["jobs"][0]
+    job.disc_type = DiscType.CD
+    job.media_type = MediaType.MUSIC
+    job.year = 1997
+    job.metadata_json = {"music": {"artist": "Radiohead", "album": "OK Computer", "tracks": [{"title": "Airbag"}]}}
+    db.rows["tracks"][0].kind = TrackKind.AUDIO_TRACK
+    with TestClient(_make_app(db)) as client:
+        r = client.post(
+            "/api/transcoder/register",
+            json={"task_id": "txt_1", "hostname": _HOSTNAME, "hw_caps": {"cpu_count": 4}},
+            headers=_SERVICE_AUTH,
+        )
+    assert r.status_code == 200, r.text
+    assert r.json()["music_tags"] == {
+        "artist": None,
+        "album_artist": None,
+        "album": None,
+        "title": "Airbag",
+        "year": None,
+        "disc_number": None,
+        "track_number": 1,
+        "track_total": None,
+        "musicbrainz_release_id": None,
     }
 
 
@@ -311,6 +343,36 @@ def test_cover_art_404_for_a_video_job(monkeypatch: pytest.MonkeyPatch) -> None:
 
     assert _get_cover(db).status_code == 404
     assert requested == []
+
+
+def test_cover_art_404_when_the_cover_is_switched_off(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    db = FakeSession()
+    _seed_cd(db)
+    db.rows["sessions"][0].music_tag_fields = ["artist", "title"]
+    requested = _stub_images(monkeypatch, {_AUTO_COVER_FULL: (b"AUTO", "image/jpeg")})
+
+    with caplog.at_level(logging.INFO, logger="arm_backend.routers.transcoder"):
+        r = _get_cover(db)
+
+    # Told apart from "none could be fetched", in the response and in the log.
+    assert r.status_code == 404
+    assert r.json()["detail"] == "cover art switched off"
+    assert f"cover art task_id=txt_1 skipped: switched off in session {db.rows['sessions'][0].id}" in caplog.messages
+    assert requested == []
+
+
+def test_cover_art_served_when_the_cover_is_switched_on(monkeypatch: pytest.MonkeyPatch) -> None:
+    db = FakeSession()
+    _seed_cd(db)
+    db.rows["sessions"][0].music_tag_fields = ["cover"]
+    _stub_images(monkeypatch, {_AUTO_COVER_FULL: (b"AUTO", "image/jpeg")})
+
+    r = _get_cover(db)
+
+    assert r.status_code == 200
+    assert r.content == b"AUTO"
 
 
 def test_cover_art_404_unknown_task() -> None:

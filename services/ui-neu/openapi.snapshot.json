@@ -14477,6 +14477,23 @@
         "type": "object",
         "title": "MusicMeta"
       },
+      "MusicTagField": {
+        "type": "string",
+        "enum": [
+          "artist",
+          "album_artist",
+          "album",
+          "title",
+          "track_number",
+          "track_total",
+          "disc_number",
+          "year",
+          "musicbrainz_release_id",
+          "cover"
+        ],
+        "title": "MusicTagField",
+        "description": "What a music session writes into each encoded track: one value per\n`MusicTags` field, then the embedded cover. Settings order."
+      },
       "MusicTags": {
         "properties": {
           "artist": {
@@ -14489,6 +14506,17 @@
               }
             ],
             "title": "Artist"
+          },
+          "album_artist": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Album Artist"
           },
           "album": {
             "anyOf": [
@@ -16772,6 +16800,20 @@
               }
             ],
             "title": "Overrides Json"
+          },
+          "music_tag_fields": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/MusicTagField"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Music Tag Fields"
           }
         },
         "type": "object",
@@ -16928,6 +16970,20 @@
               }
             ],
             "title": "Overrides Json"
+          },
+          "music_tag_fields": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/MusicTagField"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Music Tag Fields"
           }
         },
         "type": "object",
@@ -16981,6 +17037,13 @@
             ],
             "title": "Overrides Json"
           },
+          "music_tag_fields": {
+            "items": {
+              "$ref": "#/components/schemas/MusicTagField"
+            },
+            "type": "array",
+            "title": "Music Tag Fields"
+          },
           "created_by_user_id": {
             "anyOf": [
               {
@@ -17027,6 +17090,7 @@
           "transcode_preset_id",
           "output_path_template",
           "overrides_json",
+          "music_tag_fields",
           "created_by_user_id",
           "created_at",
           "updated_at"

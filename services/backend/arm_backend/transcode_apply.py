@@ -22,7 +22,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import col, select
 
 from arm_backend import job_events
-from arm_backend.constants import CONFIG_SINGLETON_ID
+from arm_backend.config_row import load_config_or_none
 from arm_backend.path_sanitize import sanitize_path_component
 from arm_backend.path_template import (
     NEVER_OPTIONAL,
@@ -37,7 +37,6 @@ from arm_backend.session_routing import routing_media_type
 from arm_backend.slugify import slugify
 from arm_backend.log_safely import log_safely
 from arm_common import (
-    Config,
     Gpu,
     Job,
     MediaType,
@@ -124,8 +123,11 @@ def music_tags_for(job: Job, track: Track) -> MusicTags | None:
     music_meta = _music_meta(metadata)
     entry = _music_track_entry(music_meta, metadata, track.index)
     track_total = len(_music_tracks(music_meta, metadata))
+    # The release's artist: the stored listing has no per-track artist.
+    artist = _str_or_none(music_meta.get("artist") or metadata.get("artist"))
     return MusicTags(
-        artist=_str_or_none(music_meta.get("artist") or metadata.get("artist")),
+        artist=artist,
+        album_artist=artist,
         album=_str_or_none(music_meta.get("album") or metadata.get("album")),
         title=_str_or_none(entry.get("title")),
         year=job.year,
@@ -504,7 +506,7 @@ async def transcode_enabled_now(db: AsyncSession) -> bool:
 
     if not effective_transcode_capable(settings):
         return False
-    cfg = (await db.execute(select(Config).where(col(Config.id) == CONFIG_SINGLETON_ID))).scalar_one_or_none()
+    cfg = await load_config_or_none(db)
     return cfg is None or cfg.transcode_enabled is not False
 
 

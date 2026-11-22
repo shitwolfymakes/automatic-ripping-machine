@@ -44,6 +44,7 @@ class MusicTags(BaseModel):
     out of the file rather than written empty."""
 
     artist: str | None = None
+    album_artist: str | None = None
     album: str | None = None
     title: str | None = None
     year: int | None = None

@@ -696,3 +696,205 @@ def test_clone_preserves_overrides_json(signing_key: bytes) -> None:
     src = next(s for s in db.rows["sessions"] if s.id == "ses_with_overrides")
     clone = next(s for s in db.rows["sessions"] if s.id == out["id"])
     assert clone.overrides_json is not src.overrides_json
+
+
+# --- music file tags ---
+
+_ALL_TAGS = [
+    "artist",
+    "album_artist",
+    "album",
+    "title",
+    "track_number",
+    "track_total",
+    "disc_number",
+    "year",
+    "musicbrainz_release_id",
+    "cover",
+]
+_MUSIC_TEMPLATE = "{artist}/{album}/{track} - {track_title}"
+
+
+def _seed_music(db: FakeSession) -> None:
+    _seed(db)
+    db.rows["rip_presets"].append(
+        RipPreset(
+            id="rpr_music",
+            name="Music: Standard CD",
+            media_type=MediaType.MUSIC,
+            is_builtin=True,
+            track_selection=TrackSelection.ALL_TRACKS,
+            identification_mode=IdentificationMode.REQUIRED,
+            output_mode=OutputMode.TRACKS,
+        )
+    )
+    db.rows["sessions"].append(
+        Session(
+            id="ses_music",
+            name="My music",
+            media_type=MediaType.MUSIC,
+            is_builtin=False,
+            rip_preset_id="rpr_music",
+            output_path_template=_MUSIC_TEMPLATE,
+            music_tag_fields=["artist", "title", "cover"],
+        )
+    )
+
+
+def _create_music(client: TestClient, token: str, **extra: Any) -> Any:
+    body = {
+        "name": "Music, tags trimmed",
+        "media_type": "music",
+        "rip_preset_id": "rpr_music",
+        "output_path_template": _MUSIC_TEMPLATE,
+        **extra,
+    }
+    return client.post("/api/sessions", json=body, headers=_auth(token))
+
+
+def test_create_music_session_writes_every_tag_by_default(signing_key: bytes) -> None:
+    db = FakeSession()
+    _seed_music(db)
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as client:
+        r = _create_music(client, token)
+    assert r.status_code == 201, r.text
+    assert r.json()["music_tag_fields"] == _ALL_TAGS
+
+
+def test_create_music_session_stores_the_chosen_tags(signing_key: bytes) -> None:
+    db = FakeSession()
+    _seed_music(db)
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as client:
+        r = _create_music(client, token, music_tag_fields=["title", "track_number"])
+    assert r.status_code == 201, r.text
+    assert r.json()["music_tag_fields"] == ["title", "track_number"]
+    row = next(s for s in db.rows["sessions"] if s.id == r.json()["id"])
+    assert row.music_tag_fields == ["title", "track_number"]
+    assert all(type(v) is str for v in row.music_tag_fields)  # plain values, not enum members
+
+
+def test_create_rejects_music_tags_on_a_movie_session(signing_key: bytes) -> None:
+    db = FakeSession()
+    _seed(db)
+    app, token = _make_app(signing_key, db)
+    body = {
+        "name": "Movie",
+        "media_type": "movie",
+        "rip_preset_id": "rpr_movie",
+        "output_path_template": "{title} ({year})/{title}.{ext}",
+        "music_tag_fields": ["artist"],
+    }
+    with TestClient(app) as client:
+        r = client.post("/api/sessions", json=body, headers=_auth(token))
+    assert r.status_code == 400
+    assert r.json()["detail"] == "music_tag_fields applies to music sessions only"
+    assert len(db.rows["sessions"]) == 1
+
+
+def test_update_music_session_tags(signing_key: bytes) -> None:
+    db = FakeSession()
+    _seed_music(db)
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as client:
+        r = client.patch("/api/sessions/ses_music", json={"music_tag_fields": []}, headers=_auth(token))
+    assert r.status_code == 200, r.text
+    assert r.json()["music_tag_fields"] == []
+    assert next(s for s in db.rows["sessions"] if s.id == "ses_music").music_tag_fields == []
+
+
+def test_update_stores_the_tags_as_plain_values(signing_key: bytes) -> None:
+    db = FakeSession()
+    _seed_music(db)
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as client:
+        r = client.patch("/api/sessions/ses_music", json={"music_tag_fields": ["title", "cover"]}, headers=_auth(token))
+    assert r.status_code == 200, r.text
+    row = next(s for s in db.rows["sessions"] if s.id == "ses_music")
+    assert row.music_tag_fields == ["title", "cover"]
+    assert all(type(v) is str for v in row.music_tag_fields)  # plain values, not enum members
+
+
+def test_update_leaves_music_tags_alone_when_not_sent(signing_key: bytes) -> None:
+    db = FakeSession()
+    _seed_music(db)
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as client:
+        r = client.patch("/api/sessions/ses_music", json={"name": "Renamed"}, headers=_auth(token))
+    assert r.status_code == 200, r.text
+    assert r.json()["music_tag_fields"] == ["artist", "title", "cover"]
+
+
+@pytest.mark.parametrize(
+    ("value", "status", "detail"),
+    [
+        (None, 400, "music_tag_fields must be a list"),
+        (["artist", "artist"], 400, "music_tag_fields: duplicate values"),
+        (["genre"], 422, None),
+    ],
+)
+def test_update_rejects_a_bad_tag_list(signing_key: bytes, value: object, status: int, detail: str | None) -> None:
+    db = FakeSession()
+    _seed_music(db)
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as client:
+        r = client.patch("/api/sessions/ses_music", json={"music_tag_fields": value}, headers=_auth(token))
+    assert r.status_code == status
+    if detail is not None:
+        assert r.json()["detail"] == detail
+    assert next(s for s in db.rows["sessions"] if s.id == "ses_music").music_tag_fields == ["artist", "title", "cover"]
+
+
+def test_update_rejects_music_tags_on_a_movie_session(signing_key: bytes) -> None:
+    db = FakeSession()
+    _seed(db)
+    db.rows["sessions"].append(
+        Session(
+            id="ses_movie",
+            name="Movie",
+            media_type=MediaType.MOVIE,
+            is_builtin=False,
+            rip_preset_id="rpr_movie",
+            output_path_template="{title}.{ext}",
+        )
+    )
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as client:
+        r = client.patch("/api/sessions/ses_movie", json={"music_tag_fields": ["artist"]}, headers=_auth(token))
+    assert r.status_code == 400
+    assert r.json()["detail"] == "music_tag_fields applies to music sessions only"
+
+
+def test_clone_keeps_the_music_tags(signing_key: bytes) -> None:
+    db = FakeSession()
+    _seed_music(db)
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as client:
+        r = client.post("/api/sessions/ses_music/clone", json={"name": "Copy"}, headers=_auth(token))
+    assert r.status_code == 201, r.text
+    assert r.json()["music_tag_fields"] == ["artist", "title", "cover"]
+    src = next(s for s in db.rows["sessions"] if s.id == "ses_music")
+    clone = next(s for s in db.rows["sessions"] if s.id == r.json()["id"])
+    assert clone.music_tag_fields is not src.music_tag_fields
+
+
+def test_update_accepts_a_rip_preset_of_the_session_media_type(signing_key: bytes) -> None:
+    db = FakeSession()
+    _seed_music(db)
+    db.rows["rip_presets"].append(
+        RipPreset(
+            id="rpr_music_fast",
+            name="Music: Fast",
+            media_type=MediaType.MUSIC,
+            is_builtin=False,
+            track_selection=TrackSelection.ALL_TRACKS,
+            identification_mode=IdentificationMode.REQUIRED,
+            output_mode=OutputMode.TRACKS,
+        )
+    )
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as client:
+        r = client.patch("/api/sessions/ses_music", json={"rip_preset_id": "rpr_music_fast"}, headers=_auth(token))
+    assert r.status_code == 200, r.text
+    assert r.json()["rip_preset_id"] == "rpr_music_fast"

@@ -16,6 +16,7 @@ from arm_common.enums import (
     ContainerFormat,
     IdentificationMode,
     MediaType,
+    MusicTagField,
     OutputMode,
     SessionApplicationStatus,
     TrackSelection,
@@ -131,6 +132,8 @@ class SessionView(BaseModel):
     transcode_preset_id: str | None
     output_path_template: str
     overrides_json: dict[str, Any] | None
+    # Music sessions: the tags, and whether the cover, written into each encoded track.
+    music_tag_fields: list[MusicTagField]
     created_by_user_id: str | None
     created_at: datetime | None
     updated_at: datetime | None
@@ -143,6 +146,8 @@ class SessionCreateRequest(BaseModel):
     transcode_preset_id: str | None = None
     output_path_template: str = Field(min_length=1)
     overrides_json: dict[str, Any] | None = None
+    # Music sessions only; every choice when left out.
+    music_tag_fields: list[MusicTagField] | None = None
 
 
 class SessionUpdateRequest(BaseModel):
@@ -151,6 +156,8 @@ class SessionUpdateRequest(BaseModel):
     transcode_preset_id: str | None = None
     output_path_template: str | None = Field(default=None, min_length=1)
     overrides_json: dict[str, Any] | None = None
+    # Music sessions only.
+    music_tag_fields: list[MusicTagField] | None = None
 
 
 class SessionCloneRequest(BaseModel):

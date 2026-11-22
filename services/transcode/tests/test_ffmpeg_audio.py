@@ -331,6 +331,7 @@ def test_build_audio_command_mp3_full_argv(tmp_path):
 
 _FULL_TAGS = MusicTags(
     artist="Sigur Rós",
+    album_artist="Sigur Rós",
     album='Ágætis byrjun / "Live"',
     title="Svefn-g-englar",
     year=1999,
@@ -397,6 +398,20 @@ def test_build_audio_command_flac_omits_unknown_fields(tmp_path):
         tags=MusicTags(album="Homogenic", track_total=10),
     )
     assert _metadata_pairs(cmd) == ["ALBUM=Homogenic", "TRACKTOTAL=10"]
+
+
+@pytest.mark.parametrize(
+    ("preset", "pair"), [("flac", "ALBUMARTIST=Various Artists"), ("mp3", "album_artist=Various Artists")]
+)
+def test_build_audio_command_album_artist_comes_from_its_own_field(tmp_path, preset, pair):
+    # ARTIST and ALBUMARTIST are separate tags: switching one off leaves the other.
+    cmd = build_audio_command(
+        input_path=tmp_path / "in.wav",
+        output_path=tmp_path / "o",
+        preset_ref=preset,
+        tags=MusicTags(album_artist="Various Artists"),
+    )
+    assert _metadata_pairs(cmd) == [pair]
 
 
 def test_build_audio_command_empty_tags_add_nothing(tmp_path):

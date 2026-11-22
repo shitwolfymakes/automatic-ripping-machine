@@ -228,6 +228,7 @@ describe('Job Detail Page', () => {
 			transcode_preset_id: null,
 			output_path_template: '{title}/{title}.mkv',
 			overrides_json: null,
+			music_tag_fields: [],
 			created_by_user_id: null,
 			created_at: null,
 			updated_at: null
