@@ -1,7 +1,7 @@
 import asyncio
 import contextlib
 import logging
-from collections.abc import AsyncIterator, Callable
+from collections.abc import AsyncIterator, Awaitable, Callable
 from typing import Any
 
 import httpx
@@ -155,22 +155,49 @@ class JobController:
                 self._active_task = None
                 self._active_job_id = None
 
-    async def pickup(self, job: JobView, device_path: str) -> None:
-        """Re-acquire a rip-ready job from a heartbeat reprobe.
+    def _start_pipeline(self, job_id: str, body: Callable[[], Awaitable[None]], what: str) -> asyncio.Task[None] | None:
+        """Run `body` for `job_id` as the drive's pipeline in a task of its own and return that task, or None while
+        another pipeline owns the drive.
 
-        Claims _active_task before starting so is_idle() returns False from the
-        moment we enter, preventing a double-rip if heartbeat fires again while
-        the pipeline is starting up. The actual rip runs via _run_rip, which
-        follows the same path as a normal pipeline (rip-start → execute → complete
-        → eject) but skips scan/identify since the job already exists.
+        The callers (the heartbeat loop, and boot recovery from amain or the poll loop) must keep running while the
+        rip does. Run inline in their task, the rip blocked heartbeats for its whole length, and job.abandoned, which
+        cancels the active task, cancelled the caller instead: the heartbeat loop for good, or amain, exiting the
+        ripper. The task is the active one from the moment it is created, so a heartbeat before it first runs neither
+        starts a second pipeline nor misses an abandon of this job. An error ends only the task, logged.
+        """
+        if not self.is_idle():
+            logger.info("%s skipped for job_id=%s: controller already busy", what, job_id)
+            return None
+
+        async def run() -> None:
+            try:
+                async with self._claim(job_id):
+                    with with_log_context(job_id=job_id):
+                        await body()
+            except Exception:
+                logger.exception("%s failed for job_id=%s", what, job_id)
+
+        task = asyncio.create_task(run(), name=f"{what}:{job_id}")
+        self._active_task = task
+        self._active_job_id = job_id
+        return task
+
+    async def pickup(self, job: JobView, device_path: str) -> asyncio.Task[None] | None:
+        """Re-acquire a rip-ready job from a heartbeat reprobe; returns the rip's task without waiting for it, or
+        None when the controller is busy.
+
+        The actual rip runs via _run_rip, which follows the same path as a normal pipeline (rip-start → execute →
+        complete → eject) but skips scan/identify since the job already exists.
         """
         if not self.is_idle():
             logger.debug("pickup ignored: controller already busy")
-            return
-        async with self._claim(job.id):
-            with with_log_context(job_id=job.id):
-                logger.info("pickup: re-acquiring job %s status=%s", job.id, job.status.value)
-                await self._run_rip(job, device_path)
+            return None
+
+        async def body() -> None:
+            logger.info("pickup: re-acquiring job %s status=%s", job.id, job.status.value)
+            await self._run_rip(job, device_path)
+
+        return self._start_pipeline(job.id, body, "pickup")
 
     async def on_ws_command(self, envelope: WSEnvelope) -> None:
         """Handler registered for `ripper.commands.{drive_id}` topic: runs the handler for the command's event
@@ -423,51 +450,58 @@ class JobController:
             rip_start=rip_start,
         )
 
-    async def recover_held_job(self, job: JobView, device_path: str) -> None:
+    async def recover_held_job(self, job: JobView, device_path: str) -> asyncio.Task[None] | None:
         """Reboot recovery for a disc that was PAUSED in the review gate.
         Re-park the review wait so the operator can still Start it; on Start
         (-> ripping) or auto-start (-> identified), run the rip. Unlike
         resume_inflight_job this does NOT wipe /raw or re-rip —
         the disc never ripped. A re-parked disc waits for an explicit Start; it
         does not auto-rip on boot even if its countdown had expired.
-        """
-        async with self._claim(job.id):
-            with with_log_context(job_id=job.id):
-                logger.info("reboot recovery: re-parking held job %s", job.id)
-                resolved = await self._waiter.await_resolution(job.id, REVIEW_WAIT)
-                if resolved is None:
-                    return
-                job = resolved
-                if job.status not in (JobStatus.IDENTIFIED, JobStatus.RIPPING):
-                    logger.info("recovered job %s in status %s; not ripping", job.id, job.status.value)
-                    return
-                await self._run_rip(job, device_path)
 
-    async def resume_inflight_job(self, job: JobView, device_path: str) -> None:
+        Returns the pipeline's task without waiting for it (the wait for Start
+        can last indefinitely), or None when the controller is busy.
+        """
+
+        async def body() -> None:
+            logger.info("reboot recovery: re-parking held job %s", job.id)
+            resolved = await self._waiter.await_resolution(job.id, REVIEW_WAIT)
+            if resolved is None:
+                return
+            if resolved.status not in (JobStatus.IDENTIFIED, JobStatus.RIPPING):
+                logger.info("recovered job %s in status %s; not ripping", resolved.id, resolved.status.value)
+                return
+            await self._run_rip(resolved, device_path)
+
+        return self._start_pipeline(job.id, body, "reboot recovery")
+
+    async def resume_inflight_job(self, job: JobView, device_path: str) -> asyncio.Task[None] | None:
         """Drive a crash-recovered rip from the boot probe.
 
         The backend's `/resume` endpoint resets tracks to QUEUED and
         sets `resumed_from_crash=True`; we then run the same rip-loop
         as a fresh disc would.
 
-        Claims the single-flight gate exactly like `recover_held_job`, so a
-        crash-resumed rip is abandonable via `job.abandoned` and makes
-        `is_idle()` False (no double-rip from the heartbeat re-probe or from
-        a reattach boot probe).
+        Holds the single-flight gate like `recover_held_job`, so a crash-resumed
+        rip is abandonable via `job.abandoned` and makes `is_idle()` False (no
+        double-rip from the heartbeat re-probe or from a reattach boot probe).
+        Returns the rip's task without waiting for it, or None when the
+        controller is busy.
         """
-        async with self._claim(job.id):
-            with with_log_context(job_id=job.id):
-                # Crash-resume skips the scan path, so refresh the key here too —
-                # a rip resumed days after a crash must not run on a stale key.
-                await self._makemkv.prepare()
-                rip_start = await self._client.resume(job.id)
-                _log_rip_started(job.disc_type, rip_start, resumed=True)
-                await self._execute_rip(
-                    job_id=job.id,
-                    disc_type=job.disc_type,
-                    device_path=device_path,
-                    rip_start=rip_start,
-                )
+
+        async def body() -> None:
+            # Crash-resume skips the scan path, so refresh the key here too —
+            # a rip resumed days after a crash must not run on a stale key.
+            await self._makemkv.prepare()
+            rip_start = await self._client.resume(job.id)
+            _log_rip_started(job.disc_type, rip_start, resumed=True)
+            await self._execute_rip(
+                job_id=job.id,
+                disc_type=job.disc_type,
+                device_path=device_path,
+                rip_start=rip_start,
+            )
+
+        return self._start_pipeline(job.id, body, "crash resume")
 
     async def _execute_rip(
         self,
