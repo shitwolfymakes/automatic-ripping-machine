@@ -30,6 +30,9 @@ const MEDIA_TYPE_LABELS: ReadonlyMap<string, string> = new Map([
 	['iso', 'ISO']
 ]);
 
+/** The label of the Video group: movie and TV transcode presets, which fit sessions of either. */
+export const VIDEO_GROUP_LABEL = 'Video';
+
 /** A media type's label. */
 export function humanizeMediaType(v: string | null | undefined): string {
 	return labelFrom(MEDIA_TYPE_LABELS, v);

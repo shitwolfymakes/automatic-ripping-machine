@@ -6,7 +6,7 @@
 	import { onMount } from 'svelte';
 	import MediaTypeChips from './MediaTypeChips.svelte';
 	import { matchesFilters, type SourceFilter } from './listFilters';
-	import { countByMediaType, transcodeMediaGroup } from '$lib/utils/sessions';
+	import { countByMediaType, presetFilterMediaType } from '$lib/utils/sessions';
 
 	interface Props {
 		/** Which preset kind this tab shows. */
@@ -49,8 +49,7 @@
 	let sourceFilter = $state<SourceFilter>('all');
 
 	function matches(p: RipPresetView | TranscodePresetView): boolean {
-		// Transcode presets are filed by group: movie and TV both count as Video (`movie`).
-		const item = kind === 'transcode' ? { ...p, media_type: transcodeMediaGroup(p.media_type) } : p;
+		const item = { ...p, media_type: presetFilterMediaType(kind, p.media_type) };
 		return matchesFilters(item, { type: typeFilter, source: sourceFilter, search });
 	}
 
@@ -64,9 +63,7 @@
 
 	// Derive preset counts per media type for the active kind only
 	const presetTypeCounts = $derived(
-		countByMediaType(
-			kind === 'transcode' ? presets.map((p) => ({ media_type: transcodeMediaGroup(p.media_type) })) : presets
-		)
+		countByMediaType(presets.map((p) => ({ media_type: presetFilterMediaType(kind, p.media_type) })))
 	);
 
 	// Filtered preset list

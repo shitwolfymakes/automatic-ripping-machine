@@ -4,6 +4,7 @@ import {
 	defaultSessionChoices,
 	manualRipSessionChoices,
 	mediaTypesCompatible,
+	presetFilterMediaType,
 	sessionsForDisc,
 	transcodeMediaGroup,
 	transcodePresetFits
@@ -154,5 +155,14 @@ describe('transcodeMediaGroup', () => {
 		expect(transcodeMediaGroup('music')).toBe('music');
 		expect(transcodeMediaGroup('data')).toBe('data');
 		expect(transcodeMediaGroup('iso')).toBe('iso');
+	});
+});
+
+describe('presetFilterMediaType', () => {
+	it('files a transcode preset by its group and a rip preset by its own type', () => {
+		expect(presetFilterMediaType('transcode', 'tv')).toBe('movie');
+		expect(presetFilterMediaType('transcode', 'music')).toBe('music');
+		expect(presetFilterMediaType('rip', 'tv')).toBe('tv');
+		expect(presetFilterMediaType('rip', 'movie')).toBe('movie');
 	});
 });
