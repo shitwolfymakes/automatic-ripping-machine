@@ -62,14 +62,15 @@
 			<p class="field-error" data-testid="environment-error">{envError}</p>
 		{/if}
 
-		<div data-testid="system-health-block">
+		<section class="stack" data-testid="system-health-block" aria-labelledby="system-diagnostics-title">
+			<h3 id="system-diagnostics-title" class="settings-page-section-title">Diagnostics</h3>
 			<SystemHealth
 				grouped
 				onresult={(r) => {
 					health = r;
 				}}
 			/>
-		</div>
+		</section>
 
 		{#if env}
 			<EnvironmentSection groups={env.groups} {logLevels} {logError} />

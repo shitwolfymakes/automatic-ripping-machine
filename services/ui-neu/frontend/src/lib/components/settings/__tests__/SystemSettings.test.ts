@@ -74,6 +74,13 @@ describe('SystemSettings', () => {
 		expect(within(card).getByText(/Your current values are kept/)).toBeInTheDocument();
 	});
 
+	it('heads the health checks and their run button with Diagnostics', () => {
+		renderSystem();
+		const block = screen.getByTestId('system-health-block');
+		expect(within(block).getByRole('heading', { name: 'Diagnostics' })).toBeInTheDocument();
+		expect(block).toHaveAccessibleName('Diagnostics');
+	});
+
 	it('labels the restart button "Run setup again" and enables it when idle', () => {
 		renderSystem();
 		expect(screen.getByRole('button', { name: 'Run setup again' })).toBeEnabled();
