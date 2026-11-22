@@ -15,11 +15,11 @@
 	<div class="modal">
 		<button
 			type="button"
-			class="modal-backdrop files-page-modal-backdrop"
+			class="files-page-modal-backdrop"
 			aria-label="Close dialog"
 			onclick={() => (orphans.isOpen = false)}
 		></button>
-		<div class="modal-panel files-page-orphan-panel">
+		<div class="modal-panel files-page-dialog-panel">
 			<!-- Header -->
 			<div class="shrink-0 files-page-modal-header">
 				<h3 class="modal-title">Orphan Folders</h3>
@@ -176,11 +176,17 @@
 		border: 1px solid var(--color-border-strong);
 		accent-color: var(--color-primary);
 	}
+	/* .modal is already the fixed, tinted scrim. The close button only fills it
+	   to catch clicks: it must not take .modal-backdrop (fixed, z-index 50,
+	   tinted), which would cover the panel and swallow every click in it. */
 	.files-page-modal-backdrop {
 		position: absolute;
 		inset: 0;
+		z-index: 0;
 	}
-	.files-page-orphan-panel {
+	.files-page-dialog-panel {
+		position: relative;
+		z-index: 1;
 		display: flex;
 		width: 100%;
 		max-width: 32rem;

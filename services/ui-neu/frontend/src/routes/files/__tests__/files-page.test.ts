@@ -274,9 +274,9 @@ describe('Files Page', () => {
 			});
 
 			// "subfolder" should NOT appear in the picker list (it's the selected folder)
-			const pickerDialog = screen.getByText(/Move 1 item/).closest('.modal-panel');
+			const pickerDialog = screen.getByText(/Move 1 item/).closest('[role="dialog"]');
 			// Within the dialog, subfolder should not be a navigation option
-			const folderButtons = pickerDialog?.querySelectorAll('button.files-page-picker-row-folder');
+			const folderButtons = pickerDialog?.querySelectorAll('button.file-move-row-folder');
 			const folderNames = Array.from(folderButtons ?? []).map((b) => b.textContent?.trim());
 			expect(folderNames.some((n) => n?.includes('subfolder'))).toBe(false);
 		});
