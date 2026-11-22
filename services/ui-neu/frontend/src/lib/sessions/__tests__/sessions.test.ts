@@ -4,7 +4,10 @@ import {
 	defaultSessionChoices,
 	manualRipSessionChoices,
 	mediaTypesCompatible,
-	sessionsForJob
+	presetFilterMediaType,
+	sessionsForJob,
+	transcodeMediaGroup,
+	transcodePresetFits
 } from '../sessions';
 
 const presets = [
@@ -131,5 +134,40 @@ describe('countByMediaType', () => {
 			data: 1,
 			iso: 0
 		});
+	});
+});
+
+// One row per session type x preset type, mirroring the backend's
+// arm_common.enums.transcode_preset_media_types table.
+describe('transcodePresetFits', () => {
+	const TYPES = ['movie', 'tv', 'music', 'data', 'iso'] as const;
+	// "preset>session" pairs that fit; every other pair does not.
+	const FITS = new Set(['movie>movie', 'movie>tv', 'tv>movie', 'tv>tv', 'music>music', 'data>data', 'iso>iso']);
+	for (const session of TYPES) {
+		for (const preset of TYPES) {
+			const expected = FITS.has(`${preset}>${session}`);
+			it(`a ${preset} preset ${expected ? 'fits' : 'does not fit'} a ${session} session`, () => {
+				expect(transcodePresetFits(preset, session)).toBe(expected);
+			});
+		}
+	}
+});
+
+describe('transcodeMediaGroup', () => {
+	it('files movie and TV under movie (Video), and the rest under their own type', () => {
+		expect(transcodeMediaGroup('movie')).toBe('movie');
+		expect(transcodeMediaGroup('tv')).toBe('movie');
+		expect(transcodeMediaGroup('music')).toBe('music');
+		expect(transcodeMediaGroup('data')).toBe('data');
+		expect(transcodeMediaGroup('iso')).toBe('iso');
+	});
+});
+
+describe('presetFilterMediaType', () => {
+	it('files a transcode preset by its group and a rip preset by its own type', () => {
+		expect(presetFilterMediaType('transcode', 'tv')).toBe('movie');
+		expect(presetFilterMediaType('transcode', 'music')).toBe('music');
+		expect(presetFilterMediaType('rip', 'tv')).toBe('tv');
+		expect(presetFilterMediaType('rip', 'movie')).toBe('movie');
 	});
 });

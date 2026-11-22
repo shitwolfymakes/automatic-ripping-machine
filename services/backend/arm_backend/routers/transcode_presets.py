@@ -122,7 +122,13 @@ async def parse_handbrake_export(
 
 @router.get("", response_model=list[TranscodePresetView])
 async def list_transcode_presets(
-    media_type: MediaType | None = Query(default=None),
+    media_type: MediaType | None = Query(
+        default=None,
+        description=(
+            "Only the presets that fit a session of this media type: a movie or TV preset fits either, "
+            "every other type only its own."
+        ),
+    ),
     _: User = Depends(require_jwt),
     db: AsyncSession = Depends(get_session),
     store: SchemaStore = Depends(get_schema_store),
