@@ -113,8 +113,11 @@
 		builderOpen = true;
 	}
 
+	// A clone is named clear of every name of its kind, hidden or not.
+	const names = (items: { name: string }[]) => items.map((i) => i.name);
+
 	async function handleCloneSession(s: JoinedSession) {
-		await reloadAfter(() => cloneSession(s.id, { name: copyName(s.name) }), 'Clone failed');
+		await reloadAfter(() => cloneSession(s.id, { name: copyName(s.name, names(data.sessions())) }), 'Clone failed');
 	}
 
 	// FIX 1: open confirm dialog instead of deleting immediately
@@ -159,7 +162,7 @@
 	}
 
 	function handleCloneRipPreset(p: RipPresetView): Promise<boolean> {
-		return reloadAfter(() => createRipPreset(ripPresetCopy(p)), 'Clone failed');
+		return reloadAfter(() => createRipPreset(ripPresetCopy(p, names(data.ripPresets()))), 'Clone failed');
 	}
 
 	// Cloning from the read-only sidebar leaves the original's sidebar once the copy exists.
@@ -168,7 +171,10 @@
 	}
 
 	function handleCloneTranscodePreset(p: TranscodePresetView): Promise<boolean> {
-		return reloadAfter(() => createTranscodePreset(transcodePresetCopy(p)), 'Clone failed');
+		return reloadAfter(
+			() => createTranscodePreset(transcodePresetCopy(p, names(data.transcodePresets()))),
+			'Clone failed'
+		);
 	}
 
 	async function cloneTranscodeFromSidebar(p: TranscodePresetView) {
