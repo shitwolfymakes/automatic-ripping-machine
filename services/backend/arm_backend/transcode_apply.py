@@ -74,13 +74,13 @@ def _format_duration_human(seconds: int | None) -> str:
 
 
 def _music_meta(metadata: dict[str, object]) -> dict[str, Any]:
-    """The job's typed `music` section (§3.4), or {} when absent or malformed."""
+    """The job's typed `music` section, or {} when absent or malformed."""
     raw_music = metadata.get("music")
     return raw_music if isinstance(raw_music, dict) else {}
 
 
 def _music_tracks(music_meta: dict[str, Any], metadata: dict[str, object]) -> list[Any]:
-    """The music track listing; the bare top-level `tracks` key is the pre-0032 fallback."""
+    """The music track listing; the bare top-level `tracks` key is the fallback for older rows."""
     tracks_meta = music_meta.get("tracks") or metadata.get("tracks")
     return tracks_meta if isinstance(tracks_meta, list) else []
 
