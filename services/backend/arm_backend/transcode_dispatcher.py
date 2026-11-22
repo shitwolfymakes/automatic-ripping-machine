@@ -635,6 +635,7 @@ class TranscodeDispatcher:
         logger.warning("transcode spawn unclaimed, stopping it task_id=%s: %s", task_id, reason)
         # Stop it first, so a late claim cannot race the next spawn of the task.
         await asyncio.to_thread(self._stop_task_containers, task_id)
+        self.gpu_waits.unclaimed(task_id)
         await release_gpu_for_task(db, task_id)
         task.attempts = (task.attempts or 0) + 1
         if task.attempts >= self._settings.ARM_TRANSCODE_MAX_ATTEMPTS:

@@ -296,6 +296,22 @@ async def test_settle_resumes_a_wait_whose_task_left_the_queue(job_log: LineCapt
     assert [(line["fields"]["task_id"], line["fields"]["state"]) for line in resumed] == [("txt_1", "resumed")]
 
 
+async def test_a_wait_after_an_unclaimed_spawn_was_stopped_is_logged(job_log: LineCapture) -> None:
+    """A spawn that never claimed is stopped and its task re-queued: its next
+    GPU wait is a real one, not the spawned task finding its own GPU busy."""
+    waits = events.GpuWaitLog()
+    db = _db()
+    task = db.rows["transcode_tasks"][0]
+    waits.spawned("txt_1")
+    await waits.waiting(db, task, "any_h265", None)
+    assert job_log.lines(event="transcode.waiting") == []
+
+    waits.unclaimed("txt_1")
+    await waits.waiting(db, task, "any_h265", None)
+
+    assert [line["fields"]["state"] for line in job_log.lines(event="transcode.waiting")] == ["waiting"]
+
+
 async def test_settle_without_waits_reads_nothing() -> None:
     db = FakeSession()
     await events.GpuWaitLog().settle(db)

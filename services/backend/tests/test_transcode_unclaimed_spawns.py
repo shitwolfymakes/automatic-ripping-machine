@@ -147,6 +147,9 @@ async def test_spawn_unclaimed_past_the_threshold_is_stopped_released_and_respaw
     assert (task.status, task.attempts) == (TranscodeTaskStatus.QUEUED, 1)
     assert disp.last_spawn_error is not None and "never claimed" in disp.last_spawn_error
 
+    # Its next GPU wait is a new one for the wait log, not the spawn's own GPU.
+    assert "txt_1" not in disp.gpu_waits._spawned
+
     # The freed GPU goes to a fresh spawn of the same task.
     await disp.spawn_pending(db)
     assert _spawned_ids(docker) == ["txt_1", "txt_1"]
