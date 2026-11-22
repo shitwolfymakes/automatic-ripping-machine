@@ -104,3 +104,19 @@ export function countByMediaType(sessions: ReadonlyArray<{ media_type: string }>
 	for (const m of SESSION_MEDIA_TYPES) counts[m] = sessions.filter((s) => s.media_type === m).length;
 	return counts as Record<MediaType | 'all', number>;
 }
+
+// Encoding settings do not depend on whether a video is a film or an episode,
+// so movie and TV transcode presets are interchangeable (as the backend's
+// session check, arm_common.enums.transcode_preset_media_types, has it).
+/** Does a transcode preset of this media type fit a session of that one? A movie or TV preset fits either. */
+export function transcodePresetFits(presetMediaType: string, sessionMediaType: string): boolean {
+	return (
+		presetMediaType === sessionMediaType ||
+		(VIDEO_MEDIA_TYPES.has(presetMediaType) && VIDEO_MEDIA_TYPES.has(sessionMediaType))
+	);
+}
+
+/** The group a transcode preset is filed under: `movie` stands for Video (movie and TV), the rest are their own. */
+export function transcodeMediaGroup(mediaType: MediaType): MediaType {
+	return VIDEO_MEDIA_TYPES.has(mediaType) ? 'movie' : mediaType;
+}
