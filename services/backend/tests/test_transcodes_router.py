@@ -507,6 +507,36 @@ def test_log_zip_returns_zip(signing_key: bytes, tmp_path: Path, monkeypatch: py
     assert b"zipline" in zf.read("arm-transcode-zip000000001.log")
 
 
+def test_log_zip_reads_the_log_off_the_event_loop(
+    signing_key: bytes, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """/logs is often a network share: the blocking read runs in a worker
+    thread, where there is no running event loop, so one slow download can't
+    stall every other request."""
+    import asyncio
+
+    loop_running: list[bool] = []
+
+    def spy(path: Path) -> list[str]:
+        try:
+            asyncio.get_running_loop()
+            loop_running.append(True)
+        except RuntimeError:
+            loop_running.append(False)
+        return ["zipline\n"]
+
+    monkeypatch.setattr(tx_router, "LOG_DIR", tmp_path)
+    monkeypatch.setattr(tx_router, "file_log_slice", spy)
+    db = FakeSession()
+    db.rows["transcode_tasks"] = [_task("txt_zip000000002", status=TranscodeTaskStatus.DONE)]
+    _write_task_log(tmp_path, "txt_zip000000002", ["zipline"])
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as c:
+        r = c.get("/api/transcodes/txt_zip000000002/log.zip", headers=_auth(token))
+    assert r.status_code == 200, r.text
+    assert loop_running == [False]
+
+
 def test_log_zip_no_file_404(signing_key: bytes, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(tx_router, "LOG_DIR", tmp_path)
     db = FakeSession()

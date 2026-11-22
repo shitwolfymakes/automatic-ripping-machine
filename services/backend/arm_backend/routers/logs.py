@@ -51,8 +51,11 @@ def list_job_logs(_: User = Depends(require_jwt)) -> list[JobLogFileView]:
 # Declared before `/{job_id}` so FastAPI matches the `.zip` suffix first;
 # otherwise `/{job_id}` would consume `job_x.zip` as a job_id with `.zip`
 # in it and the zip route would be unreachable.
+# Plain `def`, like `list_job_logs`: reading the logs (every service log, on
+# the legacy fallback) is blocking I/O on what is often a network share, so
+# FastAPI runs this in its threadpool instead of stalling the event loop.
 @router.get("/{job_id}.zip")
-async def download_job_logs_zip(
+def download_job_logs_zip(
     job_id: JobIdParam,
     _: User = Depends(require_jwt),
 ) -> Response:
