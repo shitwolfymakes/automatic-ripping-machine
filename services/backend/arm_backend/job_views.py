@@ -18,7 +18,7 @@ from arm_common import (
     TrackStatus,
     TranscodeTaskStatus,
 )
-from arm_common.enums import TERMINAL_JOB_STATUSES
+from arm_common.enums import ACTIVE_TRANSCODE_TASK_STATUSES, TERMINAL_JOB_STATUSES
 from arm_common.models import TranscodeTask
 from arm_common.schemas import (
     DiscFingerprintView,
@@ -135,6 +135,7 @@ def _summarize_transcode_progress(
     tasks_total = len(tasks)
     tasks_done = sum(1 for t in tasks if t.status == TranscodeTaskStatus.DONE)
     tasks_failed = sum(1 for t in tasks if t.status == TranscodeTaskStatus.FAILED)
+    tasks_active = sum(1 for t in tasks if t.status in ACTIVE_TRANSCODE_TASK_STATUSES)
     percent = (sum(t.progress_pct for t in tasks) / tasks_total) if tasks_total else 100.0
 
     state: Literal["transcoding", "done", "done_partial", "failed"]
@@ -154,6 +155,7 @@ def _summarize_transcode_progress(
         tasks_done=tasks_done,
         tasks_failed=tasks_failed,
         percent=round(percent, 1),
+        tasks_active=tasks_active,
     )
 
 

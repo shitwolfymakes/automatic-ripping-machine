@@ -277,6 +277,14 @@ class TranscodeTaskStatus(StrEnum):
     FAILED = "failed"
 
 
+# A task that may hold a spawned transcoder or a GPU claim: queued (it can be
+# spawned and claim a GPU before its /claim) or in progress. A job with one
+# cannot be deleted (the cascade would pull the task out from under it).
+ACTIVE_TRANSCODE_TASK_STATUSES: frozenset[TranscodeTaskStatus] = frozenset(
+    {TranscodeTaskStatus.QUEUED, TranscodeTaskStatus.IN_PROGRESS}
+)
+
+
 class GpuVendor(StrEnum):
     VAAPI = "vaapi"
     NVENC = "nvenc"

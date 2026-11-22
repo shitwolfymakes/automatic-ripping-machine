@@ -320,8 +320,8 @@ export type BulkDeleteJobsRequest = {
  *
  * DELETE /api/jobs response. `deleted_ids` lists the jobs whose DB
  * rows were removed; `skipped_non_terminal` lists job IDs that were
- * refused because they were still in flight (caller should abandon
- * them first if they really want them gone).
+ * refused because they were still in flight: ripping (abandon them
+ * first) or transcoding (cancel their transcodes first).
  */
 export type BulkDeleteJobsResponse = {
     /**
@@ -5397,7 +5397,8 @@ export type TranscodePresetView = {
  * are terminal. `None` on `JobView` means no session was applied (the job
  * is `ripped`/awaiting action). Live per-task percent flows on the
  * `transcode.progress.{task_id}` WS topic; `percent` here is a poll-time
- * mean of the job's task `progress_pct`.
+ * mean of the job's task `progress_pct`. `tasks_active` counts the queued
+ * and in-progress tasks: while it is above 0 the job cannot be deleted.
  */
 export type TranscodeProgressSummary = {
     /**
@@ -5420,6 +5421,10 @@ export type TranscodeProgressSummary = {
      * Percent
      */
     percent: number;
+    /**
+     * Tasks Active
+     */
+    tasks_active?: number;
 };
 
 /**
