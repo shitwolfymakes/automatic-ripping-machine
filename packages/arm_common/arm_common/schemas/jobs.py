@@ -142,8 +142,8 @@ class BulkDeleteJobsRequest(BaseModel):
 class BulkDeleteJobsResponse(BaseModel):
     """DELETE /api/jobs response. `deleted_ids` lists the jobs whose DB
     rows were removed; `skipped_non_terminal` lists job IDs that were
-    refused because they were still in flight (caller should abandon
-    them first if they really want them gone)."""
+    refused because they were still in flight: ripping (abandon them
+    first) or transcoding (cancel their transcodes first)."""
 
     deleted_ids: list[str]
     skipped_non_terminal: list[str]
@@ -183,7 +183,8 @@ class TranscodeProgressSummary(BaseModel):
     are terminal. `None` on `JobView` means no session was applied (the job
     is `ripped`/awaiting action). Live per-task percent flows on the
     `transcode.progress.{task_id}` WS topic; `percent` here is a poll-time
-    mean of the job's task `progress_pct`.
+    mean of the job's task `progress_pct`. `tasks_active` counts the queued
+    and in-progress tasks: while it is above 0 the job cannot be deleted.
     """
 
     state: Literal["transcoding", "done", "done_partial", "failed"]
@@ -191,6 +192,7 @@ class TranscodeProgressSummary(BaseModel):
     tasks_done: int
     tasks_failed: int
     percent: float
+    tasks_active: int = 0
 
 
 class JobActions(BaseModel):
@@ -207,12 +209,14 @@ class JobActions(BaseModel):
     can_delete: bool
 
 
-def job_actions_for(status: JobStatus) -> JobActions:
+def job_actions_for(status: JobStatus, *, transcode_active: bool = False) -> JobActions:
+    """`transcode_active`: a queued or running transcode task, which a delete
+    would pull out from under its transcoder, so the delete is refused."""
     return JobActions(
         can_resolve=status in RESOLVABLE_JOB_STATUSES,
         can_apply=status in APPLY_OK_JOB_STATUSES or status in APPLY_PARK_JOB_STATUSES,
         can_abandon=status in NON_TERMINAL_JOB_STATUSES,
-        can_delete=status in TERMINAL_JOB_STATUSES,
+        can_delete=status in TERMINAL_JOB_STATUSES and not transcode_active,
     )
 
 
@@ -263,7 +267,8 @@ class JobView(BaseModel):
     @computed_field  # type: ignore[prop-decorator]
     @property
     def actions(self) -> JobActions:
-        return job_actions_for(self.status)
+        progress = self.transcode_progress
+        return job_actions_for(self.status, transcode_active=progress is not None and progress.tasks_active > 0)
 
     @computed_field  # type: ignore[prop-decorator]
     @property

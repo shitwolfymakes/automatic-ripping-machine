@@ -15,6 +15,7 @@ def test_transcode_progress_summary_shape() -> None:
         "tasks_done": 2,
         "tasks_failed": 0,
         "percent": 100.0,
+        "tasks_active": 0,
     }
 
 
@@ -75,6 +76,20 @@ def test_running_session_is_transcoding() -> None:
     assert s.percent == 70.0
 
 
+def test_tasks_active_counts_queued_and_in_progress_tasks() -> None:
+    """The count the job's Delete action is gated on."""
+    sa = _sa("sap_1", SessionApplicationStatus.RUNNING)
+    tasks = [
+        _task("txt_1", "sap_1", TranscodeTaskStatus.DONE, 100),
+        _task("txt_2", "sap_1", TranscodeTaskStatus.IN_PROGRESS, 40),
+        _task("txt_3", "sap_1", TranscodeTaskStatus.QUEUED, 0),
+        _task("txt_4", "sap_1", TranscodeTaskStatus.FAILED, 0),
+    ]
+    s = _summarize_transcode_progress([sa], tasks)
+    assert s is not None
+    assert s.tasks_active == 2
+
+
 def test_all_done_is_done() -> None:
     sa = _sa("sap_1", SessionApplicationStatus.DONE)
     tasks = [
@@ -85,6 +100,7 @@ def test_all_done_is_done() -> None:
     assert s is not None
     assert s.state == "done"
     assert s.tasks_done == 2 and s.tasks_total == 2 and s.percent == 100.0
+    assert s.tasks_active == 0
 
 
 def test_done_partial_is_done_partial() -> None:
