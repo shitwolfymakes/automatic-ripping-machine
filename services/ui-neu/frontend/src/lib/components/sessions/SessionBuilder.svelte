@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { errorMessage } from '$lib/utils/errors';
 	import type { MediaType, SessionView, RipPresetView, TranscodePresetView } from '$lib/types/api.gen';
+	import { transcodePresetFits } from '$lib/sessions/sessions';
 	import type { JoinedSession } from '../../stores/sessions-data.svelte';
 	import { createSession, updateSession } from '$lib/api/sessions';
 	import type { EditorStatus } from '$lib/ui/editor-status';
@@ -66,7 +67,8 @@
 
 	// Derived options filtered by media type
 	let ripOptions = $derived(ripPresets.filter((p) => p.media_type === mediaType));
-	let tcOptions = $derived(transcodePresets.filter((p) => p.media_type === mediaType));
+	// A movie or TV transcode preset fits a session of either.
+	let tcOptions = $derived(transcodePresets.filter((p) => transcodePresetFits(p.media_type, mediaType)));
 
 	// Apply preselect when parent sets them (after inline-create)
 	$effect(() => {
