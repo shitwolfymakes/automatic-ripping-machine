@@ -165,3 +165,18 @@ it('groups movie and TV transcode presets under one Video chip', async () => {
 	expect(screen.getByText('Plex TV 1080p')).toBeInTheDocument();
 	expect(screen.queryByText('FLAC')).not.toBeInTheDocument();
 });
+it('keeps separate filters for rip and transcode presets, and keeps them across a remount', async () => {
+	const first = renderComponent(PresetLibrary, defaultProps({ kind: 'rip' }));
+	await fireEvent.input(screen.getByPlaceholderText(/search/i), { target: { value: 'TV' } });
+	expect(screen.queryByText('Movie Rip')).not.toBeInTheDocument();
+	first.unmount();
+
+	const second = renderComponent(PresetLibrary, defaultProps({ kind: 'transcode' }));
+	expect(screen.getByPlaceholderText(/search/i)).toHaveValue('');
+	expect(screen.getByText('H.265 MKV')).toBeInTheDocument();
+	second.unmount();
+
+	renderComponent(PresetLibrary, defaultProps({ kind: 'rip' }));
+	expect(screen.getByPlaceholderText(/search/i)).toHaveValue('TV');
+	expect(screen.queryByText('Movie Rip')).not.toBeInTheDocument();
+});

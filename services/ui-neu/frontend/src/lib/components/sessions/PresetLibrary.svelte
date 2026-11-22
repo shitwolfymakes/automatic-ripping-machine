@@ -1,11 +1,12 @@
 <script lang="ts">
-	import type { RipPresetView, TranscodePresetView, MediaType } from '$lib/types/api.gen';
+	import type { RipPresetView, TranscodePresetView } from '$lib/types/api.gen';
 	import DataTable from '$lib/components/shared/DataTable.svelte';
 	import { deleteGuard, openLabel, ripPresetColumns, transcodePresetColumns } from '../../sessions/table-columns';
 	import { encodersStore } from '$lib/stores/encoders.svelte';
 	import { onMount } from 'svelte';
 	import MediaTypeChips from './MediaTypeChips.svelte';
 	import { matchesFilters, type SourceFilter } from '../../sessions/list-filters';
+	import { listFilters } from '$lib/stores/session-list-filters.svelte';
 	import { countByMediaType, transcodeMediaGroup } from '$lib/sessions/sessions';
 
 	interface Props {
@@ -42,16 +43,16 @@
 		ondelete
 	}: Props = $props();
 
-	// ── Media-type filter ─────────────────────────────────────────────────────
+	// ── Filters ──────────────────────────────────────────────────────────────
 
-	let typeFilter = $state<MediaType | 'all'>('all');
-	let search = $state('');
-	let sourceFilter = $state<SourceFilter>('all');
+	// Rip and transcode presets each keep their own filters in a shared store,
+	// so they survive a switch to the other kind or tab and back.
+	const filters = $derived(listFilters(kind));
 
 	function matches(p: RipPresetView | TranscodePresetView): boolean {
 		// Transcode presets are filed by group: movie and TV both count as Video (`movie`).
 		const item = kind === 'transcode' ? { ...p, media_type: transcodeMediaGroup(p.media_type) } : p;
-		return matchesFilters(item, { type: typeFilter, source: sourceFilter, search });
+		return matchesFilters(item, filters);
 	}
 
 	/** The preset's usage count, from the active kind's usage function. */
@@ -115,9 +116,9 @@
 				placeholder="Search {noun} by name..."
 				aria-label="Search {noun}"
 				class="field-control preset-library-search"
-				value={search}
+				value={filters.search}
 				oninput={(e) => {
-					search = (e.currentTarget as HTMLInputElement).value;
+					filters.search = (e.currentTarget as HTMLInputElement).value;
 				}}
 			/>
 
@@ -126,9 +127,9 @@
 			<select
 				aria-label="Filter by source"
 				class="field-control preset-library-source"
-				value={sourceFilter}
+				value={filters.source}
 				onchange={(e) => {
-					sourceFilter = (e.currentTarget as HTMLSelectElement).value as typeof sourceFilter;
+					filters.source = (e.currentTarget as HTMLSelectElement).value as SourceFilter;
 				}}
 			>
 				<option value="all">All sources</option>
@@ -142,7 +143,7 @@
 		<!-- Bottom row: TYPE chips + New preset -->
 		<div class="cluster">
 			<span class="eyebrow">Type</span>
-			<MediaTypeChips counts={presetTypeCounts} bind:selected={typeFilter} videoGroup={kind === 'transcode'} />
+			<MediaTypeChips counts={presetTypeCounts} bind:selected={filters.type} videoGroup={kind === 'transcode'} />
 
 			<button
 				type="button"
