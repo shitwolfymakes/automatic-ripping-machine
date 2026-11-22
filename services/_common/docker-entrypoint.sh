@@ -222,6 +222,30 @@ precreate_optical_nodes() {  # <dev_dir> <sr_max> <sg_max> <group>
     echo "optical nodes: created ${created} (sr0..sr${sr_max}, sg0..sg${sg_max}) in ${dev_dir}"
 }
 
+# The service's TLS key (TLS_KEY_PATH; the backend's) is a file bind mount the
+# installer wrote 0440 with the installing user's group. With PUID/PGID set to
+# another user, as the docs suggest for matching a media server, the dropped
+# arm user cannot read it and the service crash-loops. Root can, so hand arm a
+# private copy before the drop, as the db container does for postgres. A key
+# arm can already read is used as mounted. Defined above the SOURCE_ONLY seam so
+# test-entrypoint-tls.sh can exercise it unprivileged.
+TLS_KEY_COPY_DIR="${TLS_KEY_COPY_DIR:-/run/arm-tls}"
+TLS_KEY_OWNER="${TLS_KEY_OWNER:-arm:arm}"
+private_tls_key() {
+    local key="${TLS_KEY_PATH:-}"
+    [[ -n "${key}" && -f "${key}" ]] || return 0
+    "${READ_TEST[@]}" "${key}" && return 0
+    local copy="${TLS_KEY_COPY_DIR}/tls.key"
+    if install -d -o "${TLS_KEY_OWNER%%:*}" -g "${TLS_KEY_OWNER##*:}" -m 0700 "${TLS_KEY_COPY_DIR}" 2>/dev/null \
+        && install -o "${TLS_KEY_OWNER%%:*}" -g "${TLS_KEY_OWNER##*:}" -m 0400 "${key}" "${copy}" 2>/dev/null; then
+        echo "TLS key ${key} is not readable by PUID:PGID=${PUID}:${PGID} (its group is the installer's); using a private copy" >&2
+        TLS_KEY_PATH="${copy}"
+        export TLS_KEY_PATH
+    else
+        echo "WARN: TLS key ${key} is not readable by PUID:PGID=${PUID}:${PGID} and could not be copied to ${TLS_KEY_COPY_DIR}" >&2
+    fi
+}
+
 # Test seam: lets services/_common/test-entrypoint-render.sh source the
 # functions above without executing the entrypoint (mirrors install.sh's
 # ARM_INSTALL_SOURCE_ONLY). The sourced-ness check makes a leaked env var
@@ -310,6 +334,8 @@ if [[ -x /usr/local/bin/update_key.sh ]] && command -v makemkvcon >/dev/null 2>&
     [[ -d /home/arm/.MakeMKV ]] || install -d -o arm -g arm /home/arm/.MakeMKV
     chown arm:arm /home/arm /home/arm/.MakeMKV 2>/dev/null || true
 fi
+
+private_tls_key
 
 umask 002
 # gosu switches UID but preserves the inherited environment — including
