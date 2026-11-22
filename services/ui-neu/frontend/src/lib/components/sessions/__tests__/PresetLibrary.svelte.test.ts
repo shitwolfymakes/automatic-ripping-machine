@@ -160,7 +160,7 @@ it('groups movie and TV transcode presets under one Video chip', async () => {
 		})
 	);
 	expect(screen.queryByRole('button', { name: /^TV/ })).not.toBeInTheDocument();
-	await fireEvent.click(screen.getByRole('button', { name: /^Video 2/ }));
+	await fireEvent.click(screen.getByRole('button', { name: /^Video 2$/ }));
 	expect(screen.getByText('Plex 1080p')).toBeInTheDocument();
 	expect(screen.getByText('Plex TV 1080p')).toBeInTheDocument();
 	expect(screen.queryByText('FLAC')).not.toBeInTheDocument();
