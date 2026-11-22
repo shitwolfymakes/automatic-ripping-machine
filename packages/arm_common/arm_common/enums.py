@@ -204,6 +204,19 @@ class MediaType(StrEnum):
     ISO = "iso"
 
 
+# Encoding settings do not depend on whether a video is a film or an episode,
+# so a movie and a TV transcode preset are interchangeable.
+VIDEO_MEDIA_TYPES: frozenset[MediaType] = frozenset({MediaType.MOVIE, MediaType.TV})
+
+
+def transcode_preset_media_types(session_media_type: MediaType) -> frozenset[MediaType]:
+    """The transcode preset media types that fit a session of this media type: both video types for a movie or TV
+    session, else its own."""
+    if session_media_type in VIDEO_MEDIA_TYPES:
+        return VIDEO_MEDIA_TYPES
+    return frozenset({session_media_type})
+
+
 class TrackSelection(StrEnum):
     MAIN_FEATURE = "main_feature"
     ALL_TRACKS = "all_tracks"

@@ -226,3 +226,23 @@ def test_unhashable_selector_is_only_a_type_issue(hb_schema):
 def test_unhashable_track_encoder_is_only_a_type_issue(hb_schema):
     item = {"AudioEncoder": [], "AudioMixdown": "x"}
     assert check(hb_schema, {"AudioList": [item]}) == [("AudioList[0].AudioEncoder", "wrong_type")]
+
+
+def test_every_common_key_is_type_checked(hb_schema, wrong_for_type):
+    common_keys = [k for k in hb_schema.keys if k not in ARM_OWNED_KEYS and k not in ENCODER_SPECIFIC_KEYS]
+    missed = [
+        key
+        for key in common_keys
+        if (key, "wrong_type") not in check(hb_schema, {key: wrong_for_type[hb_schema.keys[key].type]})
+    ]
+    assert missed == []
+
+
+def test_every_audio_item_key_is_type_checked(hb_schema, wrong_for_type):
+    missed = [
+        key
+        for key, spec in hb_schema.audio_item_keys.items()
+        if (f"AudioList[0].{key}", "wrong_type")
+        not in check(hb_schema, {"AudioList": [{key: wrong_for_type[spec.type]}]})
+    ]
+    assert missed == []

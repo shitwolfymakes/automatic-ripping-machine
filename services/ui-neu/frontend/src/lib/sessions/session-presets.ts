@@ -38,6 +38,7 @@ export function transcodePresetCopy(p: TranscodePresetView): TranscodePresetCrea
 		media_type: p.media_type,
 		tool: p.tool,
 		preset_ref: p.preset_ref ?? null,
+		handbrake_settings: p.handbrake_settings ?? null,
 		container: p.container,
 		encoder: p.encoder,
 		extra_args: p.extra_args ?? null

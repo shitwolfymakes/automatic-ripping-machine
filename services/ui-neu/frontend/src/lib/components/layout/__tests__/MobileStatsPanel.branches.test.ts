@@ -3,8 +3,11 @@ import type { Writable } from 'svelte/store';
 import { renderComponent, screen, fireEvent, cleanup } from '$lib/testing/render';
 
 // Branch pins for MobileStatsPanel, beside MobileStatsPanel.test.ts. Every
-// branch of the component is reachable from the rendered panel, so nothing
-// here is left unpinned.
+// branch of the component's own code is covered. The coverage tool still
+// reports five open arms that are Svelte's: each text `{...}` below compiles to
+// `(...) ?? ''`, and none of these values is null where it renders. A service
+// row's label, the ripping and transcoding counts (numbers), and the queued and
+// notification counts (each inside an #if that needs it above 0).
 
 // vi.mock factories are hoisted: all values must be inline (no top-level vars).
 vi.mock('$lib/stores/dashboard', async () => {
@@ -146,7 +149,8 @@ describe('MobileStatsPanel activity', () => {
 		['no drives', { drives_online: 0 }, /^0 drives$/],
 		['two drives', { drives_online: 2 }, /^2 drives$/],
 		['the database down', { db_available: false, drives_online: 2 }, /^-- drives$/],
-		['the database down with one drive', { db_available: false, drives_online: 1 }, /^-- drive$/]
+		['the database down with one drive', { db_available: false, drives_online: 1 }, /^-- drive$/],
+		['an unknown drive count', { drives_online: undefined }, /^drives$/]
 	])('shows the drive count for %s', (_name, overrides, text) => {
 		setDashboard(overrides);
 		renderComponent(MobileStatsPanel);
