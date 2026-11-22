@@ -12,6 +12,10 @@ import jwt
 
 ACCESS_TOKEN_TTL = timedelta(days=7)
 ALGORITHM = "HS256"
+# How far `iat` may be ahead of, or `exp` behind, the verifier's clock. A host
+# clock that steps back a moment (WSL2 and VM time sync do), or a verifier a
+# little behind the issuer, must not turn a fresh token into "not yet valid".
+CLOCK_SKEW_LEEWAY = timedelta(seconds=5)
 
 
 def issue_access_token(user_id: str, username: str, signing_key: bytes) -> tuple[str, datetime]:
@@ -29,4 +33,4 @@ def issue_access_token(user_id: str, username: str, signing_key: bytes) -> tuple
 
 def verify_access_token(token: str, signing_key: bytes) -> dict[str, Any]:
     """Returns the decoded payload. Raises `jwt.InvalidTokenError` (or subclass) on failure."""
-    return jwt.decode(token, signing_key, algorithms=[ALGORITHM])
+    return jwt.decode(token, signing_key, algorithms=[ALGORITHM], leeway=CLOCK_SKEW_LEEWAY)
