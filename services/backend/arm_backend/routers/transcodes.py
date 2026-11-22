@@ -40,6 +40,16 @@ def _transcode_log_path(task_id: str) -> Path:
     return LOG_DIR / f"arm-transcode-{task_id[-12:]}.log"
 
 
+def _zip_transcode_log(path: Path) -> bytes | None:
+    """The task's log as an in-memory zip of one entry, or None when there is no log file. Blocking."""
+    if not path.is_file():
+        return None
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr(path.name, "".join(file_log_slice(path)))
+    return buf.getvalue()
+
+
 async def _require_task(db: AsyncSession, task_id: str) -> TranscodeTask:
     row = (await db.execute(select(TranscodeTask).where(col(TranscodeTask.id) == task_id))).scalar_one_or_none()
     if row is None:
@@ -162,14 +172,11 @@ async def download_transcode_log_zip(
     db: AsyncSession = Depends(get_session),
 ) -> Response:
     await _require_task(db, task_id)
-    path = _transcode_log_path(task_id)
-    if not path.is_file():
+    # /logs is often a network share: the stat, the read and the zip run in a
+    # worker thread so a slow share never stalls the event loop.
+    body = await asyncio.to_thread(_zip_transcode_log, _transcode_log_path(task_id))
+    if body is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"no transcoder log for task {task_id}")
-    lines = file_log_slice(path)
-    buf = io.BytesIO()
-    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
-        zf.writestr(path.name, "".join(lines))
-    body = buf.getvalue()
     return Response(
         content=body,
         media_type="application/zip",
