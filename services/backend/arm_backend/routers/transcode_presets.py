@@ -13,6 +13,7 @@ from arm_backend.db import get_session
 from arm_backend.handbrake_schema_store import SchemaStore, get_schema_store
 from arm_backend.preset_views import normalise_settings, preset_view
 from arm_common import ContainerFormat, Gpu, MediaType, Session, TranscodePreset, TranscodeTool, User
+from arm_common.enums import transcode_preset_media_types
 from arm_common.encoders import encoder_allowed_for_tool, encoder_supports_container, get_encoder
 from arm_common.handbrake_schema.importer import ExportNotRecognised, import_export
 from arm_common.handbrake_schema.types import HandbrakeSchema
@@ -128,7 +129,8 @@ async def list_transcode_presets(
 ) -> list[TranscodePresetView]:
     stmt = select(TranscodePreset).order_by(col(TranscodePreset.name).asc())
     if media_type is not None:
-        stmt = stmt.where(col(TranscodePreset.media_type) == media_type)
+        # The presets that fit a session of that media type (movie and TV presets fit either).
+        stmt = stmt.where(col(TranscodePreset.media_type).in_(sorted(transcode_preset_media_types(media_type))))
     result = await db.execute(stmt)
     gpus = await _load_gpus(db)
     schema = store.current()
