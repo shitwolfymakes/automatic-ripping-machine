@@ -111,8 +111,8 @@ describe('DrivesSettings', () => {
 		});
 		const panel = screen.getByTestId('drive-scanning');
 		expect(panel).toHaveTextContent('Scanning');
-		expect(screen.getByLabelText(/Drive scan interval/)).toHaveValue(30);
-		expect(screen.getByLabelText(/Forget unseen drives/)).toHaveValue(7);
+		expect(screen.getByRole('spinbutton', { name: /Drive scan interval/ })).toHaveValue(30);
+		expect(screen.getByRole('spinbutton', { name: /Forget unseen drives/ })).toHaveValue(7);
 	});
 
 	it('saves an edited scanner tunable and reports it to onsaved', async () => {
@@ -122,7 +122,7 @@ describe('DrivesSettings', () => {
 			onsaved,
 			settings: settingsData({ config: { drive_scan_interval_seconds: 30, drive_detected_prune_days: 7 } as never })
 		});
-		await fireEvent.input(screen.getByLabelText(/Drive scan interval/), { target: { value: '60' } });
+		await fireEvent.input(screen.getByRole('spinbutton', { name: /Drive scan interval/ }), { target: { value: '60' } });
 		await fireEvent.click(screen.getByRole('button', { name: 'Save' }));
 		await waitFor(() => expect(saveArmConfig).toHaveBeenCalledWith({ drive_scan_interval_seconds: 60 }));
 		expect(onsaved).toHaveBeenCalledWith({ drive_scan_interval_seconds: 60 });
