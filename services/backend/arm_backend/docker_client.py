@@ -31,6 +31,20 @@ logger = logging.getLogger(__name__)
 # the remote end has silently closed the connection).
 _TRANSPORT_DEAD_ERRORS = (SSHException, ConnectionResetError, BrokenPipeError, EOFError)
 
+# The first call after the remote end kills the session fails before any of
+# those: paramiko's closed channel raises a plain OSError with this message,
+# under urllib3's ProtocolError and requests' ConnectionError. Matched by the
+# exact message so a real network error (ENETUNREACH and the like) still
+# reads as an unreachable host instead of a transport to rebuild.
+_CLOSED_CHANNEL_MESSAGE = "Socket is closed"
+
+
+def _is_dead_transport_error(exc: BaseException) -> bool:
+    if isinstance(exc, _TRANSPORT_DEAD_ERRORS):
+        return True
+    return type(exc) is OSError and exc.args == (_CLOSED_CHANNEL_MESSAGE,)
+
+
 # After a failed rebuild, calls that meet the dead transport fail with that
 # rebuild's error for this long instead of starting another SSH handshake
 # each (a black-holed host stalls every handshake for docker-py's timeout).
@@ -46,15 +60,16 @@ RETIRED_CLIENT_CLOSE_DELAY_SECONDS = 300.0
 
 def is_transport_death(exc: BaseException) -> bool:
     """A dead docker-over-SSH transport surfaces either as a raw paramiko
-    SSHException or wrapped inside docker's APIError cause chain (docker-py
-    wraps the underlying requests/urllib3 error, whose root cause is
-    paramiko's SSHException). Walk __cause__/__context__ to find it.
+    error or wrapped inside docker's APIError cause chain (docker-py wraps
+    the underlying requests/urllib3 error, whose root cause is paramiko's
+    SSHException, or its closed-channel OSError on the first call after a
+    reset). Walk __cause__/__context__ to find it.
     """
     seen: set[int] = set()
     cur: BaseException | None = exc
     while cur is not None and id(cur) not in seen:
         seen.add(id(cur))
-        if isinstance(cur, _TRANSPORT_DEAD_ERRORS):
+        if _is_dead_transport_error(cur):
             return True
         cur = cur.__cause__ or cur.__context__
     return False
