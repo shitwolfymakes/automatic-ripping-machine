@@ -252,7 +252,8 @@ def test_list_drives() -> None:
 
 def test_patch_session_transcode_media_mismatch_400() -> None:
     """Patch only transcode_preset_id (rip_preset_id absent → 139->146) with a
-    mismatched-media transcode preset → 400 (line 152)."""
+    mismatched-media transcode preset → 400 (line 152). A TV preset fits a
+    movie session, so the mismatch is a music one."""
     db = FakeSession()
     db.rows["users"] = [User(id="u1", username="admin", password_hash="x", password_must_change=False)]
     db.rows["sessions"] = [
@@ -269,11 +270,11 @@ def test_patch_session_transcode_media_mismatch_400() -> None:
     db.rows["transcode_presets"] = [
         TranscodePreset(
             id="tpr_tv",
-            name="tv preset",
-            media_type=MediaType.TV,
+            name="music preset",
+            media_type=MediaType.MUSIC,
             is_builtin=True,
-            tool=TranscodeTool.HANDBRAKE,
-            container=ContainerFormat.MKV,
+            tool=TranscodeTool.ABCDE,
+            container=ContainerFormat.FLAC,
         )
     ]
     app = _app(db, sessions_router)
@@ -285,4 +286,4 @@ def test_patch_session_transcode_media_mismatch_400() -> None:
             headers={"Authorization": f"Bearer {token}"},
         )
     assert r.status_code == 400
-    assert "transcode_preset.media_type=tv" in r.json()["detail"]
+    assert "transcode_preset.media_type=music" in r.json()["detail"]

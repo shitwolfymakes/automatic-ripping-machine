@@ -9,12 +9,15 @@
 
 	interface Props {
 		mediaType: MediaType;
+		/** Text in place of the type's own name; the colour still follows mediaType. */
+		label?: string;
 	}
-	let { mediaType }: Props = $props();
+	let { mediaType, label }: Props = $props();
+	const text = $derived(label ?? humanizeMediaType(mediaType));
 </script>
 
-<span class="badge badge-sm media-pill" data-media={mediaType} title={humanizeMediaType(mediaType)}>
-	{humanizeMediaType(mediaType)}
+<span class="badge badge-sm media-pill" data-media={mediaType} title={text}>
+	{text}
 </span>
 
 <style>

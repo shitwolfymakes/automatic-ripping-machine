@@ -119,7 +119,7 @@ describe('transcodePresetColumns', () => {
 		);
 		expect(c).toEqual({
 			name: { text: 'H.265 MKV' },
-			media: { text: 'Movie', pill: { tone: 'movie' } },
+			media: { text: 'Video', pill: { tone: 'movie' } },
 			type: { text: 'Custom', pill: { tone: 'custom' } },
 			tool: { text: 'HandBrake' },
 			container: { text: 'MKV' },
@@ -175,6 +175,15 @@ describe('Media and Type pills', () => {
 			text: 'Music',
 			pill: { tone: 'music' }
 		});
+	});
+
+	it('labels a movie or TV transcode preset Video, since it fits sessions of either', () => {
+		for (const media_type of ['movie', 'tv'] as const) {
+			expect(transcodePresetColumns({})[1].cell(transcode({ media_type }))).toEqual({
+				text: 'Video',
+				pill: { tone: 'movie' }
+			});
+		}
 	});
 
 	it('tag the Type column Custom or Built-in, in both tables', () => {
