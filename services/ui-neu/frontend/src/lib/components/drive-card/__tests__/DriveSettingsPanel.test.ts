@@ -22,36 +22,12 @@ const SESSIONS = [
 
 const FIELDS = [
 	{
-		label: /Pre-scan Cache/,
-		key: 'prescan_cache_mb',
-		min: 1,
-		max: 1024,
-		unit: '(MB)',
-		tooltip: 'Community recommends 64-128 for scratched or damaged discs'
-	},
-	{
 		label: /Pre-scan Timeout/,
 		key: 'prescan_timeout',
 		min: 30,
 		max: 3600,
 		unit: '(s)',
 		tooltip: 'Community recommends 600 for slow or damaged DVD/BD media'
-	},
-	{
-		label: /Pre-scan Retries/,
-		key: 'prescan_retries',
-		min: 1,
-		max: 10,
-		unit: null,
-		tooltip: 'Community recommends 3-5 retries for problematic drives'
-	},
-	{
-		label: /Enum Timeout/,
-		key: 'disc_enum_timeout',
-		min: 10,
-		max: 600,
-		unit: '(s)',
-		tooltip: 'Community recommends 120 for drives that are slow to spin up'
 	}
 ] as const;
 
@@ -310,18 +286,18 @@ describe('DriveSettingsPanel prescan fields', () => {
 	});
 
 	it('uses the global defaults as placeholders', () => {
-		renderPanel({}, { globalDefaults: { prescan_cache_mb: 64, prescan_timeout: 600 } });
-		expect(FIELDS.map((f) => input(f.label).placeholder)).toEqual(['64', '600', '', '']);
+		renderPanel({}, { globalDefaults: { prescan_timeout: 600 } });
+		expect(FIELDS.map((f) => input(f.label).placeholder)).toEqual(['600']);
 	});
 
 	it('has blank placeholders when no global defaults are set', () => {
 		renderPanel();
-		expect(FIELDS.map((f) => input(f.label).placeholder)).toEqual(['', '', '', '']);
+		expect(FIELDS.map((f) => input(f.label).placeholder)).toEqual(['']);
 	});
 
 	it('fills each input from the drive', async () => {
-		await renderSyncedPanel({ prescan_cache_mb: 64, prescan_timeout: 600, prescan_retries: 3, disc_enum_timeout: 120 });
-		expect(FIELDS.map((f) => input(f.label).value)).toEqual(['64', '600', '3', '120']);
+		await renderSyncedPanel({ prescan_timeout: 600 });
+		expect(FIELDS.map((f) => input(f.label).value)).toEqual(['600']);
 	});
 
 	describe.each(FIELDS)('$key', (f) => {
@@ -406,20 +382,20 @@ describe('DriveSettingsPanel prescan fields', () => {
 
 describe('DriveSettingsPanel sync', () => {
 	it('follows a drive update while closed', async () => {
-		const { rerender } = renderPanel({ rip_speed: 4, prescan_cache_mb: 64 }, { open: false });
-		await rerender({ drive: createDrive({ rip_speed: 8, prescan_cache_mb: 128 }) });
+		const { rerender } = renderPanel({ rip_speed: 4, prescan_timeout: 600 }, { open: false });
+		await rerender({ drive: createDrive({ rip_speed: 8, prescan_timeout: 900 }) });
 		await rerender({ open: true });
 		expect(input(/Rip Speed/).value).toBe('8');
-		expect(input(/Pre-scan Cache/).value).toBe('128');
+		expect(input(/Pre-scan Timeout/).value).toBe('900');
 	});
 
 	it('keeps typed text when the drive updates while open', async () => {
-		const { rerender } = renderPanel({ rip_speed: 4, prescan_cache_mb: 64 });
+		const { rerender } = renderPanel({ rip_speed: 4, prescan_timeout: 600 });
 		await typeInto(input(/Rip Speed/), '9');
-		await typeInto(input(/Pre-scan Cache/), '77');
-		await rerender({ drive: createDrive({ rip_speed: 8, prescan_cache_mb: 128 }) });
+		await typeInto(input(/Pre-scan Timeout/), '777');
+		await rerender({ drive: createDrive({ rip_speed: 8, prescan_timeout: 900 }) });
 		expect(input(/Rip Speed/).value).toBe('9');
-		expect(input(/Pre-scan Cache/).value).toBe('77');
+		expect(input(/Pre-scan Timeout/).value).toBe('777');
 	});
 });
 
@@ -431,7 +407,7 @@ describe('DriveSettingsPanel onupdate', () => {
 		await waitFor(() => expect(onupdate).toHaveBeenCalledTimes(1));
 		await typeAndBlur(input(/Rip Speed/), '8');
 		await waitFor(() => expect(onupdate).toHaveBeenCalledTimes(2));
-		await typeAndBlur(input(/Enum Timeout/), '20');
+		await typeAndBlur(input(/Pre-scan Timeout/), '120');
 		await waitFor(() => expect(onupdate).toHaveBeenCalledTimes(3));
 	});
 
@@ -439,7 +415,7 @@ describe('DriveSettingsPanel onupdate', () => {
 		renderPanel();
 		await fireEvent.change(sessionSelect(), { target: { value: 'ses_1' } });
 		await typeAndBlur(input(/Rip Speed/), '8');
-		await typeAndBlur(input(/Enum Timeout/), '20');
+		await typeAndBlur(input(/Pre-scan Timeout/), '120');
 		await waitFor(() => expect(updateDriveMock).toHaveBeenCalledTimes(3));
 	});
 });
