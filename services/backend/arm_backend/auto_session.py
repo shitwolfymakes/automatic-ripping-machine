@@ -427,26 +427,6 @@ async def _apply_session_internal(
 
     tracks = await job_tracks(db, job)
 
-    # A FOLDER (disc backup) session files the backup folder. On a job that was
-    # ripped as titles its template would file a title's .mkv as an
-    # extension-less "Title (Year)" file, so it is a mismatch, not a fan-out.
-    # Only once ripped: before the rip there is no backup track to look for yet.
-    if _missing_backup_track(rip_preset, job, tracks):
-        logger.warning(
-            "apply: backup session on a job without a backup track session_id=%s job_id=%s source=%s",
-            sess.id,
-            job.id,
-            source,
-        )
-        return ApplySessionOutcome(
-            application=None,
-            tasks=[],
-            collisions=[],
-            idempotent=False,
-            skipped_reason="media_mismatch",
-            error_detail=_NO_BACKUP_TRACK_DETAIL,
-        )
-
     outcome = await fan_out_tasks_for_application(
         db,
         application=None,
@@ -595,6 +575,46 @@ def _media_mismatch_outcome(
             error_detail=media_mismatch_detail(job, sess),
         )
     return None
+
+
+async def _no_backup_track_outcome(
+    db: AsyncSession,
+    application: SessionApplication | None,
+    job: Job,
+    sess: Session,
+    tracks: list[Track],
+    source: ApplySource,
+) -> ApplySessionOutcome | None:
+    """The media_mismatch skip for a FOLDER (disc backup) session on a ripped
+    job with no usable backup track, else None.
+
+    The session files the backup folder; on a job ripped as titles its
+    template would file a title's .mkv as an extension-less "Title (Year)"
+    file. Checked here in the shared fan-out, so a session parked before the
+    rip (resolve fan-out, rip-complete drain, redrain) is refused like a
+    direct apply. Only once ripped: before the rip there is no backup track
+    to look for yet. Like a media mismatch it is a hard stop: a passed-in
+    parked application is returned untouched.
+    """
+    rip_preset = (
+        await db.execute(select(RipPreset).where(col(RipPreset.id) == sess.rip_preset_id))
+    ).scalar_one_or_none()
+    if rip_preset is None or not _missing_backup_track(rip_preset, job, tracks):
+        return None
+    logger.warning(
+        "apply: backup session on a job without a backup track session_id=%s job_id=%s source=%s",
+        sess.id,
+        job.id,
+        source,
+    )
+    return ApplySessionOutcome(
+        application=application,
+        tasks=[],
+        collisions=[],
+        idempotent=False,
+        skipped_reason="media_mismatch",
+        error_detail=_NO_BACKUP_TRACK_DETAIL,
+    )
 
 
 async def _park_before_rip(
@@ -747,6 +767,8 @@ async def fan_out_tasks_for_application(
     """
     if (mismatch := _media_mismatch_outcome(application, job, sess, source)) is not None:
         return mismatch
+    if (no_backup := await _no_backup_track_outcome(db, application, job, sess, tracks, source)) is not None:
+        return no_backup
 
     # Park-for-later is keyed on RIP STATE, not on whether Track rows exist.
     # A pre-rip job can already carry Track rows: identify's hold_for_review
