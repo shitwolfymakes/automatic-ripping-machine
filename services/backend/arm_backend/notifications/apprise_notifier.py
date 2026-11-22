@@ -42,9 +42,9 @@ class AppriseNotifier(Protocol):
 
 
 class AppriseDeliveryError(RuntimeError):
-    """Apprise reported failure. apprise signals by RETURN VALUE (False on
-    delivery failure, None on an empty/unparseable URL bag) and swallows
-    exceptions internally — this converts that into the exception the
+    """Apprise reported failure. apprise signals by RETURN VALUE (a falsy
+    AppriseResult on failure, partial delivery, timeout or an empty URL bag)
+    and swallows exceptions internally — this converts that into the exception the
     listeners' ok/last_error bookkeeping expects; without it a failed send
     is indistinguishable from success."""
 
@@ -78,6 +78,8 @@ class RealAppriseNotifier:
                 raise AppriseDeliveryError(f"apprise rejected url {redact_apprise_url(url)}")
         # apprise's async_notify fans out URLs internally; one call covers
         # every configured destination for this event.
+        # An AppriseResult: truthy only on SUCCESS; its repr carries the status
+        # (FAILURE, NOMATCH, PARTIAL, TIMEOUT).
         result = await ap.async_notify(title=title, body=body)
-        if result is not True:
+        if not result:
             raise AppriseDeliveryError(f"apprise delivery failed (result={result!r})")
