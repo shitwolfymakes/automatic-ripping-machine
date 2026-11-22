@@ -8272,6 +8272,8 @@ export type ListTranscodePresetsApiTranscodePresetsGetData = {
     query?: {
         /**
          * Media Type
+         *
+         * Only the presets that fit a session of this media type: a movie or TV preset fits either, every other type only its own.
          */
         media_type?: MediaType | null;
     };
