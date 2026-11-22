@@ -11,7 +11,8 @@
 		orderForDelete,
 		bulkResultFeedback,
 		cleanupFeedback,
-		fixedPermissionsMessage
+		fixedPermissionsMessage,
+		parentFolderLabel
 	} from '$lib/utils/files';
 	import { cleanupTranscoder } from '$lib/api/maintenance';
 	import BreadcrumbNav from '$lib/components/BreadcrumbNav.svelte';
@@ -37,6 +38,10 @@
 
 	// New folder
 	let creatingFolder = $state(false);
+	// The up row names where it leads; at the top of a root that is the root itself.
+	let currentRootLabel = $derived(
+		browser.roots.find((r) => r.key === browser.current.root)?.label ?? browser.current.root
+	);
 	let newFolderName = $state('');
 
 	// Orphan folders modal
@@ -319,10 +324,10 @@
 						class="flex w-full items-center gap-2 files-page-nav-row"
 					>
 						<span class="w-10"></span>
-						<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+						<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
 							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 17l-5-5m0 0l5-5m-5 5h12" />
 						</svg>
-						..
+						Up to {parentFolderLabel(lst.parent_subpath, currentRootLabel)}
 					</button>
 				{/if}
 
@@ -449,6 +454,12 @@
 	}
 	.files-page-nav-row:hover {
 		background: var(--color-primary-tint-1);
+	}
+	/* The global ring sits outside the element, and .files-page-listing clips
+	   overflow, so a full-width row's ring was cut off: draw it inside. */
+	.files-page-nav-row:focus-visible {
+		outline: 2px solid var(--color-primary);
+		outline-offset: -2px;
 	}
 	.files-page-empty {
 		padding: 2rem;

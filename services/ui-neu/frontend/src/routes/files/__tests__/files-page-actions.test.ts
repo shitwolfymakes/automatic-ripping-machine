@@ -386,18 +386,26 @@ describe('listing states', () => {
 		expect(screen.queryByText(/read-only mount/)).not.toBeInTheDocument();
 	});
 
-	it('goes up through the .. row when the listing has a parent', async () => {
+	it('goes up through the row that names the root, one level below it', async () => {
 		dirs['raw::a'] = listing([file('inner.mkv')], { subpath: 'a', parent_subpath: '' });
 		setUrl('http://localhost/files?root=raw&subpath=a');
 		await renderPage('inner.mkv');
-		await fireEvent.click(screen.getByRole('button', { name: '..' }));
+		await fireEvent.click(screen.getByRole('button', { name: 'Up to Raw' }));
 		await screen.findByText('movie.mkv');
 		expect(mockFetchDirectory).toHaveBeenLastCalledWith('raw', '');
 	});
 
-	it('shows no .. row at the top of a root', async () => {
-		await renderPage();
+	it('names the parent folder in the up row deeper down', async () => {
+		dirs['raw::a/b'] = listing([file('inner.mkv')], { subpath: 'a/b', parent_subpath: 'a' });
+		setUrl('http://localhost/files?root=raw&subpath=a/b');
+		await renderPage('inner.mkv');
+		expect(screen.getByRole('button', { name: 'Up to a' })).toBeInTheDocument();
 		expect(screen.queryByRole('button', { name: '..' })).not.toBeInTheDocument();
+	});
+
+	it('shows no up row at the top of a root', async () => {
+		await renderPage();
+		expect(screen.queryByRole('button', { name: /^Up to / })).not.toBeInTheDocument();
 	});
 
 	it('refreshes the current directory from the toolbar', async () => {

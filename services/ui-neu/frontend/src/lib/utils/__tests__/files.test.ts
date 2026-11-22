@@ -4,6 +4,7 @@ import {
 	nextSort,
 	sortRoots,
 	childSubpath,
+	parentFolderLabel,
 	selectionKey,
 	parseSelectionKey,
 	moveTargetFolders,
@@ -90,6 +91,17 @@ describe('sortRoots', () => {
 	it('sorts in place and returns the same array', () => {
 		const input = [root('music'), root('raw')];
 		expect(sortRoots(input)).toBe(input);
+	});
+});
+
+describe('parentFolderLabel', () => {
+	it('is the root label one level below the root', () => {
+		expect(parentFolderLabel('', 'Media')).toBe('Media');
+	});
+
+	it('is the parent folder name deeper down', () => {
+		expect(parentFolderLabel('Movies/Half Baked (1998)', 'Media')).toBe('Half Baked (1998)');
+		expect(parentFolderLabel('Movies', 'Media')).toBe('Movies');
 	});
 });
 
