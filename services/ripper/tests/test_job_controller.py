@@ -1475,7 +1475,10 @@ async def test_pickup_claims_gate_and_runs_rip(caplog):
     controller = JobController(FakeClient(), "drv_test")
     calls = _spy_run_rip(controller)
 
-    await controller.pickup(_view(JobStatus.IDENTIFIED), "/dev/sr0")
+    task = await controller.pickup(_view(JobStatus.IDENTIFIED), "/dev/sr0")
+    assert task is not None
+    assert not controller.is_idle()  # busy from the moment the task exists
+    await task
 
     assert calls == [("job_test", "/dev/sr0", False, "job_test")]
     assert controller.is_idle()
@@ -1495,8 +1498,9 @@ async def test_pickup_releases_gate_when_run_rip_raises():
 
     controller._run_rip = boom  # type: ignore[method-assign]
 
-    with pytest.raises(RuntimeError, match="boom"):
-        await controller.pickup(_view(JobStatus.IDENTIFIED), "/dev/sr0")
+    task = await controller.pickup(_view(JobStatus.IDENTIFIED), "/dev/sr0")
+    assert task is not None
+    await task  # the error ends the rip's own task, logged; it never reaches the caller
 
     assert controller.is_idle()
     assert controller._active_job_id is None
@@ -1520,7 +1524,9 @@ async def test_recover_held_job_unresolved_returns(caplog):
     calls = _spy_run_rip(controller)
     waits = _fake_resolution(controller, None)
 
-    await controller.recover_held_job(_view(JobStatus.AWAITING_REVIEW), "/dev/sr0")
+    task = await controller.recover_held_job(_view(JobStatus.AWAITING_REVIEW), "/dev/sr0")
+    assert task is not None
+    await task
 
     assert waits == [("job_test", resolution_wait_module.REVIEW_WAIT)]
     assert calls == []
@@ -1539,7 +1545,9 @@ async def test_recover_held_job_other_status_not_ripped(caplog):
     calls = _spy_run_rip(controller)
     waits = _fake_resolution(controller, _view(JobStatus.ABANDONED))
 
-    await controller.recover_held_job(_view(JobStatus.AWAITING_REVIEW), "/dev/sr0")
+    task = await controller.recover_held_job(_view(JobStatus.AWAITING_REVIEW), "/dev/sr0")
+    assert task is not None
+    await task
 
     assert waits == [("job_test", resolution_wait_module.REVIEW_WAIT)]
     assert calls == []
@@ -1557,7 +1565,9 @@ async def test_recover_held_job_runs_rip_with_resolved_job(status):
     calls = _spy_run_rip(controller)
     waits = _fake_resolution(controller, _view(status, title="Resolved"))
 
-    await controller.recover_held_job(_view(JobStatus.AWAITING_REVIEW), "/dev/sr0")
+    task = await controller.recover_held_job(_view(JobStatus.AWAITING_REVIEW), "/dev/sr0")
+    assert task is not None
+    await task
 
     assert waits == [("job_test", resolution_wait_module.REVIEW_WAIT)]
     assert calls == [("job_test", "/dev/sr0", False, "job_test")]
@@ -1575,8 +1585,9 @@ async def test_recover_held_job_releases_gate_when_run_rip_raises():
 
     controller._run_rip = boom  # type: ignore[method-assign]
 
-    with pytest.raises(RuntimeError, match="boom"):
-        await controller.recover_held_job(_view(JobStatus.AWAITING_REVIEW), "/dev/sr0")
+    task = await controller.recover_held_job(_view(JobStatus.AWAITING_REVIEW), "/dev/sr0")
+    assert task is not None
+    await task  # logged in the task, not raised to the caller
 
     assert controller.is_idle()
     assert controller._active_job_id is None
