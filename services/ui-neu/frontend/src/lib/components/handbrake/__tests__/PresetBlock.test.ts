@@ -90,17 +90,24 @@ describe('fields', () => {
 		const onfield = mount({ name: 'N', extra_args: '--x' });
 		expect(screen.getByTestId('tp-name')).toHaveValue('N');
 		await fireEvent.input(screen.getByTestId('tp-name'), { target: { value: 'M' } });
-		await fireEvent.change(screen.getByTestId('tp-media-type'), { target: { value: 'tv' } });
+		await fireEvent.change(screen.getByTestId('tp-media-type'), { target: { value: 'music' } });
 		await fireEvent.change(screen.getByTestId('tp-tool'), { target: { value: 'abcde' } });
 		await fireEvent.change(screen.getByTestId('tp-container'), { target: { value: 'mp4' } });
 		await fireEvent.input(screen.getByTestId('tp-extra-args'), { target: { value: '--y' } });
 		expect(onfield.mock.calls).toEqual([
 			['name', 'M'],
-			['media_type', 'tv'],
+			['media_type', 'music'],
 			['tool', 'abcde'],
 			['container', 'mp4'],
 			['extra_args', '--y']
 		]);
+	});
+
+	it('offers Video for movie and TV, and shows a TV preset as Video', () => {
+		mount({ media_type: 'tv' });
+		const select = screen.getByTestId('tp-media-type') as HTMLSelectElement;
+		expect(Array.from(select.options).map((o) => o.textContent?.trim())).toEqual(['Video', 'Music', 'Data', 'ISO']);
+		expect(select.selectedOptions[0].textContent?.trim()).toBe('Video');
 	});
 
 	it('locks media type on edit and everything when read-only', () => {

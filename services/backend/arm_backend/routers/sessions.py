@@ -19,6 +19,7 @@ from arm_backend.path_template import (
 )
 from arm_backend.routers._template_validation import validate_template_or_http
 from arm_common import Drive, RipPreset, Session, SessionApplication, TranscodePreset, User
+from arm_common.enums import transcode_preset_media_types
 from arm_common.schemas import (
     SessionCloneRequest,
     SessionCreateRequest,
@@ -86,7 +87,7 @@ async def create_session(
             detail=f"rip_preset.media_type={rip_preset.media_type.value} != session.media_type={req.media_type.value}",
         )
     transcode_preset = await _load_transcode_preset(db, req.transcode_preset_id)
-    if transcode_preset is not None and transcode_preset.media_type != req.media_type:
+    if transcode_preset is not None and transcode_preset.media_type not in transcode_preset_media_types(req.media_type):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=(
@@ -153,7 +154,7 @@ async def update_session(
     else:
         new_transcode_preset_id = row.transcode_preset_id
     transcode_preset = await _load_transcode_preset(db, new_transcode_preset_id)
-    if transcode_preset is not None and transcode_preset.media_type != row.media_type:
+    if transcode_preset is not None and transcode_preset.media_type not in transcode_preset_media_types(row.media_type):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=(

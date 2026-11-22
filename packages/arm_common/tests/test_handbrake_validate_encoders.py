@@ -10,6 +10,7 @@ import pytest
 from arm_common.enums import TranscodeTool
 from arm_common.handbrake_schema.reach import base_families, reachable_families
 from arm_common.handbrake_schema.effective import UnknownBasePreset
+from arm_common.handbrake_schema.overlay import ENCODER_SPECIFIC_KEYS
 from arm_common.handbrake_schema.types import HandbrakeSchema
 from arm_common.handbrake_schema.validate import validate_family, validate_settings
 from arm_common.schemas.handbrake import HandbrakeSettings, SettingIssue
@@ -152,8 +153,12 @@ def test_tune_lists_accept_several_and_unset(hb_schema):
         assert check(hb_schema, blocks(x264={"VideoTune": tune})) == []
 
 
-def test_non_string_tune_is_not_in_list(hb_schema):
-    assert check(hb_schema, blocks(x264={"VideoTune": 3})) == [("VideoTune", "not_in_list")]
+def test_non_string_tune_is_reported_once_as_wrong_type(hb_schema):
+    assert check(hb_schema, blocks(x264={"VideoTune": 3})) == [("VideoTune", "wrong_type")]
+
+
+def test_non_string_listed_value_is_reported_once_as_wrong_type(hb_schema):
+    assert check(hb_schema, blocks(x264={"VideoPreset": 5})) == [("VideoPreset", "wrong_type")]
 
 
 def test_quality_step_and_range(hb_schema):
@@ -251,3 +256,37 @@ def test_validate_family_checks_the_block(hb_schema):
 def test_validate_family_unknown_to_schema(hb_schema):
     issues = validate_family(hb_schema, family="nvenc_av1x", preset_ref=None, settings=HandbrakeSettings())
     assert codes(issues) == [("nvenc_av1x", "encoder_not_reachable")]
+
+
+@pytest.mark.parametrize("key", sorted(ENCODER_SPECIFIC_KEYS))
+def test_every_encoder_key_is_type_checked_at_claim(hb_schema, wrong_for_type, key):
+    # Reads each type from the schema, so a key added to ENCODER_SPECIFIC_KEYS is covered without a test edit.
+    settings = blocks(x264={key: wrong_for_type[hb_schema.keys[key].type]})
+    issues = codes(validate_family(hb_schema, family="x264", preset_ref=None, settings=settings))
+    assert issues.count((key, "wrong_type")) == 1
+
+
+def test_wrong_typed_block_values_fail_on_save(hb_schema):
+    settings = blocks(
+        x264={
+            "VideoMultiPass": "yes",
+            "VideoTurboMultiPass": "no",
+            "VideoOptionExtra": ["x"],
+            "x264Option": {"k": 1},
+            "x264UseAdvancedOptions": 7,
+        }
+    )
+    assert check(hb_schema, settings, "cpu_h264") == [
+        ("VideoMultiPass", "wrong_type"),
+        ("VideoTurboMultiPass", "wrong_type"),
+        ("VideoOptionExtra", "wrong_type"),
+        ("x264Option", "wrong_type"),
+        ("x264UseAdvancedOptions", "wrong_type"),
+    ]
+
+
+def test_block_key_missing_from_the_schema_is_not_type_checked(hb_schema):
+    keys = {k: v for k, v in hb_schema.keys.items() if k != "x264Option"}
+    schema = replace(hb_schema, keys=keys)
+    settings = blocks(x264={"x264Option": 1})
+    assert validate_family(schema, family="x264", preset_ref=None, settings=settings) == []
