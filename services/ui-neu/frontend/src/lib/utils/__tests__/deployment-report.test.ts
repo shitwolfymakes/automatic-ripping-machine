@@ -92,7 +92,7 @@ const logLevels: DiagnosticsServiceView[] = [{ name: 'arm-ripper', log_level: 'd
 describe('buildDeploymentReport', () => {
 	it('starts with version and timestamp', () => {
 		expect(buildDeploymentReport(makeEnv(), null, [], now).split('\n')[0]).toBe(
-			'## ARM deployment report — v3.1.0 — 2026-11-20T12:00:00.000Z'
+			'## ARM deployment report | v3.1.0 | 2026-11-20T12:00:00.000Z'
 		);
 	});
 
@@ -116,19 +116,19 @@ describe('buildDeploymentReport', () => {
 
 	it('seed-only vars show the value in use', () => {
 		const md = buildDeploymentReport(makeEnv(), null, [], now);
-		expect(md).toContain('MAX_PARALLEL_TRANSCODES=2  · in use: 4 (Settings → Transcoding)');
-		expect(md).toContain('ARM_GPUS=all  (default)  · in use: nvidia (Settings → Transcoding)');
+		expect(md).toContain('MAX_PARALLEL_TRANSCODES=2  | in use: 4 (Settings > Transcoding)');
+		expect(md).toContain('ARM_GPUS=all  (default)  | in use: nvidia (Settings > Transcoding)');
 	});
 
 	it('containers render as <details> with image, mounts, devices, env', () => {
 		const md = buildDeploymentReport(makeEnv(), null, [], now);
-		expect(md).toMatch(/<details><summary>ripper — Pioneer BDR \(enrolled, online\)<\/summary>/);
+		expect(md).toMatch(/<details><summary>ripper: Pioneer BDR \(enrolled, online\)<\/summary>/);
 		expect(md).toContain('image: arm-ripper:3.1');
-		expect(md).toContain('/mnt/raw → /raw (rw)');
+		expect(md).toContain('/mnt/raw -> /raw (rw)');
 		expect(md).toContain('/dev/sr0');
 		expect(md).toContain('LOG_LEVEL=debug');
 		expect(md).toContain('TOKEN=<secret>');
-		expect(md).toContain('<details><summary>transcode — job 7</summary>');
+		expect(md).toContain('<details><summary>transcode: job 7</summary>');
 		expect(md).toContain('docker host: tcp://gpu:2375');
 		expect(md).toContain('</details>');
 	});
@@ -136,8 +136,8 @@ describe('buildDeploymentReport', () => {
 	it('health renders pass/fail list; omitted section when health is null', () => {
 		const md = buildDeploymentReport(makeEnv(), health, [], now);
 		expect(md).toContain('### Health');
-		expect(md).toContain('- ✅ Configuration');
-		expect(md).toContain('- ❌ MakeMKV key: ` key expired `');
+		expect(md).toContain('- PASS Configuration');
+		expect(md).toContain('- FAIL MakeMKV key: ` key expired `');
 		expect(buildDeploymentReport(makeEnv(), null, [], now)).not.toContain('### Health');
 	});
 
@@ -173,7 +173,7 @@ describe('buildDeploymentReport', () => {
 		const env = makeEnv();
 		env.containers[0].label = 'a</summary><b>&';
 		const md = buildDeploymentReport(env, null, [], now);
-		expect(md).toContain('ripper — a&lt;/summary&gt;&lt;b&gt;&amp; (enrolled, online)</summary>');
+		expect(md).toContain('ripper: a&lt;/summary&gt;&lt;b&gt;&amp; (enrolled, online)</summary>');
 	});
 
 	it('collapses newlines in health details', () => {
@@ -182,7 +182,7 @@ describe('buildDeploymentReport', () => {
 			checks: [{ name: 'config', status: 'error', detail: 'line1\nline2' }],
 			paths: []
 		};
-		expect(buildDeploymentReport(makeEnv(), h, [], now)).toContain('- ❌ Configuration: ` line1\\nline2 `');
+		expect(buildDeploymentReport(makeEnv(), h, [], now)).toContain('- FAIL Configuration: ` line1\\nline2 `');
 	});
 
 	it('wraps health details in inline code so Markdown specials stay literal', () => {
@@ -192,7 +192,7 @@ describe('buildDeploymentReport', () => {
 			paths: []
 		};
 		expect(buildDeploymentReport(makeEnv(), h, [], now)).toContain(
-			'- ❌ Configuration: `` *bold* [x](http://e) `tick` ``'
+			'- FAIL Configuration: `` *bold* [x](http://e) `tick` ``'
 		);
 	});
 });

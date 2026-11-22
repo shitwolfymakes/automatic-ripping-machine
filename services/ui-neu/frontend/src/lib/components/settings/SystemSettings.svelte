@@ -55,8 +55,8 @@
 
 		{#if env}
 			<p class="settings-page-system-summary" data-testid="system-summary">
-				Version {env.version} · Host paths set: {yesNo(env.summary.host_paths_set)} · Transcode capable:
-				{yesNo(env.summary.transcode_capable)} · GPUs: {env.summary.gpus.length ? env.summary.gpus.join(', ') : 'none'}
+				Version {env.version} | Host paths set: {yesNo(env.summary.host_paths_set)} | Transcode capable:
+				{yesNo(env.summary.transcode_capable)} | GPUs: {env.summary.gpus.length ? env.summary.gpus.join(', ') : 'none'}
 			</p>
 		{:else if envError}
 			<p class="field-error" data-testid="environment-error">{envError}</p>

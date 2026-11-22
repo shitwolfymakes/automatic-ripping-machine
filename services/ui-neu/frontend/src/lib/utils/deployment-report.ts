@@ -36,7 +36,7 @@ function varLine(v: EnvVarView): string {
 	if (v.secret) return `${v.key}=${v.is_set ? '<set>' : '<not set>'}`;
 	let line = `${v.key}=${oneLine(v.value ?? '')}`;
 	if (v.source === 'default') line += '  (default)';
-	if (v.effective) line += `  · in use: ${v.effective.value} (Settings → ${v.effective.tab})`;
+	if (v.effective) line += `  | in use: ${v.effective.value} (Settings > ${v.effective.tab})`;
 	return line;
 }
 
@@ -55,7 +55,7 @@ function containerBlock(c: ContainerView): string[] {
 	if (c.mounts.length) {
 		lines.push(
 			'mounts:',
-			...c.mounts.map((m) => `  ${oneLine(m.host)} → ${oneLine(m.container)} (${oneLine(m.mode)})`)
+			...c.mounts.map((m) => `  ${oneLine(m.host)} -> ${oneLine(m.container)} (${oneLine(m.mode)})`)
 		);
 	}
 	if (c.devices.length) lines.push('devices:', ...c.devices.map((d) => `  ${oneLine(d)}`));
@@ -63,7 +63,7 @@ function containerBlock(c: ContainerView): string[] {
 		lines.push('env:', ...c.env.map((e) => `  ${oneLine(e.key)}=${e.secret ? '<secret>' : oneLine(e.value ?? '')}`));
 	}
 	return [
-		`<details><summary>${escapeHtml(c.kind)} — ${escapeHtml(c.label)}${state}</summary>`,
+		`<details><summary>${escapeHtml(c.kind)}: ${escapeHtml(c.label)}${state}</summary>`,
 		'',
 		...fence(lines),
 		'',
@@ -73,13 +73,13 @@ function containerBlock(c: ContainerView): string[] {
 
 function healthSection(health: SystemDiagnosticsResponse): string[] {
 	const lines = health.checks.map((c) =>
-		c.status === 'ok' ? `- ✅ ${checkLabel(c.name)}` : `- ❌ ${checkLabel(c.name)}: ${inlineCode(checkDetail(c))}`
+		c.status === 'ok' ? `- PASS ${checkLabel(c.name)}` : `- FAIL ${checkLabel(c.name)}: ${inlineCode(checkDetail(c))}`
 	);
 	for (const p of health.paths) {
 		lines.push(
 			pathState(p) === 'ok'
-				? `- ✅ ${oneLine(p.name)}: ${oneLine(p.path)}`
-				: `- ❌ ${oneLine(p.name)}: ${oneLine(p.path)}, ${inlineCode(pathDetail(p))}`
+				? `- PASS ${oneLine(p.name)}: ${oneLine(p.path)}`
+				: `- FAIL ${oneLine(p.name)}: ${oneLine(p.path)}, ${inlineCode(pathDetail(p))}`
 		);
 	}
 	return ['### Health', ...lines, ''];
@@ -92,7 +92,7 @@ export function buildDeploymentReport(
 	now: Date
 ): string {
 	const out: string[] = [
-		`## ARM deployment report — ${env.version} — ${now.toISOString()}`,
+		`## ARM deployment report | ${env.version} | ${now.toISOString()}`,
 		'',
 		'**Summary**',
 		`- Host paths set: ${yesNo(env.summary.host_paths_set)}`,
