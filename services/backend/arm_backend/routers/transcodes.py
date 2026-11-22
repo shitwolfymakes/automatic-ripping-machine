@@ -21,6 +21,7 @@ from sqlmodel import col, select
 
 from arm_backend.auth import require_jwt, require_writer
 from arm_backend.gpu_claim import release_gpu_for_task
+from arm_backend.transcode_apply import reopen_session_application
 from arm_backend.transcode_queue import count_queued_encode_tasks, max_parallel_transcodes
 from arm_backend.db import get_session
 from arm_backend.log_reader import LOG_DIR, effective_cap, file_log_lines, file_log_slice
@@ -143,6 +144,7 @@ async def transcode_workers(
 @router.post("/{task_id}/retry", response_model=TranscodeTaskView)
 async def retry_transcode(
     task_id: str,
+    request: Request,
     _: User = Depends(require_writer),
     db: AsyncSession = Depends(get_session),
 ) -> TranscodeTask:
@@ -160,6 +162,23 @@ async def retry_transcode(
     row.started_at = None  # set again at the next claim; the UI's "Took" reads it
     # attempts intentionally preserved (audit trail); the dispatcher's QUEUED
     # spawn loop picks the task up on its next tick — no dispatcher change here.
+    # The application was settled when this task failed; reopen it so the job
+    # reads as transcoding again, not "done" while the retry runs.
+    application = (
+        await db.execute(select(SessionApplication).where(col(SessionApplication.id) == row.session_application_id))
+    ).scalar_one_or_none()
+    if application is not None:
+        reopen_session_application(application)
+    hub = getattr(request.app.state, "ws_hub", None)
+    if hub is not None:
+        await hub.emit(
+            topic="transcode.events",
+            event_type="task.retried",
+            payload={"task_id": row.id, "session_application_id": row.session_application_id},
+            job_id=application.job_id if application is not None else None,
+            track_id=row.source_track_id,
+            session=db,
+        )
     await db.commit()
     await db.refresh(row)
     return row
