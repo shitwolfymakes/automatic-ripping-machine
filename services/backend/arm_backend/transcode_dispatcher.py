@@ -649,6 +649,7 @@ class TranscodeDispatcher:
             logger.warning("transcode task claimed while its unclaimed spawn was stopping task_id=%s", task_id)
             await db.rollback()  # drop the row lock before the next recovery's stop
             return
+        self.gpu_waits.unclaimed(task_id)
         await release_gpu_for_task(db, task_id)
         task.attempts = (task.attempts or 0) + 1
         if task.attempts >= self._settings.ARM_TRANSCODE_MAX_ATTEMPTS:
