@@ -2,6 +2,7 @@
 	// The TYPE filter's chips: All and each media type, each with its
 	// count. The pressed chip is the selected type; pressing one selects it.
 	import type { MediaType } from '$lib/types/api.gen';
+	import { VIDEO_GROUP_LABEL } from '$lib/utils/preset-labels';
 
 	interface Props {
 		/** The count for All and each media type. A type left out shows 0. */
@@ -23,7 +24,7 @@
 	];
 	const VIDEO_GROUP_TYPES: Array<{ key: MediaType | 'all'; label: string }> = [
 		{ key: 'all', label: 'All' },
-		{ key: 'movie', label: 'Video' },
+		{ key: 'movie', label: VIDEO_GROUP_LABEL },
 		...MEDIA_TYPES.filter((c) => c.key !== 'all' && c.key !== 'movie' && c.key !== 'tv')
 	];
 	const chips = $derived(videoGroup ? VIDEO_GROUP_TYPES : MEDIA_TYPES);

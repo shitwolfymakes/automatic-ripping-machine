@@ -7,6 +7,8 @@
 	import { onMount } from 'svelte';
 	import { encodersStore, PRESET_ENCODER_ID } from '$lib/stores/encoders.svelte';
 	import { encoderGroups } from '$lib/utils/encoder-groups';
+	import { transcodeMediaGroup } from '$lib/utils/sessions';
+	import { VIDEO_GROUP_LABEL } from '$lib/utils/preset-labels';
 	import { PRESET_NAME_ID, presetBlockView } from '$lib/handbrake/panelView';
 	import { CLEARED_NOTE, isVaapiEncoder, type Draft, type PresetField } from '$lib/handbrake/sidebarModel';
 	import { presetBlockMessages } from '$lib/handbrake/issuePlacement';
@@ -93,13 +95,13 @@
 		<select
 			id="tp-media-type"
 			data-testid="tp-media-type"
-			value={draft.media_type === 'tv' ? 'movie' : draft.media_type}
+			value={transcodeMediaGroup(draft.media_type)}
 			disabled={readonly || editing}
 			onchange={(e) => onfield('media_type', value(e))}
 			{...aria('tp-media-type')}
 		>
 			<!-- A movie or TV preset fits sessions of either, so one Video choice covers both. -->
-			<option value="movie">Video</option>
+			<option value="movie">{VIDEO_GROUP_LABEL}</option>
 			<option value="music">Music</option>
 			<option value="data">Data</option>
 			<option value="iso">ISO</option>
