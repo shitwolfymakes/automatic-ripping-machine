@@ -93,7 +93,20 @@ def test_list_all_and_filter_by_media_type(signing_key: bytes) -> None:
     assert all_rows.status_code == 200
     assert len(all_rows.json()) == 2
     assert filtered.status_code == 200
-    assert [r["media_type"] for r in filtered.json()] == ["tv"]
+    # A movie preset fits a TV session too, so it is listed for TV.
+    assert sorted(r["media_type"] for r in filtered.json()) == ["movie", "tv"]
+
+
+def test_filter_by_music_lists_only_music(signing_key: bytes) -> None:
+    db = FakeSession()
+    app, token = _make_app(signing_key, db)
+    db.rows["transcode_presets"] = [
+        _preset("tpr_movie", name="movie", media_type=MediaType.MOVIE),
+        _preset("tpr_flac", name="flac", media_type=MediaType.MUSIC),
+    ]
+    with TestClient(app) as client:
+        r = client.get("/api/transcode-presets?media_type=music", headers=_auth(token))
+    assert [row["media_type"] for row in r.json()] == ["music"]
 
 
 def test_get_found_and_404(signing_key: bytes) -> None:
