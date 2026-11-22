@@ -46,6 +46,7 @@ from arm_backend.constants import CONFIG_SINGLETON_ID
 from arm_common import Config, Job, JobStatus, User
 from arm_common.config_metadata import CONFIG_FIELD_META
 from arm_common.enums import PreviouslyRippedAction
+from arm_common.schemas.drives import DEFAULT_SCAN_TIMEOUT_SECONDS
 from arm_common.schemas import (
     ConfigUpdateRequest,
     ConfigView,
@@ -103,6 +104,7 @@ def _to_view(cfg: Config) -> ConfigView:
         else settings.MAX_PARALLEL_TRANSCODES,
         max_parallel_iso_rips=int(cfg.max_parallel_iso_rips or 1),
         min_title_length_seconds=min_title_length_seconds(cfg),
+        default_scan_timeout_seconds=DEFAULT_SCAN_TIMEOUT_SECONDS,
         # None-coerce covers rows/fixtures predating the column (NULL = enabled).
         # A deployment that cannot transcode reports disabled, as every
         # enforcement point already treats it.

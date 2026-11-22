@@ -29,7 +29,7 @@ def _patch(
 ) -> dict[str, list]:
     seen: dict[str, list] = {"minimums": [], "discarded": []}
 
-    async def _makemkv(_p: str, min_title_length_seconds: int) -> ScanResult:
+    async def _makemkv(_p: str, min_title_length_seconds: int, **_options: object) -> ScanResult:
         seen["minimums"].append(min_title_length_seconds)
         answer = makemkv.pop(0)
         if isinstance(answer, Exception):

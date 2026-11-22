@@ -70,6 +70,14 @@ class DriveView(BaseModel):
     source_path: str | None = None
 
 
+# The MakeMKV scan (`makemkvcon info`) timeout a drive uses unless it sets its
+# own. Large UHD discs (40+ titles) can need longer; a timeout leaves the disc
+# unscanned.
+DEFAULT_SCAN_TIMEOUT_SECONDS = 300
+SCAN_TIMEOUT_MIN_SECONDS = 30
+SCAN_TIMEOUT_MAX_SECONDS = 3600
+
+
 class DriveUpdateRequest(BaseModel):
     """PATCH /api/drives/{id} body. Both fields optional + nullable.
 
@@ -86,7 +94,8 @@ class DriveUpdateRequest(BaseModel):
     drive_mode: DriveMode | None = None
     uhd_capable: bool | None = None
     prescan_cache_mb: int | None = None
-    prescan_timeout: int | None = None
+    # The drive's MakeMKV scan timeout in seconds; null follows DEFAULT_SCAN_TIMEOUT_SECONDS.
+    prescan_timeout: int | None = Field(default=None, ge=SCAN_TIMEOUT_MIN_SECONDS, le=SCAN_TIMEOUT_MAX_SECONDS)
     prescan_retries: int | None = None
     disc_enum_timeout: int | None = None
 

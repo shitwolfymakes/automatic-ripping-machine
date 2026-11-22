@@ -499,6 +499,29 @@ def test_patch_tuning_fields_persisted(signing_key: bytes) -> None:
     assert db.rows["drives"][0].drive_mode == DriveMode.MANUAL
 
 
+@pytest.mark.parametrize("value", [29, 3601, 0])
+def test_patch_refuses_a_scan_timeout_outside_30_to_3600(signing_key: bytes, value: int) -> None:
+    """#325: the ripper now uses the drive's scan timeout, so it is held to the drive card's 30-3600 s."""
+    db = FakeSession()
+    _seed(db)
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as c:
+        r = c.patch("/api/drives/drv_x", json={"prescan_timeout": value}, headers=_auth(token))
+    assert r.status_code == 422
+    assert db.rows["drives"][0].prescan_timeout is None
+
+
+def test_patch_clears_a_scan_timeout_with_null(signing_key: bytes) -> None:
+    db = FakeSession()
+    _seed(db)
+    db.rows["drives"][0].prescan_timeout = 900
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as c:
+        r = c.patch("/api/drives/drv_x", json={"prescan_timeout": None}, headers=_auth(token))
+    assert r.status_code == 200, r.text
+    assert db.rows["drives"][0].prescan_timeout is None
+
+
 def test_patch_invalid_drive_mode_422(signing_key: bytes) -> None:
     db = FakeSession()
     _seed(db)

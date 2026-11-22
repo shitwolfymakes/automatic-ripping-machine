@@ -252,6 +252,7 @@ def test_get_config_returns_flag() -> None:
         "ripping_paused": False,
         "manual_wait_seconds": 60,
         "min_title_length_seconds": 120,
+        "scan_timeout_seconds": 300,
     }
 
 
@@ -3365,6 +3366,26 @@ def test_get_config_resolves_per_drive_mode(mode: str | None, global_value: bool
         r = client.get("/api/ripper/config", params={"drive_id": "drv_1"}, headers=_SERVICE_AUTH)
     assert r.status_code == 200
     assert r.json()["auto_rip_on_insert"] is expected
+
+
+@pytest.mark.parametrize(("override", "expected"), [(None, 300), (900, 900)])
+def test_get_config_resolves_the_drive_scan_timeout(override: int | None, expected: int) -> None:
+    """#325: the drive's scan timeout override, else the default the scan always used."""
+    db = FakeSession()
+    db.rows["config"] = [_config()]
+    db.rows["drives"] = [Drive(id="drv_1", hostname="h", device_path="/dev/sr0", prescan_timeout=override)]
+    with TestClient(_make_app(db)) as client:
+        r = client.get("/api/ripper/config", params={"drive_id": "drv_1"}, headers=_SERVICE_AUTH)
+    assert r.status_code == 200
+    assert r.json()["scan_timeout_seconds"] == expected
+
+
+def test_get_config_scan_timeout_without_a_drive_is_the_default() -> None:
+    db = FakeSession()
+    db.rows["config"] = [_config()]
+    with TestClient(_make_app(db)) as client:
+        r = client.get("/api/ripper/config", params={"drive_id": "nope"}, headers=_SERVICE_AUTH)
+    assert r.json()["scan_timeout_seconds"] == 300
 
 
 def test_get_config_unknown_drive_falls_back_to_global() -> None:

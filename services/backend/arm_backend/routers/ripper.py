@@ -49,6 +49,7 @@ from arm_common import (
 from arm_common.enums import NON_TERMINAL_JOB_STATUSES, DriveKind, DriveSourceKind
 from arm_common.models import Track
 from arm_common.models._columns import enum_value_str
+from arm_common.schemas.drives import DEFAULT_SCAN_TIMEOUT_SECONDS
 from arm_common.schemas import (
     DriveDevicePathUpdateRequest,
     IsoPrepareReport,
@@ -139,15 +140,20 @@ async def get_ripper_config(
     `drive_id` resolves auto-rip per drive: a non-null Drive.drive_mode
     overrides the global Config.auto_rip_on_insert default; NULL follows it
     (setup spec 2026-10-01 D1). Rippers that omit it get the global value.
+    The scan timeout resolves the same way: Drive.prescan_timeout, else
+    DEFAULT_SCAN_TIMEOUT_SECONDS.
     """
     cfg = (await session.execute(select(Config).where(col(Config.id) == CONFIG_SINGLETON_ID))).scalar_one_or_none()
     if cfg is None:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="config singleton missing")
     auto_rip = bool(cfg.auto_rip_on_insert)
+    scan_timeout = DEFAULT_SCAN_TIMEOUT_SECONDS
     if drive_id is not None:
         drive = (await session.execute(select(Drive).where(col(Drive.id) == drive_id))).scalar_one_or_none()
         if drive is not None and drive.drive_mode is not None:
             auto_rip = drive.drive_mode == DriveMode.AUTO
+        if drive is not None and drive.prescan_timeout is not None:
+            scan_timeout = drive.prescan_timeout
     return RipperConfigView(
         auto_rip_on_insert=auto_rip,
         makemkv_key=cfg.makemkv_key,
@@ -156,6 +162,7 @@ async def get_ripper_config(
         ripping_paused=bool(cfg.ripping_paused),
         manual_wait_seconds=int(cfg.manual_wait_seconds) if cfg.manual_wait_seconds is not None else 60,
         min_title_length_seconds=min_title_length_seconds(cfg),
+        scan_timeout_seconds=scan_timeout,
     )
 
 
