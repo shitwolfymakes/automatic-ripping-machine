@@ -1,3 +1,7 @@
+// Open arms the coverage tool reports that are Svelte's, not the page's, each a
+// text `{...}` compiled to `(...) ?? ''`: the backend error's message (inside an
+// #if on the error), and the counts in the ACTIVE RIPS and TRANSCODING section
+// labels (array lengths, always numbers).
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { renderComponent, screen, cleanup, waitFor, fireEvent } from '$lib/testing/render';
 import DashboardPage from '../+page.svelte';

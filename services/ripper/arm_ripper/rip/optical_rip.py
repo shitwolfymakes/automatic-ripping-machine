@@ -175,9 +175,9 @@ class _OpticalRip:
         at 0 % for the whole rip even though the file is being written.
 
         We attribute disc-level progress to the first eligible track —
-        the WS payload requires a track_id, but the UI's rips store
+        the WS payload requires a track_id, but the UI's job-live store
         keys live progress by `job_id` and only ever displays a single
-        bar per disc (see services/ui-neu/frontend/src/lib/stores/rips.svelte.ts),
+        bar per disc (see services/ui-neu/frontend/src/lib/stores/job-live.svelte.ts),
         so the choice of track_id is purely a wire-format detail. The
         bar fills smoothly 0→100 % across the whole rip via the PRGV
         `total/max` channel. Per-title attribution still happens

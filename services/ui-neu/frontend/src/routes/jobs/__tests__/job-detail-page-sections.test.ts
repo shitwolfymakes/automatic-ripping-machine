@@ -1446,3 +1446,12 @@ describe('navigation between jobs', () => {
 		await waitFor(() => expect(mockUpdateTrack).toHaveBeenCalledWith('', 'trk_1', { excluded: true }));
 	});
 });
+
+describe('session names', () => {
+	it('still loads the page when the session list cannot be read', async () => {
+		vi.mocked(fetchSessions).mockRejectedValueOnce(new Error('sessions down'));
+		loadJobPage();
+		expect(await screen.findByText('Tracks (1)')).toBeInTheDocument();
+		expect(fetchSessions).toHaveBeenCalledTimes(1);
+	});
+});

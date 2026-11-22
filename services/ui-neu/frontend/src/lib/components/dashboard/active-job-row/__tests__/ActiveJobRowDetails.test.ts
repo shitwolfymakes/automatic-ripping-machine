@@ -1,3 +1,6 @@
+// Open arm the coverage tool reports that is Svelte's, not the component's:
+// the title link's `{job.id}` compiles to `(...) ?? ''`, and a job id is a
+// string.
 // The active job row's expanded panel, rendered directly.
 import { describe, it, expect, afterEach } from 'vitest';
 import { renderComponent, screen, within, cleanup } from '$lib/testing/render';

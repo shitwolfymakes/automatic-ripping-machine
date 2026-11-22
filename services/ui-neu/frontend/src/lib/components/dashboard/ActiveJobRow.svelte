@@ -61,12 +61,6 @@
 	let expanded = $state(false);
 
 	let typeConfig = $derived(getVideoTypeConfig(null, job?.disc_type ?? null));
-	// Gate the progress row on isInProgress: isLive minus the idle post-rip
-	// statuses (ripped, ripped_partial, ripped_awaiting_identify). A job
-	// waiting on the operator shows no progress bar, a transcoding job
-	// (effective 'transcoding') does, and a terminal one (complete/failed)
-	// does not.
-	let active = $derived(job ? isInProgress(job) : false);
 	let accentVar = $derived(statusAccentVar(job?.status));
 
 	function toggle(e: MouseEvent) {
@@ -80,6 +74,11 @@
 	<SkeletonCard lines={3} />
 {:else}
 	{@const live = jobLive.get(job.id)}
+	<!-- The progress row shows while the job is in progress: live minus the
+	     idle post-rip statuses, so a transcoding job shows it and a terminal
+	     one does not. -->
+	{@const active = isInProgress(job)}
+	{@const sample = progressSample(job, live)}
 	{@const ripped = job.rip_progress?.tracks_done ?? 0}
 	{@const total = job.rip_progress?.tracks_total ?? 0}
 	<!-- svelte-ignore a11y_click_events_have_key_events -->
@@ -186,7 +185,17 @@
 		<!-- Progress row: own line below a divider, indented under content -->
 		{#if active}
 			<div class="job-active-row-progress">
-				<LiveProgressLine sample={progressSample(job, live)} colorVar={accentVar} />
+				{#if sample?.pct != null}
+					<LiveProgressLine {sample} colorVar={accentVar} />
+				{:else}
+					<!-- No figure yet (scanning, waiting on the operator, or a rip
+					     before its first report): an indeterminate bar, not a
+					     promise that a report is on its way. data-indeterminate is
+					     the progress vocabulary's state hook. -->
+					<div data-indeterminate="true" class="job-active-row-indeterminate-track">
+						<div class="job-active-row-indeterminate-fill" style:--jt-progress-color={accentVar}></div>
+					</div>
+				{/if}
 			</div>
 		{/if}
 
@@ -289,5 +298,19 @@
 	.job-active-row-expanded {
 		border-top: 1px solid var(--color-border);
 		padding: 0.75rem 1rem;
+	}
+	.job-active-row-indeterminate-track {
+		height: 0.625rem;
+		overflow: hidden;
+		border-radius: 9999px;
+		background: var(--color-primary-tint-3);
+	}
+	.job-active-row-indeterminate-fill {
+		height: 100%;
+		width: 33.3333%;
+		border-radius: 9999px;
+		background: var(--jt-progress-color);
+		opacity: 0.6;
+		animation: var(--animate-indeterminate);
 	}
 </style>

@@ -5,10 +5,11 @@ import { createJob } from '../../../__fixtures__/job';
 import { createIsoDrive } from '$lib/__fixtures__/drive';
 
 // Branch pins for ActiveJobRow, beside ActiveJobRow.test.ts and the other
-// tests that render it. The branches below cannot be reached from the
-// rendered row, so nothing here forces them:
-// - The `job ? ... : ...` arms of `active`: the derived is only read inside
-//   the `{:else}` of `{#if !job}`, so `job` is always set when it runs.
+// tests that render it. Every branch of the row's own code is covered. The
+// coverage tool still reports open arms that are Svelte's, each a `{...}`
+// compiled to `(...) ?? ''` on a value that is never null: the disc-type label
+// and the Details link's job id (strings), and the `{ripped}/{total}` track
+// counts (numbers).
 
 const live = vi.hoisted(() => ({ value: { rip: null, transcode: null } as Record<string, unknown> }));
 vi.mock('$lib/stores/job-live.svelte', () => ({

@@ -144,7 +144,7 @@ describe('jobProgress: status table', () => {
 		const v = jobProgress(j, ripLive({ pct: 42.4, etaSeconds: 1080 }), CTX);
 		expect(v.segments.map((s) => s.state)).toEqual(['done', 'done', 'active', 'pending', 'pending']);
 		expect(v.segments[2].pct).toBe(42.4);
-		expect(v.readout).toEqual({ tone: 'default', label: 'Ripping', detail: 'title 2 of 4', figure: '42% · 18m left' });
+		expect(v.readout).toEqual({ tone: 'default', label: 'Ripping', detail: 'title 2 of 4', figure: '42% | 18m left' });
 	});
 	it('ripping with a percent and no ETA', () => {
 		const j = job({ status: 'ripping', rip_progress: rp() });
@@ -200,7 +200,7 @@ describe('jobProgress: status table', () => {
 			tone: 'default',
 			label: 'Transcoding',
 			detail: 'task 2 of 3',
-			figure: '55% · 10m left'
+			figure: '55% | 10m left'
 		});
 	});
 	it('transcoding falls back to the snapshot percent', () => {

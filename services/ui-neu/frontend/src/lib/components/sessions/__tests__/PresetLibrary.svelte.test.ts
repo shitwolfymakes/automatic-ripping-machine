@@ -146,3 +146,22 @@ it('search narrows presets by name', async () => {
 	expect(screen.getByText('Movie Rip')).toBeInTheDocument();
 	expect(screen.queryByText('TV Rip')).toBeNull();
 });
+
+it('groups movie and TV transcode presets under one Video chip', async () => {
+	renderComponent(
+		PresetLibrary,
+		defaultProps({
+			kind: 'transcode',
+			transcodePresets: [
+				transcode('t1', 'Plex 1080p', 'movie', true),
+				transcode('t2', 'Plex TV 1080p', 'tv', true),
+				transcode('t3', 'FLAC', 'music', true)
+			]
+		})
+	);
+	expect(screen.queryByRole('button', { name: /^TV/ })).not.toBeInTheDocument();
+	await fireEvent.click(screen.getByRole('button', { name: /^Video 2/ }));
+	expect(screen.getByText('Plex 1080p')).toBeInTheDocument();
+	expect(screen.getByText('Plex TV 1080p')).toBeInTheDocument();
+	expect(screen.queryByText('FLAC')).not.toBeInTheDocument();
+});
