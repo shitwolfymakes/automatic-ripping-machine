@@ -150,3 +150,12 @@ it('says no sessions match inside the table area when filters leave nothing', as
 	expect(screen.queryByRole('table')).not.toBeInTheDocument();
 	expect(screen.getByText('No sessions match your filters.')).toBeInTheDocument();
 });
+it('keeps its filters when it is unmounted and mounted again', async () => {
+	const first = renderComponent(SessionsHub, props());
+	await fireEvent.input(screen.getByPlaceholderText(/search/i), { target: { value: 'Bet' } });
+	await fireEvent.click(screen.getByRole('button', { name: /TV/ }));
+	first.unmount();
+	renderComponent(SessionsHub, props());
+	expect(screen.getByPlaceholderText(/search/i)).toHaveValue('Bet');
+	expect(screen.getByRole('button', { name: /TV/ })).toHaveAttribute('aria-pressed', 'true');
+});

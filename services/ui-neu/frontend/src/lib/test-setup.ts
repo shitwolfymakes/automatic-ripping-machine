@@ -29,3 +29,9 @@ Object.defineProperty(globalThis, 'matchMedia', {
 		dispatchEvent: () => false
 	})
 });
+
+// The Sessions area's list filters live in a module-level store so they
+// outlast a list; clear them between tests so no test inherits another's.
+import { afterEach } from 'vitest';
+import { resetListFilters } from '$lib/stores/sessionListFilters.svelte';
+afterEach(() => resetListFilters());

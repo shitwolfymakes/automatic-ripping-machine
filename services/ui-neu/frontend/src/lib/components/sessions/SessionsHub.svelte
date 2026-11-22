@@ -1,6 +1,5 @@
 <script lang="ts">
 	import type { JoinedSession } from './sessionsData.svelte';
-	import type { MediaType } from '$lib/types/api.gen';
 	import DataTable from '$lib/components/DataTable.svelte';
 	import { encodersStore } from '$lib/stores/encoders.svelte';
 	import { onMount } from 'svelte';
@@ -8,6 +7,7 @@
 	import { deleteGuard, openLabel, sessionColumns } from './tableColumns';
 	import MediaTypeChips from './MediaTypeChips.svelte';
 	import { matchesFilters, matchesTranscode, type SourceFilter, type TranscodeFilter } from './listFilters';
+	import { listFilters } from '$lib/stores/sessionListFilters.svelte';
 
 	interface Props {
 		sessions: JoinedSession[];
@@ -23,18 +23,12 @@
 
 	let { sessions, typeCounts, loading, activeKey = null, onedit, onclone, ondelete, onnew }: Props = $props();
 
-	// Local filter state
-	let search = $state('');
-	let sourceFilter = $state<SourceFilter>('all');
-	let transcodeFilter = $state<TranscodeFilter>('any');
-	let typeFilter = $state<MediaType | 'all'>('all');
+	// Filters live in a shared store, so they survive a switch away and back.
+	const filters = listFilters('sessions');
 
 	// Derived visible list applying all filters
 	const visible = $derived(
-		sessions.filter(
-			(s) =>
-				matchesFilters(s, { type: typeFilter, source: sourceFilter, search }) && matchesTranscode(s, transcodeFilter)
-		)
+		sessions.filter((s) => matchesFilters(s, filters) && matchesTranscode(s, filters.transcode))
 	);
 
 	// A session row carries its joined presets; the columns look them up by id.
@@ -78,9 +72,9 @@
 					type="search"
 					placeholder="Search sessions by name..."
 					class="field-control sessions-hub-search"
-					value={search}
+					value={filters.search}
 					oninput={(e) => {
-						search = (e.currentTarget as HTMLInputElement).value;
+						filters.search = (e.currentTarget as HTMLInputElement).value;
 					}}
 				/>
 
@@ -89,9 +83,9 @@
 				<select
 					aria-label="Filter by source"
 					class="field-control sessions-hub-select"
-					value={sourceFilter}
+					value={filters.source}
 					onchange={(e) => {
-						sourceFilter = (e.currentTarget as HTMLSelectElement).value as typeof sourceFilter;
+						filters.source = (e.currentTarget as HTMLSelectElement).value as SourceFilter;
 					}}
 				>
 					<option value="all">All sources</option>
@@ -102,9 +96,9 @@
 				<select
 					aria-label="Filter by transcode"
 					class="field-control sessions-hub-select"
-					value={transcodeFilter}
+					value={filters.transcode}
 					onchange={(e) => {
-						transcodeFilter = (e.currentTarget as HTMLSelectElement).value as typeof transcodeFilter;
+						filters.transcode = (e.currentTarget as HTMLSelectElement).value as TranscodeFilter;
 					}}
 				>
 					<option value="any">Any transcode</option>
@@ -118,7 +112,7 @@
 			<!-- Bottom row: TYPE chips + New session -->
 			<div class="cluster sessions-hub-type-row">
 				<span class="sessions-hub-label">Type</span>
-				<MediaTypeChips counts={typeCounts} bind:selected={typeFilter} />
+				<MediaTypeChips counts={typeCounts} bind:selected={filters.type} />
 
 				<!-- New session — pinned to the bottom-right of the filter panel -->
 				<button type="button" onclick={onnew} class="btn btn-primary sessions-hub-new-btn"> + New session </button>
