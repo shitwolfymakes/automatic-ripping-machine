@@ -147,14 +147,99 @@ def test_move_tree_refuses_an_existing_destination_and_leaves_it(tmp_path: Path)
     assert src.exists()
 
 
-def test_move_tree_uses_shutil_move_for_cross_filesystem(tmp_path: Path) -> None:
-    """The cross-filesystem copy is shutil.move's; move_tree does not add its own."""
+def test_tree_copy_never_exposes_a_partial_destination(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """D-182: the cross-filesystem copy goes to `<dst>.arm-inprogress` and is
+    renamed into place whole, so a library scanner never indexes half a disc."""
     src = _backup_tree(tmp_path / "raw" / "backup")
     dst = tmp_path / "media" / "T"
-    with patch("arm_common.fileops.shutil.move", wraps=__import__("shutil").move) as spy:
+    _no_rename(monkeypatch)
+    real_copy = fileops._copy_file
+    seen: list[bool] = []
+
+    def spy(s: Path, d: Path, *a: object, **kw: object) -> None:
+        seen.append(dst.exists())
+        real_copy(s, d, *a, **kw)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(fileops, "_copy_file", spy)
+    assert move_tree(src, dst) == 115
+    assert seen == [False, False, False]
+    assert tree_size(dst) == 115 and not src.exists()
+    assert not dst.with_name("T" + INPROGRESS_SUFFIX).exists()
+
+
+def test_failed_tree_copy_leaves_no_destination_so_a_retry_succeeds(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """D-182: one file failing (ENOSPC, EIO) used to leave a partial
+    `/media/<Title>` that the destination-exists guard then refused on every
+    retry. The partial copy is dropped and the source kept."""
+    src = _backup_tree(tmp_path / "raw" / "backup")
+    dst = tmp_path / "media" / "T"
+    _no_rename(monkeypatch)
+    real_copy = fileops._copy_file
+
+    def failing(s: Path, d: Path, *a: object, **kw: object) -> None:
+        if s.name == "00000.m2ts":
+            raise OSError(28, "No space left on device")
+        real_copy(s, d, *a, **kw)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(fileops, "_copy_file", failing)
+    with pytest.raises(OSError):
         move_tree(src, dst)
-    spy.assert_called_once()
-    assert spy.call_args.args == (src, dst)
+    assert not dst.exists()
+    assert not dst.with_name("T" + INPROGRESS_SUFFIX).exists()
+    assert tree_size(src) == 115
+
+    monkeypatch.setattr(fileops, "_copy_file", real_copy)
+    assert move_tree(src, dst) == 115
+
+
+def test_staging_left_by_a_crashed_copy_is_replaced(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A backend that died mid-copy leaves `<dst>.arm-inprogress`, never a
+    finished backup; the retry starts the copy afresh."""
+    src = _backup_tree(tmp_path / "raw" / "backup")
+    dst = tmp_path / "media" / "T"
+    stale = dst.with_name("T" + INPROGRESS_SUFFIX)
+    (stale / "BDMV").mkdir(parents=True)
+    (stale / "BDMV" / "half.m2ts").write_bytes(b"x")
+    _no_rename(monkeypatch)
+    assert move_tree(src, dst) == 115
+    assert not (dst / "BDMV" / "half.m2ts").exists()
+    assert not stale.exists()
+
+
+def test_a_stale_staging_file_is_replaced_too(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Whatever sits at `<dst>.arm-inprogress` (here a stray file) is never a finished backup."""
+    src = _backup_tree(tmp_path / "raw" / "backup")
+    dst = tmp_path / "media" / "T"
+    stale = dst.with_name("T" + INPROGRESS_SUFFIX)
+    stale.parent.mkdir(parents=True)
+    stale.write_bytes(b"x")
+    _no_rename(monkeypatch)
+    assert move_tree(src, dst) == 115
+    assert not stale.exists()
+
+
+def test_tree_copy_keeps_the_backup_when_the_source_cannot_be_removed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    """The backup is complete before the source goes: a source that cannot be
+    removed is left in /raw with a warning, never taking the copy with it."""
+    src = _backup_tree(tmp_path / "raw" / "backup")
+    dst = tmp_path / "media" / "T"
+    _no_rename(monkeypatch)
+    real_rmtree = fileops.shutil.rmtree
+
+    def rmtree(path: object, *a: object, **kw: object) -> None:
+        if Path(str(path)) == src:
+            raise PermissionError(13, "Permission denied")
+        real_rmtree(path, *a, **kw)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(fileops.shutil, "rmtree", rmtree)
+    with caplog.at_level("WARNING", logger="arm_common.fileops"):
+        assert move_tree(src, dst) == 115
+    assert tree_size(dst) == 115 and tree_size(src) == 115
+    assert "leaving it in /raw" in caplog.text
 
 
 def _no_rename(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -416,14 +501,18 @@ def test_move_tree_fsyncs_each_file_before_the_source_goes_then_the_directories(
 
     monkeypatch.setattr(fileops.shutil, "rmtree", spy_rmtree)
     move_tree(src, dst)
-    removed = ops.index(("rmtree", "backup"))
-    assert sorted(n for _op, n in ops[:removed]) == ["00000.m2ts", "id.bdmv", "index.bdmv"]
-    assert ops[removed + 1 :] == [
+    staging = "T" + INPROGRESS_SUFFIX
+    # Every file, then every folder of the staged tree, then the rename into
+    # place and the parent: the backup is durable before the source goes.
+    assert sorted(n for _op, n in ops[:3]) == ["00000.m2ts", "id.bdmv", "index.bdmv"]
+    assert ops[3:] == [
         ("fsync", "CERTIFICATE"),
         ("fsync", "STREAM"),
         ("fsync", "BDMV"),
-        ("fsync", "T"),
+        ("fsync", staging),
+        ("replace", staging),
         ("fsync", "media"),
+        ("rmtree", "backup"),
     ]
 
 
@@ -449,3 +538,46 @@ def test_directory_fsync_failure_does_not_fail_a_finished_rename(
     with atomic_output(final) as tmp:
         tmp.write_bytes(b"x")
     assert final.read_bytes() == b"x"
+
+
+# --- a symlinked media folder whose target is not inside the container (D-252) ---
+
+
+def _dangling_movies_link(tmp_path: Path) -> tuple[Path, str]:
+    target = str(tmp_path / "not-mounted-here" / "movies")
+    link = tmp_path / "media" / "Movies"
+    link.parent.mkdir(parents=True)
+    link.symlink_to(target)
+    return link, target
+
+
+@pytest.mark.parametrize("entry", ["transcode_none", "move_tree", "atomic_output"])
+def test_a_dangling_symlinked_media_folder_names_the_link_and_keeps_the_source(tmp_path: Path, entry: str) -> None:
+    """A link valid on the host but dangling in the container used to fail
+    with a bare "[Errno 17] File exists"."""
+    link, target = _dangling_movies_link(tmp_path)
+    src = tmp_path / "raw" / "t0.mkv"
+    src.parent.mkdir()
+    src.write_bytes(b"v")
+    with pytest.raises(OSError) as raised:
+        if entry == "transcode_none":
+            transcode_none(src, link / "Iron Man (2008)" / "Iron Man.mkv")
+        elif entry == "move_tree":
+            move_tree(src.parent, link / "Iron Man (2008)")
+        else:
+            with atomic_output(link / "Iron Man (2008)" / "Iron Man.mkv"):
+                pass
+    message = str(raised.value)
+    assert str(link) in message and target in message and "symlink" in message
+    assert src.read_bytes() == b"v"
+
+
+def test_a_symlinked_media_folder_that_resolves_is_followed(tmp_path: Path) -> None:
+    (tmp_path / "library" / "movies").mkdir(parents=True)
+    link = tmp_path / "media" / "Movies"
+    link.parent.mkdir()
+    link.symlink_to(tmp_path / "library" / "movies")
+    src = _backup_tree(tmp_path / "raw" / "backup")
+
+    assert move_tree(src, link / "Iron Man (2008)") == 115
+    assert tree_size(tmp_path / "library" / "movies" / "Iron Man (2008)") == 115

@@ -1811,6 +1811,36 @@ async def test_arm_inprogress_sweep_skips_when_media_root_missing(tmp_path: Path
     assert deleted == 0
 
 
+async def test_arm_inprogress_sweep_removes_an_orphaned_backup_staging_folder(tmp_path: Path) -> None:
+    """A disc backup copied across filesystems is staged as a folder,
+    `<Title>.arm-inprogress`; one left by a crash is half a disc, and a live
+    backup task's staging folder is kept."""
+    media = tmp_path / "media"
+    orphan = media / "Iron Man (2008).arm-inprogress"
+    (orphan / "BDMV").mkdir(parents=True)
+    (orphan / "BDMV" / "index.bdmv").write_bytes(b"half")
+    live = media / "Live Movie (2024).arm-inprogress"
+    (live / "BDMV").mkdir(parents=True)
+
+    db = FakeSession()
+    db.rows["transcode_tasks"] = [
+        TranscodeTask(
+            id="txt_live",
+            session_application_id="sap_x",
+            source_track_id="trk_x",
+            status=TranscodeTaskStatus.IN_PROGRESS,
+            output_path="Live Movie (2024)",
+            attempts=1,
+            progress_pct=50,
+        )
+    ]
+    disp = TranscodeDispatcher(_settings(), _db_factory(db), MagicMock(), WSHub())
+
+    assert await disp.sweeps.sweep_arm_inprogress(media) == 1
+    assert not orphan.exists()
+    assert live.exists()
+
+
 # ---- cancel running ----------------------------------------------------------
 
 
