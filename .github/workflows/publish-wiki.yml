@@ -3,6 +3,10 @@ name: Publish ARM Wiki Update
 # Publishes docs/user from main only. A review-time trigger synced an unmerged
 # PR's docs to the public wiki (the sync is rsync --delete, so the wiki mirrors
 # whatever it is given).
+#
+# Opt-in per repository, like the docs site: it runs only when the repo
+# variable WIKI_SYNC_ENABLED is 'true'. A repository whose wiki still serves
+# other docs (the v2 wiki) is never overwritten by these until it opts in.
 on:
   push:
     branches: [main]
@@ -21,7 +25,7 @@ jobs:
   job-sync-docs-to-wiki:
     runs-on: ubuntu-latest
     # A manual run can be started on any branch; only main's docs are published.
-    if: github.ref == 'refs/heads/main'
+    if: vars.WIKI_SYNC_ENABLED == 'true' && github.ref == 'refs/heads/main'
     steps:
       - name: Checkout Repo
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
