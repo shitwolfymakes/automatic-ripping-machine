@@ -120,6 +120,15 @@ describe('DataTable', () => {
 		expect(screen.getAllByText('Custom')[0]).toHaveAttribute('data-tone', 'custom');
 	});
 
+	it("labels a media pill with the cell's text, keeping the tone's colour", () => {
+		const columns = [{ id: 'm', header: 'Media', cell: () => ({ text: 'Video', pill: { tone: 'movie' as const } }) }];
+		renderComponent(DataTableHarness, { rows, columns });
+		const pills = screen.getAllByText('Video');
+		expect(pills[0]).toHaveAttribute('data-media', 'movie');
+		expect(pills[0]).toHaveAttribute('title', 'Video');
+		expect(screen.queryByText('Movie')).toBeNull();
+	});
+
 	it('draws a mono cell in the monospace face and a plain cell without it', () => {
 		const columns = [
 			{ id: 'p', header: 'Path', cell: () => ({ text: 'a/b.mkv', mono: true }) },

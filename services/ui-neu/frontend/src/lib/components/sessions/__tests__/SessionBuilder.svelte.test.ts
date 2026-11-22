@@ -149,3 +149,20 @@ it('labels every field by name and links the output path to its tokens help', ()
 	);
 	expect(screen.queryByRole('link', { name: 'Docs for Session name (opens in a new tab)' })).toBeNull();
 });
+
+it('offers a movie transcode preset to a TV session, and never a music one', async () => {
+	renderComponent(
+		SessionBuilder,
+		props({
+			transcodePresets: [
+				{ id: 't1', name: 'Plex 1080p', media_type: 'movie' },
+				{ id: 't2', name: 'FLAC', media_type: 'music' }
+			]
+		})
+	);
+	await fireEvent.click(screen.getByRole('button', { name: 'TV' }));
+	const select = document.getElementById('sb-tc') as HTMLSelectElement;
+	const labels = Array.from(select.options).map((o) => o.textContent?.trim());
+	expect(labels).toContain('Plex 1080p');
+	expect(labels).not.toContain('FLAC');
+});

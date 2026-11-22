@@ -241,6 +241,31 @@ def _check_bit_depth(ctx: _Block) -> list[SettingIssue]:
     return [_block_issue(ctx.family.name, "bit_depth", "not_in_list", message)]
 
 
+# HandBrake writes VideoTune as null for "no tune"; every other block value must match its schema type.
+_NULLABLE_BLOCK_KEYS = frozenset({"VideoTune"})
+
+
+def _block_type_issue(ctx: _Block, key: str) -> SettingIssue | None:
+    """A wrong_type issue when the block's value for `key` is not its schema type; None for a key the schema lacks."""
+    spec = ctx.schema.keys.get(key)
+    value = ctx.block[key]
+    if spec is None or (value is None and key in _NULLABLE_BLOCK_KEYS) or _TYPE_CHECKS[spec.type](value):
+        return None
+    return _block_issue(ctx.family.name, key, "wrong_type", f"{value!r} is not a valid {spec.type} value")
+
+
+def _check_block_types(ctx: _Block) -> list[SettingIssue]:
+    """Rule 8a: every encoder key in the block holds its schema type, read from the schema so a key added to
+    ENCODER_SPECIFIC_KEYS is checked too."""
+    found = [_block_type_issue(ctx, key) for key in ctx.block if key in ENCODER_SPECIFIC_KEYS]
+    return [issue for issue in found if issue is not None]
+
+
+def _well_typed(ctx: _Block, key: str) -> bool:
+    """The block sets `key` with a value of its type; rule 8a reports the others, so later rules skip them."""
+    return key in ctx.block and _block_type_issue(ctx, key) is None
+
+
 _LISTED_KEYS: dict[str, str] = {
     "VideoPreset": "presets",
     "VideoTune": "tunes",
@@ -271,8 +296,6 @@ def _check_quality(ctx: _Block, variant: EncoderVariant) -> SettingIssue | None:
     value = ctx.block["VideoQualitySlider"]
     limits = variant.quality
     name = ctx.family.name
-    if not _is_number(value):
-        return _block_issue(name, "VideoQualitySlider", "wrong_type", f"{value!r} is not a number")
     on_step = float(round((value - limits.low) / limits.step, 6)).is_integer()
     if limits.low <= value <= limits.high and on_step:
         return None
@@ -285,8 +308,8 @@ def _check_block_values(ctx: _Block) -> list[SettingIssue]:
     variant = _variant(ctx)
     if variant is None:
         return []  # rule 7 reports the depth
-    found = [_check_listed_key(ctx, variant, key) for key in _LISTED_KEYS if key in ctx.block]
-    if "VideoQualitySlider" in ctx.block:
+    found = [_check_listed_key(ctx, variant, key) for key in _LISTED_KEYS if _well_typed(ctx, key)]
+    if _well_typed(ctx, "VideoQualitySlider"):
         found.append(_check_quality(ctx, variant))
     return [issue for issue in found if issue is not None]
 
@@ -333,6 +356,7 @@ def _check_flag_support(ctx: _Block) -> list[SettingIssue]:
 
 
 _CLAIM_RULES: tuple[Callable[[_Block], list[SettingIssue]], ...] = (
+    _check_block_types,
     _check_bit_depth,
     _check_block_values,
     _check_inherited_quality,
@@ -359,7 +383,7 @@ def _run_rules(
 def validate_family(
     schema: HandbrakeSchema, *, family: str, preset_ref: str | None, settings: HandbrakeSettings
 ) -> list[SettingIssue]:
-    """Rules 7, 8, 10, 11 for one family at claim and encode time. A family without a block is valid."""
+    """Rules 7, 8, 8a, 10, 11 for one family at claim and encode time. A family without a block is valid."""
     return _run_rules(_CLAIM_RULES, schema, family, preset_ref, settings)
 
 
