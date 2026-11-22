@@ -44,7 +44,7 @@
 						<td class={view.className} data-muted={view.muted}>
 							<div class="data-table-main">
 								{#if view.pill?.kind === 'media'}
-									<MediaPill mediaType={view.pill.tone as MediaType} />
+									<MediaPill mediaType={view.pill.tone as MediaType} label={view.pill.text} />
 								{:else if view.pill}
 									<span class="badge badge-sm data-table-tag" data-tone={view.pill.tone} title={view.pill.text}
 										>{view.pill.text}</span
