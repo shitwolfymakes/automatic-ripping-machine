@@ -65,15 +65,15 @@ CLOSE_AUTH_TIMEOUT = 4408
 
 def _origin_allowed(
     origin: str | None,
-    subprotocols: list[str],
     *,
     request_host: str | None = None,
     request_scheme: str = "https",
     forwarded_host: str | None = None,
     forwarded_proto: str | None = None,
 ) -> bool:
-    if SERVICE_TOKEN_SUBPROTOCOL in subprotocols:
-        return True
+    # No Origin: not a browser. Rippers and transcoders connect this way (they
+    # request the service-token subprotocol, but any page can request that
+    # too, so it waives nothing); their token is checked at auth.
     if not origin:
         return True
     if origin in settings.ARM_ALLOWED_ORIGINS:
@@ -108,7 +108,6 @@ async def ws_endpoint(
     request_scheme = "https" if websocket.url.scheme in ("wss", "https") else "http"
     if not _origin_allowed(
         origin,
-        subprotocols,
         request_host=host,
         request_scheme=request_scheme,
         forwarded_host=x_forwarded_host,
