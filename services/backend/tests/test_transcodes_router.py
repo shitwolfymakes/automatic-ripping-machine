@@ -411,6 +411,59 @@ def test_retry_failed_requeues_and_resets(signing_key: bytes) -> None:
     assert db.rows["transcode_tasks"][0].status == TranscodeTaskStatus.QUEUED
 
 
+@pytest.mark.parametrize("app_status", [SessionApplicationStatus.FAILED, SessionApplicationStatus.DONE_PARTIAL])
+def test_retry_reopens_a_settled_session_application(signing_key: bytes, app_status: SessionApplicationStatus) -> None:
+    """The application was settled when its last task failed. Retrying puts it
+    back to running (completed_at cleared), as re-applying the session does,
+    so the job reads as transcoding again and the aggregate settles it afresh
+    when the retry finishes."""
+    from arm_backend.job_views import _summarize_transcode_progress
+
+    db = FakeSession()
+    application = SessionApplication(
+        id="sap_1",
+        session_id="ses_1",
+        job_id="job_1",
+        status=app_status,
+        completed_at=datetime.now(UTC),
+    )
+    db.rows["session_applications"] = [application]
+    db.rows["transcode_tasks"] = [
+        _task("txt_done", status=TranscodeTaskStatus.DONE),
+        _task("txt_f", status=TranscodeTaskStatus.FAILED),
+    ]
+    hub = _CapturingHub()
+    app, token = _make_app(signing_key, db, hub=hub)
+    with TestClient(app) as c:
+        r = c.post("/api/transcodes/txt_f/retry", headers=_auth(token))
+    assert r.status_code == 200, r.text
+    assert application.status == SessionApplicationStatus.RUNNING
+    assert application.completed_at is None
+    assert [(e["event_type"], e["payload"]) for e in hub.events] == [
+        ("task.retried", {"task_id": "txt_f", "session_application_id": "sap_1"})
+    ]
+    summary = _summarize_transcode_progress([application], db.rows["transcode_tasks"])
+    assert summary is not None and summary.state == "transcoding"
+
+
+def test_retry_leaves_a_running_session_application_running(signing_key: bytes) -> None:
+    """Another task of the session is still encoding: nothing to reopen."""
+    db = FakeSession()
+    application = SessionApplication(
+        id="sap_1", session_id="ses_1", job_id="job_1", status=SessionApplicationStatus.RUNNING
+    )
+    db.rows["session_applications"] = [application]
+    db.rows["transcode_tasks"] = [
+        _task("txt_run", status=TranscodeTaskStatus.IN_PROGRESS),
+        _task("txt_f", status=TranscodeTaskStatus.FAILED),
+    ]
+    app, token = _make_app(signing_key, db, hub=_CapturingHub())
+    with TestClient(app) as c:
+        r = c.post("/api/transcodes/txt_f/retry", headers=_auth(token))
+    assert r.status_code == 200, r.text
+    assert application.status == SessionApplicationStatus.RUNNING
+
+
 def test_retry_non_failed_409(signing_key: bytes) -> None:
     db = FakeSession()
     db.rows["transcode_tasks"] = [_task("txt_run", status=TranscodeTaskStatus.IN_PROGRESS)]

@@ -43,6 +43,7 @@ from arm_backend.transcode_apply import (
     encoder_available,
     find_collisions,
     is_passthrough_preset,
+    reopen_session_application,
     transcode_enabled_now,
 )
 from arm_backend.ws import WSHub
@@ -251,13 +252,7 @@ async def _existing_auto_outcome(db: AsyncSession, session_id: str, job: Job) ->
         tasks = await _load_tasks(db, existing.id)
         retried = await _retry_failed_tasks(db, tasks)
         if retried > 0:
-            if existing.status in (
-                SessionApplicationStatus.FAILED,
-                SessionApplicationStatus.DONE_PARTIAL,
-                SessionApplicationStatus.DONE,
-            ):
-                existing.status = SessionApplicationStatus.RUNNING
-                existing.completed_at = None
+            reopen_session_application(existing)
             await db.commit()
             tasks = await _load_tasks(db, existing.id)
             logger.info(
