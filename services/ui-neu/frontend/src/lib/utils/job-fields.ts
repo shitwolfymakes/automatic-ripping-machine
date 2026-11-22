@@ -69,12 +69,12 @@ function stateLabel(job: JobView, parked: string | null): string {
 	return parked ? 'Waiting' : 'Waiting for session';
 }
 
-function stateFields(job: JobView, sessionNames?: Map<string, string>): MetadataField[] {
+function stateFields(job: JobView, sessionNames?: Map<string, string>, transcodeEnabled = true): MetadataField[] {
 	// A ripped job that is waiting for the operator is live (it can still change)
 	// but nothing is running, so it is neither "In progress" nor "Finished". A
 	// job with a parked session is not waiting for one: the Session row below
 	// names the session that is waiting.
-	const parked = parkedSessionLine(job, sessionNames ?? new Map());
+	const parked = parkedSessionLine(job, sessionNames ?? new Map(), transcodeEnabled);
 	const fields: MetadataField[] = [{ label: 'State', value: stateLabel(job, parked) }];
 	if (parked) fields.push({ label: 'Session', value: parked });
 	return fields;
@@ -160,12 +160,13 @@ function padToRow(fields: MetadataField[], width: number): MetadataField[] {
 export function buildMetadataFields(
 	job: JobView,
 	driveNames?: Record<string, string> | null,
-	sessionNames?: Map<string, string>
+	sessionNames?: Map<string, string>,
+	transcodeEnabled = true
 ): MetadataField[] {
 	const tv = job.media_type === 'tv';
 	const fields = [
 		...baseFields(job, driveNames),
-		...stateFields(job, sessionNames),
+		...stateFields(job, sessionNames, transcodeEnabled),
 		...discPositionFields(job, tv),
 		...posterFields(job),
 		...metadataJsonFields(job, tv)

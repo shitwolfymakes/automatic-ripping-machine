@@ -92,6 +92,18 @@ describe('buildMetadataFields', () => {
 			expect(findField(fields, 'Session')?.value).toBe('Movies, waiting');
 		});
 
+		it('says the parked session waits on transcoding while it is switched off', () => {
+			const fields = buildMetadataFields(
+				createJob({ status: 'ripped', transcode_progress: null, parked_session_ids: ['ses_movies'] }),
+				null,
+				new Map([['ses_movies', 'Movies']]),
+				false
+			);
+			expect(findField(fields, 'Session')?.value).toBe(
+				'Movies: Transcoding is currently unavailable. Please enable to resume.'
+			);
+		});
+
 		it('shows Waiting for identity for a ripped placeholder disc', () => {
 			const fields = buildMetadataFields(createJob({ status: 'ripped_awaiting_identify', transcode_progress: null }));
 			expect(findField(fields, 'State')?.value).toBe('Waiting for identity');

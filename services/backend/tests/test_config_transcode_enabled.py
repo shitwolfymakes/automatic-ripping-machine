@@ -220,6 +220,41 @@ def test_reenable_promotes_encode_application_parked_while_disabled(
     assert any(e["event_type"] == "session.queued" for e in hub.events)
 
 
+@pytest.mark.parametrize("job_status", [JobStatus.RIPPED, JobStatus.RIPPED_PARTIAL])
+def test_rip_finished_while_disabled_is_recovered_on_reenable(
+    signing_key: bytes, db: FakeSession, config_row: Config, media_root: Path, job_status: JobStatus
+) -> None:
+    """#607: a rip that finishes while transcoding is off, routed to an encode
+    session, is queued once transcoding is switched back on."""
+    import asyncio
+
+    from arm_backend.auto_session import apply_session_internal
+    from tests.test_auto_session import CapturingHub
+    from tests.test_auto_session import _seed as seed_job
+
+    config_row.transcode_enabled = False
+    job = seed_job(db, job_status=job_status)
+    asyncio.run(
+        apply_session_internal(
+            db,
+            job=job,
+            session_id="ses_x",
+            overwrite=False,
+            created_by_user_id=None,
+            source="auto",
+            hub=CapturingHub(),  # type: ignore[arg-type]
+        )
+    )
+    assert db.rows["transcode_tasks"] == []
+    c, _hub = _client_with_hub(signing_key, db)
+
+    r = c.patch("/api/config", json={"transcode_enabled": True})
+
+    assert r.status_code == 200, r.text
+    assert db.rows["transcode_tasks"], "the rip stayed in /raw with nothing queued"
+    assert db.rows["session_applications"][0].status == SessionApplicationStatus.QUEUED
+
+
 @pytest.mark.parametrize("job_status", [JobStatus.IDENTIFIED, JobStatus.AWAITING_REVIEW])
 def test_reenable_leaves_pre_rip_application_parked_even_with_review_tracks(
     signing_key: bytes,

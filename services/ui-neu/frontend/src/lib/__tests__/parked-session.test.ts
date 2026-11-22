@@ -40,6 +40,26 @@ describe('parkedSessionLine', () => {
 			parkedSessionLine({ status: 'ripped', parked_session_ids: ['ses_a', 'ses_0123456789abcdefXYZ'] }, names)
 		).toBe('Plex 1080p, ses_0123456789a..., waiting');
 	});
+	it('post-rip while transcoding is off: says why it is waiting (#607)', () => {
+		for (const status of ['ripped', 'ripped_partial'] as const) {
+			expect(parkedSessionLine({ status, parked_session_ids: ['ses_a'] }, names, false)).toBe(
+				'Plex 1080p: Transcoding is currently unavailable. Please enable to resume.'
+			);
+		}
+	});
+	it('waiting on identity, not transcoding: enabling transcoding would not resume it', () => {
+		expect(parkedSessionLine({ status: 'ripped_awaiting_identify', parked_session_ids: ['ses_a'] }, names, false)).toBe(
+			'Plex 1080p, waiting'
+		);
+	});
+	it('pre-rip, failed or abandoned: transcoding being off changes nothing', () => {
+		expect(parkedSessionLine({ status: 'awaiting_review', parked_session_ids: ['ses_a'] }, names, false)).toBe(
+			'Plex 1080p, applies when the rip finishes'
+		);
+		expect(parkedSessionLine({ status: 'failed', parked_session_ids: ['ses_a'] }, names, false)).toBe(
+			'Plex 1080p, not applied, the rip failed'
+		);
+	});
 	it('unknown ids of 15 characters or fewer are shown in full', () => {
 		expect(parkedSessionLine({ status: 'ripped', parked_session_ids: ['ses_01234567890'] }, names)).toBe(
 			'ses_01234567890, waiting'

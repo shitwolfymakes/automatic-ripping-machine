@@ -4,6 +4,7 @@
 	import { DiscReviewData } from '$lib/stores/discReviewData.svelte';
 	import { DiscReviewJobActions } from '$lib/stores/discReviewJobActions.svelte';
 	import { parkedSessionLine } from '$lib/utils/parked-session';
+	import { transcodeRuntimeEnabled } from '$lib/stores/config';
 	import { readJobMetadata } from '$lib/utils/job-metadata';
 	import { episodeStatus } from '$lib/utils/episode-status';
 	import { handSetTrackCount } from '$lib/utils/track-fields';
@@ -130,7 +131,7 @@
 		isTv ? episodeStatus(displayJob, reviewData.detail ? tracks : null, matching.active) : null
 	);
 	let sourceRow = $derived(reviewSourceRow(displayJob, isoName, isoSourceKinds, driveNames));
-	let parkedLine = $derived(parkedSessionLine(displayJob, reviewData.sessionNames));
+	let parkedLine = $derived(parkedSessionLine(displayJob, reviewData.sessionNames, $transcodeRuntimeEnabled));
 	let appliedSession = $derived(appliedSessionName(parkedLine, jobMeta.pending_session_id, reviewData.sessionNames));
 
 	// Header phase pill. For a post-rip job that already HAS a session pending but
