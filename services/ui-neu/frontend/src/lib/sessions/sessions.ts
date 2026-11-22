@@ -120,3 +120,8 @@ export function transcodePresetFits(presetMediaType: string, sessionMediaType: s
 export function transcodeMediaGroup(mediaType: MediaType): MediaType {
 	return VIDEO_MEDIA_TYPES.has(mediaType) ? 'movie' : mediaType;
 }
+
+/** The media type a preset library filters and counts a preset by: a transcode preset by its group, a rip preset by its own type. */
+export function presetFilterMediaType(kind: 'rip' | 'transcode', mediaType: MediaType): MediaType {
+	return kind === 'transcode' ? transcodeMediaGroup(mediaType) : mediaType;
+}
