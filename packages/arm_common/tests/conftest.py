@@ -27,6 +27,12 @@ def hb_schema(hb_raw: dict[str, Any]) -> HandbrakeSchema:
 
 
 @pytest.fixture(scope="session")
+def wrong_for_type() -> dict[str, Any]:
+    """A value of the wrong JSON type for each schema key type."""
+    return {"bool": "yes", "int": "1", "float": "high", "str": 1, "list_str": [1], "list_obj": [1]}
+
+
+@pytest.fixture(scope="session")
 def plex_export() -> Any:
     """A real GUI export of a custom Plex 720p preset."""
     return json.loads((FIXTURES / "handbrake-export-custom-plex-720p.json").read_text())
