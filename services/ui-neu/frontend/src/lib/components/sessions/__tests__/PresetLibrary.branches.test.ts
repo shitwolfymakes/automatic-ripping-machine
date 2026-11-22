@@ -135,8 +135,9 @@ describe('PresetLibrary type chips', () => {
 	it('counts only the transcode presets on the transcode tab', () => {
 		renderComponent(PresetLibrary, defaultProps({ kind: 'transcode' }));
 		expect(screen.getByRole('button', { name: /^All 3$/ })).toBeInTheDocument();
-		expect(screen.getByRole('button', { name: /^Movie 1$/ })).toBeInTheDocument();
-		expect(screen.getByRole('button', { name: /^TV 1$/ })).toBeInTheDocument();
+		// Movie and TV transcode presets fit sessions of either, so they share one Video chip.
+		expect(screen.getByRole('button', { name: /^Video 2$/ })).toBeInTheDocument();
+		expect(screen.queryByRole('button', { name: /^TV/ })).not.toBeInTheDocument();
 		expect(screen.getByRole('button', { name: /^Music 1$/ })).toBeInTheDocument();
 	});
 
