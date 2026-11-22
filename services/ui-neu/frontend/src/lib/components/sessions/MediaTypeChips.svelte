@@ -2,14 +2,17 @@
 	// The TYPE filter's chips: All and each media type, each with its
 	// count. The pressed chip is the selected type; pressing one selects it.
 	import type { MediaType } from '$lib/types/api.gen';
+	import { VIDEO_GROUP_LABEL } from '$lib/utils/preset-labels';
 
 	interface Props {
 		/** The count for All and each media type. A type left out shows 0. */
 		counts: Partial<Record<MediaType | 'all', number>>;
 		/** The selected type, bound to the parent's filter. */
 		selected: MediaType | 'all';
+		/** One Video chip (keyed `movie`) in place of Movie and TV, for transcode presets, which fit either. */
+		videoGroup?: boolean;
 	}
-	let { counts, selected = $bindable() }: Props = $props();
+	let { counts, selected = $bindable(), videoGroup = false }: Props = $props();
 
 	const MEDIA_TYPES: Array<{ key: MediaType | 'all'; label: string }> = [
 		{ key: 'all', label: 'All' },
@@ -19,9 +22,15 @@
 		{ key: 'data', label: 'Data' },
 		{ key: 'iso', label: 'ISO' }
 	];
+	const VIDEO_GROUP_TYPES: Array<{ key: MediaType | 'all'; label: string }> = [
+		{ key: 'all', label: 'All' },
+		{ key: 'movie', label: VIDEO_GROUP_LABEL },
+		...MEDIA_TYPES.filter((c) => c.key !== 'all' && c.key !== 'movie' && c.key !== 'tv')
+	];
+	const chips = $derived(videoGroup ? VIDEO_GROUP_TYPES : MEDIA_TYPES);
 </script>
 
-{#each MEDIA_TYPES as chip (chip.key)}
+{#each chips as chip (chip.key)}
 	{@const count = counts[chip.key] ?? 0}
 	<button
 		type="button"
