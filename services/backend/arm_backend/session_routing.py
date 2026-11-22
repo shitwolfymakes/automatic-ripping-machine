@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import col, select
 
 from arm_common import Config, DiscType, Drive, Job, MediaType, Session, SessionRoute
+from arm_common.enums import VIDEO_MEDIA_TYPES
 
 logger = logging.getLogger("arm_backend.session_routing")
 
@@ -26,10 +27,9 @@ def media_types_compatible(job_mt: MediaType, sess_mt: MediaType) -> bool:
     """
     if job_mt == sess_mt:
         return True
-    video = {MediaType.MOVIE, MediaType.TV}
-    if sess_mt in video and job_mt in video:
+    if sess_mt in VIDEO_MEDIA_TYPES and job_mt in VIDEO_MEDIA_TYPES:
         return True
-    if sess_mt in (MediaType.ISO, MediaType.DATA) and job_mt in video | {MediaType.DATA}:
+    if sess_mt in (MediaType.ISO, MediaType.DATA) and job_mt in VIDEO_MEDIA_TYPES | {MediaType.DATA}:
         return True
     return False
 
