@@ -29,15 +29,15 @@
 </script>
 
 <div class="stack stack-lg" data-testid="system-health">
-	<div class="flex flex-wrap items-center justify-between gap-3">
+	<div class="flex flex-wrap items-center gap-3">
+		<button type="button" onclick={onrun} disabled={loading} data-testid="system-health-run" class="btn">
+			<Glyph name="refresh" class={loading ? 'spin' : ''} />
+			{loading ? 'Checking...' : 'Run system check'}
+		</button>
 		<span class="system-health-grouped-last-run flex items-center gap-1.5">
 			<Glyph name="clock" />
 			{lastRun ? `Checked ${formatDateTime(lastRun)}` : 'Not checked yet'}
 		</span>
-		<button type="button" onclick={onrun} disabled={loading} data-testid="system-health-run" class="btn">
-			<Glyph name="refresh" class={loading ? 'spin' : ''} />
-			{loading ? 'Checking...' : 'Check again'}
-		</button>
 	</div>
 
 	{#if error}
