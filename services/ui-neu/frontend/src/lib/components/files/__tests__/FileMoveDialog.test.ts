@@ -49,6 +49,16 @@ describe('FileMoveDialog', () => {
 		expect(screen.queryByText('..')).toBeNull();
 	});
 
+	it('opens as a side panel named for the move', async () => {
+		const { picker } = setup();
+		mockDir.mockResolvedValueOnce(listingOf([dir('x')], { parent_subpath: '' }));
+		await picker.open();
+		await tick();
+		const panel = screen.getByRole('dialog', { name: 'Move 1 item' });
+		expect(panel.classList.contains('slide-over-panel')).toBe(true);
+		expect(panel.contains(screen.getByText('x'))).toBe(true);
+	});
+
 	it('shows the go-up row, the folders, the current badge and the singular heading', async () => {
 		const { picker } = setup();
 		mockDir.mockResolvedValueOnce(listingOf([dir('x'), dir('y')], { parent_subpath: '' }));
@@ -106,12 +116,16 @@ describe('FileMoveDialog', () => {
 		expect(picker.location).toEqual({ root: 'raw', subpath: '' });
 	});
 
-	it('closes from the backdrop and from Cancel', async () => {
+	it('closes from the backdrop, Escape and Cancel', async () => {
 		const { picker } = setup();
 		mockDir.mockResolvedValue(listingOf([]));
 		await picker.open();
 		await tick();
-		await fireEvent.click(screen.getByLabelText('Close dialog'));
+		await fireEvent.click(document.querySelector('.slide-over-scrim') as HTMLElement);
+		expect(picker.isOpen).toBe(false);
+		await picker.open();
+		await tick();
+		await fireEvent.keyDown(document, { key: 'Escape' });
 		expect(picker.isOpen).toBe(false);
 		await picker.open();
 		await tick();

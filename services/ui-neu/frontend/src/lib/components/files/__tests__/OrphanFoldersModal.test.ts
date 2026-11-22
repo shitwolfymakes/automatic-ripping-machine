@@ -66,6 +66,21 @@ describe('OrphanFoldersModal', () => {
 		expect(screen.queryByText('Orphan Folders')).toBeNull();
 	});
 
+	it('keeps its close scrim under the panel, so a click in the panel reaches it', async () => {
+		// The shared .modal-backdrop is a fixed, tinted scrim at z-index 50: on the
+		// inner close button it covered the panel, and every click inside the
+		// dialog closed it instead.
+		const orphans = setup();
+		mockFetch.mockReturnValueOnce(new Promise(() => {}));
+		void orphans.open();
+		await tick();
+		const scrim = screen.getByRole('button', { name: 'Close dialog' });
+		expect(scrim.classList.contains('modal-backdrop')).toBe(false);
+		expect(
+			screen.getByText('Orphan Folders').closest('.modal-panel')?.classList.contains('files-page-dialog-panel')
+		).toBe(true);
+	});
+
 	it('shows the loading spinner while the folders load', async () => {
 		const orphans = setup();
 		mockFetch.mockReturnValueOnce(new Promise(() => {}));
