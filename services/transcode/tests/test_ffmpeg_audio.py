@@ -384,6 +384,64 @@ def test_build_audio_command_empty_tags_add_nothing(tmp_path):
     assert empty == bare
 
 
+_COVER_ARGS = [
+    "-map",
+    "0:a",
+    "-map",
+    "1:v",
+    "-c:v",
+    "copy",
+    "-disposition:v",
+    "attached_pic",
+    "-metadata:s:v",
+    "title=Album cover",
+    "-metadata:s:v",
+    "comment=Cover (front)",
+]
+
+
+@pytest.mark.parametrize("preset", ["flac", "mp3"])
+def test_build_audio_command_embeds_the_cover_as_a_front_cover_picture(tmp_path, preset):
+    wav, cover, out = tmp_path / "in.wav", tmp_path / "cover.jpg", tmp_path / "out"
+    cmd = build_audio_command(
+        input_path=wav, output_path=out, preset_ref=preset, tags=MusicTags(title="Airbag"), cover_path=cover
+    )
+
+    # The cover is the second input, copied untouched as the attached picture.
+    assert cmd[cmd.index("-i") : cmd.index("-i") + 4] == ["-i", str(wav), "-i", str(cover)]
+    start = cmd.index("-map")
+    assert cmd[start : start + len(_COVER_ARGS)] == _COVER_ARGS
+    assert cmd[-1] == str(out)
+    assert len(_metadata_pairs(cmd)) == 1
+
+
+def test_build_audio_command_without_a_cover_reads_one_input(tmp_path):
+    cmd = build_audio_command(input_path=tmp_path / "in.wav", output_path=tmp_path / "o", preset_ref="flac")
+    assert cmd.count("-i") == 1
+    assert "-map" not in cmd
+
+
+@pytest.mark.asyncio
+async def test_transcode_audio_passes_the_cover_to_ffmpeg(monkeypatch, tmp_path):
+    captured: list[tuple] = []
+    _stub_subprocess(monkeypatch, stdout_lines=_progress_lines([10_000_000]), captured_args=captured)
+    out_path = tmp_path / "out.flac"
+    out_path.write_bytes(b"x")
+
+    async def cb(_p: int, _t: int | None, _n: str | None, _f: float | None, _a: float | None) -> None:
+        return None
+
+    await transcode_audio(
+        input_path=tmp_path / "in.wav",
+        output_path=out_path,
+        preset_ref="flac",
+        duration_seconds=10,
+        progress_callback=cb,
+        cover_path=tmp_path / "cover.png",
+    )
+    assert str(tmp_path / "cover.png") in list(captured[0])
+
+
 @pytest.mark.asyncio
 async def test_transcode_audio_passes_tags_to_ffmpeg(monkeypatch, tmp_path):
     captured: list[tuple] = []

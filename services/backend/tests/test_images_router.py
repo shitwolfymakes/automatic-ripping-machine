@@ -391,6 +391,29 @@ def test_release_404_falls_back_to_group(client, monkeypatch):
     assert r.status_code == 200
     assert r.content == b"GROUPCOVER"
     assert any("/release-group/grp-1/" in u for u in requested)
+    assert "https://coverartarchive.org/release-group/grp-1/front-250" in requested
+
+
+def test_group_fallback_keeps_the_requested_size(client, monkeypatch):
+    # The transcoder's cover asks for front-500; the album-wide fallback must not drop to the thumbnail.
+    requested = _patch_fetch_recording(
+        monkeypatch,
+        {"/release/rel-1/": "404", "/release-group/grp-1/": ("image", b"GROUPCOVER", "image/jpeg")},
+    )
+    url = "https://coverartarchive.org/release/rel-1/front-500?fallback_group=grp-1"
+    r = client.get("/api/images/proxy", params={"url": url})
+    assert r.status_code == 200
+    assert requested[-1] == "https://coverartarchive.org/release-group/grp-1/front-500"
+
+
+def test_group_fallback_without_a_size_in_the_url_uses_the_thumbnail(client, monkeypatch):
+    requested = _patch_fetch_recording(
+        monkeypatch,
+        {"/release/rel-1/": "404", "/release-group/grp-1/": ("image", b"GROUPCOVER", "image/jpeg")},
+    )
+    url = "https://coverartarchive.org/release/rel-1/front?fallback_group=grp-1"
+    assert client.get("/api/images/proxy", params={"url": url}).status_code == 200
+    assert requested[-1] == "https://coverartarchive.org/release-group/grp-1/front-250"
 
 
 def test_release_200_does_not_use_fallback(client, monkeypatch):

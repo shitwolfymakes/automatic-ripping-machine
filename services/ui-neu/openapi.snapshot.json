@@ -3817,6 +3817,51 @@
         ]
       }
     },
+    "/api/transcoder/tasks/{task_id}/cover-art": {
+      "get": {
+        "tags": [
+          "transcoder"
+        ],
+        "summary": "Cover Art",
+        "operationId": "cover_art_api_transcoder_tasks__task_id__cover_art_get",
+        "security": [
+          {
+            "ServiceToken": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "task_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Task Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/transcoder/tasks/{task_id}/claim": {
       "post": {
         "tags": [

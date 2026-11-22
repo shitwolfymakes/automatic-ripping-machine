@@ -351,6 +351,7 @@ async def test_run_encoder_abcde_encodes_audio_with_preset_ref(monkeypatch, tmp_
     assert called["preset_ref"] == "mp3"
     assert called["duration_seconds"] == 321
     assert called["tags"] is None
+    assert called["cover_path"] is None
     assert (tmp_path / "out.mkv").read_bytes() == b"a" * 5
 
 
@@ -377,8 +378,10 @@ async def test_run_encoder_abcde_passes_music_tags(monkeypatch, tmp_path) -> Non
         state=ProgressState(),
         cancel_event=asyncio.Event(),
         music_tags=tags,
+        cover_path=tmp_path / "cover.jpg",
     )
     assert called["tags"] is tags
+    assert called["cover_path"] == tmp_path / "cover.jpg"
 
 
 @pytest.mark.asyncio

@@ -14,6 +14,8 @@ A music track's tags (`MusicTags`, from the Backend's register response)
 go in as `-metadata key=value` pairs, one argv item each, so any title is
 safe without shell quoting. FLAC gets Vorbis comment names; MP3 gets the
 ffmpeg ID3v2 keys, written as ID3v2.3 for the widest player support.
+The cover, when there is one, is a second input copied in untouched as
+the front-cover picture (a FLAC PICTURE block, an ID3 APIC frame).
 """
 
 from __future__ import annotations
@@ -76,6 +78,25 @@ def _mp3_tags(tags: MusicTags) -> list[tuple[str, object]]:
 _TAG_MAPS: dict[str, Callable[[MusicTags], list[tuple[str, object]]]] = {"flac": _flac_tags, "mp3": _mp3_tags}
 
 
+# The cover is the second input: map the WAV's audio and the image, copy the
+# image as-is, and mark it as the front cover (picture type 3) both muxers read
+# from the stream's `comment`.
+_COVER_ARGS = [
+    "-map",
+    "0:a",
+    "-map",
+    "1:v",
+    "-c:v",
+    "copy",
+    "-disposition:v",
+    "attached_pic",
+    "-metadata:s:v",
+    "title=Album cover",
+    "-metadata:s:v",
+    "comment=Cover (front)",
+]
+
+
 def _metadata_args(codec: str, tags: MusicTags | None) -> list[str]:
     """`-metadata key=value` argv pairs for every known tag; [] without tags."""
     if tags is None:
@@ -88,9 +109,15 @@ def _metadata_args(codec: str, tags: MusicTags | None) -> list[str]:
 
 
 def build_audio_command(
-    *, input_path: Path, output_path: Path, preset_ref: str, tags: MusicTags | None = None
+    *,
+    input_path: Path,
+    output_path: Path,
+    preset_ref: str,
+    tags: MusicTags | None = None,
+    cover_path: Path | None = None,
 ) -> list[str]:
-    """Build the ffmpeg argv that re-encodes `input_path` to the preset's codec, writing `tags` into the output.
+    """Build the ffmpeg argv that re-encodes `input_path` to the preset's codec,
+    writing `tags` and the `cover_path` image into the output.
 
     Progress goes to stdout; raises `RuntimeError` for an unknown preset.
     """
@@ -110,6 +137,7 @@ def build_audio_command(
         "-y",
         "-i",
         str(input_path),
+        *(["-i", str(cover_path), *_COVER_ARGS] if cover_path is not None else []),
         *flags,
         *_metadata_args(codec, tags),
         str(output_path),
@@ -124,12 +152,15 @@ async def transcode_audio(
     duration_seconds: int | None,
     progress_callback: ProgressCallback,
     tags: MusicTags | None = None,
+    cover_path: Path | None = None,
 ) -> int:
-    """Run ffmpeg to re-encode `input_path` → `output_path`, tagged with `tags`.
+    """Run ffmpeg to re-encode `input_path` → `output_path`, tagged with `tags` and `cover_path`.
 
     Returns the final file size in bytes; raises `RuntimeError` on non-zero exit.
     """
-    cmd = build_audio_command(input_path=input_path, output_path=output_path, preset_ref=preset_ref, tags=tags)
+    cmd = build_audio_command(
+        input_path=input_path, output_path=output_path, preset_ref=preset_ref, tags=tags, cover_path=cover_path
+    )
     logger.info("ffmpeg launching: %s", " ".join(cmd))
 
     proc = await asyncio.create_subprocess_exec(

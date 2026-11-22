@@ -56,6 +56,14 @@ class BackendClient:
         r.raise_for_status()
         return RegisterTranscoderResponse.model_validate(r.json())
 
+    async def cover_art(self, task_id: str) -> tuple[bytes, str] | None:
+        """The music track's cover as (content, content type); None when it has none (404)."""
+        r = await self._client.get(f"/api/transcoder/tasks/{task_id}/cover-art")
+        if r.status_code == 404:
+            return None
+        r.raise_for_status()
+        return r.content, r.headers.get("content-type", "")
+
     async def claim(self, task_id: str) -> ClaimTaskResponse:
         r = await self._client.post(f"/api/transcoder/tasks/{task_id}/claim")
         r.raise_for_status()

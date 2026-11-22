@@ -24,6 +24,9 @@ import logging
 import os
 import ssl
 import sys
+import tempfile
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from arm_common import configure_service_logging, with_log_context
@@ -169,8 +172,10 @@ async def _encode_audio(
     duration_seconds: int | None,
     progress_callback: ProgressCallback,
     music_tags: MusicTags | None,
+    cover_path: Path | None,
 ) -> int:
-    """Run the ffmpeg audio engine into an atomic output, tagged with `music_tags`, and return the size written."""
+    """Run the ffmpeg audio engine into an atomic output, tagged with `music_tags`
+    and the `cover_path` image, and return the size written."""
     # The ripper's abcde stage produced .wav files; we re-encode to
     # `preset.container.value` (flac, mp3) here.
     target = preset.preset_ref or preset.container.value
@@ -182,6 +187,7 @@ async def _encode_audio(
             duration_seconds=duration_seconds,
             progress_callback=progress_callback,
             tags=music_tags,
+            cover_path=cover_path,
         )
 
 
@@ -194,8 +200,10 @@ async def _encode(
     duration_seconds: int | None,
     progress_callback: ProgressCallback,
     music_tags: MusicTags | None,
+    cover_path: Path | None,
 ) -> int:
-    """Run the engine `tool` selects and return the size it wrote; only the audio engine writes `music_tags`."""
+    """Run the engine `tool` selects and return the size it wrote; only the
+    audio engine writes `music_tags` and the cover."""
     if tool == TranscodeTool.NONE:
         return transcode_none(raw_input, final_output)
 
@@ -233,6 +241,7 @@ async def _encode(
             duration_seconds=duration_seconds,
             progress_callback=progress_callback,
             music_tags=music_tags,
+            cover_path=cover_path,
         )
 
     raise RuntimeError(f"unknown transcode tool={tool.value}")
@@ -248,6 +257,7 @@ async def _run_encoder(
     state: ProgressState,
     cancel_event: asyncio.Event,
     music_tags: MusicTags | None = None,
+    cover_path: Path | None = None,
 ) -> int:
     """Encode with the engine for `tool`, recording progress on `state`; returns the size written."""
     size = await _encode(
@@ -258,6 +268,7 @@ async def _run_encoder(
         duration_seconds=duration_seconds,
         progress_callback=_progress_recorder(state, cancel_event),
         music_tags=music_tags,
+        cover_path=cover_path,
     )
     state.pct = 100
     return size
@@ -298,6 +309,43 @@ async def _report_complete(
     logger.info("task complete output=%s size=%d", relative, size)
 
 
+_COVER_SUFFIXES = {"image/jpeg": ".jpg", "image/png": ".png"}
+
+
+async def _download_cover_art(api: BackendClient, task_id: str, workdir: Path) -> Path | None:
+    """Save the track's cover into `workdir`; None when it has none, it is not
+    a JPEG or PNG, or the download fails. Missing art never fails an encode."""
+    try:
+        fetched = await api.cover_art(task_id)
+    except Exception as exc:
+        logger.warning("cover art download failed; encoding without it: %s", exc)
+        return None
+    if fetched is None:
+        logger.info("no cover art for this track")
+        return None
+    content, content_type = fetched
+    suffix = _COVER_SUFFIXES.get(content_type)
+    if suffix is None:
+        logger.warning("cover art type %r cannot be embedded; encoding without it", content_type)
+        return None
+    path = workdir / f"cover{suffix}"
+    path.write_bytes(content)
+    return path
+
+
+@asynccontextmanager
+async def _cover_art_file(api: BackendClient, task_id: str, *, wanted: bool) -> AsyncIterator[Path | None]:
+    """The track's cover as a temp file for the encode's lifetime, or None.
+
+    Only a music track (`wanted`) asks the Backend for one; the file is
+    removed when the encode is done."""
+    if not wanted:
+        yield None
+        return
+    with tempfile.TemporaryDirectory(prefix="arm-cover-") as workdir:
+        yield await _download_cover_art(api, task_id, Path(workdir))
+
+
 async def _encode_and_report(
     *,
     api: BackendClient,
@@ -315,7 +363,10 @@ async def _encode_and_report(
 
     state = ProgressState()
     try:
-        async with HeartbeatPump(api=api, ws=ws, task_id=task_id, state=state):
+        async with (
+            HeartbeatPump(api=api, ws=ws, task_id=task_id, state=state),
+            _cover_art_file(api, task_id, wanted=registered.music_tags is not None) as cover_path,
+        ):
             size = await _run_encoder(
                 tool=tool,
                 preset=preset,
@@ -325,6 +376,7 @@ async def _encode_and_report(
                 state=state,
                 cancel_event=cancel_event,
                 music_tags=registered.music_tags,
+                cover_path=cover_path,
             )
     except CancelRequested:
         await api.fail(task_id, last_error="cancelled by user")

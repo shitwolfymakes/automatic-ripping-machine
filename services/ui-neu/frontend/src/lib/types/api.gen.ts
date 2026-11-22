@@ -8081,6 +8081,34 @@ export type RegisterApiTranscoderRegisterPostResponses = {
 
 export type RegisterApiTranscoderRegisterPostResponse = RegisterApiTranscoderRegisterPostResponses[keyof RegisterApiTranscoderRegisterPostResponses];
 
+export type CoverArtApiTranscoderTasksTaskIdCoverArtGetData = {
+    body?: never;
+    path: {
+        /**
+         * Task Id
+         */
+        task_id: string;
+    };
+    query?: never;
+    url: '/api/transcoder/tasks/{task_id}/cover-art';
+};
+
+export type CoverArtApiTranscoderTasksTaskIdCoverArtGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CoverArtApiTranscoderTasksTaskIdCoverArtGetError = CoverArtApiTranscoderTasksTaskIdCoverArtGetErrors[keyof CoverArtApiTranscoderTasksTaskIdCoverArtGetErrors];
+
+export type CoverArtApiTranscoderTasksTaskIdCoverArtGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: unknown;
+};
+
 export type ClaimApiTranscoderTasksTaskIdClaimPostData = {
     body?: never;
     headers?: {
