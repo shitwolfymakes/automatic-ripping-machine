@@ -120,8 +120,8 @@ class MusicBrainzClient:
         try:
             body = await self._get(
                 f"/discid/{disc_id}",
-                # release-groups: so extract_poster_url can prefer the (more often
-                # populated) release-group cover over the specific release's.
+                # release-groups: so extract_poster_url can carry the album's
+                # release-group cover as the fallback when this release has none.
                 params={"inc": inc, "fmt": "json"},
                 not_found_detail=_DISC_NOT_FOUND,
             )
@@ -208,8 +208,8 @@ class MusicBrainzClient:
         """
         body = await self._get(
             f"/release/{quote(release_id, safe='')}",
-            # release-groups: so extract_poster_url can prefer the (more often
-            # populated) release-group cover over the specific release's.
+            # release-groups: so extract_poster_url can carry the album's
+            # release-group cover as the fallback when this release has none.
             params={"inc": "artists+recordings+labels+release-groups", "fmt": "json"},
             not_found_detail="musicbrainz release not found",
         )

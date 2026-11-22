@@ -3507,6 +3507,48 @@ export type MusicMeta = {
 };
 
 /**
+ * MusicTags
+ *
+ * The tags a music track's encoded file carries, from the job's stored
+ * MusicBrainz identity. Every field is optional: an unknown one is left
+ * out of the file rather than written empty.
+ */
+export type MusicTags = {
+    /**
+     * Artist
+     */
+    artist?: string | null;
+    /**
+     * Album
+     */
+    album?: string | null;
+    /**
+     * Title
+     */
+    title?: string | null;
+    /**
+     * Year
+     */
+    year?: number | null;
+    /**
+     * Disc Number
+     */
+    disc_number?: number | null;
+    /**
+     * Track Number
+     */
+    track_number?: number | null;
+    /**
+     * Track Total
+     */
+    track_total?: number | null;
+    /**
+     * Musicbrainz Release Id
+     */
+    musicbrainz_release_id?: string | null;
+};
+
+/**
  * MusicTrackMeta
  */
 export type MusicTrackMeta = {
@@ -4124,7 +4166,8 @@ export type RegisterTranscoderRequest = {
  * `raw_input_path` is the absolute path the transcoder should read from
  * (`/raw/<job>/title_tNN.mkv` for video, `/raw/<job>/track_NN.wav` for
  * audio, `/raw/<job>/dump.iso` for data). `media_root` plus the task's
- * `output_path` is where the final file lands.
+ * `output_path` is where the final file lands. `music_tags` is set for a
+ * music job's track only.
  */
 export type RegisterTranscoderResponse = {
     task: TranscodeTaskView;
@@ -4139,6 +4182,7 @@ export type RegisterTranscoderResponse = {
      * Media Root
      */
     media_root: string;
+    music_tags?: MusicTags | null;
 };
 
 /**
@@ -8508,6 +8552,34 @@ export type RegisterApiTranscoderRegisterPostResponses = {
 };
 
 export type RegisterApiTranscoderRegisterPostResponse = RegisterApiTranscoderRegisterPostResponses[keyof RegisterApiTranscoderRegisterPostResponses];
+
+export type CoverArtApiTranscoderTasksTaskIdCoverArtGetData = {
+    body?: never;
+    path: {
+        /**
+         * Task Id
+         */
+        task_id: string;
+    };
+    query?: never;
+    url: '/api/transcoder/tasks/{task_id}/cover-art';
+};
+
+export type CoverArtApiTranscoderTasksTaskIdCoverArtGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CoverArtApiTranscoderTasksTaskIdCoverArtGetError = CoverArtApiTranscoderTasksTaskIdCoverArtGetErrors[keyof CoverArtApiTranscoderTasksTaskIdCoverArtGetErrors];
+
+export type CoverArtApiTranscoderTasksTaskIdCoverArtGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: unknown;
+};
 
 export type ClaimApiTranscoderTasksTaskIdClaimPostData = {
     body?: never;

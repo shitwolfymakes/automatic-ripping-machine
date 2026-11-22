@@ -7,7 +7,7 @@ import asyncio
 import pytest
 
 from arm_common import ContainerFormat, MediaType, TranscodeTool
-from arm_common.schemas import TranscodePresetView
+from arm_common.schemas import MusicTags, TranscodePresetView
 from arm_common.schemas.handbrake import HandbrakeSettings
 from arm_transcode.heartbeat import ProgressState
 from arm_transcode.main import _MAX_ERROR_CHARS, _clip_error
@@ -368,7 +368,38 @@ async def test_run_encoder_abcde_encodes_audio_with_preset_ref(monkeypatch, tmp_
     assert called["output_path"] == tmp_path / "out.mkv.arm-inprogress"
     assert called["preset_ref"] == "mp3"
     assert called["duration_seconds"] == 321
+    assert called["tags"] is None
+    assert called["cover_path"] is None
     assert (tmp_path / "out.mkv").read_bytes() == b"a" * 5
+
+
+@pytest.mark.asyncio
+async def test_run_encoder_abcde_passes_music_tags(monkeypatch, tmp_path) -> None:
+    import arm_transcode.main as m
+
+    _clear_encoder_env(monkeypatch)
+    called: dict = {}
+
+    async def fake_transcode_audio(**kwargs):
+        called.update(kwargs)
+        kwargs["output_path"].write_bytes(b"a")
+        return 1
+
+    monkeypatch.setattr(m, "transcode_audio", fake_transcode_audio)
+    tags = MusicTags(title="Airbag", track_number=1)
+    await m._run_encoder(
+        tool=TranscodeTool.ABCDE,
+        preset=_audio_preset(preset_ref="flac"),
+        raw_input=tmp_path / "in.wav",
+        final_output=tmp_path / "out.flac",
+        duration_seconds=10,
+        state=ProgressState(),
+        cancel_event=asyncio.Event(),
+        music_tags=tags,
+        cover_path=tmp_path / "cover.jpg",
+    )
+    assert called["tags"] is tags
+    assert called["cover_path"] == tmp_path / "cover.jpg"
 
 
 @pytest.mark.asyncio
