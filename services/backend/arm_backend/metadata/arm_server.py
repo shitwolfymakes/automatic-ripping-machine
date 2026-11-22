@@ -18,7 +18,7 @@ from typing import Any, Literal
 import httpx
 
 from arm_backend.config import settings
-from arm_backend.metadata.base import LookupError, LookupTimeout, MetadataResult
+from arm_backend.metadata.base import LookupError, LookupTimeout, MetadataResult, json_object
 from arm_backend.metadata.years import year_from_any
 
 logger = logging.getLogger("arm_backend.metadata.arm_server")
@@ -106,7 +106,7 @@ class ArmServerClient:
         if r.status_code != 200:
             raise LookupError(f"arm_server status={r.status_code}")
 
-        body: dict[str, Any] = r.json()
+        body = json_object(r, "arm_server")
         if not body.get("success"):
             raise LookupError(f"arm_server miss: {body.get('error', 'no match')}")
         return body

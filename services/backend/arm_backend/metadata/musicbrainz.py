@@ -9,7 +9,7 @@ from urllib.parse import quote
 import httpx
 
 from arm_backend.config import settings
-from arm_backend.metadata.base import LookupError, LookupTimeout, MetadataResult
+from arm_backend.metadata.base import LookupError, LookupTimeout, MetadataResult, json_object
 from arm_backend.metadata.years import year_from
 
 logger = logging.getLogger("arm_backend.metadata.musicbrainz")
@@ -110,7 +110,7 @@ class MusicBrainzClient:
         if r.status_code != 200:
             raise LookupError(f"musicbrainz status={r.status_code}")
 
-        return r.json()  # type: ignore[no-any-return]
+        return json_object(r, "musicbrainz")
 
     async def lookup_disc_id(self, disc_id: str, toc: str | None = None) -> MetadataResult:
         """Exact disc-ID lookup. When that disc isn't listed (404 or no
