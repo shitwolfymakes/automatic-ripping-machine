@@ -7,7 +7,8 @@ import {
 	humanizeMediaType,
 	humanizeOutputMode,
 	humanizeTool,
-	humanizeTrackSelection
+	humanizeTrackSelection,
+	VIDEO_GROUP_LABEL
 } from '$lib/sessions/preset-labels';
 import { encoderLabel } from '$lib/stores/encoders.svelte';
 import { transcodeMediaGroup } from '$lib/sessions/sessions';
@@ -37,7 +38,7 @@ function mediaCell(preset: { media_type: MediaType }): CellContent {
 
 // A movie or TV transcode preset fits sessions of either, so it reads Video.
 function transcodeMediaCell(preset: { media_type: MediaType }): CellContent {
-	if (transcodeMediaGroup(preset.media_type) === 'movie') return { text: 'Video', pill: { tone: 'movie' } };
+	if (transcodeMediaGroup(preset.media_type) === 'movie') return { text: VIDEO_GROUP_LABEL, pill: { tone: 'movie' } };
 	return mediaCell(preset);
 }
 
