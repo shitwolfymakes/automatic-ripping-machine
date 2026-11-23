@@ -141,7 +141,7 @@ has "a missing image during an upgrade: the hint names the live .env" "ARM_IMAGE
 lacks "a missing image during an upgrade: the hint does not name .env.next" ".env.next" "$out"
 
 # --- up and down ordering -----------------------------------------------------
-STEPS=(select_up_services pull_images verify_images_present guard_running_spawned refresh_arm_gpus refresh_ui_leaf backup_db remove_spawned_containers remove_retired_services restart_ui_for_new_leaf respawn_rippers_if_needed wait_for_backend)
+STEPS=(select_up_services pull_images verify_images_present guard_running_spawned refresh_arm_gpus refresh_ui_leaf backup_db apply_selinux_labels remove_spawned_containers remove_retired_services restart_ui_for_new_leaf respawn_rippers_if_needed wait_for_backend)
 # run_cmd <install name> <FAIL_AT step or ''> <command> [args...]: run an
 # armctl command with every step replaced by a recorder; print the order.
 run_cmd() {
@@ -166,7 +166,7 @@ run_cmd() {
     )
 }
 check "up: pull and verify come before anything changes" \
-    "select_up_services;pull_images;verify_images_present;guard_running_spawned;refresh_arm_gpus;refresh_ui_leaf;backup_db;remove_spawned_containers;remove_retired_services;compose up -d --no-build;restart_ui_for_new_leaf;respawn_rippers_if_needed;wait_for_backend;FORCE=0 NO_BACKUP=0;" \
+    "select_up_services;pull_images;verify_images_present;guard_running_spawned;refresh_arm_gpus;refresh_ui_leaf;backup_db;apply_selinux_labels;remove_spawned_containers;remove_retired_services;compose up -d --no-build;restart_ui_for_new_leaf;respawn_rippers_if_needed;wait_for_backend;FORCE=0 NO_BACKUP=0;" \
     "$(run_cmd up-ok '' cmd_up)"
 check "up: a missing image stops before the guard, backup and removal" \
     "select_up_services;pull_images;verify_images_present;FORCE=0 NO_BACKUP=0;" \
@@ -1088,7 +1088,7 @@ apply_case() {
 }
 out="$(apply_case apply-ok '')"
 has "apply: pull, verify, guard and backup all come before the switch" \
-    "select_up_services;pull_images;verify_images_present;guard_running_spawned;refresh_arm_gpus;refresh_ui_leaf;backup_db;remove_spawned_containers;remove_retired_services;compose up -d --no-build;restart_ui_for_new_leaf;respawn_rippers_if_needed;wait_for_backend;rc=0;" "$out"
+    "select_up_services;pull_images;verify_images_present;guard_running_spawned;refresh_arm_gpus;refresh_ui_leaf;backup_db;apply_selinux_labels;remove_spawned_containers;remove_retired_services;compose up -d --no-build;restart_ui_for_new_leaf;respawn_rippers_if_needed;wait_for_backend;rc=0;" "$out"
 has "apply: .env is on the new release" "TAG=v3.2.0;RIPPER=reg/arm-ripper:v3.2.0;" "$out"
 has "apply: current points at the new release" "CURRENT=releases/v3.2.0;" "$out"
 has "apply: the previous release is kept, older ones pruned" "RELEASES=v3.1.0 v3.2.0;" "$out"
@@ -1180,5 +1180,161 @@ rc=0; (ARM_DIR="${TMPROOT}/settings/arm"; current_uid() { echo 1000; }; armctl_m
 check "an unknown command exits 2" "2" "$rc"
 has "help lists the commands" "upgrade" "$(armctl_main help)"
 has "help lists --no-pull" "--no-pull" "$(armctl_main help)"
+
+# --- SELinux overlay (lib/selinux.sh) -----------------------------------------
+# A `docker compose config` document in compose's own long form, as the
+# overlay writer reads it. Paths are filled in per case.
+se_config() {  # se_config <arm dir> <outside dir>
+    cat <<EOF
+name: armv3
+services:
+  arm-backend:
+    command:
+      - sh
+      - -c
+      - |
+        source: not-a-mount
+    volumes:
+      - type: bind
+        source: $1/logs
+        target: /logs
+        bind:
+          create_host_path: true
+      - type: bind
+        source: "$1/my certs/ca.crt"
+        target: /etc/ssl/arm/arm-ca.crt
+        read_only: true
+        bind:
+          create_host_path: true
+      - type: bind
+        source: $2
+        target: /ingress
+        read_only: true
+        bind:
+          create_host_path: true
+      - type: bind
+        source: /var/run/docker.sock
+        target: /var/run/docker.sock
+        bind:
+          create_host_path: true
+      - type: bind
+        source: /nonexistent/dev/disk
+        target: /host-disk
+        read_only: true
+        bind:
+          create_host_path: true
+      - type: volume
+        source: arm-data
+        target: /data
+        volume: {}
+  arm-db:
+    volumes:
+      - type: bind
+        source: $1/db
+        target: /var/lib/postgresql
+        bind: {}
+  arm-ui:
+    image: reg/arm-ui:v3.1.0
+volumes:
+  arm-data:
+    name: armv3_arm-data
+EOF
+}
+# se_overlay <case> <stub code>: the overlay for se_config, then a ---- line,
+# then what the run printed to stderr. Sockets, labels and filesystems are stubs.
+se_overlay() {
+    (
+        new_install "$1"
+        mkdir -p "${ARM_DIR}/logs" "${ARM_DIR}/db" "${ARM_DIR}/my certs" "${TMPROOT}/$1/outside"
+        touch "${ARM_DIR}/my certs/ca.crt"
+        selinux_is_socket() { [[ "$1" == /var/run/docker.sock ]]; }
+        selinux_label_type() { echo user_home_t; }
+        selinux_fs_type() { echo ext2/ext3; }
+        selinux_bool_on() { return 1; }
+        eval "$2"
+        se_config "${ARM_DIR}" "${TMPROOT}/$1/outside" \
+            | selinux_overlay_from_config armctl 2> "${TMPROOT}/$1.err"
+        echo ----
+        cat "${TMPROOT}/$1.err"
+    )
+}
+out="$(se_overlay se-base '')"
+ov="${out%%----*}"
+notes="${out#*----}"
+has "selinux: the backend runs unlabelled for the docker socket" $'  arm-backend:\n    security_opt:\n      - label=disable\n    volumes:' "$ov"
+has "selinux: a folder under the arm dir is labelled, create_host_path kept" \
+    $'        target: "/logs"\n        bind:\n          create_host_path: true\n          selinux: z' "$ov"
+has "selinux: a read-only file keeps read_only, a spaced path is quoted" \
+    "        source: \"${TMPROOT}/se-base/arm/my certs/ca.crt\""$'\n        target: "/etc/ssl/arm/arm-ca.crt"\n        read_only: true' "$ov"
+has "selinux: a mount without create_host_path does not gain it" \
+    $'        target: "/var/lib/postgresql"\n        bind:\n          selinux: z' "$ov"
+lacks "selinux: the socket itself is not relabelled" "/var/run/docker.sock" "$ov"
+lacks "selinux: a device path is not relabelled" "/host-disk" "$ov"
+lacks "selinux: a folder outside the arm dir is not relabelled" "/ingress" "$ov"
+lacks "selinux: a service with no bind mounts is left out" "arm-ui" "$ov"
+lacks "selinux: a block scalar is not read as a mount" "not-a-mount" "$ov"
+has "selinux: the outside folder's wrong label is reported" "${TMPROOT}/se-base/outside is labelled user_home_t" "$notes"
+has "selinux: the report names the fix" "sudo chcon -R -t container_file_t '${TMPROOT}/se-base/outside'" "$notes"
+has "selinux: the run says what it labelled" "labelling 3 bind-mounted path(s)" "$notes"
+has "selinux: the run names the unlabelled service" "arm-backend mounts the Docker socket" "$notes"
+
+out="$(se_overlay se-ok 'selinux_label_type() { echo container_file_t; }')"
+lacks "selinux: an outside folder already labelled for containers is not reported" "is labelled" "${out#*----}"
+
+out="$(se_overlay se-nfs 'selinux_fs_type() { echo nfs; }')"
+lacks "selinux: nothing on NFS is relabelled (Docker would fail to)" "selinux: z" "${out%%----*}"
+has "selinux: NFS gets the boolean hint" "sudo setsebool -P virt_use_nfs 1" "${out#*----}"
+check "selinux: the NFS hint is given once per path" "4" "$(grep -c 'setsebool' <<<"${out#*----}")"
+# shellcheck disable=SC2016 # the stub body is evaluated later, single quotes are intended
+out="$(se_overlay se-nfs-on 'selinux_fs_type() { echo nfs; }; selinux_bool_on() { [[ "$1" == virt_use_nfs ]]; }')"
+lacks "selinux: no NFS hint once virt_use_nfs is on" "setsebool" "${out#*----}"
+
+out="$(new_install se-none; printf 'services:\n  arm-db:\n    image: postgres:18\n' | selinux_overlay_from_config armctl 2>/dev/null)"
+has "selinux: nothing to label gives an empty overlay" $'\nservices: {}' "$out"
+
+# The mode switch and detection.
+se_mode() {  # se_mode <case> <.env line> <docker info stdout, or FAIL>
+    (
+        new_install "$1"
+        printf '%s\n' "$2" > "${ENV_FILE}"
+        info="$3"
+        docker() { [[ "${info}" == FAIL ]] && return 1; printf '%s\n' "${info}"; }
+        if selinux_labels_needed 2>/dev/null; then echo yes; else echo no; fi
+    )
+}
+check "selinux: auto follows docker info (selinux)" "yes" "$(se_mode sm1 '' '["name=seccomp,profile=builtin","name=selinux"]')"
+check "selinux: auto follows docker info (no selinux)" "no" "$(se_mode sm2 'ARM_SELINUX_LABELS=auto' '["name=seccomp,profile=builtin"]')"
+check "selinux: auto with docker unreachable is no" "no" "$(se_mode sm3 '' FAIL)"
+check "selinux: off wins over docker" "no" "$(se_mode sm4 'ARM_SELINUX_LABELS=off' '["name=selinux"]')"
+check "selinux: on wins over docker" "yes" "$(se_mode sm5 'ARM_SELINUX_LABELS=on' FAIL)"
+check "selinux: an unknown value falls back to auto" "no" "$(se_mode sm6 'ARM_SELINUX_LABELS=yes' FAIL)"
+
+# armctl: the overlay is on the compose command line only once it exists, and
+# goes after the host overlay.
+out="$( (new_install se-cmd; printf '%s\n' "${ARM_COMPOSE_CMD[*]}") )"
+lacks "selinux: no overlay file, no -f for it" "selinux-overlay.yml" "$out"
+out="$( (new_install se-cmd2; ensure_selinux_overlay_file "${SELINUX_OVERLAY}"
+         use_env_file "${ENV_FILE}"; printf '%s\n' "${ARM_COMPOSE_CMD[*]}") )"
+has "selinux: the overlay comes last, after the host overlay" "host-overlay.yml -f ${TMPROOT}/se-cmd2/arm/.armctl/selinux-overlay.yml" "$out"
+
+# apply_selinux_labels: a host that never needed it gets no file; one that does
+# gets the file, written from an emptied overlay, on the command line.
+out="$( (new_install se-apply-no; selinux_labels_needed() { return 1; }; apply_selinux_labels
+         [[ -e "${SELINUX_OVERLAY}" ]] && echo file || echo nofile) )"
+check "selinux: not needed and never written: no file" "nofile" "$out"
+out="$( (new_install se-apply-yes; mkdir -p "${ARM_DIR}/logs"; : > "${ENV_FILE}"
+         selinux_labels_needed() { return 0; }
+         selinux_label_type() { echo user_home_t; }
+         printf 'stale\n' > "${SELINUX_OVERLAY}"
+         compose() { [[ "$(cat "${SELINUX_OVERLAY}")" == "services: {}" ]] || echo "STALE INPUT" >&2
+                     printf 'services:\n  arm-backend:\n    volumes:\n      - type: bind\n        source: %s/logs\n        target: /logs\n' "${ARM_DIR}"; }
+         apply_selinux_labels 2>&1
+         printf '%s\n' "${ARM_COMPOSE_CMD[*]}"; cat "${SELINUX_OVERLAY}") )"
+lacks "selinux: the config is read with the overlay emptied" "STALE INPUT" "$out"
+has "selinux: needed: the overlay is on the command line" "-f ${TMPROOT}/se-apply-yes/arm/.armctl/selinux-overlay.yml" "$out"
+has "selinux: needed: the overlay labels the logs folder" $'target: "/logs"\n        bind:\n          selinux: z' "$out"
+out="$( (new_install se-apply-off; printf 'old\n' > "${SELINUX_OVERLAY}"; selinux_labels_needed() { return 1; }
+         apply_selinux_labels; cat "${SELINUX_OVERLAY}") )"
+check "selinux: no longer needed: the overlay is emptied, not removed" "services: {}" "$out"
 
 exit "$fail"

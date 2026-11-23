@@ -125,10 +125,20 @@ ARM_HINT_IMAGES_READY="Images are built"
 ARM_HINT_LOGS_CMD="docker compose logs"
 ARM_HINT_RIPPER_ONLY="--ripper-only"
 ARM_UDEV_MANAGED_BY="devtools/setup-dev.sh"
-for lib in common detect certs udev lifecycle; do
+for lib in common detect certs udev lifecycle selinux; do
     # shellcheck source=/dev/null
     source "${ROOT_DIR}/deploy/lib/${lib}.sh"
 done
+
+# SELinux overlay (deploy/lib/selinux.sh): generated per host and gitignored,
+# like docker-compose.yml. It joins COMPOSE_FILE in .env only on a host whose
+# Docker labels containers. Once .env names it, it must exist for any compose
+# command to run, `down` included.
+SELINUX_OVERLAY_NAME="docker-compose.selinux.yml"
+SELINUX_OVERLAY="${ROOT_DIR}/${SELINUX_OVERLAY_NAME}"
+if grep -qs "${SELINUX_OVERLAY_NAME}" "${ROOT_DIR}/.env"; then
+    ensure_selinux_overlay_file "${SELINUX_OVERLAY}"
+fi
 
 if [[ "${ACTION}" == "down" ]]; then
     require docker "Install docker first."
@@ -307,6 +317,37 @@ elif grep -q '^#ARM_TRANSCODE_CAPABLE=' "${ENV_FILE}"; then
 else
     printf 'ARM_TRANSCODE_CAPABLE=%s\n' "${ARM_TRANSCODE_CAPABLE_VALUE}" >> "${ENV_FILE}"
 fi
+
+# SELinux: on a host whose Docker labels containers, label the bind mounts
+# under ./arm and run the backend (it mounts the Docker socket) unlabelled.
+# Compose reads COMPOSE_FILE from .env on every call, so the overlay is added to
+# that list once and applies to manual `docker compose` commands too. With no
+# COMPOSE_FILE yet, the list starts from what compose loads by default.
+apply_selinux_labels() {
+    local sep files
+    if selinux_labels_needed; then
+        ensure_selinux_overlay_file "${SELINUX_OVERLAY}"
+        sep="$(env_file_value COMPOSE_PATH_SEPARATOR)"
+        sep="${sep:-:}"
+        files="$(env_file_value COMPOSE_FILE)"
+        if [[ "${sep}${files}${sep}" != *"${sep}${SELINUX_OVERLAY_NAME}${sep}"* ]]; then
+            if [[ -z "${files}" ]]; then
+                files="docker-compose.yml"
+                if [[ -f "${ROOT_DIR}/docker-compose.override.yml" ]]; then
+                    files+="${sep}docker-compose.override.yml"
+                fi
+            fi
+            env_set COMPOSE_FILE "${files}${sep}${SELINUX_OVERLAY_NAME}"
+            echo "==> SELinux: added ${SELINUX_OVERLAY_NAME} to COMPOSE_FILE in .env"
+        fi
+        write_selinux_overlay "${SELINUX_OVERLAY}" "devtools/setup-dev.sh"
+    elif [[ -f "${SELINUX_OVERLAY}" ]]; then
+        # No longer needed (ARM_SELINUX_LABELS=off, or Docker stopped labelling):
+        # empty it, which keeps a COMPOSE_FILE entry valid.
+        printf '%s\n' "${SELINUX_OVERLAY_EMPTY}" > "${SELINUX_OVERLAY}"
+    fi
+}
+apply_selinux_labels
 
 # The transcode images are built by `up`'s `compose build` like every other
 # service (the arm-transcode* services have deploy.replicas:0: built, never

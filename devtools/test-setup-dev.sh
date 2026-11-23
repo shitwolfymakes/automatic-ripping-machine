@@ -168,7 +168,7 @@ dev_out() {
         ARM_HINT_RIPPER_ONLY="--ripper-only"
         ARM_UDEV_MANAGED_BY="devtools/setup-dev.sh"
         FORCE=0 NO_BACKUP=0 RIPPER_ONLY=0
-        for lib in common detect certs udev lifecycle; do source "${LIB}/${lib}.sh"; done
+        for lib in common detect certs udev lifecycle selinux; do source "${LIB}/${lib}.sh"; done
         eval "$1"
     )
 }
@@ -219,13 +219,19 @@ check "detect_cdrom_gid falls back to 44" "44" \
     "$(dev_out 'getent() { return 2; }; detect_cdrom_gid')"
 
 # No message literal may remain outside the helpers: everything goes through them.
-rc=0; grep -nE '"(==> |ERROR: |WARNING: )' "${LIB}"/detect.sh "${LIB}"/certs.sh "${LIB}"/udev.sh "${LIB}"/lifecycle.sh >/dev/null || rc=$?
+rc=0; grep -nE '"(==> |ERROR: |WARNING: )' "${LIB}"/detect.sh "${LIB}"/certs.sh "${LIB}"/udev.sh "${LIB}"/lifecycle.sh "${LIB}"/selinux.sh >/dev/null || rc=$?
 check "library prints only through the output helpers" 1 "${rc}"
 present "setup-dev loads the shared library" 'deploy/lib/\$\{lib\}\.sh' "${SETUP}"
+present "setup-dev loads the SELinux library" '^for lib in .* selinux; do$' "${SETUP}"
+present "setup-dev writes the SELinux overlay on every run" '^apply_selinux_labels$' "${SETUP}"
+present "the generated SELinux overlay is gitignored" '^/docker-compose\.selinux\.yml$' "${ROOT}/.gitignore"
 absent  "setup-dev no longer shells out to install.sh" 'install\.sh" *\\$' "${SETUP}"
 
 # --- compose template -----------------------------------------------------------
 absent  "template has no generated region"      'arm-ripper services'       "${TEMPLATE}"
+# SELinux labels come from the generated overlay (deploy/lib/selinux.sh), only
+# on hosts that need them; a :z in the template would relabel on every host.
+absent  "template hard-codes no SELinux relabel" '^ *- [^#]*:(z|Z|[a-z,]*,[zZ])$' "${TEMPLATE}"
 absent  "template has no arm-ripper-srN"        'arm-ripper-sr'             "${TEMPLATE}"
 present "template has the arm-ripper service"   '^  arm-ripper:$'           "${TEMPLATE}"
 present "arm-ripper image defaults like transcode" 'ARM_RIPPER_IMAGE:-arm-ripper:latest' "${TEMPLATE}"

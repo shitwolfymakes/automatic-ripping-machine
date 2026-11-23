@@ -31,7 +31,7 @@ Usage: armctl <command> [options]
 USAGE
 }
 
-for _lib in common detect certs udev lifecycle; do
+for _lib in common detect certs udev lifecycle selinux; do
     # shellcheck source=/dev/null
     source "${ARMCTL_RELEASE_DIR}/lib/${_lib}.sh"
 done
@@ -74,6 +74,11 @@ use_env_file() {
         -f "${ARMCTL_RELEASE_DIR}/docker-compose.yml.example"
         -f "${ARMCTL_RELEASE_DIR}/docker-compose.release.yml"
         -f "${HOST_OVERLAY}")
+    # Last, so its labels also cover the host overlay's raw and media mounts.
+    # It exists only on a host that has needed it (apply_selinux_labels).
+    if [[ -f "${SELINUX_OVERLAY:-}" ]]; then
+        ARM_COMPOSE_CMD+=(-f "${SELINUX_OVERLAY}")
+    fi
 }
 
 # The compose template writes its paths as ./arm/..., so compose runs from the
@@ -90,6 +95,7 @@ armctl_settings() {
     ARM_PARENT_DIR="$(dirname "${ARM_DIR}")"
     ARM_STATE_DIR="${ARM_DIR}/.armctl"
     HOST_OVERLAY="${ARM_STATE_DIR}/host-overlay.yml"
+    SELINUX_OVERLAY="${ARM_STATE_DIR}/selinux-overlay.yml"
     ARM_CERTS_DIR="${ARM_DIR}/certs"
     ARM_COMPOSE_CWD="${ARM_PARENT_DIR}"
     DB_SERVICE="arm-db"
@@ -204,10 +210,28 @@ verify_images_present() {
     exit 1
 }
 
+# SELinux (lib/selinux.sh): on a host whose Docker labels containers, write the
+# overlay that labels the mounts under ${ARM_DIR} and runs the backend (it
+# mounts the Docker socket) unlabelled, and put it on the compose command line.
+# Once written, the file stays: emptied when no longer needed, so every armctl
+# command keeps a valid file list.
+apply_selinux_labels() {
+    if selinux_labels_needed; then
+        ensure_selinux_overlay_file "${SELINUX_OVERLAY}"
+        use_env_file "${ENV_FILE}"
+        write_selinux_overlay "${SELINUX_OVERLAY}" "armctl"
+    elif [[ -f "${SELINUX_OVERLAY}" ]]; then
+        printf '%s\n' "${SELINUX_OVERLAY_EMPTY}" > "${SELINUX_OVERLAY}"
+    fi
+}
+
 # Remove what the backend spawned, start from the pulled images, and bring the
 # rippers back. Everything before this point leaves the running stack alone.
+# The SELinux overlay is written here, against the release and .env that are
+# about to start (after an upgrade's switch, not before it).
 go_live() {
     local started_before
+    apply_selinux_labels
     started_before="$(backend_started_at)"
     remove_spawned_containers
     remove_retired_services
