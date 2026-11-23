@@ -1,7 +1,13 @@
 // What the session builder makes of its form: the field rules, the
 // overrides field read as JSON, when the music tags show, and the create
 // and update requests.
-import type { MediaType, MusicTagField, SessionCreateRequest, SessionUpdateRequest } from '$lib/types/api.gen';
+import type {
+	MediaType,
+	MusicCoverSize,
+	MusicTagField,
+	SessionCreateRequest,
+	SessionUpdateRequest
+} from '$lib/types/api.gen';
 import { NAME_REQUIRED, type FieldErrors } from '$lib/ui/form-validation';
 
 /** The builder's checked inputs, by element id, in form order. */
@@ -16,7 +22,8 @@ export const FIELD_IDS = {
 	transcode_preset: 'form.session.transcode_preset',
 	output_path: 'form.session.output_path',
 	overrides: 'form.session.overrides',
-	music_tags: 'form.session.music_tags'
+	music_tags: 'form.session.music_tags',
+	cover_size: 'form.session.cover_size'
 } as const;
 
 export const RIP_PRESET_REQUIRED = 'Choose a rip preset';
@@ -67,6 +74,8 @@ export interface SessionForm {
 	overrides: Record<string, unknown> | null;
 	/** The tags a music session writes; ignored for any other media type. */
 	musicTags: MusicTagField[];
+	/** The cover size a music session embeds; ignored for any other media type. */
+	coverSize: MusicCoverSize;
 }
 
 /** Whether the builder offers the music file tags: a music session that
@@ -75,10 +84,17 @@ export function showsMusicTags(mediaType: MediaType, tcId: string): boolean {
 	return mediaType === 'music' && tcId !== '';
 }
 
+/** Whether the builder offers the cover size: the music tags show and the
+ * cover is one of them. */
+export function showsCoverSize(mediaType: MediaType, tcId: string, musicTags: readonly MusicTagField[]): boolean {
+	return showsMusicTags(mediaType, tcId) && musicTags.includes('cover');
+}
+
 /** The update request for the form. It leaves out media_type, which
  * can't change on edit: the update schema has no such field, so it is
- * not sent rather than left for the backend to drop. The music tags go
- * only with a music session; the backend refuses them on any other. */
+ * not sent rather than left for the backend to drop. The music tags and
+ * cover size go only with a music session; the backend refuses them on any
+ * other. */
 export function sessionUpdate(form: SessionForm) {
 	return {
 		name: form.name,
@@ -86,7 +102,7 @@ export function sessionUpdate(form: SessionForm) {
 		transcode_preset_id: form.tcId || null,
 		output_path_template: form.template,
 		overrides_json: form.overrides,
-		...(form.mediaType === 'music' ? { music_tag_fields: form.musicTags } : {})
+		...(form.mediaType === 'music' ? { music_tag_fields: form.musicTags, music_cover_size: form.coverSize } : {})
 	} satisfies SessionUpdateRequest;
 }
 

@@ -41,6 +41,7 @@ from arm_common import (
     TranscodeTaskStatus,
     TranscodeTool,
 )
+from arm_common.enums import MusicCoverSize
 from tests._fakes import FakeSession
 from tests._hb_schema import fixture_schema
 from tests._logs import LineCapture, log_commits
@@ -343,6 +344,20 @@ def test_cover_art_404_for_a_video_job(monkeypatch: pytest.MonkeyPatch) -> None:
 
     assert _get_cover(db).status_code == 404
     assert requested == []
+
+
+def test_cover_art_comes_in_the_session_size(monkeypatch: pytest.MonkeyPatch) -> None:
+    db = FakeSession()
+    _seed_cd(db)
+    db.rows["sessions"][0].music_cover_size = MusicCoverSize.PX_1200
+    big = "https://coverartarchive.org/release/rel-1/front-1200"
+    requested = _stub_images(monkeypatch, {big: (b"BIG", "image/jpeg"), _AUTO_COVER_FULL: (b"MID", "image/jpeg")})
+
+    r = _get_cover(db)
+
+    assert r.status_code == 200
+    assert r.content == b"BIG"
+    assert requested == [big]
 
 
 def test_cover_art_404_when_the_cover_is_switched_off(

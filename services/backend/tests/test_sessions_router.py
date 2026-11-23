@@ -29,6 +29,7 @@ from arm_common import (
     TranscodeTool,
     User,
 )
+from arm_common.enums import MusicCoverSize
 from arm_common.models.user import GUEST_ROLE
 
 from tests._fakes import FakeSession
@@ -829,7 +830,7 @@ def test_update_leaves_music_tags_alone_when_not_sent(signing_key: bytes) -> Non
 @pytest.mark.parametrize(
     ("value", "status", "detail"),
     [
-        (None, 400, "music_tag_fields must be a list"),
+        (None, 400, "music_tag_fields must not be null"),
         (["artist", "artist"], 400, "music_tag_fields: duplicate values"),
         (["genre"], 422, None),
     ],
@@ -898,3 +899,82 @@ def test_update_accepts_a_rip_preset_of_the_session_media_type(signing_key: byte
         r = client.patch("/api/sessions/ses_music", json={"rip_preset_id": "rpr_music_fast"}, headers=_auth(token))
     assert r.status_code == 200, r.text
     assert r.json()["rip_preset_id"] == "rpr_music_fast"
+
+
+# --- music cover size ---
+
+
+def test_create_music_session_embeds_the_500px_cover_by_default(signing_key: bytes) -> None:
+    db = FakeSession()
+    _seed_music(db)
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as client:
+        r = _create_music(client, token)
+    assert r.status_code == 201, r.text
+    assert r.json()["music_cover_size"] == "500"
+
+
+def test_create_music_session_stores_the_chosen_cover_size(signing_key: bytes) -> None:
+    db = FakeSession()
+    _seed_music(db)
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as client:
+        r = _create_music(client, token, music_cover_size="source")
+    assert r.status_code == 201, r.text
+    assert r.json()["music_cover_size"] == "source"
+    assert next(s for s in db.rows["sessions"] if s.id == r.json()["id"]).music_cover_size == "source"
+
+
+def test_create_rejects_a_cover_size_on_a_movie_session(signing_key: bytes) -> None:
+    db = FakeSession()
+    _seed(db)
+    app, token = _make_app(signing_key, db)
+    body = {
+        "name": "Movie",
+        "media_type": "movie",
+        "rip_preset_id": "rpr_movie",
+        "output_path_template": "{title} ({year})/{title}.{ext}",
+        "music_cover_size": "1200",
+    }
+    with TestClient(app) as client:
+        r = client.post("/api/sessions", json=body, headers=_auth(token))
+    assert r.status_code == 400
+    assert r.json()["detail"] == "music_cover_size applies to music sessions only"
+
+
+def test_update_music_session_cover_size(signing_key: bytes) -> None:
+    db = FakeSession()
+    _seed_music(db)
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as client:
+        r = client.patch("/api/sessions/ses_music", json={"music_cover_size": "1200"}, headers=_auth(token))
+    assert r.status_code == 200, r.text
+    assert r.json()["music_cover_size"] == "1200"
+    assert next(s for s in db.rows["sessions"] if s.id == "ses_music").music_cover_size == "1200"
+
+
+@pytest.mark.parametrize(
+    ("value", "status", "detail"),
+    [(None, 400, "music_cover_size must not be null"), ("300", 422, None), ("front", 422, None)],
+)
+def test_update_rejects_a_bad_cover_size(signing_key: bytes, value: object, status: int, detail: str | None) -> None:
+    db = FakeSession()
+    _seed_music(db)
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as client:
+        r = client.patch("/api/sessions/ses_music", json={"music_cover_size": value}, headers=_auth(token))
+    assert r.status_code == status
+    if detail is not None:
+        assert r.json()["detail"] == detail
+    assert next(s for s in db.rows["sessions"] if s.id == "ses_music").music_cover_size == "500"
+
+
+def test_clone_keeps_the_cover_size(signing_key: bytes) -> None:
+    db = FakeSession()
+    _seed_music(db)
+    next(s for s in db.rows["sessions"] if s.id == "ses_music").music_cover_size = MusicCoverSize.PX_1200
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as client:
+        r = client.post("/api/sessions/ses_music/clone", json={"name": "Copy"}, headers=_auth(token))
+    assert r.status_code == 201, r.text
+    assert r.json()["music_cover_size"] == "1200"

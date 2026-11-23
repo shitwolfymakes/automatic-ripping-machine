@@ -1,6 +1,13 @@
 <script lang="ts">
 	import { errorMessage } from '$lib/utils/errors';
-	import type { MediaType, MusicTagField, SessionView, RipPresetView, TranscodePresetView } from '$lib/types/api.gen';
+	import type {
+		MediaType,
+		MusicCoverSize,
+		MusicTagField,
+		SessionView,
+		RipPresetView,
+		TranscodePresetView
+	} from '$lib/types/api.gen';
 	import { transcodePresetFits } from '$lib/sessions/sessions';
 	import type { JoinedSession } from '../../stores/sessions-data.svelte';
 	import { createSession, updateSession } from '$lib/api/sessions';
@@ -9,7 +16,7 @@
 	import { errorId, focusFirstInvalid, invalidAttrs } from '$lib/ui/form-validation';
 	import FieldLabel from '$lib/components/shared/FieldLabel.svelte';
 	import CheckListField from '$lib/components/shared/CheckListField.svelte';
-	import { ALL_MUSIC_TAGS, MUSIC_TAG_OPTIONS } from '$lib/sessions/music-tags';
+	import { ALL_MUSIC_TAGS, COVER_SIZE_OPTIONS, DEFAULT_COVER_SIZE, MUSIC_TAG_OPTIONS } from '$lib/sessions/music-tags';
 	import {
 		FIELD_IDS,
 		SESSION_FIELDS,
@@ -18,6 +25,7 @@
 		sessionErrors,
 		sessionUpdate,
 		sessionCreate,
+		showsCoverSize,
 		showsMusicTags,
 		type SessionForm
 	} from '../../sessions/session-form';
@@ -66,6 +74,7 @@
 	let template = $state(session?.output_path_template ?? '');
 	let overridesJson = $state(session?.overrides_json ? JSON.stringify(session.overrides_json, null, 2) : '');
 	let musicTags = $state<MusicTagField[]>([...(session?.music_tag_fields ?? ALL_MUSIC_TAGS)]);
+	let coverSize = $state<MusicCoverSize>(session?.music_cover_size ?? DEFAULT_COVER_SIZE);
 	// The Advanced section opens itself when Save sends focus to the overrides field inside it.
 	let advancedOpen = $state(false);
 	let submitError = $state<string | null>(null);
@@ -145,7 +154,8 @@
 			tcId,
 			template,
 			overrides: parseOverrides(overridesJson),
-			musicTags
+			musicTags,
+			coverSize
 		};
 
 		submitting = true;
@@ -266,6 +276,22 @@
 				/>
 				<p class="field-help" id="sb-music-tags-help">
 					What this session writes into each track it encodes. An unticked tag is left out of the file.
+				</p>
+			</div>
+		{/if}
+
+		<!-- Cover art size: when the cover is one of the music tags -->
+		{#if showsCoverSize(mediaType, tcId, musicTags)}
+			<div class="field" data-testid="sb-cover-size">
+				<FieldLabel for="sb-cover-size" label="Cover art size" docsId={FIELD_IDS.cover_size} />
+				<select id="sb-cover-size" bind:value={coverSize} aria-describedby="sb-cover-size-help" disabled={readOnly}>
+					{#each COVER_SIZE_OPTIONS as option (option.value)}
+						<option value={option.value}>{option.label}</option>
+					{/each}
+				</select>
+				<p class="field-help" id="sb-cover-size-help">
+					The Cover Art Archive image embedded in each track, by its longest side. A cover uploaded smaller than the
+					size chosen is embedded as uploaded. A cover URL entered on the job is used as entered.
 				</p>
 			</div>
 		{/if}

@@ -5,6 +5,7 @@ import {
 	sessionErrors,
 	sessionUpdate,
 	sessionCreate,
+	showsCoverSize,
 	showsMusicTags,
 	type SessionForm
 } from '../session-form';
@@ -16,8 +17,9 @@ const form: SessionForm = {
 	tcId: 'tc-1',
 	template: '{title}',
 	overrides: { a: 1 },
-	// Set on purpose: a movie session must not send it.
-	musicTags: ['artist']
+	// Set on purpose: a movie session must not send these.
+	musicTags: ['artist'],
+	coverSize: '1200'
 };
 
 describe('parseOverrides', () => {
@@ -56,7 +58,12 @@ describe('sessionUpdate', () => {
 	it('sends the music tags for a music session', () => {
 		const music: SessionForm = { ...form, mediaType: 'music', musicTags: ['title', 'cover'] };
 		expect(sessionUpdate(music).music_tag_fields).toEqual(['title', 'cover']);
-		expect(sessionCreate(music)).toMatchObject({ media_type: 'music', music_tag_fields: ['title', 'cover'] });
+		expect(sessionUpdate(music).music_cover_size).toBe('1200');
+		expect(sessionCreate(music)).toMatchObject({
+			media_type: 'music',
+			music_tag_fields: ['title', 'cover'],
+			music_cover_size: '1200'
+		});
 	});
 
 	it('sends an empty list when a music session writes no tags', () => {
@@ -109,5 +116,20 @@ describe('sessionErrors', () => {
 
 	it('lists the checked inputs in form order', () => {
 		expect(SESSION_FIELD_ORDER).toEqual(['sb-name', 'sb-rip', 'sb-path', 'sb-overrides']);
+	});
+});
+
+describe('showsCoverSize', () => {
+	it('shows when the music tags show and the cover is ticked', () => {
+		expect(showsCoverSize('music', 'tc-1', ['artist', 'cover'])).toBe(true);
+	});
+
+	it('hides when the cover is not ticked', () => {
+		expect(showsCoverSize('music', 'tc-1', ['artist'])).toBe(false);
+	});
+
+	it('hides when the music tags do not show', () => {
+		expect(showsCoverSize('music', '', ['cover'])).toBe(false);
+		expect(showsCoverSize('movie', 'tc-1', ['cover'])).toBe(false);
 	});
 });

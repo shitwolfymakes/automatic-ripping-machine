@@ -14441,6 +14441,17 @@
         ],
         "title": "MoveRequest"
       },
+      "MusicCoverSize": {
+        "type": "string",
+        "enum": [
+          "250",
+          "500",
+          "1200",
+          "source"
+        ],
+        "title": "MusicCoverSize",
+        "description": "The Cover Art Archive front cover a music session embeds: a thumbnail\nwhose longest side is this many pixels, or the image as uploaded. The\narchive sends the original when it is smaller than the size asked for."
+      },
       "MusicMeta": {
         "properties": {
           "artist": {
@@ -16814,6 +16825,16 @@
               }
             ],
             "title": "Music Tag Fields"
+          },
+          "music_cover_size": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MusicCoverSize"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "type": "object",
@@ -16984,6 +17005,16 @@
               }
             ],
             "title": "Music Tag Fields"
+          },
+          "music_cover_size": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MusicCoverSize"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "type": "object",
@@ -17044,6 +17075,9 @@
             "type": "array",
             "title": "Music Tag Fields"
           },
+          "music_cover_size": {
+            "$ref": "#/components/schemas/MusicCoverSize"
+          },
           "created_by_user_id": {
             "anyOf": [
               {
@@ -17091,6 +17125,7 @@
           "output_path_template",
           "overrides_json",
           "music_tag_fields",
+          "music_cover_size",
           "created_by_user_id",
           "created_at",
           "updated_at"

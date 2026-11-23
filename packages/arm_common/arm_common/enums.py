@@ -225,6 +225,17 @@ class MusicTagField(StrEnum):
     COVER = "cover"
 
 
+class MusicCoverSize(StrEnum):
+    """The Cover Art Archive front cover a music session embeds: a thumbnail
+    whose longest side is this many pixels, or the image as uploaded. The
+    archive sends the original when it is smaller than the size asked for."""
+
+    PX_250 = "250"
+    PX_500 = "500"
+    PX_1200 = "1200"
+    SOURCE = "source"
+
+
 # Encoding settings do not depend on whether a video is a film or an episode,
 # so a movie and a TV transcode preset are interchangeable.
 VIDEO_MEDIA_TYPES: frozenset[MediaType] = frozenset({MediaType.MOVIE, MediaType.TV})

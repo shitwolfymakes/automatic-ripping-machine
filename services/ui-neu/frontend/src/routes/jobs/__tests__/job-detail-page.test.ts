@@ -229,6 +229,7 @@ describe('Job Detail Page', () => {
 			output_path_template: '{title}/{title}.mkv',
 			overrides_json: null,
 			music_tag_fields: [],
+			music_cover_size: '500',
 			created_by_user_id: null,
 			created_at: null,
 			updated_at: null

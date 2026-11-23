@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { ALL_MUSIC_TAGS, MUSIC_TAG_OPTIONS } from '../music-tags';
+import { ALL_MUSIC_TAGS, COVER_SIZE_OPTIONS, DEFAULT_COVER_SIZE, MUSIC_TAG_OPTIONS } from '../music-tags';
 
 describe('MUSIC_TAG_OPTIONS', () => {
 	it("lists every tag once, in the backend's order, then the cover", () => {
@@ -20,5 +20,20 @@ describe('MUSIC_TAG_OPTIONS', () => {
 	it('labels each tag', () => {
 		expect(MUSIC_TAG_OPTIONS.find((o) => o.value === 'musicbrainz_release_id')?.label).toBe('MusicBrainz release ID');
 		expect(MUSIC_TAG_OPTIONS.every((o) => o.label.length > 0)).toBe(true);
+	});
+});
+
+describe('COVER_SIZE_OPTIONS', () => {
+	it('lists the sizes smallest first, then the original upload', () => {
+		expect(COVER_SIZE_OPTIONS).toEqual([
+			{ value: '250', label: '250 px' },
+			{ value: '500', label: '500 px' },
+			{ value: '1200', label: '1200 px' },
+			{ value: 'source', label: 'Original upload' }
+		]);
+	});
+
+	it('starts a new session at 500 px, the size used before it was a choice', () => {
+		expect(DEFAULT_COVER_SIZE).toBe('500');
 	});
 });

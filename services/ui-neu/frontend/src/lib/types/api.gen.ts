@@ -3488,6 +3488,15 @@ export type MoveRequest = {
 };
 
 /**
+ * MusicCoverSize
+ *
+ * The Cover Art Archive front cover a music session embeds: a thumbnail
+ * whose longest side is this many pixels, or the image as uploaded. The
+ * archive sends the original when it is smaller than the size asked for.
+ */
+export type MusicCoverSize = '250' | '500' | '1200' | 'source';
+
+/**
  * MusicMeta
  */
 export type MusicMeta = {
@@ -4795,6 +4804,7 @@ export type SessionCreateRequest = {
      * Music Tag Fields
      */
     music_tag_fields?: Array<MusicTagField> | null;
+    music_cover_size?: MusicCoverSize | null;
 };
 
 /**
@@ -4863,6 +4873,7 @@ export type SessionUpdateRequest = {
      * Music Tag Fields
      */
     music_tag_fields?: Array<MusicTagField> | null;
+    music_cover_size?: MusicCoverSize | null;
 };
 
 /**
@@ -4904,6 +4915,7 @@ export type SessionView = {
      * Music Tag Fields
      */
     music_tag_fields: Array<MusicTagField>;
+    music_cover_size: MusicCoverSize;
     /**
      * Created By User Id
      */

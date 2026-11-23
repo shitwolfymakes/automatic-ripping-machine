@@ -320,6 +320,11 @@
       "page": "guide/configuring-arm",
       "section": "Rip presets, transcode presets, and sessions"
     },
+    "form.session.cover_size": {
+      "type": "internal",
+      "page": "guide/configuring-arm",
+      "section": "Rip presets, transcode presets, and sessions"
+    },
     "form.session.media_type": {
       "none": "Self-explanatory: the kind of disc the item applies to; it cannot change after create."
     },

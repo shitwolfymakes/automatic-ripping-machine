@@ -197,10 +197,12 @@ def _cached_image(safe_url: str) -> tuple[bytes, str] | None:
 
 
 def _group_cover_url(release_url: str, fallback_group: str) -> str:
-    """The release-group cover in the same size variant as `release_url` (`front-250` when it names none)."""
+    """The release-group cover in the same size variant as `release_url`: a
+    `front-N` thumbnail, or `front` for the original; `front-250` when it names
+    neither."""
     group_url = COVERART_GROUP_FRONT_URL_TEMPLATE.format(mbid=fallback_group)
     size = urlparse(release_url).path.rsplit("/", 1)[-1]
-    if size.startswith("front-"):
+    if size == "front" or size.startswith("front-"):
         group_url = f"{group_url.rsplit('/', 1)[0]}/{size}"
     return group_url
 

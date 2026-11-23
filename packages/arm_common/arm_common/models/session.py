@@ -6,7 +6,7 @@ from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from sqlmodel import Field, SQLModel
 
 from arm_common.models._columns import created_at_column, enum_column, updated_at_column
-from arm_common.enums import MediaType
+from arm_common.enums import MediaType, MusicCoverSize
 from arm_common.music_tags import MUSIC_TAG_CHOICES
 from arm_common.ulid import new_id
 
@@ -35,6 +35,12 @@ class Session(SQLModel, table=True):
     music_tag_fields: list[str] = Field(
         default_factory=lambda: list(MUSIC_TAG_CHOICES),
         sa_column=Column(ARRAY(String), nullable=False, server_default="{" + ",".join(MUSIC_TAG_CHOICES) + "}"),
+    )
+    # Music sessions only: the Cover Art Archive size embedded as the cover.
+    # VARCHAR, validated app-side by MusicCoverSize.
+    music_cover_size: MusicCoverSize = Field(
+        default=MusicCoverSize.PX_500,
+        sa_column=enum_column(MusicCoverSize, "music_cover_size", server_default=MusicCoverSize.PX_500.value),
     )
     created_by_user_id: str | None = Field(
         sa_column=Column(String, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)

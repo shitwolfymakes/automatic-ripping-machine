@@ -148,6 +148,12 @@ one (Music to FLAC, say) to change its tags, and keep a clone for each
 behaviour you want. In an MP3 the track total is written as part of the track
 number (`4/12`), so it is only written when the track number is too.
 
+With the cover ticked, **Cover art size** picks the Cover Art Archive image to
+embed: 250, 500 or 1200 px on its longest side, or the original upload. New
+sessions use 500 px. A cover uploaded smaller than the size chosen is embedded
+as uploaded, and a cover URL you enter on a job is used as entered, whatever
+the size.
+
 ARM seeds sensible built-in presets on first boot, so you don't have to create
 any to get started. See [Web UI](Web-UI) for the pages that manage them.
 

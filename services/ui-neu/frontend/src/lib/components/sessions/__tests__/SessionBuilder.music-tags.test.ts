@@ -9,8 +9,12 @@ import { createSession, updateSession, previewTemplate } from '$lib/api/sessions
 import SessionBuilder from './SessionBuilderHarness.svelte';
 import { ALL_MUSIC_TAGS } from '$lib/sessions/music-tags';
 
-// The Music file tags field: shown for a music session that encodes, saved
-// with it, and left out of every other session's request.
+// The Music file tags field and the cover size: shown for a music session
+// that encodes, saved with it, and left out of every other session's request.
+// The coverage tool reports one open branch on the cover size's
+// `<option value={option.value}>`, which is Svelte's, not the component's: it
+// compiles the attribute to `(option.__value = option.value) ?? ''`, and a
+// size is never null.
 
 const preset = (id: string, mt: string) => ({ id, name: `preset ${id}`, media_type: mt }) as any;
 const props = (over = {}) => ({
@@ -34,11 +38,13 @@ const musicSession = (over = {}) =>
 		output_path_template: '{artist}/{album}/{track}.{ext}',
 		overrides_json: null,
 		music_tag_fields: ['artist', 'title', 'cover'],
+		music_cover_size: '1200',
 		...over
 	}) as any;
 
 const box = (name: string) => screen.getByRole('checkbox', { name }) as HTMLInputElement;
 const tagsField = () => screen.queryByTestId('sb-music-tags');
+const sizeSelect = () => screen.queryByLabelText(/^cover art size/i) as HTMLSelectElement | null;
 const submit = () => fireEvent.click(screen.getByRole('button', { name: /^save$/i }));
 
 beforeEach(() => {
@@ -120,5 +126,40 @@ describe('SessionBuilder music file tags', () => {
 	it('locks the checkboxes on a built-in session', () => {
 		renderComponent(SessionBuilder, props({ session: musicSession({ is_builtin: true }) }));
 		for (const el of screen.getAllByRole('checkbox')) expect(el).toBeDisabled();
+	});
+
+	it('shows the session cover size and saves the one chosen', async () => {
+		vi.mocked(updateSession).mockResolvedValue(musicSession());
+		renderComponent(SessionBuilder, props({ session: musicSession() }));
+
+		expect(sizeSelect()?.value).toBe('1200');
+		expect(sizeSelect()).toHaveAttribute('aria-describedby', 'sb-cover-size-help');
+		await fireEvent.change(sizeSelect() as HTMLSelectElement, { target: { value: 'source' } });
+		await submit();
+
+		await waitFor(() =>
+			expect(updateSession).toHaveBeenCalledWith('ses-music', expect.objectContaining({ music_cover_size: 'source' }))
+		);
+	});
+
+	it('hides the cover size once Cover art is unticked, and shows it again when ticked', async () => {
+		renderComponent(SessionBuilder, props({ session: musicSession() }));
+		await fireEvent.click(box('Cover art'));
+		expect(sizeSelect()).toBeNull();
+		await fireEvent.click(box('Cover art'));
+		expect(sizeSelect()?.value).toBe('1200');
+	});
+
+	it('starts a new music session at 500 px', async () => {
+		vi.mocked(createSession).mockResolvedValue(musicSession());
+		renderComponent(SessionBuilder, props());
+		await fireEvent.click(screen.getByRole('button', { name: 'Music' }));
+		await fireEvent.change(screen.getByLabelText(/^transcode preset/i), { target: { value: 't-flac' } });
+		expect(sizeSelect()?.value).toBe('500');
+	});
+
+	it('locks the cover size on a built-in session', () => {
+		renderComponent(SessionBuilder, props({ session: musicSession({ is_builtin: true }) }));
+		expect(sizeSelect()).toBeDisabled();
 	});
 });

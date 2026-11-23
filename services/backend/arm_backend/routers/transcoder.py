@@ -52,6 +52,7 @@ from arm_common import (
     TranscodeTask,
     TranscodeTaskStatus,
 )
+from arm_common.enums import MusicCoverSize
 from arm_common.models import Job, Track
 from arm_common.music_tags import COVER
 from arm_common.schemas import (
@@ -184,16 +185,16 @@ async def cover_art(task_id: str, db: AsyncSession = Depends(get_session)) -> Re
     if COVER not in music_tag_fields_setting(sess):
         logger.info("cover art task_id=%s skipped: switched off in session %s", task_id, sess.id)
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="cover art switched off")
-    cover = await _first_embeddable_cover(task_id, job)
+    cover = await _first_embeddable_cover(task_id, job, sess.music_cover_size)
     if cover is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="no cover art")
     return cover
 
 
-async def _first_embeddable_cover(task_id: str, job: Job) -> Response | None:
-    """The override, else the automatic cover: the first that can be fetched as an
-    embeddable image. None when neither can."""
-    for url in cover_art_urls(job):
+async def _first_embeddable_cover(task_id: str, job: Job, size: MusicCoverSize) -> Response | None:
+    """The override, else the automatic cover in `size`: the first that can be
+    fetched as an embeddable image. None when neither can."""
+    for url in cover_art_urls(job, size):
         try:
             content, media_type = await fetch_allowed_image(url)
         except ImageUnavailable as e:

@@ -4,6 +4,7 @@ from typing import Any
 
 from arm_backend.metadata.base import MetadataResult
 from arm_common import Job
+from arm_common.enums import MusicCoverSize
 
 # TMDB serves posters from a CDN; `w500` (500px-wide) is the size used
 # here and renders fine for thumbnail and detail-card use. Full hashed path is
@@ -21,22 +22,27 @@ TMDB_POSTER_BASE_URL = "https://image.tmdb.org/t/p/w500"
 # (common) case of an art-less regional pressing.
 COVERART_RELEASE_FRONT_URL_TEMPLATE = "https://coverartarchive.org/release/{mbid}/front-250"
 COVERART_GROUP_FRONT_URL_TEMPLATE = "https://coverartarchive.org/release-group/{mbid}/front-250"
-# The cover embedded in a music file: the 500px variant, not the UI thumbnail.
+# The cover embedded in a music file: the session's size, not the UI thumbnail.
 _COVERART_PREFIX = "https://coverartarchive.org/"
 _COVERART_THUMBNAIL = "/front-250"
-_COVERART_EMBED = "/front-500"
+_COVERART_FRONT_BY_SIZE: dict[MusicCoverSize, str] = {
+    MusicCoverSize.PX_250: "/front-250",
+    MusicCoverSize.PX_500: "/front-500",
+    MusicCoverSize.PX_1200: "/front-1200",
+    MusicCoverSize.SOURCE: "/front",
+}
 
 
 def _is_http_url(url: str | None) -> bool:
     return isinstance(url, str) and url.startswith(("http://", "https://"))
 
 
-def cover_art_urls(job: Job) -> list[str]:
+def cover_art_urls(job: Job, size: MusicCoverSize) -> list[str]:
     """The covers to try for a music track's embedded art, in order.
 
     The operator's override first, used exactly as entered; then the
-    automatic cover, with a Cover Art Archive thumbnail swapped for its
-    500px variant. Empty when the job has neither.
+    automatic cover, with a Cover Art Archive thumbnail swapped for the
+    `size` variant. Empty when the job has neither.
     """
     urls: list[str] = []
     if _is_http_url(job.poster_url_manual):
@@ -44,7 +50,7 @@ def cover_art_urls(job: Job) -> list[str]:
     if _is_http_url(job.poster_url):
         auto = str(job.poster_url)
         if auto.startswith(_COVERART_PREFIX):
-            auto = auto.replace(_COVERART_THUMBNAIL, _COVERART_EMBED, 1)
+            auto = auto.replace(_COVERART_THUMBNAIL, _COVERART_FRONT_BY_SIZE[size], 1)
         if auto not in urls:
             urls.append(auto)
     return urls
