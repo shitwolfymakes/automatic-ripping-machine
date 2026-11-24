@@ -25,7 +25,6 @@ RUN apt-get update \
         qtbase5-dev \
         wget \
         zlib1g-dev \
-        openjdk-17-jre-headless \
         libtesseract-dev \
         libleptonica-dev \
     && rm -rf /var/lib/apt/lists/*
@@ -75,6 +74,8 @@ ENV DEBIAN_FRONTEND=noninteractive \
 # skip libdvd-pkg / libdvdcss here — Phase 3 (real rip pipeline) can re-add
 # them if any rip-time tool turns out to need them. Keeps the image to
 # main-repo packages only and avoids enabling contrib / non-free.
+# The JRE lets makemkvcon run a Blu-ray's BD-J program, which it uses to find
+# the real title on discs with obfuscated playlists.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         tini \
@@ -95,6 +96,7 @@ RUN apt-get update \
         7zip \
         libtesseract5 \
         liblept5 \
+        openjdk-17-jre-headless \
     && rm -rf /var/lib/apt/lists/*
 
 # Pull MakeMKV binaries + libs from the build stage. The bin tarball installs
