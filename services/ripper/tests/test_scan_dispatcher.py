@@ -27,10 +27,11 @@ def _patch(
     data: ScanResult | None = None,
     extracted: Path | None = None,
 ) -> dict[str, list]:
-    seen: dict[str, list] = {"minimums": [], "discarded": []}
+    seen: dict[str, list] = {"minimums": [], "timeouts": [], "discarded": []}
 
-    async def _makemkv(_p: str, min_title_length_seconds: int, **_options: object) -> ScanResult:
+    async def _makemkv(_p: str, min_title_length_seconds: int, *, timeout_seconds: float | None = None) -> ScanResult:
         seen["minimums"].append(min_title_length_seconds)
+        seen["timeouts"].append(timeout_seconds)
         answer = makemkv.pop(0)
         if isinstance(answer, Exception):
             raise answer
@@ -62,6 +63,28 @@ async def test_a_titled_makemkv_scan_gets_the_minimum_and_wins(monkeypatch: pyte
 
     assert await scan_dispatcher.scan("/dev/sr0", 60) is found
     assert seen["minimums"] == [60]
+
+
+async def test_the_drive_scan_timeout_reaches_makemkv(monkeypatch: pytest.MonkeyPatch) -> None:
+    found = ScanResult(disc_type=DiscType.DVD, titles=[_TITLE])
+    seen = _patch(monkeypatch, makemkv=[found])
+
+    assert await scan_dispatcher.scan("/dev/sr0", 60, timeout_seconds=900) is found
+    assert seen["timeouts"] == [900]
+
+
+async def test_the_drive_scan_timeout_reaches_the_rescan_of_an_unpacked_image(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    iso = tmp_path / "m.iso"
+    iso.write_bytes(b"\0")
+    found = ScanResult(disc_type=DiscType.BLURAY, titles=[_TITLE])
+    seen = _patch(monkeypatch, makemkv=[ScanError("exit -11"), found], extracted=tmp_path / "m")
+
+    result = await scan_dispatcher.scan(str(iso), 60, timeout_seconds=900)
+
+    assert result.titles == [_TITLE]
+    assert seen["timeouts"] == [900, 900]
 
 
 async def test_an_image_that_cannot_be_unpacked_falls_through_to_data(

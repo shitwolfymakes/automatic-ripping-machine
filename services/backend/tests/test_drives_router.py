@@ -511,6 +511,17 @@ def test_patch_refuses_a_scan_timeout_outside_30_to_3600(signing_key: bytes, val
     assert db.rows["drives"][0].prescan_timeout is None
 
 
+@pytest.mark.parametrize("value", [30, 3600])
+def test_patch_accepts_a_scan_timeout_on_either_bound(signing_key: bytes, value: int) -> None:
+    db = FakeSession()
+    _seed(db)
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as c:
+        r = c.patch("/api/drives/drv_x", json={"prescan_timeout": value}, headers=_auth(token))
+    assert r.status_code == 200, r.text
+    assert db.rows["drives"][0].prescan_timeout == value
+
+
 def test_patch_clears_a_scan_timeout_with_null(signing_key: bytes) -> None:
     db = FakeSession()
     _seed(db)
