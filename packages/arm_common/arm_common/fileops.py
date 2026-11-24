@@ -4,8 +4,8 @@
 the helper `fsync`s that file, renames it to `<final>`, then `fsync`s the
 directory so the rename survives a power cut. Same filesystem, so rename is
 atomic.
-Plex/Jellyfin scanners ignore `.arm-inprogress`, so half-written files are
-invisible. On failure (exception, SIGTERM, container kill), the partial file
+Plex/Jellyfin skip a file whose extension they do not recognise, so a
+half-written `.arm-inprogress` file is invisible to them. On failure (exception, SIGTERM, container kill), the partial file
 stays on disk for the Backend startup sweep.
 
 `transcode_none`: used by ISO and data-copy sessions where there's no
@@ -25,13 +25,18 @@ NFS export), it logs a hint that a single parent mount would make the move
 an instant rename.
 
 `move_tree`: the folder counterpart of `transcode_none`, for the Blu-ray
-decrypted backup. `shutil.move` renames on the same filesystem and copies
-the tree then removes the source across filesystems; `move_tree` adds the
-refusal to overwrite an existing destination, the same `cancel` check
-(a cancelled copy removes the partial tree), the size of the tree, and the
-durability of the copy: each file is fsynced as it lands, before
-`shutil.move` removes the source, and the destination directories are
-fsynced once the move returns.
+decrypted backup. It refuses an existing destination, then tries
+`os.rename`; across filesystems it copies the tree into a staging folder
+`<dst>.arm-inprogress`, fsyncing each file as it lands and every directory
+once the copy is done, renames the staging folder to `<dst>`, fsyncs the
+parent, and only then removes the source. A copy error, a cancel (checked
+between chunks) or a crash leaves only the staging folder and the source;
+the next attempt replaces a leftover staging folder, and the Backend startup
+sweep removes an orphaned one. Unlike a single `.arm-inprogress` file, the
+staging folder holds ordinary `BDMV/STREAM/*.m2ts` files, so a library
+scanner may index the partial copy while it runs or until a leftover is
+removed; `<dst>` itself only ever appears complete. Returns the total size
+of the tree's files.
 """
 
 from __future__ import annotations
