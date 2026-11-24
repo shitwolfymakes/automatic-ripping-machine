@@ -85,10 +85,14 @@
 {/if}
 
 <style>
+	/* The value box and its editor both fill their container, so they are the
+	   same size and opening the editor doesn't shift the layout. */
 	.inline-field-value {
-		padding: 0 0.25rem;
-		margin: 0 -0.25rem;
-		border: 1px dashed transparent;
+		display: block;
+		width: 100%;
+		padding: 0 0.25rem 1px;
+		/* A faint dashed box marks the value as editable even at rest. */
+		border: 1px dashed var(--color-border);
 		border-radius: var(--radius-sm);
 		background: none;
 		font: inherit;
@@ -98,15 +102,17 @@
 	}
 	.inline-field-value:hover,
 	.inline-field-value:focus-visible {
-		border-color: var(--color-border-strong);
-		background: var(--color-primary-tint-1);
+		border-color: var(--color-primary);
+		background: var(--color-primary-tint-2);
 		outline: none;
 	}
 	.inline-field-input {
-		min-height: 1.75rem;
-		padding: 0.125rem 0.5rem;
 		width: 100%;
-		max-width: 12rem;
+		min-height: 0;
+		padding: 0 0.25rem 1px;
+		border-radius: var(--radius-sm);
+		font: inherit;
+		line-height: inherit;
 	}
 	.inline-field-error {
 		display: block;
