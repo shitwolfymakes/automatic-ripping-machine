@@ -58,6 +58,25 @@ describe('sessionListFilters', () => {
 		expect(fresh.source).toBe('all');
 	});
 
+	it.each([
+		['type', 'movie'],
+		['source', 'builtin'],
+		['search', 'bluray']
+	] as const)('saves a lone %s change across a reload', async (field, value) => {
+		const { listFilters } = await import('../sessionListFilters.svelte');
+		(listFilters('rip') as unknown as Record<string, string>)[field] = value;
+		vi.resetModules();
+		const fresh = (await import('../sessionListFilters.svelte')).listFilters('rip');
+		expect(fresh[field]).toBe(value);
+	});
+
+	it('treats a stored JSON null as nothing saved', async () => {
+		sessionStorage.setItem(KEY, 'null');
+		const { listFilters } = await import('../sessionListFilters.svelte');
+		const s = listFilters('sessions');
+		expect([s.type, s.source, s.search, s.transcode]).toEqual(['all', 'all', '', 'any']);
+	});
+
 	it('resetListFilters clears every list and the stored copy', async () => {
 		const { listFilters, resetListFilters } = await import('../sessionListFilters.svelte');
 		listFilters('sessions').search = 'x';
