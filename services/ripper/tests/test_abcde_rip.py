@@ -531,6 +531,77 @@ async def test_rip_cd_kills_the_whole_process_group_on_timeout(monkeypatch, tmp_
     assert results[1].ok is False
 
 
+def _stub_running_abcde(monkeypatch) -> tuple[_RunningProc, dict[str, Path]]:
+    """abcde mid-rip that never exits on its own; returns it and, under "conf", the config file it was given."""
+    monkeypatch.setattr(abcde_rip, "STATUS_POLL_SECONDS", 0.01)
+    fake = _RunningProc(asyncio.Event())
+    spawned: dict[str, Path] = {}
+
+    async def fake_create(*args: Any, **_kw: Any) -> _RunningProc:
+        spawned["conf"] = Path(args[args.index("-c") + 1])
+        return fake
+
+    monkeypatch.setattr(abcde_rip.asyncio, "create_subprocess_exec", fake_create)
+    return fake, spawned
+
+
+@pytest.mark.asyncio
+async def test_rip_cd_cancelled_kills_abcde_before_waiting_for_a_track_report_in_flight(
+    monkeypatch, tmp_path, killpg_calls
+):
+    """Abandon cancels the rip once and ejects at once. abcde and cdparanoia are killed straight away, so they do
+    not hold the drive while a track report already sent to the backend finishes; that report still completes."""
+    fake, _ = _stub_running_abcde(monkeypatch)
+    reporting, release = asyncio.Event(), asyncio.Event()
+    reported: list[int] = []
+
+    async def on_done(idx: int, _result: RipResult) -> None:
+        reporting.set()
+        await release.wait()
+        reported.append(idx)
+
+    rip = asyncio.create_task(rip_cd("/dev/sr0", tmp_path, [1, 2], on_track_done=on_done))
+    _write_track_wav(tmp_path, 1)
+    _append_status(tmp_path, "movetrack-01")
+    await reporting.wait()
+    rip.cancel()
+    await _until(lambda: bool(killpg_calls))
+
+    assert killpg_calls == [(_FAKE_PID, abcde_rip.signal.SIGKILL)]
+    assert not rip.done()
+    release.set()
+    with pytest.raises(asyncio.CancelledError):
+        await rip
+    assert reported == [1]
+    assert fake.returncode == -9
+
+
+@pytest.mark.asyncio
+async def test_rip_cd_cancelled_twice_still_kills_abcde_and_cleans_up(monkeypatch, tmp_path, killpg_calls):
+    """A second cancel while the rip waits for a track report cuts that wait short, but abcde is still killed and
+    reaped and its config file deleted."""
+    fake, spawned = _stub_running_abcde(monkeypatch)
+    reporting = asyncio.Event()
+
+    async def on_done(_idx: int, _result: RipResult) -> None:
+        reporting.set()
+        await asyncio.sleep(3600)
+
+    rip = asyncio.create_task(rip_cd("/dev/sr0", tmp_path, [1, 2], on_track_done=on_done))
+    _write_track_wav(tmp_path, 1)
+    _append_status(tmp_path, "movetrack-01")
+    await reporting.wait()
+    rip.cancel()
+    await asyncio.sleep(0.02)
+    rip.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await rip
+
+    assert killpg_calls == [(_FAKE_PID, abcde_rip.signal.SIGKILL)]
+    assert fake.returncode == -9
+    assert not spawned["conf"].exists()
+
+
 def test_kill_group_tolerates_an_already_empty_group(monkeypatch):
     def gone(_pgid: int, _sig: int) -> None:
         raise ProcessLookupError
@@ -715,13 +786,13 @@ async def _finished_task() -> asyncio.Task[None]:
     return task
 
 
-async def test_stop_abcde_kills_and_reaps_a_running_process_and_deletes_the_config(monkeypatch, tmp_path):
+async def test_stop_abcde_reaps_a_killed_process_and_deletes_the_config(monkeypatch, tmp_path):
     proc, conf_path, killpg_calls = _stop_abcde_setup(monkeypatch, tmp_path, returncode=None)
 
     await abcde_rip._stop_abcde(proc, await _finished_task(), conf_path)  # type: ignore[arg-type]
 
-    assert killpg_calls == [(_FAKE_PID, abcde_rip.signal.SIGKILL)]
-    assert proc.returncode == -9
+    assert killpg_calls == []
+    assert proc.returncode == 0
     assert not conf_path.exists()
 
 
@@ -744,7 +815,7 @@ async def test_stop_abcde_swallows_a_failing_reap(monkeypatch, tmp_path):
 
     await abcde_rip._stop_abcde(proc, await _finished_task(), conf_path)  # type: ignore[arg-type]
 
-    assert len(killpg_calls) == 1
+    assert killpg_calls == []
     assert not conf_path.exists()
 
 
