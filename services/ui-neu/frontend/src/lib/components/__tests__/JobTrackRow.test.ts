@@ -379,7 +379,7 @@ describe('JobTrackRow CD song titles', () => {
 	});
 
 	it('keeps the title search toggle on a non-audio CD row and on a video row', async () => {
-		renderRow(audio({ kind: 'data_track' }), { job: { disc_type: 'cd' }, musicTracks: [song], canEditSongs: true });
+		renderRow(audio({ kind: 'data_dump' }), { job: { disc_type: 'cd' }, musicTracks: [song], canEditSongs: true });
 		await fireEvent.click(cell('Title'));
 		expect(ontoggleedit).toHaveBeenCalledTimes(1);
 		cleanup();

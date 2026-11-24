@@ -1372,7 +1372,7 @@ describe('below the tracks', () => {
 	it('shows the CD tracklist when there are no track rows', async () => {
 		loadJobPage(cdWithMusic([]));
 		expect(await screen.findByText('Tracklist')).toBeInTheDocument();
-		expect(screen.getByText('(1 tracks via MusicBrainz)')).toBeInTheDocument();
+		expect(screen.getByText('(1 tracks)')).toBeInTheDocument();
 		expect(screen.getByText('Opening')).toBeInTheDocument();
 		expect(screen.queryByText(/^Tracks \(/)).not.toBeInTheDocument();
 	});
