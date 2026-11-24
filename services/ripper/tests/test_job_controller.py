@@ -1506,6 +1506,28 @@ async def test_pickup_releases_gate_when_run_rip_raises():
     assert controller._active_job_id is None
 
 
+@pytest.mark.asyncio
+async def test_abandon_before_pickup_task_first_runs_releases_the_claim():
+    """An abandon landing before the rip's task has run a step cancels it before `_claim` is entered, so no
+    `finally` of its own releases the claim; the drive must still read idle afterwards."""
+    controller = JobController(FakeClient(), "drv_test")
+    calls = _spy_run_rip(controller)
+    controller._disc_seated = lambda: False  # type: ignore[method-assign]
+    controller._spawn_eject = lambda: None  # type: ignore[method-assign]
+    job = _view(JobStatus.IDENTIFIED)
+
+    task = await controller.pickup(job, "/dev/sr0")
+    assert task is not None
+    controller._handle_abandon(job.id, delete_raw=False)
+    with pytest.raises(asyncio.CancelledError):
+        await task
+
+    assert calls == []
+    assert controller.is_idle()
+    assert controller._active_job_id is None
+    assert await controller.pickup(job, "/dev/sr0") is not None
+
+
 def _fake_resolution(controller: JobController, result: JobView | None) -> list[tuple[str, object]]:
     waits: list[tuple[str, object]] = []
 
