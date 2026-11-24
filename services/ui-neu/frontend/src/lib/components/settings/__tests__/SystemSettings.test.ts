@@ -4,8 +4,13 @@ import SystemSettings from '../SystemSettings.svelte';
 import { SetupRestart } from '$lib/stores/setup-restart.svelte';
 import { goto } from '$app/navigation';
 import { restartSetup } from '$lib/api/setup';
-import { fetchSystemEnvironment } from '$lib/api/system';
+import { fetchSystemDiagnostics, fetchSystemEnvironment } from '$lib/api/system';
+import { ApiError } from '$lib/api/client';
 import { fetchDiagnostics } from '$lib/api/diagnostics';
+
+// Branches not forced here: the `?? ''` fallbacks Svelte compiles around the
+// expressions in the summary line (`{env.version}`, `{yesNo(...)}`): version is
+// a required string and yesNo always returns a string, so none is ever nullish.
 
 vi.mock('$app/navigation', async (importOriginal) => ({
 	...(await importOriginal<Record<string, unknown>>()),
@@ -51,6 +56,22 @@ vi.mock('$lib/api/diagnostics', () => ({
 	fetchDiagnostics: vi.fn(() => Promise.resolve({ services: [] }))
 }));
 
+const health = { status: 'ok', checks: [{ name: 'config', status: 'ok', detail: null }], paths: [] };
+
+const originalClipboard = Object.getOwnPropertyDescriptor(navigator, 'clipboard');
+
+function stubClipboard(): ReturnType<typeof vi.fn> {
+	const writeText = vi.fn((_text: string) => Promise.resolve());
+	Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
+	return writeText;
+}
+
+async function copyReport(writeText: ReturnType<typeof vi.fn>): Promise<string> {
+	await fireEvent.click(screen.getByRole('button', { name: 'Copy deployment report' }));
+	await waitFor(() => expect(writeText).toHaveBeenCalledTimes(1));
+	return writeText.mock.calls[0][0] as string;
+}
+
 function renderSystem(over: { setup?: SetupRestart } = {}) {
 	const setup = over.setup ?? new SetupRestart();
 	renderComponent(SystemSettings, { props: { setup } });
@@ -63,6 +84,8 @@ describe('SystemSettings', () => {
 	});
 
 	afterEach(() => {
+		if (originalClipboard) Object.defineProperty(navigator, 'clipboard', originalClipboard);
+		else delete (navigator as unknown as Record<string, unknown>).clipboard;
 		cleanup();
 	});
 
@@ -144,5 +167,64 @@ describe('SystemSettings', () => {
 		vi.mocked(fetchSystemEnvironment).mockRejectedValueOnce(new Error('env down'));
 		renderSystem();
 		expect(await screen.findByTestId('environment-error')).toHaveTextContent('env down');
+	});
+
+	it('explains an admin-only environment to a guest instead of erroring, and hides the copy button', async () => {
+		vi.mocked(fetchSystemEnvironment).mockRejectedValueOnce(
+			new ApiError(403, 'read-only role: write access required', null)
+		);
+		vi.mocked(fetchDiagnostics).mockResolvedValueOnce({ services: [{ name: 'arm-ripper', log_level: 'INFO' }] });
+		renderSystem();
+		expect(await screen.findByTestId('environment-forbidden')).toHaveTextContent(/admins only/);
+		expect(screen.queryByTestId('environment-error')).not.toBeInTheDocument();
+		expect(screen.queryByRole('button', { name: 'Copy deployment report' })).not.toBeInTheDocument();
+		expect(screen.getByTestId('diag-level-arm-ripper')).toHaveTextContent('INFO');
+	});
+
+	it('copies a report from the loaded environment and the health result of the last system check', async () => {
+		vi.mocked(fetchSystemDiagnostics).mockResolvedValueOnce(health);
+		const writeText = stubClipboard();
+		renderSystem();
+		await screen.findByTestId('system-summary');
+		await fireEvent.click(screen.getByRole('button', { name: 'Run system check' }));
+		await waitFor(() => expect(fetchSystemDiagnostics).toHaveBeenCalledTimes(1));
+		const report = await copyReport(writeText);
+		expect(report).toContain('## ARM deployment report | 3.1.0');
+		expect(report).toContain('- PASS');
+		expect(fetchSystemEnvironment).toHaveBeenCalledTimes(1);
+		expect(fetchSystemDiagnostics).toHaveBeenCalledTimes(1);
+	});
+
+	it('fetches the environment and health on copy when neither loaded', async () => {
+		vi.mocked(fetchSystemEnvironment).mockRejectedValueOnce(new Error('env down'));
+		vi.mocked(fetchSystemDiagnostics).mockResolvedValueOnce(health);
+		const writeText = stubClipboard();
+		renderSystem();
+		await screen.findByTestId('environment-error');
+		const report = await copyReport(writeText);
+		expect(report).toContain('## ARM deployment report | 3.1.0');
+		expect(report).toContain('### Health');
+		expect(fetchSystemEnvironment).toHaveBeenCalledTimes(2);
+		expect(fetchSystemDiagnostics).toHaveBeenCalledTimes(1);
+	});
+
+	it('summarises unknown host paths and no GPUs', async () => {
+		vi.mocked(fetchSystemEnvironment).mockResolvedValueOnce({
+			version: '3.1.0',
+			summary: { host_paths_set: null, transcode_capable: true, gpus: [] },
+			groups: [],
+			containers: []
+		});
+		renderSystem();
+		const summary = await screen.findByTestId('system-summary');
+		expect(summary).toHaveTextContent('Host paths set: unknown');
+		expect(summary).toHaveTextContent('Transcode capable: yes');
+		expect(summary).toHaveTextContent('GPUs: none');
+	});
+
+	it('falls back to a generic environment error for a non-Error rejection', async () => {
+		vi.mocked(fetchSystemEnvironment).mockRejectedValueOnce('boom');
+		renderSystem();
+		expect(await screen.findByTestId('environment-error')).toHaveTextContent('Failed to load the environment');
 	});
 });

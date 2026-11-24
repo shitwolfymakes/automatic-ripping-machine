@@ -4,6 +4,11 @@ import EnvironmentSection from '../EnvironmentSection.svelte';
 import { tabFromHash } from '$lib/settings/tabs';
 import type { EnvGroupView } from '$lib/types/api.gen';
 
+// Branches not forced here: the `?? ''` fallbacks Svelte compiles around
+// `{v.effective.value}`, `{v.effective.tab}`, the `{v.key}` in `data-testid`,
+// `{s.name}` and `{s.log_level}`. Each is a required string on EnvEffectiveView,
+// EnvVarView or DiagnosticsServiceView, so none is ever nullish.
+
 const groups: EnvGroupView[] = [
 	{
 		name: 'Paths',
@@ -58,5 +63,48 @@ describe('EnvironmentSection', () => {
 		renderComponent(EnvironmentSection, { props: { groups, logLevels: [] } });
 		await fireEvent.click(screen.getByRole('button', { name: /Paths/ }));
 		expect(screen.queryByTestId('env-RAW_ROOT')).toBeNull();
+	});
+
+	it('shows an unset secret as not set and an empty public value as blank', () => {
+		renderComponent(EnvironmentSection, {
+			props: {
+				groups: [
+					{
+						name: 'Misc',
+						vars: [
+							{ key: 'API_KEY', value: null, secret: true, is_set: false, source: 'default' },
+							{ key: 'EMPTY', value: null, secret: false, is_set: false, source: 'env' }
+						]
+					}
+				],
+				logLevels: []
+			}
+		});
+		expect(screen.getByTestId('env-API_KEY')).toHaveTextContent('not set');
+		expect(screen.getByTestId('env-EMPTY').querySelector('.environment-section-value')).toHaveTextContent(/^$/);
+	});
+
+	it('links an in-use value with no setting key to its tab', () => {
+		renderComponent(EnvironmentSection, {
+			props: {
+				groups: [
+					{
+						name: 'Transcode',
+						vars: [
+							{
+								key: 'ARM_GPUS',
+								value: 'all',
+								secret: false,
+								is_set: true,
+								source: 'env',
+								effective: { value: '2 device(s)', setting_key: null, tab: 'Transcoding' }
+							}
+						]
+					}
+				],
+				logLevels: []
+			}
+		});
+		expect(screen.getByRole('link', { name: /in use: 2 device/ })).toHaveAttribute('href', '#transcoding');
 	});
 });

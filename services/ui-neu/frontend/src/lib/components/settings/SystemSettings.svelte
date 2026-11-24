@@ -8,6 +8,7 @@
 	import CopyReportButton from '$lib/components/settings/CopyReportButton.svelte';
 	import { fetchSystemDiagnostics, fetchSystemEnvironment } from '$lib/api/system';
 	import { fetchDiagnostics } from '$lib/api/diagnostics';
+	import { ApiError } from '$lib/api/client';
 	import { buildDeploymentReport } from '$lib/utils/deployment-report';
 	import type {
 		DiagnosticsServiceView,
@@ -23,6 +24,8 @@
 
 	let env = $state<SystemEnvironmentResponse | null>(null);
 	let envError = $state<string | null>(null);
+	// The environment report is admin-only; a guest gets 403.
+	let envForbidden = $state(false);
 	let logLevels = $state<DiagnosticsServiceView[]>([]);
 	let logError = $state<string | null>(null);
 	let health: SystemDiagnosticsResponse | null = null;
@@ -30,6 +33,7 @@
 	onMount(async () => {
 		const [envRes, logRes] = await Promise.allSettled([fetchSystemEnvironment(), fetchDiagnostics()]);
 		if (envRes.status === 'fulfilled') env = envRes.value;
+		else if (envRes.reason instanceof ApiError && envRes.reason.status === 403) envForbidden = true;
 		else envError = envRes.reason instanceof Error ? envRes.reason.message : 'Failed to load the environment';
 		if (logRes.status === 'fulfilled') logLevels = logRes.value.services;
 		else logError = 'Failed to load log levels';
@@ -51,7 +55,9 @@
 	<div class="stack stack-lg">
 		<div class="settings-page-system-header">
 			<h2 class="settings-page-section-title" data-page-section-title>System</h2>
-			<CopyReportButton {getReport} />
+			{#if !envForbidden}
+				<CopyReportButton {getReport} />
+			{/if}
 		</div>
 
 		<FeedbackAlert feedback={setup.feedback.current} />
@@ -63,6 +69,10 @@
 			</p>
 		{:else if envError}
 			<p class="field-error" data-testid="environment-error">{envError}</p>
+		{:else if envForbidden}
+			<p class="settings-page-system-summary" data-testid="environment-forbidden">
+				The environment report and deployment report are for admins only.
+			</p>
 		{/if}
 
 		<section class="stack" data-testid="system-health-block" aria-labelledby="system-diagnostics-title">
@@ -78,7 +88,7 @@
 		{#if env}
 			<EnvironmentSection groups={env.groups} {logLevels} {logError} />
 			<ContainersSection containers={env.containers} />
-		{:else if envError}
+		{:else if envError || envForbidden}
 			<!-- Log levels do not depend on the environment endpoint. -->
 			<EnvironmentSection groups={[{ name: 'Logging', vars: [] }]} {logLevels} {logError} />
 		{/if}

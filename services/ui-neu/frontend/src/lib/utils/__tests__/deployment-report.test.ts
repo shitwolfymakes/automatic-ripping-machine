@@ -195,4 +195,40 @@ describe('buildDeploymentReport', () => {
 			'- FAIL Configuration: `` *bold* [x](http://e) `tick` ``'
 		);
 	});
+
+	it('summarises unknown and false flags, no GPUs and no containers', () => {
+		const env = {
+			...makeEnv(),
+			summary: { host_paths_set: null, transcode_capable: false, gpus: [] },
+			containers: []
+		};
+		const out = buildDeploymentReport(env, null, [], now);
+		expect(out).toContain('- Host paths set: unknown');
+		expect(out).toContain('- Transcode capable: no');
+		expect(out).toContain('- GPUs: none');
+		expect(out).not.toContain('### Containers');
+	});
+
+	it('lists storage paths as PASS when writable and FAIL with the reason otherwise', () => {
+		const h: SystemDiagnosticsResponse = {
+			status: 'error',
+			checks: [],
+			paths: [
+				{ name: 'Raw', path: '/raw', exists: true, writable: true },
+				{ name: 'Media', path: '/media', exists: false, writable: false }
+			]
+		};
+		const out = buildDeploymentReport(makeEnv(), h, [], now);
+		expect(out).toContain('- PASS Raw: /raw');
+		expect(out).toContain('- FAIL Media: /media, ` missing `');
+	});
+
+	it('renders a public var or container env entry with no value as empty', () => {
+		const env = makeEnv();
+		env.groups[0].vars.push({ key: 'EMPTY_VAR', value: null, secret: false, is_set: false, source: 'env' });
+		env.containers[0].env.push({ key: 'EMPTY_ENV', value: null, secret: false });
+		const out = buildDeploymentReport(env, null, [], now);
+		expect(out).toContain('EMPTY_VAR=\n');
+		expect(out).toContain('  EMPTY_ENV=\n');
+	});
 });

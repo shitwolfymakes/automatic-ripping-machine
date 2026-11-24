@@ -3,6 +3,13 @@ import { renderComponent, screen, cleanup } from '$lib/testing/render';
 import ContainersSection from '../ContainersSection.svelte';
 import type { ContainerView } from '$lib/types/api.gen';
 
+// Branches not forced here: the `?? ''` fallbacks Svelte compiles around the
+// text and attribute expressions `{m.host}`, `{m.container}`, `{m.mode}`,
+// `{e.key}`, the whole `{e.secret ? '<secret>' : (e.value ?? '')}` and the
+// `{c.label}` in `data-testid`. Each is a required string on ContainerView /
+// ContainerMountView / ContainerEnvView (the ternary always yields a string),
+// so none is ever nullish.
+
 const containers: ContainerView[] = [
 	{
 		kind: 'ripper',
@@ -44,5 +51,13 @@ describe('ContainersSection', () => {
 	it('renders nothing without containers', () => {
 		renderComponent(ContainersSection, { props: { containers: [] } });
 		expect(screen.queryByTestId('containers-section')).toBeNull();
+	});
+
+	it('shows an unknown state and a blank public env value', () => {
+		const c = { ...containers[0], state: null, env: [{ key: 'EMPTY', value: null, secret: false }] };
+		renderComponent(ContainersSection, { props: { containers: [c] } });
+		const d = screen.getByTestId('container-0-arm-ripper');
+		expect(d).toHaveTextContent('unknown');
+		expect(d).toHaveTextContent(/EMPTY=$/);
 	});
 });

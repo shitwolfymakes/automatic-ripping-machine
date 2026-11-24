@@ -186,7 +186,7 @@ async def system_version(_: User = Depends(require_jwt)) -> SystemVersionRespons
 @router.get("/environment", response_model=SystemEnvironmentResponse)
 async def environment(
     request: Request,
-    _: User = Depends(require_jwt),
+    _: User = Depends(require_writer),
     session: AsyncSession = Depends(get_session),
 ) -> SystemEnvironmentResponse:
     cfg = (await session.execute(select(Config).where(col(Config.id) == CONFIG_SINGLETON_ID))).scalar_one_or_none()

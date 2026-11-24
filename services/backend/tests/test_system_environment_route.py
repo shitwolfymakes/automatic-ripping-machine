@@ -24,7 +24,7 @@ from tests._fakes import FakeSession
 _TOKEN = "secret-token"
 
 
-def _app(monkeypatch: pytest.MonkeyPatch) -> tuple[FastAPI, str]:
+def _app(monkeypatch: pytest.MonkeyPatch, *, guest_enabled: bool = False) -> tuple[FastAPI, str]:
     monkeypatch.setattr(
         system_router,
         "settings",
@@ -39,7 +39,7 @@ def _app(monkeypatch: pytest.MonkeyPatch) -> tuple[FastAPI, str]:
             password_hash="x",
             password_must_change=False,
             role=GUEST_ROLE,
-            disabled=True,
+            disabled=not guest_enabled,
         ),
     ]
     db.rows["config"] = [Config(id=1)]
@@ -92,6 +92,12 @@ def client_no_token(monkeypatch: pytest.MonkeyPatch) -> Iterator[TestClient]:
 
 def test_requires_auth(client_no_token: TestClient) -> None:
     assert client_no_token.get("/api/system/environment").status_code == 401
+
+
+def test_anonymous_guest_is_forbidden(monkeypatch: pytest.MonkeyPatch) -> None:
+    app, _ = _app(monkeypatch, guest_enabled=True)
+    with TestClient(app) as c:
+        assert c.get("/api/system/environment").status_code == 403
 
 
 def test_returns_groups_containers_and_masks(client: TestClient) -> None:
