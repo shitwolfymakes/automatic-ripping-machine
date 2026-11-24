@@ -63,6 +63,8 @@ class ConfigView(BaseModel):
     max_parallel_iso_rips: int
     # Shortest title the scan lists and the rip writes, in seconds.
     min_title_length_seconds: int
+    # The MakeMKV scan timeout a drive uses unless it sets its own (read-only).
+    default_scan_timeout_seconds: int
     # transcode_enabled: the runtime switch (a Config DB column, editable).
     # transcode_capable: the deployment capability (read-only, derived from env
     # Settings, not a Config column). capable=False renders the toggle locked.

@@ -2,6 +2,7 @@ import asyncio
 import logging
 from typing import NamedTuple
 
+from arm_common.schemas.drives import DEFAULT_SCAN_TIMEOUT_SECONDS
 from arm_common import DiscType
 from arm_common.schemas import DiscFingerprintInput, ScanResult, ScanTitle
 from arm_ripper.scan.disc_probe import DiscProbe, probe_disc
@@ -10,7 +11,7 @@ from arm_ripper.source import makemkv_source_url
 
 logger = logging.getLogger("arm_ripper.scan.makemkv")
 
-SCAN_TIMEOUT_SECONDS = 300.0
+SCAN_TIMEOUT_SECONDS = float(DEFAULT_SCAN_TIMEOUT_SECONDS)
 
 # MakeMKV emits this when its hard-coded 60-day beta kill-switch has fired.
 # No registration key overrides it; the binary refuses all protected-disc
@@ -98,8 +99,8 @@ class _InfoRun(NamedTuple):
     returncode: int | None
 
 
-async def _run_info(device_path: str, min_title_length_seconds: int) -> _InfoRun:
-    """Run `makemkvcon info` on the device under the scan timeout.
+async def _run_info(device_path: str, min_title_length_seconds: int, timeout_seconds: float) -> _InfoRun:
+    """Run `makemkvcon info` on the device, killed after `timeout_seconds`.
 
     Raises ScanError when makemkvcon is not on PATH or times out.
     """
@@ -123,11 +124,11 @@ async def _run_info(device_path: str, min_title_length_seconds: int) -> _InfoRun
         raise ScanError("makemkvcon binary not found on PATH") from e
 
     try:
-        stdout, stderr, expired = await asyncio.wait_for(_read_makemkvcon_stream(proc), timeout=SCAN_TIMEOUT_SECONDS)
+        stdout, stderr, expired = await asyncio.wait_for(_read_makemkvcon_stream(proc), timeout=timeout_seconds)
     except asyncio.TimeoutError:
         proc.kill()
         await proc.wait()
-        raise ScanError(f"makemkvcon timed out after {SCAN_TIMEOUT_SECONDS}s") from None
+        raise ScanError(f"makemkvcon timed out after {timeout_seconds}s") from None
 
     await proc.wait()
     return _InfoRun(stdout, stderr, expired, proc.returncode)
@@ -165,9 +166,11 @@ def _fingerprints(probe: DiscProbe) -> list[DiscFingerprintInput]:
     return fingerprints
 
 
-async def scan_disc(device_path: str, min_title_length_seconds: int) -> ScanResult:
-    """Scan the disc with `makemkvcon info`, listing titles down to `min_title_length_seconds`."""
-    run = await _run_info(device_path, min_title_length_seconds)
+async def scan_disc(
+    device_path: str, min_title_length_seconds: int, *, timeout_seconds: float = SCAN_TIMEOUT_SECONDS
+) -> ScanResult:
+    """Scan the disc with `makemkvcon info`, listing titles down to `min_title_length_seconds`, within `timeout_seconds`."""
+    run = await _run_info(device_path, min_title_length_seconds, timeout_seconds)
 
     _raise_for_failure(run)
 

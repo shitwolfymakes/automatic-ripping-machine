@@ -148,7 +148,7 @@
           "ripper"
         ],
         "summary": "Get Ripper Config",
-        "description": "Subset of the global Config the ripper reads on each disc insert to\ndecide whether to fire its scan/identify/rip pipeline. Cheap enough to\npoll per-insert; avoids the WS-event invalidation dance for a single\nboolean.\n\n`drive_id` resolves auto-rip per drive: a non-null Drive.drive_mode\noverrides the global Config.auto_rip_on_insert default; NULL follows it\nRippers that omit it get the global value.",
+        "description": "Subset of the global Config the ripper reads on each disc insert to\ndecide whether to fire its scan/identify/rip pipeline. Cheap enough to\npoll per-insert; avoids the WS-event invalidation dance for a single\nboolean.\n\n`drive_id` resolves auto-rip per drive: a non-null Drive.drive_mode\noverrides the global Config.auto_rip_on_insert default; NULL follows it\nRippers that omit it get the global value.\nThe scan timeout resolves the same way: Drive.prescan_timeout, else\nDEFAULT_SCAN_TIMEOUT_SECONDS.",
         "operationId": "get_ripper_config_api_ripper_config_get",
         "security": [
           {
@@ -9413,6 +9413,10 @@
             "type": "integer",
             "title": "Min Title Length Seconds"
           },
+          "default_scan_timeout_seconds": {
+            "type": "integer",
+            "title": "Default Scan Timeout Seconds"
+          },
           "transcode_enabled": {
             "type": "boolean",
             "title": "Transcode Enabled"
@@ -9613,6 +9617,7 @@
           "max_parallel_transcodes",
           "max_parallel_iso_rips",
           "min_title_length_seconds",
+          "default_scan_timeout_seconds",
           "transcode_enabled",
           "transcode_capable",
           "makemkv_sdf_enabled",
@@ -10705,7 +10710,9 @@
           "prescan_timeout": {
             "anyOf": [
               {
-                "type": "integer"
+                "type": "integer",
+                "maximum": 3600.0,
+                "minimum": 30.0
               },
               {
                 "type": "null"
@@ -16643,6 +16650,11 @@
             "type": "integer",
             "title": "Min Title Length Seconds",
             "default": 120
+          },
+          "scan_timeout_seconds": {
+            "type": "integer",
+            "title": "Scan Timeout Seconds",
+            "default": 300
           }
         },
         "type": "object",

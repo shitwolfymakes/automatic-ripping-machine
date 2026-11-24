@@ -141,7 +141,7 @@ def _patch_scan(
     is extracted, so the source URL is `file:`) answers `rescan`."""
     seen: dict[str, list[str]] = {"urls": [], "discarded": [], "discard_threads": []}
 
-    async def _makemkv(device_path: str, _min_title_length_seconds: int) -> ScanResult:
+    async def _makemkv(device_path: str, _min_title_length_seconds: int, **_options: object) -> ScanResult:
         url = makemkv_source_url(device_path)
         seen["urls"].append(url)
         if url.startswith("iso:") or rescan is None:

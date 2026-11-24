@@ -98,6 +98,7 @@ class FakeClient:
         self.sdf_reports: list = []
         self.makemkv_sdf_enabled: bool = True
         self.min_title_length_seconds: int = 120
+        self.scan_timeout_seconds: int = 300
 
     async def identify(
         self,
@@ -152,6 +153,7 @@ class FakeClient:
             manual_wait_seconds=self.manual_wait_seconds,
             makemkv_sdf_enabled=self.makemkv_sdf_enabled,
             min_title_length_seconds=self.min_title_length_seconds,
+            scan_timeout_seconds=self.scan_timeout_seconds,
         )
 
     async def report_keydb_status(self, *, state, vuk_count=None, age_days=None) -> None:
@@ -184,7 +186,7 @@ def stub_eject(monkeypatch):
 
 @pytest.fixture
 def stub_scan(monkeypatch):
-    async def _scan(_device_path: str, _min_title_length_seconds: int) -> ScanResult:
+    async def _scan(_device_path: str, _min_title_length_seconds: int, **_options: object) -> ScanResult:
         return ScanResult(
             disc_type=DiscType.DVD,
             volume_label="TEST",
@@ -229,7 +231,7 @@ async def test_drive_vanishing_mid_scan_is_abandoned_cleanly(monkeypatch, caplog
     must not propagate it — the poll loop's absence handling owns recovery —
     and must log exactly one warning about it."""
 
-    async def _scan(_device_path: str, _min_title_length_seconds: int) -> ScanResult:
+    async def _scan(_device_path: str, _min_title_length_seconds: int, **_options: object) -> ScanResult:
         raise OSError(errno.ENXIO, "No such device or address")
 
     monkeypatch.setattr(disc_scan_module, "scan_disc", _scan)
@@ -248,7 +250,7 @@ async def test_non_absent_oserror_during_scan_still_raises(monkeypatch):
     """Only the absence errnos (ENOENT/ENXIO/ENODEV) are swallowed. A genuine
     I/O error must keep propagating so it isn't silently lost."""
 
-    async def _scan(_device_path: str, _min_title_length_seconds: int) -> ScanResult:
+    async def _scan(_device_path: str, _min_title_length_seconds: int, **_options: object) -> ScanResult:
         raise OSError(errno.EIO, "io")
 
     monkeypatch.setattr(disc_scan_module, "scan_disc", _scan)
@@ -1177,7 +1179,7 @@ async def test_scan_retry_recovers_transient_not_ready(monkeypatch):
     results = deque([_empty_scan(), _titled_scan()])
     calls = {"n": 0}
 
-    async def _scan(device_path, _min_title_length_seconds):
+    async def _scan(device_path, _min_title_length_seconds, **_options):
         calls["n"] += 1
         return results.popleft()
 
@@ -1191,7 +1193,7 @@ async def test_scan_retry_recovers_transient_not_ready(monkeypatch):
 
 async def test_scan_retry_exhausts_and_logs_marker(monkeypatch, caplog):
     monkeypatch.setattr(disc_scan_module.asyncio, "sleep", _noop_async)
-    monkeypatch.setattr(disc_scan_module, "scan_disc", lambda _p, _m: _async_return(_empty_scan()))
+    monkeypatch.setattr(disc_scan_module, "scan_disc", lambda _p, _m, **_options: _async_return(_empty_scan()))
     monkeypatch.setattr(disc_scan_module, "read_drive_status", lambda _p: DriveState.DISC_OK)
 
     with caplog.at_level("ERROR"):
@@ -1208,7 +1210,7 @@ async def test_scan_retry_iso_source_never_touches_drive_ioctl(monkeypatch, tmp_
     iso.write_bytes(b"\0" * 16)
     calls = {"n": 0}
 
-    async def _scan(device_path, _min_title_length_seconds):
+    async def _scan(device_path, _min_title_length_seconds, **_options):
         calls["n"] += 1
         return _empty_scan()
 
@@ -1227,7 +1229,7 @@ async def test_scan_retry_stops_when_disc_pulled(monkeypatch):
     monkeypatch.setattr(disc_scan_module.asyncio, "sleep", _noop_async)
     calls = {"n": 0}
 
-    async def _scan(device_path, _min_title_length_seconds):
+    async def _scan(device_path, _min_title_length_seconds, **_options):
         calls["n"] += 1
         return _empty_scan()
 
@@ -1248,7 +1250,7 @@ async def test_scan_retry_stops_pre_sleep_when_disc_absent(monkeypatch):
         sleep_calls["n"] += 1
 
     monkeypatch.setattr(disc_scan_module.asyncio, "sleep", _count_sleep)
-    monkeypatch.setattr(disc_scan_module, "scan_disc", lambda _p, _m: _async_return(_empty_scan()))
+    monkeypatch.setattr(disc_scan_module, "scan_disc", lambda _p, _m, **_options: _async_return(_empty_scan()))
     monkeypatch.setattr(disc_scan_module, "read_drive_status", lambda _p: DriveState.NO_DISC)
 
     out = await disc_scan_module._scan_with_ready_retry("/dev/sr0", 120)
@@ -1259,7 +1261,7 @@ async def test_scan_retry_stops_pre_sleep_when_disc_absent(monkeypatch):
 async def test_scan_retry_no_retry_on_first_success(monkeypatch):
     calls = {"n": 0, "status": 0}
 
-    async def _scan(device_path, _min_title_length_seconds):
+    async def _scan(device_path, _min_title_length_seconds, **_options):
         calls["n"] += 1
         return _titled_scan()
 
@@ -1277,7 +1279,7 @@ async def test_scan_retry_no_retry_on_first_success(monkeypatch):
 
 
 async def test_scan_retry_propagates_scanerror(monkeypatch):
-    async def _scan(device_path, _min_title_length_seconds):
+    async def _scan(device_path, _min_title_length_seconds, **_options):
         raise disc_scan_module.ScanError("makemkvcon rc=1")
 
     monkeypatch.setattr(disc_scan_module, "scan_disc", _scan)
@@ -1859,7 +1861,7 @@ async def test_auto_start_due_is_false_for_a_timed_gate_with_no_job_view():
 async def test_scan_failure_ends_the_pipeline_before_identify(monkeypatch, caplog, stub_eject):
     """A ScanError from the scan logs one ERROR and ends the pipeline before identify or rip-start."""
 
-    async def _boom(_device_path: str, _min_title_length_seconds: int) -> ScanResult:
+    async def _boom(_device_path: str, _min_title_length_seconds: int, **_options: object) -> ScanResult:
         raise disc_scan_module.ScanError("no disc")
 
     monkeypatch.setattr(disc_scan_module, "scan_disc", _boom)
@@ -2012,7 +2014,7 @@ async def test_rip_complete_is_logged_at_debug_only(stub_scan, stub_eject, caplo
 def _capture_scan_minimum(monkeypatch) -> list[int]:
     seen: list[int] = []
 
-    async def _scan(_device_path: str, min_title_length_seconds: int) -> ScanResult:
+    async def _scan(_device_path: str, min_title_length_seconds: int, **_options: object) -> ScanResult:
         seen.append(min_title_length_seconds)
         return ScanResult(disc_type=DiscType.DVD, volume_label="T", titles=[ScanTitle(index=0, duration_seconds=3600)])
 
@@ -2042,3 +2044,41 @@ async def test_pipeline_scans_with_the_fallback_minimum_when_the_config_is_unrea
     await asyncio.wait_for(controller.handle_manual_trigger(None), timeout=2.0)
 
     assert seen == [90]
+
+
+# --- the scan uses the drive's scan timeout (#325) ---------------------------
+
+
+def _capture_scan_timeout(monkeypatch) -> list[float]:
+    seen: list[float] = []
+
+    async def _scan(_device_path: str, _min_title_length_seconds: int, *, timeout_seconds: float) -> ScanResult:
+        seen.append(timeout_seconds)
+        return ScanResult(disc_type=DiscType.DVD, volume_label="T", titles=[ScanTitle(index=0, duration_seconds=3600)])
+
+    monkeypatch.setattr(disc_scan_module, "scan_disc", _scan)
+    return seen
+
+
+async def test_pipeline_scans_with_the_drive_scan_timeout(monkeypatch, stub_eject):
+    seen = _capture_scan_timeout(monkeypatch)
+    client = FakeClient()
+    client.scan_timeout_seconds = 900
+    client.identify_responses.append(_job(JobStatus.IDENTIFIED, title="Test Movie"))
+    controller = JobController(client, "drv_test")
+
+    await asyncio.wait_for(controller.handle_disc_inserted("/dev/sr0"), timeout=2.0)
+
+    assert seen == [900]
+
+
+async def test_pipeline_scans_with_the_default_timeout_when_the_config_is_unreachable(monkeypatch, stub_eject):
+    seen = _capture_scan_timeout(monkeypatch)
+    client = FakeClient()
+    client.get_ripper_config_error = httpx.ConnectError("backend down")
+    client.identify_responses.append(_job(JobStatus.IDENTIFIED, title="Test Movie"))
+    controller = JobController(client, "drv_test", device_path="/dev/sr0")
+
+    await asyncio.wait_for(controller.handle_manual_trigger(None), timeout=2.0)
+
+    assert seen == [300]
