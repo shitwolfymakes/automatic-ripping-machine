@@ -2,8 +2,16 @@
 
 from __future__ import annotations
 
-from arm_backend.music_tag_settings import enabled_music_tags, music_tag_fields_setting, session_music_tags
+import pytest
+
+from arm_backend.music_tag_settings import (
+    cover_max_bytes,
+    enabled_music_tags,
+    music_tag_fields_setting,
+    session_music_tags,
+)
 from arm_common import MediaType, Session
+from arm_common.enums import MusicCoverMaxSize
 from arm_common.music_tags import MUSIC_TAG_CHOICES
 from arm_common.schemas import MusicTags
 from tests.test_migration_chain import _render_sql
@@ -128,3 +136,29 @@ def test_0054_downgrade_puts_the_column_back_on_config() -> None:
     sql = _render_sql("0054_session_music_tag_fields", "0053_config_music_tag_fields", downgrade=True)
     assert f"ALTER TABLE config ADD COLUMN music_tag_fields VARCHAR[] DEFAULT {_ALL_TAGS_SQL} NOT NULL" in sql
     assert "ALTER TABLE sessions DROP COLUMN music_tag_fields" in sql
+
+
+# --- cover_max_bytes ---
+
+
+@pytest.mark.parametrize(
+    ("setting", "max_bytes"),
+    [
+        (MusicCoverMaxSize.KB_500, 500 * 1024),
+        (MusicCoverMaxSize.MB_1, 1024 * 1024),
+        (MusicCoverMaxSize.MB_2, 2 * 1024 * 1024),
+        (MusicCoverMaxSize.MB_5, 5 * 1024 * 1024),
+        (MusicCoverMaxSize.MB_10, 10 * 1024 * 1024),
+        (MusicCoverMaxSize.UNLIMITED, None),
+    ],
+)
+def test_cover_max_bytes_per_setting(setting: MusicCoverMaxSize, max_bytes: int | None) -> None:
+    assert cover_max_bytes(_session(music_cover_max_size=setting)) == max_bytes
+
+
+def test_cover_max_bytes_reads_a_plain_stored_value() -> None:
+    assert cover_max_bytes(_session(music_cover_max_size="unlimited")) is None
+
+
+def test_cover_max_bytes_is_2mb_for_a_new_session() -> None:
+    assert cover_max_bytes(_session()) == 2 * 1024 * 1024

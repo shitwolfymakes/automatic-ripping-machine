@@ -34,12 +34,12 @@ from arm_backend.gpu_claim import release_gpu_for_task
 from arm_backend.handbrake_schema_runner import HandbrakeSchemaRunner
 from arm_backend.handbrake_schema_store import SchemaStore, get_schema_store
 from arm_backend.log_safely import log_safely
-from arm_backend.metadata.poster import cover_art_urls
+from arm_backend.metadata.poster import cover_art_candidates
 from arm_backend.preset_views import preset_view
 from arm_backend.routers._deps import get_hub, get_schema_runner
-from arm_backend.routers.images import ImageUnavailable, fetch_allowed_image
+from arm_backend.routers.images import ImageTooLarge, ImageUnavailable, fetch_allowed_image
 from arm_backend.session_routing import routing_media_type
-from arm_backend.music_tag_settings import music_tag_fields_setting, session_music_tags
+from arm_backend.music_tag_settings import cover_max_bytes, music_tag_fields_setting, session_music_tags
 from arm_backend.transcode_apply import log_session_settled, music_tags_for, settle_session_application
 from arm_backend.ws import WSHub
 from arm_common import (
@@ -185,21 +185,41 @@ async def cover_art(task_id: str, db: AsyncSession = Depends(get_session)) -> Re
     if COVER not in music_tag_fields_setting(sess):
         logger.info("cover art task_id=%s skipped: switched off in session %s", task_id, sess.id)
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="cover art switched off")
-    cover = await _first_embeddable_cover(task_id, job, sess.music_cover_size)
+    cover = await _first_embeddable_cover(task_id, job, sess.music_cover_size, cover_max_bytes(sess))
     if cover is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="no cover art")
     return cover
 
 
-async def _first_embeddable_cover(task_id: str, job: Job, size: MusicCoverSize) -> Response | None:
-    """The override, else the automatic cover in `size`: the first that can be
-    fetched as an embeddable image. None when neither can."""
-    for url in cover_art_urls(job, size):
+async def _first_embeddable_cover(
+    task_id: str, job: Job, size: MusicCoverSize, max_bytes: int | None
+) -> Response | None:
+    """The override, else the automatic cover in `size` or the largest smaller
+    size within `max_bytes`: the first that can be fetched as an embeddable
+    image. None when neither can."""
+    for variants in cover_art_candidates(job, size):
+        cover = await _largest_embeddable_variant(task_id, variants, max_bytes)
+        if cover is not None:
+            return cover
+    return None
+
+
+async def _largest_embeddable_variant(
+    task_id: str, variants: tuple[str, ...], max_bytes: int | None
+) -> Response | None:
+    """The first of one cover's `variants`, largest first, that fits `max_bytes`
+    and can be embedded. A variant too large, or of a type the files can't
+    embed, gives way to the next smaller one; any other failure means the
+    cover can't be had, so the rest are not tried. None when no variant serves."""
+    for url in variants:
         try:
-            content, media_type = await fetch_allowed_image(url)
+            content, media_type = await fetch_allowed_image(url, max_bytes=max_bytes)
+        except ImageTooLarge:
+            logger.info("cover art task_id=%s url=%s skipped: over %s bytes", task_id, url, max_bytes)
+            continue
         except ImageUnavailable as e:
             logger.info("cover art task_id=%s url=%s skipped: %s", task_id, url, e.detail)
-            continue
+            return None
         if media_type in _EMBEDDABLE_COVER_TYPES:
             return Response(content=content, media_type=media_type)
         logger.info("cover art task_id=%s url=%s skipped: type %s", task_id, url, media_type)

@@ -236,6 +236,18 @@ class MusicCoverSize(StrEnum):
     SOURCE = "source"
 
 
+class MusicCoverMaxSize(StrEnum):
+    """The largest cover file a music session embeds. A Cover Art Archive cover
+    over it gives way to the next smaller size; UNLIMITED embeds any size."""
+
+    KB_500 = "500kb"
+    MB_1 = "1mb"
+    MB_2 = "2mb"
+    MB_5 = "5mb"
+    MB_10 = "10mb"
+    UNLIMITED = "unlimited"
+
+
 # Encoding settings do not depend on whether a video is a film or an episode,
 # so a movie and a TV transcode preset are interchangeable.
 VIDEO_MEDIA_TYPES: frozenset[MediaType] = frozenset({MediaType.MOVIE, MediaType.TV})

@@ -53,6 +53,7 @@ function createSession(overrides: Partial<SessionView> = {}): SessionView {
 		overrides_json: null,
 		music_tag_fields: [],
 		music_cover_size: '500',
+		music_cover_max_size: '2mb',
 		created_by_user_id: null,
 		created_at: null,
 		updated_at: null,

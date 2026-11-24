@@ -29,7 +29,7 @@ from arm_common import (
     TranscodeTool,
     User,
 )
-from arm_common.enums import MusicCoverSize
+from arm_common.enums import MusicCoverMaxSize, MusicCoverSize
 from arm_common.models.user import GUEST_ROLE
 
 from tests._fakes import FakeSession
@@ -978,3 +978,85 @@ def test_clone_keeps_the_cover_size(signing_key: bytes) -> None:
         r = client.post("/api/sessions/ses_music/clone", json={"name": "Copy"}, headers=_auth(token))
     assert r.status_code == 201, r.text
     assert r.json()["music_cover_size"] == "1200"
+
+
+# --- music cover file size limit ---
+
+
+def test_create_music_session_limits_the_cover_to_2mb_by_default(signing_key: bytes) -> None:
+    db = FakeSession()
+    _seed_music(db)
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as client:
+        r = _create_music(client, token)
+    assert r.status_code == 201, r.text
+    assert r.json()["music_cover_max_size"] == "2mb"
+
+
+def test_create_music_session_stores_the_chosen_cover_limit(signing_key: bytes) -> None:
+    db = FakeSession()
+    _seed_music(db)
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as client:
+        r = _create_music(client, token, music_cover_size="source", music_cover_max_size="unlimited")
+    assert r.status_code == 201, r.text
+    assert r.json()["music_cover_max_size"] == "unlimited"
+    row = next(s for s in db.rows["sessions"] if s.id == r.json()["id"])
+    # Stored as plain values, the way an update stores them.
+    assert (row.music_cover_size, row.music_cover_max_size) == ("source", "unlimited")
+    assert type(row.music_cover_max_size) is str
+
+
+def test_create_rejects_a_cover_limit_on_a_movie_session(signing_key: bytes) -> None:
+    db = FakeSession()
+    _seed(db)
+    app, token = _make_app(signing_key, db)
+    body = {
+        "name": "Movie",
+        "media_type": "movie",
+        "rip_preset_id": "rpr_movie",
+        "output_path_template": "{title} ({year})/{title}.{ext}",
+        "music_cover_max_size": "5mb",
+    }
+    with TestClient(app) as client:
+        r = client.post("/api/sessions", json=body, headers=_auth(token))
+    assert r.status_code == 400
+    assert r.json()["detail"] == "music_cover_max_size applies to music sessions only"
+
+
+def test_update_music_session_cover_limit(signing_key: bytes) -> None:
+    db = FakeSession()
+    _seed_music(db)
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as client:
+        r = client.patch("/api/sessions/ses_music", json={"music_cover_max_size": "10mb"}, headers=_auth(token))
+    assert r.status_code == 200, r.text
+    assert r.json()["music_cover_max_size"] == "10mb"
+    assert next(s for s in db.rows["sessions"] if s.id == "ses_music").music_cover_max_size == "10mb"
+
+
+@pytest.mark.parametrize(
+    ("value", "status", "detail"),
+    [(None, 400, "music_cover_max_size must not be null"), ("3mb", 422, None), ("2097152", 422, None)],
+)
+def test_update_rejects_a_bad_cover_limit(signing_key: bytes, value: object, status: int, detail: str | None) -> None:
+    db = FakeSession()
+    _seed_music(db)
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as client:
+        r = client.patch("/api/sessions/ses_music", json={"music_cover_max_size": value}, headers=_auth(token))
+    assert r.status_code == status
+    if detail is not None:
+        assert r.json()["detail"] == detail
+    assert next(s for s in db.rows["sessions"] if s.id == "ses_music").music_cover_max_size == "2mb"
+
+
+def test_clone_keeps_the_cover_limit(signing_key: bytes) -> None:
+    db = FakeSession()
+    _seed_music(db)
+    next(s for s in db.rows["sessions"] if s.id == "ses_music").music_cover_max_size = MusicCoverMaxSize.MB_5
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as client:
+        r = client.post("/api/sessions/ses_music/clone", json={"name": "Copy"}, headers=_auth(token))
+    assert r.status_code == 201, r.text
+    assert r.json()["music_cover_max_size"] == "5mb"

@@ -14441,6 +14441,19 @@
         ],
         "title": "MoveRequest"
       },
+      "MusicCoverMaxSize": {
+        "type": "string",
+        "enum": [
+          "500kb",
+          "1mb",
+          "2mb",
+          "5mb",
+          "10mb",
+          "unlimited"
+        ],
+        "title": "MusicCoverMaxSize",
+        "description": "The largest cover file a music session embeds. A Cover Art Archive cover\nover it gives way to the next smaller size; UNLIMITED embeds any size."
+      },
       "MusicCoverSize": {
         "type": "string",
         "enum": [
@@ -14464,6 +14477,17 @@
               }
             ],
             "title": "Artist"
+          },
+          "album_artist": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Album Artist"
           },
           "album": {
             "anyOf": [
@@ -14517,17 +14541,6 @@
               }
             ],
             "title": "Artist"
-          },
-          "album_artist": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Album Artist"
           },
           "album": {
             "anyOf": [
@@ -16835,6 +16848,16 @@
                 "type": "null"
               }
             ]
+          },
+          "music_cover_max_size": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MusicCoverMaxSize"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "type": "object",
@@ -17015,6 +17038,16 @@
                 "type": "null"
               }
             ]
+          },
+          "music_cover_max_size": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MusicCoverMaxSize"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "type": "object",
@@ -17078,6 +17111,9 @@
           "music_cover_size": {
             "$ref": "#/components/schemas/MusicCoverSize"
           },
+          "music_cover_max_size": {
+            "$ref": "#/components/schemas/MusicCoverMaxSize"
+          },
           "created_by_user_id": {
             "anyOf": [
               {
@@ -17126,6 +17162,7 @@
           "overrides_json",
           "music_tag_fields",
           "music_cover_size",
+          "music_cover_max_size",
           "created_by_user_id",
           "created_at",
           "updated_at"

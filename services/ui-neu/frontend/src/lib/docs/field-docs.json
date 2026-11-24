@@ -320,6 +320,11 @@
       "page": "guide/configuring-arm",
       "section": "Rip presets, transcode presets, and sessions"
     },
+    "form.session.cover_max_size": {
+      "type": "internal",
+      "page": "guide/configuring-arm",
+      "section": "Rip presets, transcode presets, and sessions"
+    },
     "form.session.cover_size": {
       "type": "internal",
       "page": "guide/configuring-arm",

@@ -56,7 +56,7 @@ async def _load_transcode_preset(db: AsyncSession, transcode_preset_id: str | No
 
 
 # Fields only a music session has.
-_MUSIC_ONLY_FIELDS = ("music_tag_fields", "music_cover_size")
+_MUSIC_ONLY_FIELDS = ("music_tag_fields", "music_cover_size", "music_cover_max_size")
 
 
 def _validate_music_fields(media_type: MediaType, fields: dict[str, Any]) -> None:
@@ -72,6 +72,14 @@ def _validate_music_fields(media_type: MediaType, fields: dict[str, Any]) -> Non
     tags = fields.get("music_tag_fields")
     if tags is not None and len(set(tags)) != len(tags):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="music_tag_fields: duplicate values")
+
+
+def _apply_music_fields(row: Session, req: SessionCreateRequest) -> None:
+    """The music-only fields the create request sets, onto the new row as plain values
+    (as an update stores them); the row's defaults stand for any left out."""
+    music = req.model_dump(include=set(_MUSIC_ONLY_FIELDS), exclude_none=True, mode="json")
+    for key, value in music.items():
+        setattr(row, key, value)
 
 
 @router.get("", response_model=list[SessionView])
@@ -137,10 +145,7 @@ async def create_session(
         overrides_json=req.overrides_json,
         created_by_user_id=user.id,
     )
-    if req.music_tag_fields is not None:
-        row.music_tag_fields = [choice.value for choice in req.music_tag_fields]
-    if req.music_cover_size is not None:
-        row.music_cover_size = req.music_cover_size
+    _apply_music_fields(row, req)
     db.add(row)
     await db.commit()
     await db.refresh(row)
@@ -271,6 +276,7 @@ async def clone_session(
         overrides_json=dict(src.overrides_json) if src.overrides_json is not None else None,
         music_tag_fields=list(src.music_tag_fields),
         music_cover_size=src.music_cover_size,
+        music_cover_max_size=src.music_cover_max_size,
         created_by_user_id=user.id,
     )
     db.add(clone)

@@ -63,6 +63,7 @@ const makeSession = (id = 's1', name = 'ses Alpha') => ({
 	overrides_json: null,
 	music_tag_fields: [],
 	music_cover_size: '500' as const,
+	music_cover_max_size: '2mb' as const,
 	created_by_user_id: null,
 	created_at: null,
 	updated_at: null

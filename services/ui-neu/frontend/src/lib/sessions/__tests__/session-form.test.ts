@@ -19,7 +19,8 @@ const form: SessionForm = {
 	overrides: { a: 1 },
 	// Set on purpose: a movie session must not send these.
 	musicTags: ['artist'],
-	coverSize: '1200'
+	coverSize: '1200',
+	coverMaxSize: 'unlimited'
 };
 
 describe('parseOverrides', () => {
@@ -59,10 +60,12 @@ describe('sessionUpdate', () => {
 		const music: SessionForm = { ...form, mediaType: 'music', musicTags: ['title', 'cover'] };
 		expect(sessionUpdate(music).music_tag_fields).toEqual(['title', 'cover']);
 		expect(sessionUpdate(music).music_cover_size).toBe('1200');
+		expect(sessionUpdate(music).music_cover_max_size).toBe('unlimited');
 		expect(sessionCreate(music)).toMatchObject({
 			media_type: 'music',
 			music_tag_fields: ['title', 'cover'],
-			music_cover_size: '1200'
+			music_cover_size: '1200',
+			music_cover_max_size: 'unlimited'
 		});
 	});
 

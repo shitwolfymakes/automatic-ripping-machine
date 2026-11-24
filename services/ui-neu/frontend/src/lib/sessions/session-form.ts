@@ -3,6 +3,7 @@
 // and update requests.
 import type {
 	MediaType,
+	MusicCoverMaxSize,
 	MusicCoverSize,
 	MusicTagField,
 	SessionCreateRequest,
@@ -23,7 +24,8 @@ export const FIELD_IDS = {
 	output_path: 'form.session.output_path',
 	overrides: 'form.session.overrides',
 	music_tags: 'form.session.music_tags',
-	cover_size: 'form.session.cover_size'
+	cover_size: 'form.session.cover_size',
+	cover_max_size: 'form.session.cover_max_size'
 } as const;
 
 export const RIP_PRESET_REQUIRED = 'Choose a rip preset';
@@ -76,6 +78,8 @@ export interface SessionForm {
 	musicTags: MusicTagField[];
 	/** The cover size a music session embeds; ignored for any other media type. */
 	coverSize: MusicCoverSize;
+	/** The largest cover file a music session embeds; ignored for any other media type. */
+	coverMaxSize: MusicCoverMaxSize;
 }
 
 /** Whether the builder offers the music file tags: a music session that
@@ -90,11 +94,19 @@ export function showsCoverSize(mediaType: MediaType, tcId: string, musicTags: re
 	return showsMusicTags(mediaType, tcId) && musicTags.includes('cover');
 }
 
+/** The music-only fields of the requests. */
+function musicFields(form: SessionForm) {
+	return {
+		music_tag_fields: form.musicTags,
+		music_cover_size: form.coverSize,
+		music_cover_max_size: form.coverMaxSize
+	};
+}
+
 /** The update request for the form. It leaves out media_type, which
  * can't change on edit: the update schema has no such field, so it is
- * not sent rather than left for the backend to drop. The music tags and
- * cover size go only with a music session; the backend refuses them on any
- * other. */
+ * not sent rather than left for the backend to drop. The music fields go
+ * only with a music session; the backend refuses them on any other. */
 export function sessionUpdate(form: SessionForm) {
 	return {
 		name: form.name,
@@ -102,7 +114,7 @@ export function sessionUpdate(form: SessionForm) {
 		transcode_preset_id: form.tcId || null,
 		output_path_template: form.template,
 		overrides_json: form.overrides,
-		...(form.mediaType === 'music' ? { music_tag_fields: form.musicTags, music_cover_size: form.coverSize } : {})
+		...(form.mediaType === 'music' ? musicFields(form) : {})
 	} satisfies SessionUpdateRequest;
 }
 

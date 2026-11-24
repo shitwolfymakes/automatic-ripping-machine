@@ -11,10 +11,10 @@ import { ALL_MUSIC_TAGS } from '$lib/sessions/music-tags';
 
 // The Music file tags field and the cover size: shown for a music session
 // that encodes, saved with it, and left out of every other session's request.
-// The coverage tool reports one open branch on the cover size's
-// `<option value={option.value}>`, which is Svelte's, not the component's: it
-// compiles the attribute to `(option.__value = option.value) ?? ''`, and a
-// size is never null.
+// The coverage tool reports one open branch on each of the cover size's and
+// the cover file size limit's `<option value={option.value}>`, which is
+// Svelte's, not the component's: it compiles the attribute to
+// `(option.__value = option.value) ?? ''`, and neither value is ever null.
 
 const preset = (id: string, mt: string) => ({ id, name: `preset ${id}`, media_type: mt }) as any;
 const props = (over = {}) => ({
@@ -39,12 +39,14 @@ const musicSession = (over = {}) =>
 		overrides_json: null,
 		music_tag_fields: ['artist', 'title', 'cover'],
 		music_cover_size: '1200',
+		music_cover_max_size: '5mb',
 		...over
 	}) as any;
 
 const box = (name: string) => screen.getByRole('checkbox', { name }) as HTMLInputElement;
 const tagsField = () => screen.queryByTestId('sb-music-tags');
 const sizeSelect = () => screen.queryByLabelText(/^cover art size/i) as HTMLSelectElement | null;
+const maxSizeSelect = () => screen.queryByLabelText(/^max cover file size/i) as HTMLSelectElement | null;
 const submit = () => fireEvent.click(screen.getByRole('button', { name: /^save$/i }));
 
 beforeEach(() => {
@@ -161,5 +163,42 @@ describe('SessionBuilder music file tags', () => {
 	it('locks the cover size on a built-in session', () => {
 		renderComponent(SessionBuilder, props({ session: musicSession({ is_builtin: true }) }));
 		expect(sizeSelect()).toBeDisabled();
+	});
+
+	it('shows the session cover file size limit and saves the one chosen', async () => {
+		vi.mocked(updateSession).mockResolvedValue(musicSession());
+		renderComponent(SessionBuilder, props({ session: musicSession() }));
+
+		expect(maxSizeSelect()?.value).toBe('5mb');
+		expect(maxSizeSelect()).toHaveAttribute('aria-describedby', 'sb-cover-max-size-help');
+		await fireEvent.change(maxSizeSelect() as HTMLSelectElement, { target: { value: 'unlimited' } });
+		await submit();
+
+		await waitFor(() =>
+			expect(updateSession).toHaveBeenCalledWith(
+				'ses-music',
+				expect.objectContaining({ music_cover_max_size: 'unlimited' })
+			)
+		);
+	});
+
+	it('hides the cover file size limit with the cover size when Cover art is unticked', async () => {
+		renderComponent(SessionBuilder, props({ session: musicSession() }));
+		await fireEvent.click(box('Cover art'));
+		expect(maxSizeSelect()).toBeNull();
+		await fireEvent.click(box('Cover art'));
+		expect(maxSizeSelect()?.value).toBe('5mb');
+	});
+
+	it('starts a new music session at 2 MB', async () => {
+		renderComponent(SessionBuilder, props());
+		await fireEvent.click(screen.getByRole('button', { name: 'Music' }));
+		await fireEvent.change(screen.getByLabelText(/^transcode preset/i), { target: { value: 't-flac' } });
+		expect(maxSizeSelect()?.value).toBe('2mb');
+	});
+
+	it('locks the cover file size limit on a built-in session', () => {
+		renderComponent(SessionBuilder, props({ session: musicSession({ is_builtin: true }) }));
+		expect(maxSizeSelect()).toBeDisabled();
 	});
 });

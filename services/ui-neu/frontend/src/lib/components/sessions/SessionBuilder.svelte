@@ -2,6 +2,7 @@
 	import { errorMessage } from '$lib/utils/errors';
 	import type {
 		MediaType,
+		MusicCoverMaxSize,
 		MusicCoverSize,
 		MusicTagField,
 		SessionView,
@@ -16,7 +17,14 @@
 	import { errorId, focusFirstInvalid, invalidAttrs } from '$lib/ui/form-validation';
 	import FieldLabel from '$lib/components/shared/FieldLabel.svelte';
 	import CheckListField from '$lib/components/shared/CheckListField.svelte';
-	import { ALL_MUSIC_TAGS, COVER_SIZE_OPTIONS, DEFAULT_COVER_SIZE, MUSIC_TAG_OPTIONS } from '$lib/sessions/music-tags';
+	import {
+		ALL_MUSIC_TAGS,
+		COVER_MAX_SIZE_OPTIONS,
+		COVER_SIZE_OPTIONS,
+		DEFAULT_COVER_MAX_SIZE,
+		DEFAULT_COVER_SIZE,
+		MUSIC_TAG_OPTIONS
+	} from '$lib/sessions/music-tags';
 	import {
 		FIELD_IDS,
 		SESSION_FIELDS,
@@ -75,6 +83,7 @@
 	let overridesJson = $state(session?.overrides_json ? JSON.stringify(session.overrides_json, null, 2) : '');
 	let musicTags = $state<MusicTagField[]>([...(session?.music_tag_fields ?? ALL_MUSIC_TAGS)]);
 	let coverSize = $state<MusicCoverSize>(session?.music_cover_size ?? DEFAULT_COVER_SIZE);
+	let coverMaxSize = $state<MusicCoverMaxSize>(session?.music_cover_max_size ?? DEFAULT_COVER_MAX_SIZE);
 	// The Advanced section opens itself when Save sends focus to the overrides field inside it.
 	let advancedOpen = $state(false);
 	let submitError = $state<string | null>(null);
@@ -155,7 +164,8 @@
 			template,
 			overrides: parseOverrides(overridesJson),
 			musicTags,
-			coverSize
+			coverSize,
+			coverMaxSize
 		};
 
 		submitting = true;
@@ -292,6 +302,27 @@
 				<p class="field-help" id="sb-cover-size-help">
 					The Cover Art Archive image embedded in each track, by its longest side. A cover uploaded smaller than the
 					size chosen is embedded as uploaded. A cover URL entered on the job is used as entered.
+				</p>
+			</div>
+		{/if}
+
+		<!-- Max cover file size: with the cover size -->
+		{#if showsCoverSize(mediaType, tcId, musicTags)}
+			<div class="field" data-testid="sb-cover-max-size">
+				<FieldLabel for="sb-cover-max-size" label="Max cover file size" docsId={FIELD_IDS.cover_max_size} />
+				<select
+					id="sb-cover-max-size"
+					bind:value={coverMaxSize}
+					aria-describedby="sb-cover-max-size-help"
+					disabled={readOnly}
+				>
+					{#each COVER_MAX_SIZE_OPTIONS as option (option.value)}
+						<option value={option.value}>{option.label}</option>
+					{/each}
+				</select>
+				<p class="field-help" id="sb-cover-max-size-help">
+					The largest cover file each track embeds. A Cover Art Archive cover over it is embedded at the next smaller
+					size that fits. A cover URL entered on the job over it is skipped.
 				</p>
 			</div>
 		{/if}

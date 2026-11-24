@@ -154,6 +154,15 @@ sessions use 500 px. A cover uploaded smaller than the size chosen is embedded
 as uploaded, and a cover URL you enter on a job is used as entered, whatever
 the size.
 
+**Max cover file size** caps how large a cover file a track embeds: 500 KB,
+1, 2, 5 or 10 MB, or Unlimited. New sessions use 2 MB. When the Cover Art
+Archive image at the chosen size is over the limit, ARM embeds the next smaller
+size that fits (1200, then 500, then 250 px), and the same happens for an image
+type a music file can't hold. A cover URL you enter on a job is never resized:
+if it is over the limit, the automatic cover is used instead. Covers larger
+than the image cache's limit (`ARM_IMAGE_CACHE_MAX_BYTES`, 2 MB by default)
+are downloaded again for each track.
+
 ARM seeds sensible built-in presets on first boot, so you don't have to create
 any to get started. See [Web UI](Web-UI) for the pages that manage them.
 

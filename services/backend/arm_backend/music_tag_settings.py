@@ -1,4 +1,4 @@
-"""Which of a music track's tags, and whether its cover, the transcoder writes into the encoded file.
+"""Which of a music track's tags, and whether and how large a cover, the transcoder writes into the encoded file.
 
 The choice belongs to the music session the track is transcoded with.
 """
@@ -6,6 +6,7 @@ The choice belongs to the music session the track is transcoded with.
 from collections.abc import Collection
 
 from arm_common import Session
+from arm_common.enums import MusicCoverMaxSize
 from arm_common.music_tags import MUSIC_TAG_CHOICES
 from arm_common.schemas import MusicTags
 
@@ -29,3 +30,19 @@ def session_music_tags(tags: MusicTags | None, sess: Session) -> MusicTags | Non
     if tags is None:
         return None
     return enabled_music_tags(tags, music_tag_fields_setting(sess))
+
+
+_MIB = 1024 * 1024
+_COVER_MAX_BYTES: dict[MusicCoverMaxSize, int | None] = {
+    MusicCoverMaxSize.KB_500: 500 * 1024,
+    MusicCoverMaxSize.MB_1: _MIB,
+    MusicCoverMaxSize.MB_2: 2 * _MIB,
+    MusicCoverMaxSize.MB_5: 5 * _MIB,
+    MusicCoverMaxSize.MB_10: 10 * _MIB,
+    MusicCoverMaxSize.UNLIMITED: None,
+}
+
+
+def cover_max_bytes(sess: Session) -> int | None:
+    """The largest cover file the session embeds, in bytes; None for no limit."""
+    return _COVER_MAX_BYTES[MusicCoverMaxSize(sess.music_cover_max_size)]

@@ -3488,6 +3488,14 @@ export type MoveRequest = {
 };
 
 /**
+ * MusicCoverMaxSize
+ *
+ * The largest cover file a music session embeds. A Cover Art Archive cover
+ * over it gives way to the next smaller size; UNLIMITED embeds any size.
+ */
+export type MusicCoverMaxSize = '500kb' | '1mb' | '2mb' | '5mb' | '10mb' | 'unlimited';
+
+/**
  * MusicCoverSize
  *
  * The Cover Art Archive front cover a music session embeds: a thumbnail
@@ -3504,6 +3512,10 @@ export type MusicMeta = {
      * Artist
      */
     artist?: string | null;
+    /**
+     * Album Artist
+     */
+    album_artist?: string | null;
     /**
      * Album
      */
@@ -3535,10 +3547,6 @@ export type MusicTags = {
      * Artist
      */
     artist?: string | null;
-    /**
-     * Album Artist
-     */
-    album_artist?: string | null;
     /**
      * Album
      */
@@ -4805,6 +4813,7 @@ export type SessionCreateRequest = {
      */
     music_tag_fields?: Array<MusicTagField> | null;
     music_cover_size?: MusicCoverSize | null;
+    music_cover_max_size?: MusicCoverMaxSize | null;
 };
 
 /**
@@ -4874,6 +4883,7 @@ export type SessionUpdateRequest = {
      */
     music_tag_fields?: Array<MusicTagField> | null;
     music_cover_size?: MusicCoverSize | null;
+    music_cover_max_size?: MusicCoverMaxSize | null;
 };
 
 /**
@@ -4916,6 +4926,7 @@ export type SessionView = {
      */
     music_tag_fields: Array<MusicTagField>;
     music_cover_size: MusicCoverSize;
+    music_cover_max_size: MusicCoverMaxSize;
     /**
      * Created By User Id
      */

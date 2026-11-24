@@ -16,6 +16,7 @@ from arm_common.enums import (
     ContainerFormat,
     IdentificationMode,
     MediaType,
+    MusicCoverMaxSize,
     MusicCoverSize,
     MusicTagField,
     OutputMode,
@@ -137,6 +138,8 @@ class SessionView(BaseModel):
     music_tag_fields: list[MusicTagField]
     # Music sessions: the Cover Art Archive size embedded as the cover.
     music_cover_size: MusicCoverSize
+    # Music sessions: the largest cover file embedded.
+    music_cover_max_size: MusicCoverMaxSize
     created_by_user_id: str | None
     created_at: datetime | None
     updated_at: datetime | None
@@ -153,6 +156,8 @@ class SessionCreateRequest(BaseModel):
     music_tag_fields: list[MusicTagField] | None = None
     # Music sessions only; 500 px when left out.
     music_cover_size: MusicCoverSize | None = None
+    # Music sessions only; 2 MB when left out.
+    music_cover_max_size: MusicCoverMaxSize | None = None
 
 
 class SessionUpdateRequest(BaseModel):
@@ -164,6 +169,7 @@ class SessionUpdateRequest(BaseModel):
     # Music sessions only.
     music_tag_fields: list[MusicTagField] | None = None
     music_cover_size: MusicCoverSize | None = None
+    music_cover_max_size: MusicCoverMaxSize | None = None
 
 
 class SessionCloneRequest(BaseModel):

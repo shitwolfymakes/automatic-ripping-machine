@@ -43,6 +43,16 @@ def test_single_linear_head() -> None:
     assert len(heads) == 1, f"expected one migration head, found {heads}"
 
 
+# alembic_version.version_num is VARCHAR(32): a longer id fails the UPDATE that
+# records it, after its migration ran, so the backend's startup upgrade crashes.
+_VERSION_NUM_LENGTH = 32
+
+
+def test_every_revision_id_fits_the_version_table() -> None:
+    too_long = [rev.revision for rev in _script_directory().walk_revisions() if len(rev.revision) > _VERSION_NUM_LENGTH]
+    assert too_long == [], f"revision ids longer than {_VERSION_NUM_LENGTH} characters: {too_long}"
+
+
 def _render_sql(from_rev: str, to_rev: str, *, downgrade: bool = False) -> str:
     """Run a migration range in Alembic's offline mode and return the DDL.
 

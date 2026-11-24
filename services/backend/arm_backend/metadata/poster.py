@@ -31,29 +31,51 @@ _COVERART_FRONT_BY_SIZE: dict[MusicCoverSize, str] = {
     MusicCoverSize.PX_1200: "/front-1200",
     MusicCoverSize.SOURCE: "/front",
 }
+# Where an embedded cover steps down to when one size is too large to embed.
+_COVERART_SIZES_LARGEST_FIRST: tuple[MusicCoverSize, ...] = (
+    MusicCoverSize.SOURCE,
+    MusicCoverSize.PX_1200,
+    MusicCoverSize.PX_500,
+    MusicCoverSize.PX_250,
+)
 
 
 def _is_http_url(url: str | None) -> bool:
     return isinstance(url, str) and url.startswith(("http://", "https://"))
 
 
-def cover_art_urls(job: Job, size: MusicCoverSize) -> list[str]:
-    """The covers to try for a music track's embedded art, in order.
+def _automatic_cover_variants(url: str | None, size: MusicCoverSize) -> tuple[str, ...]:
+    """The automatic cover's URLs to try, largest first: a Cover Art Archive
+    thumbnail in `size`, then in each smaller size; any other URL as given.
+    Empty when there is no automatic cover."""
+    if not _is_http_url(url):
+        return ()
+    auto = str(url)
+    if not auto.startswith(_COVERART_PREFIX):
+        return (auto,)
+    sizes = _COVERART_SIZES_LARGEST_FIRST[_COVERART_SIZES_LARGEST_FIRST.index(size) :]
+    # A URL without the thumbnail suffix comes out the same in every size: try it once.
+    return tuple(dict.fromkeys(auto.replace(_COVERART_THUMBNAIL, _COVERART_FRONT_BY_SIZE[s], 1) for s in sizes))
+
+
+def cover_art_candidates(job: Job, size: MusicCoverSize) -> list[tuple[str, ...]]:
+    """The covers to try for a music track's embedded art, in order, each as
+    the URLs to try for it, largest first.
 
     The operator's override first, used exactly as entered; then the
-    automatic cover, with a Cover Art Archive thumbnail swapped for the
-    `size` variant. Empty when the job has neither.
+    automatic cover, a Cover Art Archive one in `size` and then each smaller
+    size, so a cover over the session's file size limit can give way to a
+    smaller one. Empty when the job has neither.
     """
-    urls: list[str] = []
-    if _is_http_url(job.poster_url_manual):
-        urls.append(str(job.poster_url_manual))
-    if _is_http_url(job.poster_url):
-        auto = str(job.poster_url)
-        if auto.startswith(_COVERART_PREFIX):
-            auto = auto.replace(_COVERART_THUMBNAIL, _COVERART_FRONT_BY_SIZE[size], 1)
-        if auto not in urls:
-            urls.append(auto)
-    return urls
+    candidates: list[tuple[str, ...]] = []
+    auto = _automatic_cover_variants(job.poster_url, size)
+    manual = job.poster_url_manual
+    # An override that is the automatic cover in this size is tried as the automatic cover, smaller sizes and all.
+    if _is_http_url(manual) and auto[:1] != (manual,):
+        candidates.append((str(manual),))
+    if auto:
+        candidates.append(auto)
+    return candidates
 
 
 def _tmdb_poster(payload: dict[str, Any]) -> str | None:

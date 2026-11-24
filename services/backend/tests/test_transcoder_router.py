@@ -18,7 +18,7 @@ from fastapi.testclient import TestClient
 from arm_backend.db import get_session
 from arm_backend.handbrake_schema_store import SchemaStore
 from arm_backend.routers import transcoder as transcoder_router
-from arm_backend.routers.images import ImageUnavailable
+from arm_backend.routers.images import ImageTooLarge, ImageUnavailable
 from arm_backend.ws import WSHub
 from arm_common import (
     ContainerFormat,
@@ -41,7 +41,7 @@ from arm_common import (
     TranscodeTaskStatus,
     TranscodeTool,
 )
-from arm_common.enums import MusicCoverSize
+from arm_common.enums import MusicCoverMaxSize, MusicCoverSize
 from tests._fakes import FakeSession
 from tests._hb_schema import fixture_schema
 from tests._logs import LineCapture, log_commits
@@ -258,12 +258,24 @@ def _seed_cd(db: FakeSession, *, poster_url: str | None = _AUTO_COVER, manual: s
     job.poster_url_manual = manual
 
 
-def _stub_images(monkeypatch: pytest.MonkeyPatch, served: dict[str, tuple[bytes, str]]) -> list[str]:
-    """Serve `served` by URL through the image fetch the endpoint uses; every other URL is unavailable."""
+def _stub_images(
+    monkeypatch: pytest.MonkeyPatch,
+    served: dict[str, tuple[bytes, str]],
+    *,
+    too_large: frozenset[str] = frozenset(),
+    caps: list[int | None] | None = None,
+) -> list[str]:
+    """Serve `served` by URL through the image fetch the endpoint uses; a URL in
+    `too_large` is over any cap, and every other URL is unavailable. `caps`
+    collects the size cap of each fetch."""
     requested: list[str] = []
 
-    async def fake_fetch(url: str) -> tuple[bytes, str]:
+    async def fake_fetch(url: str, max_bytes: int | None = None) -> tuple[bytes, str]:
         requested.append(url)
+        if caps is not None:
+            caps.append(max_bytes)
+        if url in too_large:
+            raise ImageTooLarge
         if url not in served:
             raise ImageUnavailable("Image unavailable")
         return served[url]
@@ -388,6 +400,111 @@ def test_cover_art_served_when_the_cover_is_switched_on(monkeypatch: pytest.Monk
 
     assert r.status_code == 200
     assert r.content == b"AUTO"
+
+
+_CAA = "https://coverartarchive.org/release/rel-1/"
+
+
+def test_cover_art_too_large_in_the_original_steps_down_to_the_next_size(monkeypatch: pytest.MonkeyPatch) -> None:
+    db = FakeSession()
+    _seed_cd(db)
+    db.rows["sessions"][0].music_cover_size = MusicCoverSize.SOURCE
+    requested = _stub_images(
+        monkeypatch,
+        {_CAA + "front-1200": (b"1200", "image/jpeg"), _AUTO_COVER_FULL: (b"500", "image/jpeg")},
+        too_large=frozenset({_CAA + "front"}),
+    )
+
+    r = _get_cover(db)
+
+    assert r.status_code == 200
+    assert r.content == b"1200"
+    assert requested == [_CAA + "front", _CAA + "front-1200"]
+
+
+def test_cover_art_steps_down_as_far_as_it_must(monkeypatch: pytest.MonkeyPatch) -> None:
+    db = FakeSession()
+    _seed_cd(db)
+    db.rows["sessions"][0].music_cover_size = MusicCoverSize.SOURCE
+    requested = _stub_images(
+        monkeypatch,
+        {_AUTO_COVER: (b"250", "image/jpeg")},
+        too_large=frozenset({_CAA + "front", _CAA + "front-1200", _AUTO_COVER_FULL}),
+    )
+
+    r = _get_cover(db)
+
+    assert r.content == b"250"
+    assert requested == [_CAA + "front", _CAA + "front-1200", _AUTO_COVER_FULL, _AUTO_COVER]
+
+
+def test_cover_art_404_when_every_size_is_too_large(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    db = FakeSession()
+    _seed_cd(db)
+    db.rows["sessions"][0].music_cover_max_size = MusicCoverMaxSize.KB_500
+    _stub_images(monkeypatch, {}, too_large=frozenset({_AUTO_COVER_FULL, _AUTO_COVER}))
+
+    with caplog.at_level(logging.INFO, logger="arm_backend.routers.transcoder"):
+        r = _get_cover(db)
+
+    assert r.status_code == 404
+    assert r.json()["detail"] == "no cover art"
+    assert f"cover art task_id=txt_1 url={_AUTO_COVER} skipped: over 512000 bytes" in caplog.messages
+
+
+def test_cover_art_original_of_a_type_it_cannot_embed_steps_down(monkeypatch: pytest.MonkeyPatch) -> None:
+    db = FakeSession()
+    _seed_cd(db)
+    db.rows["sessions"][0].music_cover_size = MusicCoverSize.SOURCE
+    _stub_images(monkeypatch, {_CAA + "front": (b"WEBP", "image/webp"), _CAA + "front-1200": (b"1200", "image/jpeg")})
+
+    assert _get_cover(db).content == b"1200"
+
+
+def test_cover_art_missing_cover_does_not_try_smaller_sizes(monkeypatch: pytest.MonkeyPatch) -> None:
+    # A cover with no art has none in any size: no request per size.
+    db = FakeSession()
+    _seed_cd(db)
+    db.rows["sessions"][0].music_cover_size = MusicCoverSize.SOURCE
+    requested = _stub_images(monkeypatch, {_AUTO_COVER: (b"250", "image/jpeg")})
+
+    assert _get_cover(db).status_code == 404
+    assert requested == [_CAA + "front"]
+
+
+def test_cover_art_override_too_large_gives_way_to_the_automatic_cover(monkeypatch: pytest.MonkeyPatch) -> None:
+    db = FakeSession()
+    _seed_cd(db, manual=_MANUAL_COVER)
+    requested = _stub_images(
+        monkeypatch, {_AUTO_COVER_FULL: (b"AUTO", "image/jpeg")}, too_large=frozenset({_MANUAL_COVER})
+    )
+
+    assert _get_cover(db).content == b"AUTO"
+    assert requested == [_MANUAL_COVER, _AUTO_COVER_FULL]
+
+
+@pytest.mark.parametrize(
+    ("max_size", "cap"),
+    [
+        (None, 2 * 1024 * 1024),
+        (MusicCoverMaxSize.MB_10, 10 * 1024 * 1024),
+        (MusicCoverMaxSize.UNLIMITED, None),
+    ],
+)
+def test_cover_art_fetches_within_the_session_file_size_limit(
+    monkeypatch: pytest.MonkeyPatch, max_size: MusicCoverMaxSize | None, cap: int | None
+) -> None:
+    db = FakeSession()
+    _seed_cd(db)
+    if max_size is not None:
+        db.rows["sessions"][0].music_cover_max_size = max_size
+    caps: list[int | None] = []
+    _stub_images(monkeypatch, {_AUTO_COVER_FULL: (b"AUTO", "image/jpeg")}, caps=caps)
+
+    assert _get_cover(db).status_code == 200
+    assert caps == [cap]
 
 
 def test_cover_art_404_unknown_task() -> None:

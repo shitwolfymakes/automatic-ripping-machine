@@ -1,5 +1,12 @@
 import { describe, it, expect } from 'vitest';
-import { ALL_MUSIC_TAGS, COVER_SIZE_OPTIONS, DEFAULT_COVER_SIZE, MUSIC_TAG_OPTIONS } from '../music-tags';
+import {
+	ALL_MUSIC_TAGS,
+	COVER_MAX_SIZE_OPTIONS,
+	COVER_SIZE_OPTIONS,
+	DEFAULT_COVER_MAX_SIZE,
+	DEFAULT_COVER_SIZE,
+	MUSIC_TAG_OPTIONS
+} from '../music-tags';
 
 describe('MUSIC_TAG_OPTIONS', () => {
 	it("lists every tag once, in the backend's order, then the cover", () => {
@@ -35,5 +42,22 @@ describe('COVER_SIZE_OPTIONS', () => {
 
 	it('starts a new session at 500 px, the size used before it was a choice', () => {
 		expect(DEFAULT_COVER_SIZE).toBe('500');
+	});
+});
+
+describe('COVER_MAX_SIZE_OPTIONS', () => {
+	it('lists the limits smallest first, then no limit', () => {
+		expect(COVER_MAX_SIZE_OPTIONS).toEqual([
+			{ value: '500kb', label: '500 KB' },
+			{ value: '1mb', label: '1 MB' },
+			{ value: '2mb', label: '2 MB' },
+			{ value: '5mb', label: '5 MB' },
+			{ value: '10mb', label: '10 MB' },
+			{ value: 'unlimited', label: 'Unlimited' }
+		]);
+	});
+
+	it('starts a new session at 2 MB, the limit every cover had before it was a choice', () => {
+		expect(DEFAULT_COVER_MAX_SIZE).toBe('2mb');
 	});
 });
