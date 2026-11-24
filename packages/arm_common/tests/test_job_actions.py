@@ -1,5 +1,5 @@
 import pytest
-from arm_common.enums import JobStatus
+from arm_common.enums import JobStatus, TranscodeTaskStatus, transcode_task_blocks_job_delete
 from arm_common.schemas.jobs import JobView, TranscodeProgressSummary, job_actions_for
 
 # (can_resolve, can_apply, can_abandon, can_delete) per status. Written out in
@@ -73,3 +73,20 @@ def test_job_with_a_queued_or_running_transcode_cannot_be_deleted() -> None:
 def test_job_whose_transcodes_finished_can_be_deleted() -> None:
     assert _ripped_view(_progress(tasks_active=0)).actions.can_delete is True
     assert _ripped_view(None).actions.can_delete is True
+
+
+@pytest.mark.parametrize(
+    ("status", "holds_gpu", "blocks"),
+    [
+        (TranscodeTaskStatus.IN_PROGRESS, False, True),
+        (TranscodeTaskStatus.IN_PROGRESS, True, True),
+        (TranscodeTaskStatus.QUEUED, True, True),
+        (TranscodeTaskStatus.QUEUED, False, False),
+        (TranscodeTaskStatus.DONE, True, False),
+        (TranscodeTaskStatus.FAILED, False, False),
+    ],
+)
+def test_transcode_task_blocks_job_delete(status: TranscodeTaskStatus, holds_gpu: bool, blocks: bool) -> None:
+    """A queued task blocks only once a GPU is claimed for it (spawned); one
+    the dispatcher holds has nothing running."""
+    assert transcode_task_blocks_job_delete(status, holds_gpu=holds_gpu) is blocks

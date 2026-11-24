@@ -16,6 +16,7 @@ from arm_backend.auto_session import (
 )
 from arm_backend.config import settings
 from arm_backend.db import get_session
+from arm_backend.gpu_claim import gpu_claimed_task_ids
 from arm_backend.identity.apply import apply_identity_result, suggestion_to_result
 from arm_backend.identity.manual_edits import apply_manual_edits
 from arm_backend.identity.resolve_service import identity_snapshot, resolve_identity
@@ -64,11 +65,11 @@ from arm_common.schemas import (
     TranscodeTaskView,
 )
 from arm_common.enums import (
-    ACTIVE_TRANSCODE_TASK_STATUSES,
     NON_TERMINAL_JOB_STATUSES,
     POST_RIP_JOB_STATUSES,
     RESOLVABLE_JOB_STATUSES,
     TERMINAL_JOB_STATUSES,
+    transcode_task_blocks_job_delete,
 )
 from arm_common.schemas.job_metadata import (
     identity_suggestion_of,
@@ -461,12 +462,15 @@ def _bulk_delete_candidates(
 
 
 async def _jobs_with_active_transcodes(db: AsyncSession, job_ids: Sequence[str]) -> set[str]:
-    """The ids among `job_ids` with a queued or in-progress transcode task.
+    """The ids among `job_ids` with a task that `transcode_task_blocks_job_delete`:
+    in progress, or queued with a GPU claimed for it.
 
     Such a job is not deleted: the cascade would remove the task under its
     transcoder (whose final report then 404s, leaving a claimed GPU busy until
-    a restart) and `delete_raw` would remove the input it is reading. Two
-    single-table queries rather than a join, which FakeSession can't evaluate.
+    a restart) and `delete_raw` would remove the input it is reading. A queued
+    task without a GPU does not block, so the cascade never removes a task a
+    GPU row is claimed by. Single-table queries rather than a join, which
+    FakeSession can't evaluate.
     """
     if not job_ids:
         return set()
@@ -478,18 +482,23 @@ async def _jobs_with_active_transcodes(db: AsyncSession, job_ids: Sequence[str])
     job_of = {a.id: a.job_id for a in applications}
     if not job_of:
         return set()
-    active = (
+    live = (
         (
             await db.execute(
                 select(TranscodeTask)
                 .where(col(TranscodeTask.session_application_id).in_(tuple(job_of)))
-                .where(col(TranscodeTask.status).in_(tuple(ACTIVE_TRANSCODE_TASK_STATUSES)))
+                .where(col(TranscodeTask.status).in_((TranscodeTaskStatus.QUEUED, TranscodeTaskStatus.IN_PROGRESS)))
             )
         )
         .scalars()
         .all()
     )
-    return {job_of[t.session_application_id] for t in active}
+    holding_gpu = await gpu_claimed_task_ids(db, [t.id for t in live if t.status == TranscodeTaskStatus.QUEUED])
+    return {
+        job_of[t.session_application_id]
+        for t in live
+        if transcode_task_blocks_job_delete(t.status, holds_gpu=t.id in holding_gpu)
+    }
 
 
 async def _clean_up_job_files(db: AsyncSession, job_id: str, *, raw_root: Path, media_root: Path) -> dict[str, int]:
@@ -540,8 +549,10 @@ async def delete_job(
     Refuses non-terminal jobs (CREATED / AWAITING_USER_ID / IDENTIFIED /
     RIPPING) — caller must `POST /abandon` first if they want a job in
     flight gone. This keeps the active-rip cancel logic in one place.
-    Likewise refuses a job with a queued or running transcode: its tasks
-    are cancelled through `/api/transcodes/{id}`, which stops the container.
+    Likewise refuses a job with a running transcode (in progress, or queued
+    with a GPU claimed for it): its tasks are cancelled through
+    `/api/transcodes/{id}`, which stops the container. A queued task the
+    dispatcher holds does not block the delete.
 
     `delete_raw=true` also unlinks every transcode output recorded for the
     job and rmtrees `/raw/{job_id}/`. Backend mounts both bind paths

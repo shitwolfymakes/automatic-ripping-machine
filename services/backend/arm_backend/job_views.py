@@ -1,6 +1,8 @@
 """Builds the job list and detail views, with their progress summaries and the batched lookups behind them."""
 
+from collections.abc import Collection, Iterable
 from datetime import UTC, datetime
+from itertools import chain
 from pathlib import Path
 from typing import Literal
 
@@ -8,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import col, select
 
 from arm_backend.config import settings
+from arm_backend.gpu_claim import gpu_claimed_task_ids
 from arm_common import (
     DiscFingerprint,
     Job,
@@ -18,7 +21,7 @@ from arm_common import (
     TrackStatus,
     TranscodeTaskStatus,
 )
-from arm_common.enums import ACTIVE_TRANSCODE_TASK_STATUSES, TERMINAL_JOB_STATUSES
+from arm_common.enums import TERMINAL_JOB_STATUSES, transcode_task_blocks_job_delete
 from arm_common.models import TranscodeTask
 from arm_common.schemas import (
     DiscFingerprintView,
@@ -104,6 +107,7 @@ def _summarize_transcode_progress(
     tasks: list[TranscodeTask],
     *,
     parked_settled: bool = False,
+    gpu_claimed_task_ids: Collection[str] = frozenset(),
 ) -> TranscodeProgressSummary | None:
     """Roll a job's session_applications (+ their tasks) into one job-level
     transcode state. Returns None when no session has been applied.
@@ -116,6 +120,9 @@ def _summarize_transcode_progress(
     application with no tasks is then not in flight, only parked (its reason
     is shown through `parked_session_ids`), so it is left out of the rollup;
     otherwise a ripped job would read "Transcoding 0/0" forever.
+
+    `gpu_claimed_task_ids`: the tasks a GPU row is claimed by, which
+    `tasks_active` needs to tell a spawned queued task from a held one.
     """
     tasks_by_app: dict[str, list[TranscodeTask]] = {}
     for t in tasks:
@@ -135,7 +142,9 @@ def _summarize_transcode_progress(
     tasks_total = len(tasks)
     tasks_done = sum(1 for t in tasks if t.status == TranscodeTaskStatus.DONE)
     tasks_failed = sum(1 for t in tasks if t.status == TranscodeTaskStatus.FAILED)
-    tasks_active = sum(1 for t in tasks if t.status in ACTIVE_TRANSCODE_TASK_STATUSES)
+    tasks_active = sum(
+        1 for t in tasks if transcode_task_blocks_job_delete(t.status, holds_gpu=t.id in gpu_claimed_task_ids)
+    )
     percent = (sum(t.progress_pct for t in tasks) / tasks_total) if tasks_total else 100.0
 
     state: Literal["transcoding", "done", "done_partial", "failed"]
@@ -222,11 +231,17 @@ async def _apps_and_tasks_for(
     return sas_by_job, transcode_tasks_by_job
 
 
+async def _gpu_claimed_queued_tasks(session: AsyncSession, tasks: Iterable[TranscodeTask]) -> set[str]:
+    """The ids of the queued tasks among `tasks` that a GPU row is claimed by."""
+    return await gpu_claimed_task_ids(session, [t.id for t in tasks if t.status == TranscodeTaskStatus.QUEUED])
+
+
 async def job_list_views(session: AsyncSession, jobs: list[Job]) -> list[JobView]:
     """The JobView of each job, with its rip and transcode progress filled in."""
     tracks_by_job = await _tracks_for_ripping(session, jobs)
     job_ids = [j.id for j in jobs]
     sas_by_job, transcode_tasks_by_job = await _apps_and_tasks_for(session, job_ids)
+    gpu_claimed = await _gpu_claimed_queued_tasks(session, chain.from_iterable(transcode_tasks_by_job.values()))
 
     views: list[JobView] = []
     for j in jobs:
@@ -234,7 +249,10 @@ async def job_list_views(session: AsyncSession, jobs: list[Job]) -> list[JobView
         if j.status == JobStatus.RIPPING:
             view.rip_progress = _summarize_rip_progress(tracks_by_job.get(j.id, []))
         view.transcode_progress = _summarize_transcode_progress(
-            sas_by_job.get(j.id, []), transcode_tasks_by_job.get(j.id, []), parked_settled=_parked_apps_are_settled(j)
+            sas_by_job.get(j.id, []),
+            transcode_tasks_by_job.get(j.id, []),
+            parked_settled=_parked_apps_are_settled(j),
+            gpu_claimed_task_ids=gpu_claimed,
         )
         view.parked_session_ids = _parked_session_ids(sas_by_job.get(j.id, []))
         views.append(view)
@@ -286,7 +304,10 @@ async def job_detail_view(session: AsyncSession, job: Job) -> JobDetailView:
     job_tasks = tasks_by_job.get(job.id, [])
     job_view = JobView.model_validate(job)
     job_view.transcode_progress = _summarize_transcode_progress(
-        sas, job_tasks, parked_settled=_parked_apps_are_settled(job)
+        sas,
+        job_tasks,
+        parked_settled=_parked_apps_are_settled(job),
+        gpu_claimed_task_ids=await _gpu_claimed_queued_tasks(session, job_tasks),
     )
     job_view.parked_session_ids = _parked_session_ids(sas)
     latest_task = _latest_task_by_track(job_tasks)

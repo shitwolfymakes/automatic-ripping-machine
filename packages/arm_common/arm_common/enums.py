@@ -277,12 +277,17 @@ class TranscodeTaskStatus(StrEnum):
     FAILED = "failed"
 
 
-# A task that may hold a spawned transcoder or a GPU claim: queued (it can be
-# spawned and claim a GPU before its /claim) or in progress. A job with one
-# cannot be deleted (the cascade would pull the task out from under it).
-ACTIVE_TRANSCODE_TASK_STATUSES: frozenset[TranscodeTaskStatus] = frozenset(
-    {TranscodeTaskStatus.QUEUED, TranscodeTaskStatus.IN_PROGRESS}
-)
+def transcode_task_blocks_job_delete(status: TranscodeTaskStatus, *, holds_gpu: bool) -> bool:
+    """Whether this task keeps its job from being deleted: in progress, or
+    queued with a GPU claimed for it (the dispatcher claims the GPU when it
+    spawns the transcoder, before the transcoder's /claim). The cascade would
+    pull such a task out from under its transcoder. A queued task without a GPU
+    has no transcoder working on it: the dispatcher holds it or has yet to
+    reach it, or a CPU transcoder just spawned for it has not claimed it, and
+    that /claim then 404s (as after `DELETE /api/transcodes/{id}`)."""
+    if status == TranscodeTaskStatus.IN_PROGRESS:
+        return True
+    return status == TranscodeTaskStatus.QUEUED and holds_gpu
 
 
 class GpuVendor(StrEnum):

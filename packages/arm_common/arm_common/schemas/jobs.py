@@ -183,8 +183,9 @@ class TranscodeProgressSummary(BaseModel):
     are terminal. `None` on `JobView` means no session was applied (the job
     is `ripped`/awaiting action). Live per-task percent flows on the
     `transcode.progress.{task_id}` WS topic; `percent` here is a poll-time
-    mean of the job's task `progress_pct`. `tasks_active` counts the queued
-    and in-progress tasks: while it is above 0 the job cannot be deleted.
+    mean of the job's task `progress_pct`. `tasks_active` counts the tasks
+    that `transcode_task_blocks_job_delete` (in progress, or queued with a GPU
+    claimed): while it is above 0 the job cannot be deleted.
     """
 
     state: Literal["transcoding", "done", "done_partial", "failed"]
@@ -210,8 +211,9 @@ class JobActions(BaseModel):
 
 
 def job_actions_for(status: JobStatus, *, transcode_active: bool = False) -> JobActions:
-    """`transcode_active`: a queued or running transcode task, which a delete
-    would pull out from under its transcoder, so the delete is refused."""
+    """`transcode_active`: a running transcode task (in progress, or queued
+    with a GPU claimed), which a delete would pull out from under its
+    transcoder, so the delete is refused."""
     return JobActions(
         can_resolve=status in RESOLVABLE_JOB_STATUSES,
         can_apply=status in APPLY_OK_JOB_STATUSES or status in APPLY_PARK_JOB_STATUSES,
