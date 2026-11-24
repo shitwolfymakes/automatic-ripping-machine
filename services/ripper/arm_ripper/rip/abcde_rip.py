@@ -182,13 +182,11 @@ async def _read_until_exit(proc: asyncio.subprocess.Process) -> int:
 
 
 async def _stop_abcde(proc: asyncio.subprocess.Process, stderr_task: asyncio.Task[None], conf_path: Path) -> None:
-    """Clean up after one abcde run: kill and reap its process group if still running, let the stderr drain finish,
-    and delete the config file.
+    """Clean up after one abcde run, once its process group has been killed or has exited: reap it, let the stderr
+    drain finish, and delete the config file.
     """
-    if proc.returncode is None:
-        _kill_group(proc)
-        with contextlib.suppress(BaseException):
-            await proc.wait()
+    with contextlib.suppress(BaseException):
+        await proc.wait()
     with contextlib.suppress(asyncio.CancelledError):
         await stderr_task
     conf_path.unlink(missing_ok=True)
@@ -266,11 +264,16 @@ async def rip_cd(
     finally:
         # Cancel-safe: if the parent task was cancelled (abandon flow) or
         # we timed out above, abcde is still running and writing to the raw
-        # dir. Kill it and its children before letting CancelledError
-        # propagate / before returning a timeout result. The pollers stop
-        # first, so a track being finalized reports before abcde is reaped.
-        await stop_all(finalizer, reporter)
-        await _stop_abcde(proc, stderr_task, conf_path)
+        # dir. It and its children are killed before the first await, so a
+        # further cancel cannot skip the kill and the drive is free for the
+        # abandon eject. The pollers then stop, so a track being finalized
+        # still reports, and the cleanup runs even if that wait is cancelled.
+        if proc.returncode is None:
+            _kill_group(proc)
+        try:
+            await stop_all(finalizer, reporter)
+        finally:
+            await _stop_abcde(proc, stderr_task, conf_path)
 
     if timed_out:
         await tracks.fail_remaining(f"abcde timed out after {CD_RIP_TIMEOUT_SECONDS}s")
