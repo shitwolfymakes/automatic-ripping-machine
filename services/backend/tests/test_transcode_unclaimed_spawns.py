@@ -14,6 +14,8 @@ from datetime import UTC, datetime
 from typing import Any
 from unittest.mock import MagicMock
 
+import pytest
+
 from arm_backend.transcode_dispatcher import TranscodeDispatcher
 from arm_backend.ws import WSHub
 from arm_common import GpuStatus, GpuVendor, TranscodeTask, TranscodeTaskStatus
@@ -313,6 +315,56 @@ async def test_recovery_skips_a_task_claimed_since_the_check() -> None:
     assert db.rows["gpus"][0].status == GpuStatus.BUSY
     assert db.rows["transcode_tasks"][0].attempts == 0
     docker.containers.list.assert_not_called()
+
+
+@pytest.mark.parametrize("attempts_before", [0, 2])  # a middle attempt, and the last one
+async def test_a_claim_landing_while_the_container_stops_is_kept(attempts_before: int) -> None:
+    """The stop can take seconds; a /claim that commits meanwhile owns the task.
+    Recovery neither requeues nor fails it, keeps the claim's attempt count and
+    leaves its GPU claimed."""
+    db = _nvenc_db()
+    task = db.rows["transcode_tasks"][0]
+    task.attempts = attempts_before
+    docker = MagicMock()
+
+    def _claim_commits_during_the_stop(**_: Any) -> list[MagicMock]:
+        task.status = TranscodeTaskStatus.IN_PROGRESS
+        task.claimed_by = "arm-transcode-x"
+        task.attempts = attempts_before + 1
+        return [MagicMock()]
+
+    docker.containers.list.side_effect = _claim_commits_during_the_stop
+    disp, clock = _dispatcher(db, docker)
+    await disp.spawn_pending(db)
+    clock.now += _STALE + 1
+    locks_before = db.locked.count("transcode_tasks")
+
+    await disp.sweep_unclaimed_spawns(db)
+
+    # Re-read under its row lock, then the lock is dropped right away.
+    assert db.locked.count("transcode_tasks") == locks_before + 1
+    assert db.call_log[-1] == "rollback"
+    assert (task.status, task.attempts, task.last_error) == (
+        TranscodeTaskStatus.IN_PROGRESS,
+        attempts_before + 1,
+        None,
+    )
+    gpu = db.rows["gpus"][0]
+    assert (gpu.status, gpu.claimed_by_task_id) == (GpuStatus.BUSY, "txt_1")
+
+
+async def test_each_tick_recovers_unclaimed_spawns() -> None:
+    db = _nvenc_db()
+    docker = MagicMock()
+    docker.containers.list.return_value = []
+    disp, clock = _dispatcher(db, docker)
+    await disp.spawn_pending(db)
+    clock.now += _STALE + 1
+
+    await disp._tick()
+
+    docker.containers.list.assert_any_call(filters={"label": "arm.task_id=txt_1"})
+    assert db.rows["transcode_tasks"][0].attempts == 1
 
 
 def test_stopping_containers_without_a_docker_client_is_a_no_op() -> None:

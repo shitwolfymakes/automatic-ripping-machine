@@ -619,13 +619,22 @@ class TranscodeDispatcher:
                 await db.rollback()
         return len(overdue)
 
-    async def _recover_unclaimed_spawn(self, db: AsyncSession, task_id: str, threshold: float) -> None:
-        task = (
-            await db.execute(
-                select(TranscodeTask).where(col(TranscodeTask.id) == task_id).execution_options(populate_existing=True)
-            )
-        ).scalar_one_or_none()
+    async def _queued_task(self, db: AsyncSession, task_id: str, *, lock: bool) -> TranscodeTask | None:
+        """Fresh load of `task_id`, or None once it is no longer QUEUED (claimed,
+        finished or gone). `lock` holds its row lock until the next commit."""
+        query = select(TranscodeTask).where(col(TranscodeTask.id) == task_id)
+        if lock:
+            query = query.with_for_update()
+        task = (await db.execute(query.execution_options(populate_existing=True))).scalar_one_or_none()
         if task is None or task.status != TranscodeTaskStatus.QUEUED:
+            return None
+        return task
+
+    async def _recover_unclaimed_spawn(self, db: AsyncSession, task_id: str, threshold: float) -> None:
+        """Stop an overdue spawn, then requeue or fail its task. The stop takes
+        seconds and holds no row lock; the task is re-read under its lock after
+        it, so a claim that committed during the stop keeps the task."""
+        if await self._queued_task(db, task_id, lock=False) is None:
             return  # claimed (or gone) since the check
         reason = (
             f"transcoder never claimed the task within {threshold:g} s of starting (can it reach the backend?); "
@@ -635,6 +644,11 @@ class TranscodeDispatcher:
         logger.warning("transcode spawn unclaimed, stopping it task_id=%s: %s", task_id, reason)
         # Stop it first, so a late claim cannot race the next spawn of the task.
         await asyncio.to_thread(self._stop_task_containers, task_id)
+        task = await self._queued_task(db, task_id, lock=True)
+        if task is None:
+            logger.warning("transcode task claimed while its unclaimed spawn was stopping task_id=%s", task_id)
+            await db.rollback()  # drop the row lock before the next recovery's stop
+            return
         self.gpu_waits.unclaimed(task_id)
         await release_gpu_for_task(db, task_id)
         task.attempts = (task.attempts or 0) + 1
