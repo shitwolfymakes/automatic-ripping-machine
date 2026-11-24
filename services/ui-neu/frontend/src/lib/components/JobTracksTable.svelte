@@ -1,6 +1,7 @@
 <script lang="ts">
 	import JobTrackRow from '$lib/components/JobTrackRow.svelte';
 	import type { JobView, NamingPreviewItem, TrackView } from '$lib/types/api.gen';
+	import type { MusicTrackRow } from '$lib/utils/music-tracks';
 
 	interface Props {
 		job: JobView;
@@ -9,9 +10,22 @@
 		previewByTrack: ReadonlyMap<string, NamingPreviewItem>;
 		onexcludedchange: (trackId: string, excluded: boolean) => void;
 		ontitleapplied: () => void;
+		musicTracks?: MusicTrackRow[];
+		canEditSongs?: boolean;
+		onsongsave?: (index: number, raw: string) => Promise<void>;
 	}
 
-	let { job, tracks, tracksAreSeries, previewByTrack, onexcludedchange, ontitleapplied }: Props = $props();
+	let {
+		job,
+		tracks,
+		tracksAreSeries,
+		previewByTrack,
+		onexcludedchange,
+		ontitleapplied,
+		musicTracks = [],
+		canEditSongs = false,
+		onsongsave
+	}: Props = $props();
 
 	let editingTrackId = $state<string | null>(null);
 
@@ -62,6 +76,9 @@
 						}}
 						{onexcludedchange}
 						ontitleapplied={handleTrackTitleApply}
+						{musicTracks}
+						{canEditSongs}
+						{onsongsave}
 					/>
 				{/each}
 			</tbody>

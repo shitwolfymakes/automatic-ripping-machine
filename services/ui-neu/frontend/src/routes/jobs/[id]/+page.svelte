@@ -86,6 +86,8 @@
 		if (await jobDetail.saveFact(field, raw)) matching.start();
 	}
 
+	const saveSong = (index: number, raw: string) => jobDetail.saveCdField({ field: 'track', index }, raw);
+
 	function handleSeriesApplied() {
 		panels.active = 'episodes';
 		matching.start();
@@ -280,6 +282,9 @@
 					previewByTrack={jobDetail.previewByTrack}
 					onexcludedchange={jobDetail.setExcluded}
 					ontitleapplied={() => jobDetail.load()}
+					musicTracks={jobDetail.musicTracks}
+					canEditSongs={$isAdmin && jobDetail.canResolve}
+					onsongsave={saveSong}
 				/>
 			{/if}
 
@@ -288,12 +293,16 @@
 				<JobFingerprints fingerprints={d.fingerprints} />
 			{/if}
 
-			<!-- Music tracklist (CD jobs; read-only). Fallback ONLY when there are no
+			<!-- Music tracklist (CD jobs, titles set in place). Fallback ONLY when there are no
 		     real Track rows yet — once the disc has tracks (which carry the mapped
 		     song titles), the Tracks table above is authoritative and this would
 		     just duplicate it. Mirrors neu's single-section behavior. -->
 			{#if tracks.length === 0 && jobDetail.musicTracks.length > 0}
-				<JobMusicTracklist tracks={jobDetail.musicTracks} />
+				<JobMusicTracklist
+					tracks={jobDetail.musicTracks}
+					canEdit={$isAdmin && jobDetail.canResolve}
+					onsave={saveSong}
+				/>
 			{/if}
 
 			<!-- Live, per-service job log (backend + ripper + transcode aggregated) -->

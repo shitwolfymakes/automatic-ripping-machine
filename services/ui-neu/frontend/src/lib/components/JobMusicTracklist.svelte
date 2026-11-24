@@ -1,17 +1,20 @@
 <script lang="ts">
+	import InlineField from '$lib/components/InlineField.svelte';
 	import type { MusicTrackRow } from '$lib/utils/music-tracks';
 
 	interface Props {
 		tracks: MusicTrackRow[];
+		canEdit?: boolean;
+		onsave?: (index: number, raw: string) => Promise<void>;
 	}
 
-	let { tracks }: Props = $props();
+	let { tracks, canEdit = false, onsave }: Props = $props();
 </script>
 
 <section>
 	<h2 class="mb-3 job-detail-section-title">
 		Tracklist
-		<span class="job-detail-section-subtitle">({tracks.length} tracks via MusicBrainz)</span>
+		<span class="job-detail-section-subtitle">({tracks.length} tracks)</span>
 	</h2>
 	<div class="overflow-x-auto job-detail-table-scroll">
 		<table class="table responsive-table">
@@ -26,7 +29,14 @@
 				{#each tracks as mt (mt.number)}
 					<tr class="table-row">
 						<td class="table-cell" data-label="#">{mt.number}</td>
-						<td class="table-cell" data-label="Title">{mt.title}</td>
+						<td class="table-cell" data-label="Title">
+							<InlineField
+								label="Track {mt.number} title"
+								value={mt.rawTitle}
+								{canEdit}
+								onsave={(raw) => onsave?.(mt.number, raw)}
+							/>
+						</td>
 						<td class="table-cell job-detail-right" data-label="Duration">{mt.durationLabel}</td>
 					</tr>
 				{/each}
