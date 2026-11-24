@@ -76,6 +76,25 @@ describe('buildMetadataFields — promoted fields', () => {
 		expect(fieldByLabel(fields, 'Album')?.value).toBe('Abbey Road');
 	});
 
+	it('always offers Artist and Album as text edits on a CD, blank when unset', () => {
+		const fields = buildMetadataFields(createJob({ disc_type: 'cd', metadata_json: {} }));
+		expect(fieldByLabel(fields, 'Artist')).toMatchObject({ value: '-', raw: '', textEdit: 'artist' });
+		expect(fieldByLabel(fields, 'Album')).toMatchObject({ value: '-', raw: '', textEdit: 'album' });
+	});
+
+	it('starts the CD Artist and Album editors from the stored values', () => {
+		const fields = buildMetadataFields(
+			createJob({ disc_type: 'cd', metadata_json: { music: { artist: 'Lali Puna', album: 'Two Windows' } } })
+		);
+		expect(fieldByLabel(fields, 'Artist')).toMatchObject({ value: 'Lali Puna', raw: 'Lali Puna' });
+		expect(fieldByLabel(fields, 'Album')).toMatchObject({ value: 'Two Windows', raw: 'Two Windows' });
+	});
+
+	it('keeps Artist read-only on a video disc', () => {
+		const fields = buildMetadataFields(createJob({ metadata_json: { music: { artist: 'The Beatles' } } }));
+		expect(fieldByLabel(fields, 'Artist')?.textEdit).toBeUndefined();
+	});
+
 	it('adds Titles count only when rip_progress is absent', () => {
 		const scanned = buildMetadataFields(
 			createJob({

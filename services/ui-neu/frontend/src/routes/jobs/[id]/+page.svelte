@@ -220,7 +220,12 @@
 					</div>
 
 					<!-- Metadata grid -->
-					<JobFactsGrid fields={metadataFields} canEdit={$isAdmin && jobDetail.canResolve} onsave={saveFact} />
+					<JobFactsGrid
+						fields={metadataFields}
+						canEdit={$isAdmin && jobDetail.canResolve}
+						onsave={saveFact}
+						ontextsave={(field, raw) => jobDetail.saveCdField({ field }, raw)}
+					/>
 				</div>
 
 				<!-- Panel toggle bar: poster override (manual poster_url_manual quick-edit).
