@@ -37,8 +37,7 @@ def per_job_log_path(job_id: str) -> Path:
 
 # Defaults / caps for the streaming grep + zip endpoints are env-tunable via
 # the `ARM_LOG_*` settings (see config.py); resolved at call time so a
-# `monkeypatch.setattr(settings, ...)` or env override flows through. Per-file
-# (not global) — see the logs router's module docstring.
+# `monkeypatch.setattr(settings, ...)` or env override flows through.
 
 
 def effective_cap(limit: int | None) -> int:
