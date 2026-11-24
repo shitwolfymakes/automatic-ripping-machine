@@ -27,12 +27,28 @@ _MAX_FETCH_BYTES = 2 * 1024 * 1024  # 2 MB — matches the cache cap; rejects ov
 
 router = APIRouter(prefix="/api", tags=["images"])
 
-_SAFE_CONTENT_TYPES = {
-    "image/jpeg",
-    "image/png",
-    "image/gif",
-    "image/webp",
-}
+# The image types the proxy serves, keyed by the signature their bytes open
+# with. Upstream Content-Type headers are not trusted: a missing or generic
+# header, or an HTML error page labelled as an image, must not reach a client
+# (or the transcoder's ffmpeg) as a picture.
+_IMAGE_SIGNATURES = (
+    (b"\xff\xd8\xff", "image/jpeg"),
+    (b"\x89PNG\r\n\x1a\n", "image/png"),
+    (b"GIF87a", "image/gif"),
+    (b"GIF89a", "image/gif"),
+)
+
+
+def _sniff_image_type(content: bytes) -> str | None:
+    """The image type `content`'s leading bytes name, or None when it is not a served image type."""
+    for signature, media_type in _IMAGE_SIGNATURES:
+        if content.startswith(signature):
+            return media_type
+    # WebP is a RIFF container: "RIFF", a 4-byte size, then "WEBP".
+    if content[:4] == b"RIFF" and content[8:12] == b"WEBP":
+        return "image/webp"
+    return None
+
 
 _ALLOWED_IMAGE_HOSTS = {
     "m.media-amazon.com",
@@ -120,6 +136,10 @@ class _ImageTooLarge(Exception):
     """Raised by _read_capped_body when the body exceeds the size cap."""
 
 
+class _NotAnImage(Exception):
+    """Raised by _fetch_image when the body is not a served image type."""
+
+
 def _next_hop(fetch_url: str, resp: httpx.Response) -> str | None:
     """The next URL to fetch for a redirect response, or None when it must not be followed."""
     location = resp.headers.get("location")
@@ -149,11 +169,12 @@ async def _read_capped_body(resp: httpx.Response) -> bytes:
 async def _fetch_image(client: httpx.AsyncClient, start_url: str) -> tuple[bytes, str] | None:
     """Fetch one image, following CAA redirects manually with a per-hop SSRF guard.
 
-    Returns (content, safe_content_type) on success, or None when the chain
-    terminates in a 404 (CAA returns 404 for entities with no art) or exhausts
-    the redirect budget — both let the caller try a fallback. Raises
-    httpx.HTTPError for transport/other-status failures and _ImageTooLarge when
-    the body exceeds the cap; the caller maps those to a 404 response."""
+    Returns (content, content type read from the body) on success, or None when
+    the chain terminates in a 404 (CAA returns 404 for entities with no art) or
+    exhausts the redirect budget — both let the caller try a fallback. Raises
+    httpx.HTTPError for transport/other-status failures, _ImageTooLarge when
+    the body exceeds the cap and _NotAnImage when the body is not an image; the
+    caller maps those to a 404 response."""
     fetch_url = start_url
     for _ in range(_MAX_REDIRECTS + 1):
         async with client.stream("GET", fetch_url) as resp:
@@ -168,9 +189,11 @@ async def _fetch_image(client: httpx.AsyncClient, start_url: str) -> tuple[bytes
             if resp.status_code == 404:
                 return None
             resp.raise_for_status()
-            content_type = resp.headers.get("content-type", "image/jpeg")
-            safe_type = content_type if content_type in _SAFE_CONTENT_TYPES else "image/jpeg"
-            return await _read_capped_body(resp), safe_type
+            content = await _read_capped_body(resp)
+            media_type = _sniff_image_type(content)
+            if media_type is None:
+                raise _NotAnImage
+            return content, media_type
     # Exhausted the hop budget without reaching a terminal response.
     return None
 
@@ -181,7 +204,8 @@ def _image_response(content: bytes, media_type: str) -> Response:
 
 
 def _cached_image(safe_url: str) -> tuple[bytes, str] | None:
-    """The cached (content, content type) for a hit, or None on a miss or an unreadable cache."""
+    """The cached (content, content type read from the body) for a hit, or None
+    on a miss, an unreadable cache or a cached body that is not an image."""
     # The cache is an optimization, never a hard dependency: a broken or
     # unwritable cache dir must degrade to a live fetch, not fail the request.
     try:
@@ -191,9 +215,11 @@ def _cached_image(safe_url: str) -> tuple[bytes, str] | None:
         cached = None
     if cached is None:
         return None
-    content, content_type = cached
-    safe_type = content_type if content_type in _SAFE_CONTENT_TYPES else "application/octet-stream"
-    return content, safe_type
+    content, _ = cached
+    media_type = _sniff_image_type(content)
+    if media_type is None:
+        return None
+    return content, media_type
 
 
 def _group_cover_url(release_url: str, fallback_group: str) -> str:
@@ -269,6 +295,9 @@ async def fetch_allowed_image(url: str) -> tuple[bytes, str]:
     except _ImageTooLarge:
         _negative_cache_put(safe_url, now)
         raise ImageUnavailable("Image too large") from None
+    except _NotAnImage:
+        _negative_cache_put(safe_url, now)
+        raise ImageUnavailable("Upstream body is not an image") from None
     except httpx.HTTPError:
         _negative_cache_put(safe_url, now)
         raise ImageUnavailable("Failed to fetch image") from None
