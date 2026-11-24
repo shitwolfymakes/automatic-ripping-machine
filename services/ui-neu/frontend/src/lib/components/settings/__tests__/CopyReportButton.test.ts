@@ -72,4 +72,22 @@ describe('CopyReportButton', () => {
 		await fireEvent.click(screen.getByRole('button', { name: 'Close' }));
 		expect(screen.queryByRole('dialog')).toBeNull();
 	});
+
+	it('keeps the fallback dialog open on keys other than Escape', async () => {
+		setClipboard(undefined);
+		renderComponent(CopyReportButton, { props: { getReport: () => Promise.resolve(report) } });
+		await fireEvent.click(screen.getByRole('button', { name: 'Copy deployment report' }));
+		await screen.findByRole('textbox');
+		await fireEvent.keyDown(window, { key: 'Enter' });
+		expect(screen.getByRole('textbox')).toBeInTheDocument();
+	});
+
+	it('toasts an error with no body when the report fails with a non-Error', async () => {
+		renderComponent(CopyReportButton, { props: { getReport: () => Promise.reject('nope') } });
+		await fireEvent.click(screen.getByRole('button', { name: 'Copy deployment report' }));
+		await waitFor(() => expect(toasts.value.some((t) => t.tone === 'error')).toBe(true));
+		const t = toasts.value.find((x) => x.tone === 'error');
+		expect(t?.title).toBe('Could not build the report');
+		expect(t?.body).toBeUndefined();
+	});
 });

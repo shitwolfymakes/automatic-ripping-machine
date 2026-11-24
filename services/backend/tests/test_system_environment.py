@@ -1,8 +1,10 @@
 import pytest
 from arm_backend.config import Settings
-from arm_backend.env_registry import CONTAINER_PUBLIC_ENV, ENV_GROUP_ORDER
+from arm_backend.env_registry import CONTAINER_PUBLIC_ENV, ENV_GROUP_ORDER, EnvVarMeta
 from arm_backend.ripper_container_spec import container_spec
 from arm_backend.system_environment import (
+    _effective,
+    _tab_for,
     build_env_groups,
     mask_container_env,
     ripper_container_views,
@@ -239,3 +241,11 @@ def test_spec_error_degrades_to_a_view(make_settings):
     [view] = ripper_container_views(make_settings(), [bad])
     assert view.state == "enrolled, online, spec error"
     assert view.env == [] and view.mounts == []
+
+
+def test_tab_for_unknown_setting_falls_back_to_gpus_tab() -> None:
+    assert _tab_for("no_such_setting") == "Transcoding"
+
+
+def test_effective_unknown_seed_is_none() -> None:
+    assert _effective(EnvVarMeta("Transcode", seed_of="no_such_setting"), "1", None, 0) is None

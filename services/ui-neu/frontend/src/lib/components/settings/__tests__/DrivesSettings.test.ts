@@ -258,4 +258,10 @@ describe('DrivesSettings', () => {
 		await waitFor(() => expect(enrollDrive).toHaveBeenCalledWith('drv_detected'));
 		await waitFor(() => expect(onrefresh).toHaveBeenCalledTimes(1));
 	});
+
+	it('renders the Scanning panel with blank fields when settings carry no config', () => {
+		render({ group: drivesGroup, settings: undefined as never });
+		expect(screen.getByTestId('drive-scanning')).toBeInTheDocument();
+		expect(screen.getByRole('spinbutton', { name: /Drive scan interval/ })).toHaveValue(null);
+	});
 });
