@@ -227,17 +227,20 @@ precreate_optical_nodes() {  # <dev_dir> <sr_max> <sg_max> <group>
 # another user, as the docs suggest for matching a media server, the dropped
 # arm user cannot read it and the service crash-loops. Root can, so hand arm a
 # private copy before the drop, as the db container does for postgres. A key
-# arm can already read is used as mounted. Defined above the SOURCE_ONLY seam so
-# test-entrypoint-tls.sh can exercise it unprivileged.
+# arm can already read is used as mounted. The copy is owned by PUID:PGID as
+# numbers, which are arm's uid and primary gid after the remap below whatever
+# the group is called (a PGID the image already has, e.g. 100 `users`, leaves
+# no group named `arm`). install's own error is left on stderr so a failed copy
+# says why. Defined above the SOURCE_ONLY seam so test-entrypoint-tls.sh can
+# exercise it unprivileged.
 TLS_KEY_COPY_DIR="${TLS_KEY_COPY_DIR:-/run/arm-tls}"
-TLS_KEY_OWNER="${TLS_KEY_OWNER:-arm:arm}"
 private_tls_key() {
     local key="${TLS_KEY_PATH:-}"
     [[ -n "${key}" && -f "${key}" ]] || return 0
     "${READ_TEST[@]}" "${key}" && return 0
     local copy="${TLS_KEY_COPY_DIR}/tls.key"
-    if install -d -o "${TLS_KEY_OWNER%%:*}" -g "${TLS_KEY_OWNER##*:}" -m 0700 "${TLS_KEY_COPY_DIR}" 2>/dev/null \
-        && install -o "${TLS_KEY_OWNER%%:*}" -g "${TLS_KEY_OWNER##*:}" -m 0400 "${key}" "${copy}" 2>/dev/null; then
+    if install -d -o "${PUID}" -g "${PGID}" -m 0700 "${TLS_KEY_COPY_DIR}" \
+        && install -o "${PUID}" -g "${PGID}" -m 0400 "${key}" "${copy}"; then
         echo "TLS key ${key} is not readable by PUID:PGID=${PUID}:${PGID} (its group is the installer's); using a private copy" >&2
         TLS_KEY_PATH="${copy}"
         export TLS_KEY_PATH
