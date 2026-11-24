@@ -16,7 +16,6 @@
 	import JobMusicTracklist from '$lib/components/JobMusicTracklist.svelte';
 	import MusicSearch from '$lib/components/MusicSearch.svelte';
 	import EpisodeMatchPanel from '$lib/components/episodes/EpisodeMatchPanel.svelte';
-	import IdentifyDialog from '$lib/components/IdentifyDialog.svelte';
 	import ApplySessionDialog from '$lib/components/ApplySessionDialog.svelte';
 	import JobLifecycle from '$lib/components/JobLifecycle.svelte';
 	import { identitySuggestionOf } from '$lib/utils/job-review';
@@ -49,7 +48,6 @@
 	const matching = new EpisodeMatching();
 
 	// Dialog visibility + a transient note shown after a resolve/apply lands.
-	let showIdentify = $state(false);
 	let showApply = $state(false);
 	let actionNote = $state<string | null>(null);
 	let noteTimer: ReturnType<typeof setTimeout> | null = null;
@@ -63,7 +61,6 @@
 	}
 
 	function handleIdentified(resp: ResolveResponse) {
-		showIdentify = false;
 		jobDetail.load();
 		const note = identifyNote(resp);
 		if (note) flashNote(note);
@@ -197,7 +194,6 @@
 						{job}
 						{jobDetail}
 						onmediatypechanged={handleMediaTypeChanged}
-						onidentify={() => (showIdentify = true)}
 						onapply={() => (showApply = true)}
 						ondelete={() => goto('/')}
 					/>
@@ -206,12 +202,7 @@
 				<!-- A confident match identify held for confirmation (auto-apply off). -->
 				{#if identitySuggestionOf(job)}
 					<div class="job-detail-suggestion">
-						<IdentitySuggestionBanner
-							{job}
-							canAct={$isAdmin && jobDetail.canResolve}
-							onaccepted={handleIdentified}
-							onsearch={() => (showIdentify = true)}
-						/>
+						<IdentitySuggestionBanner {job} canAct={$isAdmin && jobDetail.canResolve} onaccepted={handleIdentified} />
 					</div>
 				{/if}
 
@@ -244,7 +235,7 @@
 				</div>
 
 				<!-- Panel toggle bar: poster override (manual poster_url_manual quick-edit).
-			     Disc identity now commits through the IdentifyDialog (resolve), not here. -->
+			     Disc identity is edited in place above and searched from these tabs. -->
 				<JobPanelTabs {job} {jobDetail} {panels} />
 
 				<!-- Active panel content -->
@@ -327,14 +318,6 @@
 			{/if}
 		</div>
 
-		{#if showIdentify}
-			<IdentifyDialog
-				{job}
-				driveNames={$dashboard.drive_names}
-				onclose={() => (showIdentify = false)}
-				onidentified={handleIdentified}
-			/>
-		{/if}
 		{#if showApply}
 			<ApplySessionDialog {job} onclose={() => (showApply = false)} onapplied={handleApplied} />
 		{/if}

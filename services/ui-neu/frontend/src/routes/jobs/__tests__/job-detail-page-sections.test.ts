@@ -388,14 +388,13 @@ describe('header', () => {
 		expect(screen.queryByTestId('media-type-text')).not.toBeInTheDocument();
 	});
 
-	it('labels the dialog button Edit identity on a CD that already has an identity', async () => {
-		loadJobPage(detailOf({ disc_type: 'cd' }));
-		expect(await screen.findByTestId('identify-open')).toHaveTextContent('Edit identity');
-	});
-
-	it('labels the dialog button Identify disc while the disc awaits an identity', async () => {
-		loadJobPage(detailOf({ status: 'awaiting_user_id' }));
-		expect(await screen.findByTestId('identify-open')).toHaveTextContent('Identify disc');
+	it.each([
+		['a CD that already has an identity', { disc_type: 'cd' }],
+		['a disc awaiting an identity', { status: 'awaiting_user_id' }]
+	] as const)('has no identify dialog button on %s', async (_label, job) => {
+		loadJobPage(detailOf(job));
+		await heading('Test Movie');
+		expect(screen.queryByTestId('identify-open')).not.toBeInTheDocument();
 	});
 
 	it('hides Apply session and Identify when the job cannot be applied or resolved', async () => {
@@ -422,14 +421,6 @@ describe('header', () => {
 		loadJobPage(detailOf({ title: null }));
 		expect(await screen.findByRole('heading', { name: 'Untitled' })).toBeInTheDocument();
 		expect(document.querySelector('.job-detail-breadcrumb-current')).toHaveTextContent('Untitled');
-	});
-
-	it('opens the identify dialog from the banner and closes it from the backdrop', async () => {
-		loadJobPage(heldDetail());
-		await fireEvent.click(await screen.findByRole('button', { name: 'Search instead' }));
-		expect(await screen.findByRole('dialog')).toBeInTheDocument();
-		await fireEvent.click(screen.getByRole('button', { name: 'Close dialog' }));
-		await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
 	});
 
 	it('closes the apply session dialog from its backdrop', async () => {

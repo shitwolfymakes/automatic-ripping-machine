@@ -10,13 +10,14 @@
 		job: JobView;
 		canAct: boolean;
 		onaccepted?: (resp: ResolveResponse) => void;
+		/** Hands off to a manual search; without it the banner offers none (the job page has its search panel). */
 		onsearch?: () => void;
 	}
 
 	let { job, canAct, onaccepted, onsearch }: Props = $props();
 
 	// A confident match identify held because the media type's auto-apply
-	// switch is off. Accept applies it; Search hands off to the manual search.
+	// switch is off. Accept applies it; Search, when offered, hands off to the manual search.
 	let suggestion = $derived(identitySuggestionOf(job));
 	// A CD matched by track layout where several releases fit: the backend
 	// ranked them, so this is the closest, but not the only, candidate.
@@ -58,7 +59,9 @@
 			</p>
 			{#if tocCandidateCount > 1}
 				<p class="identity-suggestion-source">
-					One of {tocCandidateCount} releases that fit this disc's track layout. Use Search instead to pick another.
+					One of {tocCandidateCount} releases that fit this disc's track layout. Use {onsearch
+						? 'Search instead'
+						: 'Match CD'} to pick another.
 				</p>
 			{/if}
 			<p class="identity-suggestion-source">from {providerLabel(suggestion.provider)}</p>
@@ -73,7 +76,9 @@
 						disabled={accepting || (acceptedSuggestion !== null && acceptedSuggestion === suggestion)}
 						onclick={accept}>Use this title</button
 					>
-					<button type="button" class="btn" onclick={() => onsearch?.()}>Search instead</button>
+					{#if onsearch}
+						<button type="button" class="btn" onclick={() => onsearch()}>Search instead</button>
+					{/if}
 				</div>
 			{/if}
 		</div>

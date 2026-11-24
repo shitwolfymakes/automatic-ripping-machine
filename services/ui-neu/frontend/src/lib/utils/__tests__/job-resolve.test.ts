@@ -2,12 +2,10 @@ import { describe, it, expect } from 'vitest';
 import {
 	buildResolveBody,
 	cdEditBody,
-	cdIdentifyBody,
 	musicReleaseBody,
 	titleMatchBody,
 	titleResolveBody,
-	tvSeasonOrDiscChanged,
-	videoIdentifyBody
+	tvSeasonOrDiscChanged
 } from '$lib/utils/job-resolve';
 
 const job = (over: Record<string, unknown> = {}) =>
@@ -46,54 +44,6 @@ describe('buildResolveBody', () => {
 			year: null,
 			season: null
 		});
-	});
-});
-
-describe('cdIdentifyBody', () => {
-	const cd = (over: Record<string, unknown> = {}) => ({
-		album: '  Album ',
-		artist: ' Artist  ',
-		year: 1999,
-		trackTitles: [' One ', 'Two  '],
-		...over
-	});
-
-	it('trims album, artist and each track title', () => {
-		expect(cdIdentifyBody(cd())).toEqual({
-			title: 'Album',
-			year: 1999,
-			music: { artist: 'Artist', album: 'Album', tracks: [{ title: 'One' }, { title: 'Two' }] }
-		});
-	});
-
-	it("keeps a blank track title as ''", () => {
-		expect(cdIdentifyBody(cd({ trackTitles: ['  '] })).music?.tracks).toEqual([{ title: '' }]);
-	});
-
-	it('sends a null year as null', () => {
-		expect(cdIdentifyBody(cd({ year: null })).year).toBeNull();
-	});
-
-	it('sends no tracks for an empty list', () => {
-		expect(cdIdentifyBody(cd({ trackTitles: [] })).music?.tracks).toEqual([]);
-	});
-});
-
-describe('videoIdentifyBody', () => {
-	it('trims the title', () => {
-		expect(videoIdentifyBody({ title: '  Movie ', year: null }).title).toBe('Movie');
-	});
-
-	it('sends a set year', () => {
-		expect(videoIdentifyBody({ title: 'Movie', year: 2001 })).toEqual({ title: 'Movie', year: 2001 });
-	});
-
-	it('sends a null year as null', () => {
-		expect(videoIdentifyBody({ title: 'Movie', year: null }).year).toBeNull();
-	});
-
-	it('has no music key', () => {
-		expect(videoIdentifyBody({ title: 'Movie', year: 2001 })).not.toHaveProperty('music');
 	});
 });
 

@@ -146,11 +146,12 @@ describe('Job Detail Page', () => {
 			expect(screen.getByRole('button', { name: 'Edit Year' })).toBeInTheDocument();
 		});
 
-		it('keeps Identify disc for a disc still waiting for an identity', async () => {
+		it('identifies a disc still waiting for an identity in place, with no dialog button', async () => {
 			const { fetchJob } = await import('$lib/api/jobs');
 			vi.mocked(fetchJob).mockResolvedValueOnce(buildDetail({ status: 'awaiting_user_id' }));
 			renderComponent(JobDetailPage);
-			await waitFor(() => expect(screen.getByTestId('identify-open')).toHaveTextContent('Identify disc'));
+			await waitFor(() => expect(screen.getByRole('button', { name: 'Edit Title' })).toBeInTheDocument());
+			expect(screen.queryByTestId('identify-open')).not.toBeInTheDocument();
 		});
 
 		it('shows Apply session for a ripped disc awaiting identification', async () => {
@@ -160,7 +161,7 @@ describe('Job Detail Page', () => {
 			await waitFor(() => expect(screen.getByTestId('apply-open')).toBeInTheDocument());
 		});
 
-		it('shows Apply session for a resolvable status, and Identify only while the identity is missing', async () => {
+		it('shows Apply session for a resolvable status, and no Identify button', async () => {
 			renderComponent(JobDetailPage);
 			await waitFor(() => expect(screen.getByTestId('apply-open')).toBeInTheDocument());
 			expect(screen.queryByTestId('identify-open')).not.toBeInTheDocument();
@@ -188,7 +189,7 @@ describe('Job Detail Page', () => {
 			auth.__setRole('admin');
 		});
 
-		it('hides Identify, Apply session, and Delete for guests', async () => {
+		it('hides Apply session and Delete for guests', async () => {
 			const auth = (await import('$lib/stores/auth')) as unknown as {
 				__setRole: (r: string | null) => void;
 			};
@@ -202,14 +203,14 @@ describe('Job Detail Page', () => {
 			expect(screen.queryByText('Delete')).not.toBeInTheDocument();
 		});
 
-		it('shows Identify (on a disc awaiting identity), Apply session, and Delete for admins', async () => {
+		it('shows Apply session and Delete for admins', async () => {
 			const { fetchJob } = await import('$lib/api/jobs');
 			vi.mocked(fetchJob).mockResolvedValueOnce(buildDetail({ status: 'ripped_awaiting_identify' }));
 			renderComponent(JobDetailPage);
 			await waitFor(() => {
-				expect(screen.getByTestId('identify-open')).toBeInTheDocument();
+				expect(screen.getByTestId('apply-open')).toBeInTheDocument();
 			});
-			expect(screen.getByTestId('apply-open')).toBeInTheDocument();
+			expect(screen.queryByTestId('identify-open')).not.toBeInTheDocument();
 			expect(screen.getByText('Delete')).toBeInTheDocument();
 		});
 	});
