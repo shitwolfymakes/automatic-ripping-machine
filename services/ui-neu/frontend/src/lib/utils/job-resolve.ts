@@ -3,7 +3,7 @@
 // apply, the title search's apply, and whether a fact edit re-runs the episode
 // match. Pure, so each rule is tested without the page or the dialog.
 import type { MatchProvider, resolveJob } from '$lib/api/jobs';
-import type { ExternalIds, JobView, MetadataCandidate, MetadataReleaseTrack } from '$lib/types/api.gen';
+import type { ExternalIds, JobView, MetadataCandidate, MetadataReleaseTrack, MusicTrackMeta } from '$lib/types/api.gen';
 import type { EditableJobField } from '$lib/utils/job-fields';
 
 export type ResolveBody = Parameters<typeof resolveJob>[1];
@@ -30,6 +30,50 @@ export function buildResolveBody(job: JobView, field: EditableJobField | 'title'
 	};
 	if (field !== 'title' && field !== 'year') body[field] = num(raw);
 	return body;
+}
+
+/** One CD field edited in place: the artist, the album, or a track's title (1-based `index`). */
+export type CdEdit = { field: 'artist' } | { field: 'album' } | { field: 'track'; index: number };
+
+const asText = (v: unknown) => (typeof v === 'string' ? v : '');
+
+function storedMusic(job: JobView): { artist: string; album: string; tracks: MusicTrackMeta[] } {
+	const raw = (job.metadata_json as { music?: unknown } | null | undefined)?.music;
+	const music = raw && typeof raw === 'object' && !Array.isArray(raw) ? (raw as Record<string, unknown>) : {};
+	const tracks = Array.isArray(music.tracks)
+		? music.tracks.map((t) => {
+				const entry = t && typeof t === 'object' ? (t as Record<string, unknown>) : {};
+				return { ...entry, title: asText(entry.title) } as MusicTrackMeta;
+			})
+		: [];
+	return { artist: asText(music.artist), album: asText(music.album), tracks };
+}
+
+/**
+ * The resolve body for one CD field edited in place. The backend replaces the
+ * whole `music` block, so this restates the stored artist, album and every
+ * track (each keeping its other keys) with the one trimmed change, padding the
+ * track list with blank titles up to the scan's track count and the edited
+ * track. The album is the title; a blank album throws before anything is sent.
+ */
+export function cdEditBody(job: JobView, edit: CdEdit, raw: string, trackCount: number): ResolveBody {
+	const music = storedMusic(job);
+	const value = raw.trim();
+	const length = Math.max(music.tracks.length, trackCount, edit.field === 'track' ? edit.index : 0);
+	const tracks = Array.from({ length }, (_, i) => music.tracks[i] ?? { title: '' });
+	if (edit.field === 'album') {
+		if (!value) throw new Error('An album is required');
+		music.album = value;
+	} else if (edit.field === 'artist') {
+		music.artist = value;
+	} else {
+		tracks[edit.index - 1] = { ...tracks[edit.index - 1], title: value };
+	}
+	return {
+		title: music.album || (job.title ?? ''),
+		year: job.year ?? null,
+		music: { artist: music.artist, album: music.album, tracks }
+	};
 }
 
 /**
