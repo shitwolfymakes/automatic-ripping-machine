@@ -2,10 +2,12 @@
 # Plain-bash unit test for the entrypoint's private_tls_key(). No Docker, no
 # root: it sources the production entrypoint (ARM_ENTRYPOINT_SOURCE_ONLY) and
 # drives private_tls_key against temp files, substituting a stub for the
-# production `gosu arm test -r` (READ_TEST) and the current user for the copy's
-# owner (TLS_KEY_OWNER), since the test cannot chown to `arm`.
+# production `gosu arm test -r` (READ_TEST). PUID:PGID is the current user and
+# its primary group: a gid that already exists under a name other than `arm`,
+# which is the case where the entrypoint adopts the existing group (PGID=100
+# `users`) and no `arm` group exists.
 #
-# READ_TEST, TLS_KEY_OWNER, TLS_KEY_COPY_DIR and TLS_KEY_PATH are read by the
+# READ_TEST, PUID, PGID, TLS_KEY_COPY_DIR and TLS_KEY_PATH are read by the
 # sourced function, which the linter cannot see across the source boundary.
 # shellcheck disable=SC2034
 set -euo pipefail
@@ -14,10 +16,10 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ENTRYPOINT="${HERE}/docker-entrypoint.sh"
 
 READ_TEST=(test -r)
-TLS_KEY_OWNER="$(id -u):$(id -g)"
 export ARM_ENTRYPOINT_SOURCE_ONLY=1
 # shellcheck disable=SC1090
 source "${ENTRYPOINT}"
+PUID="$(id -u)"; PGID="$(id -g)"
 
 fail=0
 expect() {  # expect <label> <command...>: the command must succeed
@@ -54,6 +56,10 @@ expect "unreadable key: TLS_KEY_PATH points at the copy" test "${TLS_KEY_PATH}" 
 expect "unreadable key: the copy has the same bytes" cmp -s "${key}" "${copy}"
 expect "unreadable key: the copy is 0400" test "$(mode_of "${copy}")" = 400
 expect "unreadable key: its dir is 0700" test "$(mode_of "${work}/copy2")" = 700
+expect "unreadable key: the copy is owned by PUID:PGID" \
+    test "$(stat -c %u:%g "${copy}")" = "${PUID}:${PGID}"
+expect "unreadable key: its dir is owned by PUID:PGID" \
+    test "$(stat -c %u:%g "${work}/copy2")" = "${PUID}:${PGID}"
 expect "unreadable key: says why, naming the key and PUID:PGID" \
     grep -q "${key} is not readable by PUID:PGID=" "${work}/err2"
 
@@ -71,5 +77,6 @@ TLS_KEY_PATH="${key}"; TLS_KEY_COPY_DIR="${work}/locked/copy"
 private_tls_key 2>"${work}/err4"
 expect "failed copy: mounted path kept" test "${TLS_KEY_PATH}" = "${key}"
 expect "failed copy: warns" grep -q "^WARN: TLS key ${key}" "${work}/err4"
+expect "failed copy: the install error is logged" grep -q "^install: " "${work}/err4"
 
 exit "${fail}"
