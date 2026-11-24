@@ -19,6 +19,7 @@ Container exits when the run() coroutine returns.
 from __future__ import annotations
 
 import asyncio
+import functools
 import json
 import logging
 import os
@@ -175,20 +176,29 @@ async def _encode_audio(
     cover_path: Path | None,
 ) -> int:
     """Run the ffmpeg audio engine into an atomic output, tagged with `music_tags`
-    and the `cover_path` image, and return the size written."""
+    and the `cover_path` image, and return the size written.
+
+    A cover ffmpeg cannot embed is dropped: the encode reruns without it."""
     # The ripper's abcde stage produced .wav files; we re-encode to
     # `preset.container.value` (flac, mp3) here.
     target = preset.preset_ref or preset.container.value
     with atomic_output(final_output) as tmp:
-        return await transcode_audio(
+        encode = functools.partial(
+            transcode_audio,
             input_path=raw_input,
             output_path=tmp,
             preset_ref=target,
             duration_seconds=duration_seconds,
             progress_callback=progress_callback,
             tags=music_tags,
-            cover_path=cover_path,
         )
+        try:
+            return await encode(cover_path=cover_path)
+        except RuntimeError as exc:
+            if cover_path is None:
+                raise
+            logger.warning("encode with the cover art failed; encoding without it: %s", exc)
+        return await encode(cover_path=None)
 
 
 async def _encode(
