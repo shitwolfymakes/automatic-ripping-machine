@@ -61,12 +61,10 @@ def download_job_logs_zip(
 ) -> Response:
     """In-memory zip of every line tagged with `job_id`.
 
-    Source preference:
-      1. `/logs/jobs/{job_id}.log` — the per-job aggregated file written
-         by `LogTailer`. Single zip entry, named `<job_id>.log`.
-      2. Fallback (per-job file absent, e.g. jobs predating the tailer's
-         per-job append): walk `/logs/*.log` and write one entry per
-         service that contributed any matching lines.
+    Sourced from `/logs/jobs/{job_id}.log`, the per-job file written by
+    `LogTailer`, as a single entry named `<job_id>.log` and capped by the
+    per-entry line and byte limits. The zip has no entries when that file
+    is absent or empty.
     """
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
@@ -92,9 +90,9 @@ async def stream_job_logs(
 ) -> StreamingResponse:
     """NDJSON stream of every line tagged with `job_id`.
 
-    Reads `/logs/jobs/{job_id}.log` directly when present; otherwise
-    falls back to scanning `/logs/*.log` (alphabetical order; lines
-    within a file in append order; no cross-file resort — the consumer
-    can sort by `ts` if global ordering matters).
+    Reads `/logs/jobs/{job_id}.log`, the per-job file written by
+    `LogTailer`, in append order; the stream is empty when that file is
+    absent. `limit` caps the line count (server default when omitted,
+    clamped to the hard cap).
     """
     return StreamingResponse(job_log_lines(job_id, effective_cap(limit)), media_type="application/x-ndjson")
