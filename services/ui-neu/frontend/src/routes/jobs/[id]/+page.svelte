@@ -22,6 +22,7 @@
 	import { identitySuggestionOf } from '$lib/utils/job-review';
 	import { effectiveJobStatus, isPartialComplete } from '$lib/utils/job-status';
 	import IdentitySuggestionBanner from '$lib/components/IdentitySuggestionBanner.svelte';
+	import Glyph from '$lib/components/Glyph.svelte';
 	import { isLive } from '$lib/utils/job-status-groups';
 	import { applyNote, identifyNote } from '$lib/utils/job-action-notes';
 	import { fetchSessions } from '$lib/api/sessions';
@@ -211,6 +212,18 @@
 							onaccepted={handleIdentified}
 							onsearch={() => (showIdentify = true)}
 						/>
+					</div>
+				{/if}
+
+				<!-- A TV disc with no show id: its episodes can't be matched automatically. -->
+				{#if $isAdmin && jobDetail.canResolve && jobDetail.isVideoDisc && (job.looks_episodic || job.media_type === 'tv') && !job.has_series}
+					<div class="job-detail-suggestion">
+						<div class="alert alert-info" data-testid="no-show-id-note">
+							<p class="alert-title flex items-center gap-2"><Glyph name="info" />No show id yet</p>
+							<p class="alert-body">
+								Without a search result ARM has no show id, so episodes can't be matched automatically.
+							</p>
+						</div>
 					</div>
 				{/if}
 

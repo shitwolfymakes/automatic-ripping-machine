@@ -920,3 +920,49 @@ describe('Job detail page (v3)', () => {
 		});
 	});
 });
+
+describe('Job detail page: no show id note', () => {
+	const auth = authStore as unknown as { __setRole: (r: string | null) => void };
+
+	async function renderJob(job: Partial<Parameters<typeof createJob>[0]>, role = 'admin') {
+		auth.__setRole(role);
+		mockFetchJob.mockResolvedValue({
+			...createJobDetail({ tracks: [] }),
+			job: createJob({ id: 'job_42', status: 'ripped', title: 'Test Show', ...job })
+		});
+		renderComponent(Page);
+		await screen.findByRole('heading', { name: 'Test Show' });
+	}
+
+	afterEach(() => {
+		cleanup();
+		auth.__setRole('admin');
+		mockFetchJob.mockReset();
+	});
+
+	it('shows the note in an info alert on a TV disc with no show id', async () => {
+		await renderJob({ disc_type: 'dvd', media_type: 'tv', has_series: false });
+		const note = screen.getByTestId('no-show-id-note');
+		expect(note).toHaveClass('alert', 'alert-info');
+		expect(note).toHaveTextContent("Without a search result ARM has no show id, so episodes can't be matched");
+	});
+
+	it('shows the note on a movie job that looks episodic', async () => {
+		await renderJob({ disc_type: 'bluray', media_type: 'movie', looks_episodic: true, has_series: false });
+		expect(screen.getByTestId('no-show-id-note')).toBeInTheDocument();
+	});
+
+	it.each([
+		['a TV disc with a show id', { disc_type: 'dvd', media_type: 'tv', has_series: true }],
+		['a movie job', { disc_type: 'bluray', media_type: 'movie', looks_episodic: false }],
+		['a CD', { disc_type: 'cd', media_type: 'tv', has_series: false }]
+	] as const)('shows no note on %s', async (_label, job) => {
+		await renderJob(job);
+		expect(screen.queryByTestId('no-show-id-note')).not.toBeInTheDocument();
+	});
+
+	it('shows no note to a guest', async () => {
+		await renderJob({ disc_type: 'dvd', media_type: 'tv', has_series: false }, 'guest');
+		expect(screen.queryByTestId('no-show-id-note')).not.toBeInTheDocument();
+	});
+});
