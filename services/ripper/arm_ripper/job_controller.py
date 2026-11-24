@@ -180,7 +180,16 @@ class JobController:
         task = asyncio.create_task(run(), name=f"{what}:{job_id}")
         self._active_task = task
         self._active_job_id = job_id
+        task.add_done_callback(self._release_unstarted)
         return task
+
+    def _release_unstarted(self, task: asyncio.Task[None]) -> None:
+        """Release a pipeline task's claim when the task ends still holding it: an abandon that cancels the task
+        before its first step means `_claim` is never entered, so its `finally` never clears the claim. A task
+        that ran releases in `_claim`, and a newer pipeline's claim is left alone."""
+        if self._active_task is task:
+            self._active_task = None
+            self._active_job_id = None
 
     async def pickup(self, job: JobView, device_path: str) -> asyncio.Task[None] | None:
         """Re-acquire a rip-ready job from a heartbeat reprobe; returns the rip's task without waiting for it, or
