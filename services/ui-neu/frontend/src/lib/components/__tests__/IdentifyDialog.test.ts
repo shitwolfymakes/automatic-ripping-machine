@@ -39,6 +39,19 @@ describe('IdentifyDialog', () => {
 		vi.clearAllMocks();
 	});
 
+	it('keeps its close scrim under the panel, so a click in the panel reaches it', () => {
+		// A positioned box with z-index auto paints over an unpositioned sibling:
+		// with only the scrim positioned, it covered the panel and every click in
+		// the dialog closed it. jsdom neither hit-tests nor applies scoped styles,
+		// so check the panel carries the class that stacks it above the scrim.
+		renderComponent(IdentifyDialog, {
+			props: { job: createJob({ status: 'awaiting_user_id' }), onclose: vi.fn(), onidentified: vi.fn() }
+		});
+		const scrim = screen.getByRole('button', { name: 'Close dialog' });
+		expect(scrim.classList.contains('identify-dialog-backdrop')).toBe(true);
+		expect(screen.getByRole('dialog').classList.contains('identify-dialog-panel')).toBe(true);
+	});
+
 	describe('video job', () => {
 		it('renders title + year inputs and submits title/year with no music', async () => {
 			resolveJobMock.mockResolvedValue(makeResp());

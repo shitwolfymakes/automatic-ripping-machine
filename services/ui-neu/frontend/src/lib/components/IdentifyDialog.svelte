@@ -90,7 +90,13 @@
 <div class="modal">
 	<button type="button" class="identify-dialog-backdrop" aria-label="Close dialog" onclick={onclose}></button>
 
-	<div class="modal-panel" data-dialog role="dialog" aria-modal="true" aria-labelledby="identify-dialog-title">
+	<div
+		class="modal-panel identify-dialog-panel"
+		data-dialog
+		role="dialog"
+		aria-modal="true"
+		aria-labelledby="identify-dialog-title"
+	>
 		<h3 id="identify-dialog-title" class="modal-title">
 			{isEditMode ? 'Edit identity' : 'Identify this disc'}
 		</h3>
@@ -145,10 +151,17 @@
 </div>
 
 <style>
-	/* the backdrop click-catcher sits absolutely inside .modal (which already
-	   draws the fixed scrim + centering); it just needs to fill that box */
+	/* .modal already draws the fixed scrim and centres the panel. The close
+	   button only fills it to catch clicks. Both need a z-index: a positioned
+	   box with z-index auto paints over an unpositioned sibling, so the button
+	   would cover the panel and swallow every click in it. */
 	.identify-dialog-backdrop {
 		position: absolute;
 		inset: 0;
+		z-index: 0;
+	}
+	.identify-dialog-panel {
+		position: relative;
+		z-index: 1;
 	}
 </style>
