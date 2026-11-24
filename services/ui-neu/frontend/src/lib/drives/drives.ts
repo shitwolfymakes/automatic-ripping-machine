@@ -67,10 +67,9 @@ export function startRipBlockedReason(d: DriveView): string | null {
 	return MEDIA_BLOCK_REASONS[d.media_status ?? 'unknown'] ?? null;
 }
 
-/** How many of the four prescan override fields are set on the drive. */
+/** How many prescan override fields are set on the drive. */
 export function prescanOverrideCount(d: DriveView): number {
-	return [d.prescan_cache_mb, d.prescan_timeout, d.prescan_retries, d.disc_enum_timeout].filter((v) => v != null)
-		.length;
+	return [d.prescan_timeout].filter((v) => v != null).length;
 }
 
 export function serialLabel(d: DriveView): { text: string; warn: boolean } {

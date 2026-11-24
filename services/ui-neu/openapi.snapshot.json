@@ -10263,17 +10263,6 @@
             ],
             "title": "Uhd Capable"
           },
-          "prescan_cache_mb": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Prescan Cache Mb"
-          },
           "prescan_timeout": {
             "anyOf": [
               {
@@ -10284,6 +10273,17 @@
               }
             ],
             "title": "Prescan Timeout"
+          },
+          "prescan_cache_mb": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prescan Cache Mb"
           },
           "prescan_retries": {
             "anyOf": [
@@ -10696,17 +10696,6 @@
             ],
             "title": "Uhd Capable"
           },
-          "prescan_cache_mb": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Prescan Cache Mb"
-          },
           "prescan_timeout": {
             "anyOf": [
               {
@@ -10719,28 +10708,6 @@
               }
             ],
             "title": "Prescan Timeout"
-          },
-          "prescan_retries": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Prescan Retries"
-          },
-          "disc_enum_timeout": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Disc Enum Timeout"
           }
         },
         "additionalProperties": false,
@@ -10853,17 +10820,6 @@
             ],
             "title": "Uhd Capable"
           },
-          "prescan_cache_mb": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Prescan Cache Mb"
-          },
           "prescan_timeout": {
             "anyOf": [
               {
@@ -10874,28 +10830,6 @@
               }
             ],
             "title": "Prescan Timeout"
-          },
-          "prescan_retries": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Prescan Retries"
-          },
-          "disc_enum_timeout": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Disc Enum Timeout"
           },
           "created_at": {
             "anyOf": [
@@ -11070,10 +11004,7 @@
           "rip_speed",
           "drive_mode",
           "uhd_capable",
-          "prescan_cache_mb",
           "prescan_timeout",
-          "prescan_retries",
-          "disc_enum_timeout",
           "created_at",
           "updated_at",
           "lifecycle",

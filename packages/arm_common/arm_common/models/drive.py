@@ -97,8 +97,10 @@ class Drive(SQLModel, table=True):
     rip_speed: int | None = Field(default=None)
     drive_mode: DriveMode | None = Field(sa_column=enum_column(DriveMode, "drive_mode", nullable=True))
     uhd_capable: bool | None = Field(default=None)
-    prescan_cache_mb: int | None = Field(default=None)
     prescan_timeout: int | None = Field(default=None)
+    # Never read by the ripper and no longer in the API (#325); the columns
+    # stay until a migration drops them.
+    prescan_cache_mb: int | None = Field(default=None)
     prescan_retries: int | None = Field(default=None)
     disc_enum_timeout: int | None = Field(default=None)
     default_session_id: str | None = Field(

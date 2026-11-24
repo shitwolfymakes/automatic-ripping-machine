@@ -62,17 +62,12 @@ describe('DriveCard branches', () => {
 	});
 
 	describe('prescan settings', () => {
-		const FIELDS = [
-			{ label: /Pre-scan Cache/, key: 'prescan_cache_mb', min: 1, max: 1024 },
-			{ label: /Pre-scan Timeout/, key: 'prescan_timeout', min: 30, max: 3600 },
-			{ label: /Pre-scan Retries/, key: 'prescan_retries', min: 1, max: 10 },
-			{ label: /Enum Timeout/, key: 'disc_enum_timeout', min: 10, max: 600 }
-		] as const;
+		const FIELDS = [{ label: /Pre-scan Timeout/, key: 'prescan_timeout', min: 30, max: 3600 }] as const;
 
 		it('fills every prescan input from the drive while the panel is closed', async () => {
-			renderDrive({ prescan_cache_mb: 64, prescan_timeout: 600, prescan_retries: 3, disc_enum_timeout: 120 });
+			renderDrive({ prescan_timeout: 600 });
 			await openSettings();
-			expect(FIELDS.map((f) => input(f.label).value)).toEqual(['64', '600', '3', '120']);
+			expect(FIELDS.map((f) => input(f.label).value)).toEqual(['600']);
 		});
 
 		describe.each(FIELDS)('$key', ({ label, key, min, max }) => {
@@ -477,7 +472,7 @@ describe('DriveCard branches', () => {
 
 	describe('full card details', () => {
 		it('shows the speed chip and the prescan override count', () => {
-			renderDrive({ rip_speed: 4, disc_enum_timeout: 120 });
+			renderDrive({ rip_speed: 4, prescan_timeout: 600 });
 			expect(screen.getByText('4x speed')).toBeInTheDocument();
 			expect(screen.getByText('1 custom')).toBeInTheDocument();
 		});
@@ -485,16 +480,16 @@ describe('DriveCard branches', () => {
 		// The chips' intro is local to their own block, so it plays only when the
 		// chip appears while the chip row is already on screen.
 		it('reveals the speed chip when a polled update adds a speed', async () => {
-			const { rerender } = renderDrive({ prescan_retries: 3 });
+			const { rerender } = renderDrive({ prescan_timeout: 600 });
 			expect(screen.queryByText(/x speed/)).not.toBeInTheDocument();
-			await rerender({ drive: createDrive({ prescan_retries: 3, rip_speed: 4 }) });
+			await rerender({ drive: createDrive({ prescan_timeout: 600, rip_speed: 4 }) });
 			expect(await screen.findByText('4x speed')).toBeInTheDocument();
 		});
 
 		it('reveals the prescan chip when a polled update adds an override', async () => {
 			const { rerender } = renderDrive({ rip_speed: 4 });
 			expect(screen.queryByText(/custom/)).not.toBeInTheDocument();
-			await rerender({ drive: createDrive({ rip_speed: 4, prescan_cache_mb: 64 }) });
+			await rerender({ drive: createDrive({ rip_speed: 4, prescan_timeout: 600 }) });
 			expect(await screen.findByText('1 custom')).toBeInTheDocument();
 		});
 
@@ -525,7 +520,7 @@ describe('DriveCard branches', () => {
 		});
 
 		it('shows the prescan chip without a speed chip', () => {
-			renderDrive({ prescan_retries: 3 });
+			renderDrive({ prescan_timeout: 600 });
 			expect(screen.queryByText(/x speed/)).not.toBeInTheDocument();
 			expect(screen.getByText('1 custom')).toBeInTheDocument();
 		});

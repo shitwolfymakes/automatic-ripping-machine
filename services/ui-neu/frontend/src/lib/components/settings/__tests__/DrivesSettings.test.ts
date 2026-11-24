@@ -23,10 +23,7 @@ function drive(over: Partial<DriveView> = {}): DriveView {
 		rip_speed: null,
 		drive_mode: null,
 		uhd_capable: null,
-		prescan_cache_mb: null,
 		prescan_timeout: null,
-		prescan_retries: null,
-		disc_enum_timeout: null,
 		created_at: null,
 		updated_at: null,
 		lifecycle: 'enrolled',
@@ -203,31 +200,13 @@ describe('DrivesSettings', () => {
 		expect(screen.getByRole('combobox', { name: 'Rip mode' })).toHaveTextContent('Default (Manual)');
 	});
 
-	it('takes the prescan defaults from arm_config', async () => {
-		render({
-			drives: [mainDrive()],
-			settings: settingsData({
-				arm_config: {
-					PRESCAN_CACHE_MB: '64',
-					PRESCAN_RETRIES: '5',
-					DISC_ENUM_TIMEOUT: '120'
-				}
-			})
-		});
-		await fireEvent.click(screen.getByTitle('Drive settings'));
-		expect(screen.getByLabelText(/Pre-scan Cache/)).toHaveAttribute('placeholder', '64');
-		expect(screen.getByLabelText(/Pre-scan Timeout/)).toHaveAttribute('placeholder', '300');
-		expect(screen.getByLabelText(/Pre-scan Retries/)).toHaveAttribute('placeholder', '5');
-		expect(screen.getByLabelText(/Enum Timeout/)).toHaveAttribute('placeholder', '120');
-	});
-
-	it('falls back to the built-in prescan defaults when arm_config has no values', async () => {
+	it('offers only the scan timeout, the one prescan setting the ripper reads', async () => {
 		render({ drives: [mainDrive()] });
 		await fireEvent.click(screen.getByTitle('Drive settings'));
-		expect(screen.getByLabelText(/Pre-scan Cache/)).toHaveAttribute('placeholder', '1');
 		expect(screen.getByLabelText(/Pre-scan Timeout/)).toHaveAttribute('placeholder', '300');
-		expect(screen.getByLabelText(/Pre-scan Retries/)).toHaveAttribute('placeholder', '3');
-		expect(screen.getByLabelText(/Enum Timeout/)).toHaveAttribute('placeholder', '60');
+		expect(screen.queryByLabelText(/Pre-scan Cache/)).not.toBeInTheDocument();
+		expect(screen.queryByLabelText(/Pre-scan Retries/)).not.toBeInTheDocument();
+		expect(screen.queryByLabelText(/Enum Timeout/)).not.toBeInTheDocument();
 	});
 
 	it("takes the scan timeout placeholder from the backend's published default", async () => {
@@ -248,7 +227,6 @@ describe('DrivesSettings', () => {
 	it('falls back to the built-in defaults when settings carry no config at all', async () => {
 		render({ drives: [mainDrive()], settings: undefined as never });
 		await fireEvent.click(screen.getByTitle('Drive settings'));
-		expect(screen.getByLabelText(/Pre-scan Cache/)).toHaveAttribute('placeholder', '1');
 		expect(screen.getByRole('combobox', { name: 'Rip mode' })).toHaveTextContent('Default (Auto)');
 	});
 
