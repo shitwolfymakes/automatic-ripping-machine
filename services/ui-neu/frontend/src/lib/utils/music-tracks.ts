@@ -1,6 +1,8 @@
 export interface MusicTrackRow {
 	number: number;
 	title: string;
+	/** The stored title, '' when missing (`title` shows `Track N` then). */
+	rawTitle: string;
 	durationLabel: string;
 }
 
@@ -13,14 +15,24 @@ function msToLabel(ms: unknown): string {
 }
 
 // metadata_json is the typed JobMetadata bag; tracks live under music.tracks[].
-export function extractMusicTracks(metadata: Record<string, unknown> | null | undefined): MusicTrackRow[] {
+// Rows past the stored list, up to `minCount`, are blank (a CD's scanned
+// tracks that have no title yet).
+export function extractMusicTracks(
+	metadata: Record<string, unknown> | null | undefined,
+	minCount = 0
+): MusicTrackRow[] {
 	const music = metadata?.music;
-	if (!music || typeof music !== 'object' || Array.isArray(music)) return [];
-	const raw = (music as Record<string, unknown>).tracks;
-	if (!Array.isArray(raw)) return [];
-	return raw.map((t, i) => {
+	const isRecord = !!music && typeof music === 'object' && !Array.isArray(music);
+	const raw = isRecord ? (music as Record<string, unknown>).tracks : undefined;
+	const stored = Array.isArray(raw) ? raw : [];
+	const rows = stored.map((t, i) => {
 		const obj = (t ?? {}) as Record<string, unknown>;
-		const title = typeof obj.title === 'string' && obj.title.trim() ? obj.title : `Track ${i + 1}`;
-		return { number: i + 1, title, durationLabel: msToLabel(obj.length_ms) };
+		const rawTitle = typeof obj.title === 'string' ? obj.title : '';
+		const title = rawTitle.trim() ? rawTitle : `Track ${i + 1}`;
+		return { number: i + 1, title, rawTitle, durationLabel: msToLabel(obj.length_ms) };
 	});
+	for (let n = rows.length + 1; n <= minCount; n++) {
+		rows.push({ number: n, title: `Track ${n}`, rawTitle: '', durationLabel: '-' });
+	}
+	return rows;
 }

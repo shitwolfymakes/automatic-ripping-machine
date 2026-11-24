@@ -6,7 +6,7 @@ import { ApiError } from '$lib/api/client';
 import type { JobDetailView, NamingPreviewItem } from '$lib/types/api.gen';
 import type { EditableJobField } from '$lib/utils/job-fields';
 import { readJobMetadata } from '$lib/utils/job-metadata';
-import { buildResolveBody, tvSeasonOrDiscChanged } from '$lib/utils/job-resolve';
+import { buildResolveBody, cdEditBody, tvSeasonOrDiscChanged, type CdEdit } from '$lib/utils/job-resolve';
 import { isPostRipStatus } from '$lib/utils/job-status-groups';
 import { extractMusicTracks } from '$lib/utils/music-tracks';
 import { handSetTrackCount, isSeriesTrackList } from '$lib/utils/track-fields';
@@ -36,7 +36,14 @@ export class JobDetail {
 	canApply = $derived(!!this.detail && this.detail.job.actions.can_apply);
 	isVideoDisc = $derived(this.detail?.job.disc_type === 'dvd' || this.detail?.job.disc_type === 'bluray');
 	isCdDisc = $derived(this.detail?.job.disc_type === 'cd');
-	musicTracks = $derived(this.detail ? extractMusicTracks(this.detail.job.metadata_json) : []);
+	// A CD's scanned track count, so its track list has a row per track even
+	// before any title is stored (0 without a scan or a job).
+	cdTrackCount = $derived(this.detail ? (readJobMetadata(this.detail.job.metadata_json).titleCount ?? 0) : 0);
+	musicTracks = $derived(
+		this.detail
+			? extractMusicTracks(this.detail.job.metadata_json, this.detail.job.disc_type === 'cd' ? this.cdTrackCount : 0)
+			: []
+	);
 	tracksAreSeries = $derived(isSeriesTrackList(this.detail?.tracks ?? [], this.detail?.job.media_type));
 	handSetCount = $derived(handSetTrackCount(this.detail?.tracks ?? []));
 	// The loaded job's rip has finished (false until a job is loaded).
@@ -67,10 +74,24 @@ export class JobDetail {
 	saveFact = async (field: EditableJobField | 'title', raw: string): Promise<boolean> => {
 		if (!this.detail) return false;
 		const job = this.detail.job;
+		// A CD's title is its album, kept in step with the music details.
+		if (field === 'title' && job.disc_type === 'cd') {
+			await this.saveCdField({ field: 'album' }, raw);
+			return false;
+		}
 		const body = buildResolveBody(job, field, raw);
 		const resp = await resolveJob(job.id, body);
 		await this.load();
 		return tvSeasonOrDiscChanged(job, resp?.job);
+	};
+
+	// A CD's artist, album or track title edited in place goes through resolve
+	// with the stored music details restated around the one change.
+	saveCdField = async (edit: CdEdit, raw: string): Promise<void> => {
+		if (!this.detail) return;
+		const job = this.detail.job;
+		await resolveJob(job.id, cdEditBody(job, edit, raw, this.cdTrackCount));
+		await this.load();
 	};
 
 	#loadPreview = async (id: string, poll: boolean): Promise<void> => {

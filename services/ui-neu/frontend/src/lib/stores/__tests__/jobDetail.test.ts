@@ -11,7 +11,7 @@ vi.mock('$app/navigation', () => ({ goto: vi.fn() }));
 
 import { goto } from '$app/navigation';
 import { fetchJob, fetchNamingPreview, resolveJob, updateTrack } from '$lib/api/jobs';
-import { buildResolveBody } from '$lib/utils/job-resolve';
+import { buildResolveBody, cdEditBody } from '$lib/utils/job-resolve';
 import { ApiError } from '$lib/api/client';
 import { createJob, createTrack, createJobDetail } from '$lib/components/__fixtures__/job';
 import { JobDetail } from '../jobDetail.svelte';
@@ -329,5 +329,36 @@ describe('JobDetail saveFact', () => {
 		expect(await d.saveFact('title', 'Dune')).toBe(false);
 		expect(mockResolve).toHaveBeenCalledWith('job_1', buildResolveBody(job, 'title', 'Dune'));
 		expect(mockFetchJob).toHaveBeenCalledTimes(1);
+	});
+});
+
+describe('JobDetail CD fields', () => {
+	const cdMeta = {
+		music: { artist: 'Lali', album: 'Two Windows', tracks: [{ title: 'A' }] },
+		scan_result: { titles: [{}, {}, {}] }
+	};
+
+	it('pads the music tracks to the scan count on a CD', () => {
+		const d = detailWith({ disc_type: 'cd', metadata_json: cdMeta as never });
+		expect(d.cdTrackCount).toBe(3);
+		expect(d.musicTracks).toHaveLength(3);
+	});
+
+	it('saveCdField sends the CD edit body and reloads the job', async () => {
+		const d = detailWith({ id: 'job_1', disc_type: 'cd', metadata_json: cdMeta as never });
+		const job = d.detail!.job;
+		mockResolve.mockResolvedValue({ job } as never);
+		await d.saveCdField({ field: 'track', index: 2 }, 'Two');
+		expect(mockResolve).toHaveBeenCalledWith('job_1', cdEditBody(job, { field: 'track', index: 2 }, 'Two', 3));
+		expect(mockFetchJob).toHaveBeenCalledTimes(1);
+	});
+
+	it('a title edit on a CD saves it as the album', async () => {
+		const d = detailWith({ id: 'job_1', disc_type: 'cd', metadata_json: cdMeta as never });
+		mockResolve.mockResolvedValue({ job: d.detail!.job } as never);
+		expect(await d.saveFact('title', 'New')).toBe(false);
+		const body = mockResolve.mock.calls[0][1];
+		expect(body.title).toBe('New');
+		expect(body.music?.album).toBe('New');
 	});
 });
