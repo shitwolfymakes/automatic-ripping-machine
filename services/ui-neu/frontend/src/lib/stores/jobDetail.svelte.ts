@@ -86,12 +86,19 @@ export class JobDetail {
 	};
 
 	// A CD's artist, album or track title edited in place goes through resolve
-	// with the stored music details restated around the one change.
-	saveCdField = async (edit: CdEdit, raw: string): Promise<void> => {
-		if (!this.detail) return;
-		const job = this.detail.job;
-		await resolveJob(job.id, cdEditBody(job, edit, raw, this.cdTrackCount));
-		await this.load();
+	// with the stored music details restated around the one change. Saves run
+	// one after another, each built from the job the previous one reloaded, so
+	// a quick second edit cannot restate the first field's old value.
+	#cdSaves: Promise<void> = Promise.resolve();
+	saveCdField = (edit: CdEdit, raw: string): Promise<void> => {
+		const run = this.#cdSaves.then(async () => {
+			if (!this.detail) return;
+			const job = this.detail.job;
+			await resolveJob(job.id, cdEditBody(job, edit, raw, this.cdTrackCount));
+			await this.load();
+		});
+		this.#cdSaves = run.catch(() => {});
+		return run;
 	};
 
 	#loadPreview = async (id: string, poll: boolean): Promise<void> => {

@@ -301,13 +301,19 @@ describe('cdEditBody', () => {
 		expect(cdEditBody(job1, { field: 'artist' }, 'X', 3).music?.tracks).toHaveLength(3);
 	});
 
-	it('an unidentified CD with no music still makes a valid body', () => {
+	it('an artist or track edit needs the album first, so a save never identifies a CD without one', () => {
 		const bare = cdJob(null, { title: 'DISC_LABEL', year: null });
-		expect(cdEditBody(bare, { field: 'track', index: 2 }, 'Two', 2)).toEqual({
-			title: 'DISC_LABEL',
+		expect(() => cdEditBody(bare, { field: 'track', index: 2 }, 'Two', 2)).toThrow('Set the album first');
+		expect(() => cdEditBody(bare, { field: 'artist' }, 'Lali Puna', 2)).toThrow('Set the album first');
+	});
+
+	it('an unidentified CD with no music still makes a valid body once the album is typed', () => {
+		const bare = cdJob(null, { title: 'DISC_LABEL', year: null });
+		expect(cdEditBody(bare, { field: 'album' }, 'Two Windows', 2)).toEqual({
+			title: 'Two Windows',
 			year: null,
-			music: { artist: '', album: '', tracks: [{ title: '' }, { title: 'Two' }] }
+			music: { artist: '', album: 'Two Windows', tracks: [{ title: '' }, { title: '' }] }
 		});
-		expect(cdEditBody(cdJob({ tracks: 'bad' }), { field: 'artist' }, 'Z', 2).music?.tracks).toHaveLength(2);
+		expect(cdEditBody(cdJob({ album: 'X', tracks: 'bad' }), { field: 'artist' }, 'Z', 2).music?.tracks).toHaveLength(2);
 	});
 });
