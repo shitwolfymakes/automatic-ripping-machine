@@ -3589,8 +3589,10 @@
                   "type": "null"
                 }
               ],
+              "description": "Only the presets that fit a session of this media type: a movie or TV preset fits either, every other type only its own.",
               "title": "Media Type"
-            }
+            },
+            "description": "Only the presets that fit a session of this media type: a movie or TV preset fits either, every other type only its own."
           }
         ],
         "responses": {

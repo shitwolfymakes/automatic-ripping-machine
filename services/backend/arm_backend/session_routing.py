@@ -19,6 +19,7 @@ from arm_common import (
     SessionApplicationStatus,
     SessionRoute,
 )
+from arm_common.enums import VIDEO_MEDIA_TYPES
 from arm_common.schemas.job_metadata import flag_is_set
 
 logger = logging.getLogger("arm_backend.session_routing")
@@ -37,10 +38,9 @@ def media_types_compatible(job_mt: MediaType, sess_mt: MediaType) -> bool:
     """
     if job_mt == sess_mt:
         return True
-    video = {MediaType.MOVIE, MediaType.TV}
-    if sess_mt in video and job_mt in video:
+    if sess_mt in VIDEO_MEDIA_TYPES and job_mt in VIDEO_MEDIA_TYPES:
         return True
-    if sess_mt in (MediaType.ISO, MediaType.DATA) and job_mt in video | {MediaType.DATA}:
+    if sess_mt in (MediaType.ISO, MediaType.DATA) and job_mt in VIDEO_MEDIA_TYPES | {MediaType.DATA}:
         return True
     return False
 
