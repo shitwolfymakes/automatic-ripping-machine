@@ -1,12 +1,11 @@
 import { describe, it, expect } from 'vitest';
 import {
 	buildResolveBody,
-	cdIdentifyBody,
+	cdEditBody,
 	musicReleaseBody,
 	titleMatchBody,
 	titleResolveBody,
-	tvSeasonOrDiscChanged,
-	videoIdentifyBody
+	tvSeasonOrDiscChanged
 } from '$lib/jobs/resolve';
 
 const job = (over: Record<string, unknown> = {}) =>
@@ -45,54 +44,6 @@ describe('buildResolveBody', () => {
 			year: null,
 			season: null
 		});
-	});
-});
-
-describe('cdIdentifyBody', () => {
-	const cd = (over: Record<string, unknown> = {}) => ({
-		album: '  Album ',
-		artist: ' Artist  ',
-		year: 1999,
-		trackTitles: [' One ', 'Two  '],
-		...over
-	});
-
-	it('trims album, artist and each track title', () => {
-		expect(cdIdentifyBody(cd())).toEqual({
-			title: 'Album',
-			year: 1999,
-			music: { artist: 'Artist', album: 'Album', tracks: [{ title: 'One' }, { title: 'Two' }] }
-		});
-	});
-
-	it("keeps a blank track title as ''", () => {
-		expect(cdIdentifyBody(cd({ trackTitles: ['  '] })).music?.tracks).toEqual([{ title: '' }]);
-	});
-
-	it('sends a null year as null', () => {
-		expect(cdIdentifyBody(cd({ year: null })).year).toBeNull();
-	});
-
-	it('sends no tracks for an empty list', () => {
-		expect(cdIdentifyBody(cd({ trackTitles: [] })).music?.tracks).toEqual([]);
-	});
-});
-
-describe('videoIdentifyBody', () => {
-	it('trims the title', () => {
-		expect(videoIdentifyBody({ title: '  Movie ', year: null }).title).toBe('Movie');
-	});
-
-	it('sends a set year', () => {
-		expect(videoIdentifyBody({ title: 'Movie', year: 2001 })).toEqual({ title: 'Movie', year: 2001 });
-	});
-
-	it('sends a null year as null', () => {
-		expect(videoIdentifyBody({ title: 'Movie', year: null }).year).toBeNull();
-	});
-
-	it('has no music key', () => {
-		expect(videoIdentifyBody({ title: 'Movie', year: 2001 })).not.toHaveProperty('music');
 	});
 });
 
@@ -292,5 +243,77 @@ describe('titleResolveBody', () => {
 		[false, 'movie']
 	])('sends the media type for isSeries %s as %s', (isSeries, want) => {
 		expect(titleResolveBody(values({ isSeries })).media_type).toBe(want);
+	});
+});
+
+describe('cdEditBody', () => {
+	const cdJob = (music: unknown, over: Record<string, unknown> = {}) =>
+		({ id: 'c1', title: 'Two Windows', year: 2017, disc_type: 'cd', metadata_json: { music }, ...over }) as any;
+	const stored = {
+		artist: 'Lali',
+		album: 'Two Windows',
+		tracks: [
+			{ title: 'A', position: 1, length_ms: 1000 },
+			{ title: 'B', position: 2 }
+		]
+	};
+
+	it('edits the artist and restates album, title, year and every stored track', () => {
+		expect(cdEditBody(cdJob(stored), { field: 'artist' }, '  Lali Puna ', 0)).toEqual({
+			title: 'Two Windows',
+			year: 2017,
+			music: {
+				artist: 'Lali Puna',
+				album: 'Two Windows',
+				tracks: [
+					{ title: 'A', position: 1, length_ms: 1000 },
+					{ title: 'B', position: 2 }
+				]
+			}
+		});
+	});
+
+	it('an album edit becomes the title', () => {
+		const body = cdEditBody(cdJob(stored), { field: 'album' }, ' New ', 0);
+		expect(body.title).toBe('New');
+		expect(body.music?.album).toBe('New');
+	});
+
+	it('a blank album throws before anything is sent', () => {
+		expect(() => cdEditBody(cdJob(stored), { field: 'album' }, '  ', 0)).toThrow('An album is required');
+	});
+
+	it("a track edit changes only that title and keeps the entry's other keys", () => {
+		const tracks = cdEditBody(cdJob(stored), { field: 'track', index: 1 }, ' Birds ', 0).music?.tracks;
+		expect(tracks?.[0]).toEqual({ title: 'Birds', position: 1, length_ms: 1000 });
+		expect(tracks?.[1]).toEqual({ title: 'B', position: 2 });
+	});
+
+	it('pads to the scan count and to the edited track', () => {
+		const job1 = cdJob({ artist: 'X', album: 'Y', tracks: [{ title: 'A' }] });
+		expect(cdEditBody(job1, { field: 'track', index: 5 }, 'E', 3).music?.tracks).toEqual([
+			{ title: 'A' },
+			{ title: '' },
+			{ title: '' },
+			{ title: '' },
+			{ title: 'E' }
+		]);
+		expect(cdEditBody(job1, { field: 'artist' }, 'X', 3).music?.tracks).toHaveLength(3);
+	});
+
+	it('an artist or track edit needs the album first, so a save never identifies a CD without one', () => {
+		const bare = cdJob(null, { title: 'DISC_LABEL', year: null });
+		expect(() => cdEditBody(bare, { field: 'track', index: 2 }, 'Two', 2)).toThrow('Set the album first');
+		expect(() => cdEditBody(bare, { field: 'artist' }, 'Lali Puna', 2)).toThrow('Set the album first');
+	});
+
+	it('an unidentified CD with no music still makes a valid body once the album is typed', () => {
+		const bare = cdJob(null, { title: 'DISC_LABEL', year: null });
+		expect(cdEditBody(bare, { field: 'album' }, 'Two Windows', 2)).toEqual({
+			title: 'Two Windows',
+			year: null,
+			music: { artist: '', album: 'Two Windows', tracks: [{ title: '' }, { title: '' }] }
+		});
+		expect(cdEditBody(cdJob({ album: 'X', tracks: 'bad' }), { field: 'artist' }, 'Z', 2).music?.tracks).toHaveLength(2);
 	});
 });

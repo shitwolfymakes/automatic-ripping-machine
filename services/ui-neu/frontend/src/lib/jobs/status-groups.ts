@@ -51,7 +51,7 @@ const AWAITING_IDENTITY: Record<JobStatus, boolean> = {
 	failed: false
 };
 
-/** Identification failed and the operator must supply it ("Identify disc" vs "Edit identity"). */
+/** Identification failed and the operator must supply it. */
 export function isAwaitingIdentity(status: string): boolean {
 	return AWAITING_IDENTITY[status as JobStatus] === true;
 }

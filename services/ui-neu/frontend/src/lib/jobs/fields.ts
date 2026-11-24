@@ -18,6 +18,8 @@ export interface MetadataField {
 	empty?: boolean;
 	/** The job field an admin edits in place in this cell. */
 	edit?: EditableJobField;
+	/** The CD music field an admin edits in place in this cell, as text. */
+	textEdit?: 'artist' | 'album';
 	/** The raw value the editor starts from ('' when unset); `value` stays the display form. */
 	raw?: string;
 }
@@ -129,11 +131,17 @@ function metadataJsonFields(job: JobView, tv: boolean): MetadataField[] {
 			raw: job.season != null ? String(job.season) : ''
 		});
 	}
-	if (md.artist) {
-		fields.push({ label: 'Artist', value: md.artist });
-	}
-	if (md.album) {
-		fields.push({ label: 'Album', value: md.album });
+	if (job.disc_type === 'cd') {
+		// A CD always offers its artist and album, set in place.
+		fields.push({ label: 'Artist', value: md.artist || '-', textEdit: 'artist', raw: md.artist ?? '' });
+		fields.push({ label: 'Album', value: md.album || '-', textEdit: 'album', raw: md.album ?? '' });
+	} else {
+		if (md.artist) {
+			fields.push({ label: 'Artist', value: md.artist });
+		}
+		if (md.album) {
+			fields.push({ label: 'Album', value: md.album });
+		}
 	}
 	// Scanned-title count: only when the base "Tracks" cell (rip_progress) is absent.
 	if (!job.rip_progress && md.titleCount != null) {

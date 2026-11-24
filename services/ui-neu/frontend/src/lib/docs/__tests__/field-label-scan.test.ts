@@ -19,8 +19,6 @@ const TASK_FORMS: Record<string, string> = {
 	'/src/routes/login/+page.svelte': 'login: signing in, not a setting',
 	'/src/lib/components/jobs/JobInfoForm.svelte': "job dialog: edits one job's title, year and disc numbers",
 	'/src/lib/components/jobs/ApplySessionDialog.svelte': 'job dialog: picks a session for one job',
-	'/src/lib/components/jobs/identify/IdentifyCdForm.svelte': 'identify dialog: names one audio CD',
-	'/src/lib/components/jobs/identify/IdentifyVideoForm.svelte': 'identify dialog: names one video disc',
 	'/src/lib/components/match/TitleSearch.svelte': 'match dialog: searches a title for one job',
 	'/src/lib/components/match/TrackTitleSearch.svelte': 'match dialog: searches a title for one track',
 	'/src/lib/components/match/track-title-search/TrackOutputOptions.svelte': "match dialog: one track's output name",

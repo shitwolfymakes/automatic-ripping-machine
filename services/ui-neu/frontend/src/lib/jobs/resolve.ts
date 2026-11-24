@@ -1,9 +1,9 @@
-// The resolve request bodies the UI sends, for the job page's in-place fact
-// edit, the identify dialog's manual entry and the music search's release
-// apply, the title search's apply, and whether a fact edit re-runs the episode
-// match. Pure, so each rule is tested without the page or the dialog.
+// The resolve request bodies the UI sends: the job page's in-place fact and
+// CD field edits, the music search's release apply, the title search's apply,
+// and whether a fact edit re-runs the episode match. Pure, so each rule is
+// tested without the page.
 import type { MatchProvider, resolveJob } from '$lib/api/jobs';
-import type { ExternalIds, JobView, MetadataCandidate, MetadataReleaseTrack } from '$lib/types/api.gen';
+import type { ExternalIds, JobView, MetadataCandidate, MetadataReleaseTrack, MusicTrackMeta } from '$lib/types/api.gen';
 import type { EditableJobField } from '$lib/jobs/fields';
 
 export type ResolveBody = Parameters<typeof resolveJob>[1];
@@ -32,33 +32,52 @@ export function buildResolveBody(job: JobView, field: EditableJobField | 'title'
 	return body;
 }
 
-/**
- * The identify dialog's resolve body for a CD: the trimmed album as the title,
- * and `music` holding the trimmed artist, album and one track per title.
- */
-export function cdIdentifyBody(f: {
-	album: string;
-	artist: string;
-	year: number | null;
-	trackTitles: string[];
-}): ResolveBody {
-	return {
-		title: f.album.trim(),
-		year: f.year ?? null,
-		music: {
-			artist: f.artist.trim(),
-			album: f.album.trim(),
-			tracks: f.trackTitles.map((t) => ({ title: t.trim() }))
-		}
-	};
+/** One CD field edited in place: the artist, the album, or a track's title (1-based `index`). */
+export type CdEdit = { field: 'artist' } | { field: 'album' } | { field: 'track'; index: number };
+
+const asText = (v: unknown) => (typeof v === 'string' ? v : '');
+
+function storedMusic(job: JobView): { artist: string; album: string; tracks: MusicTrackMeta[] } {
+	const raw = (job.metadata_json as { music?: unknown } | null | undefined)?.music;
+	const music = raw && typeof raw === 'object' && !Array.isArray(raw) ? (raw as Record<string, unknown>) : {};
+	const tracks = Array.isArray(music.tracks)
+		? music.tracks.map((t) => {
+				const entry = t && typeof t === 'object' ? (t as Record<string, unknown>) : {};
+				return { ...entry, title: asText(entry.title) } as MusicTrackMeta;
+			})
+		: [];
+	return { artist: asText(music.artist), album: asText(music.album), tracks };
 }
 
 /**
- * The identify dialog's resolve body for anything but a CD: the trimmed title
- * and the year, with no `music` key.
+ * The resolve body for one CD field edited in place. The backend replaces the
+ * whole `music` block, so this restates the stored artist, album and every
+ * track (each keeping its other keys) with the one trimmed change, padding the
+ * track list with blank titles up to the scan's track count and the edited
+ * track. The album is the title. Every save identifies the job (and can start
+ * a parked session), so it always carries an album: a blank album, or an
+ * artist or track edit before any album is set, throws before anything is sent.
  */
-export function videoIdentifyBody(f: { title: string; year: number | null }): ResolveBody {
-	return { title: f.title.trim(), year: f.year ?? null };
+export function cdEditBody(job: JobView, edit: CdEdit, raw: string, trackCount: number): ResolveBody {
+	const music = storedMusic(job);
+	const value = raw.trim();
+	const length = Math.max(music.tracks.length, trackCount, edit.field === 'track' ? edit.index : 0);
+	const tracks = Array.from({ length }, (_, i) => music.tracks[i] ?? { title: '' });
+	if (edit.field === 'album') {
+		if (!value) throw new Error('An album is required');
+		music.album = value;
+	} else if (!music.album.trim()) {
+		throw new Error('Set the album first');
+	} else if (edit.field === 'artist') {
+		music.artist = value;
+	} else {
+		tracks[edit.index - 1] = { ...tracks[edit.index - 1], title: value };
+	}
+	return {
+		title: music.album,
+		year: job.year ?? null,
+		music: { artist: music.artist, album: music.album, tracks }
+	};
 }
 
 /**

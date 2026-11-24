@@ -38,9 +38,9 @@ function heldJob(suggestion: Partial<typeof SUGGESTION> | null = {}): JobView {
 	});
 }
 
-function renderBanner(job: JobView, canAct = true) {
+function renderBanner(job: JobView, canAct = true, withSearch = true) {
 	const onaccepted = vi.fn();
-	const onsearch = vi.fn();
+	const onsearch = withSearch ? vi.fn() : undefined;
 	renderComponent(IdentitySuggestionBanner, { props: { job, canAct, onaccepted, onsearch } });
 	return { onaccepted, onsearch };
 }
@@ -56,6 +56,14 @@ describe('IdentitySuggestionBanner', () => {
 		renderBanner(heldJob({ kind: 'music', provider: 'musicbrainz', payload: { toc_candidates } }));
 		expect(
 			screen.getByText("One of 3 releases that fit this disc's track layout. Use Search instead to pick another.")
+		).toBeInTheDocument();
+	});
+
+	it('points at Match CD for several fits when the banner has no search of its own', () => {
+		const toc_candidates = [{ id: 'a' }, { id: 'b' }];
+		renderBanner(heldJob({ kind: 'music', provider: 'musicbrainz', payload: { toc_candidates } }), true, false);
+		expect(
+			screen.getByText("One of 2 releases that fit this disc's track layout. Use Match CD to pick another.")
 		).toBeInTheDocument();
 	});
 
@@ -129,6 +137,12 @@ describe('IdentitySuggestionBanner', () => {
 		await fireEvent.click(screen.getByRole('button', { name: 'Search instead' }));
 		expect(onsearch).toHaveBeenCalledTimes(1);
 		expect(mockAccept).not.toHaveBeenCalled();
+	});
+
+	it('offers no Search instead without onsearch (the job page has its own search panel)', () => {
+		renderBanner(heldJob(), true, false);
+		expect(screen.getByRole('button', { name: 'Use this title' })).toBeInTheDocument();
+		expect(screen.queryByRole('button', { name: 'Search instead' })).toBeNull();
 	});
 
 	it('a guest sees the banner text but no buttons', () => {

@@ -268,8 +268,8 @@ INSERT INTO jobs (id, drive_id, disc_type, title, year, status, metadata_json, r
  ('${J[3]}', '${DRV}', 'dvd',    NULL,                 NULL, 'awaiting_user_id', '{"seed":true}'::jsonb,                                              false, NULL, NULL, NULL,                    NULL,                    now()-interval '3 min',  NULL),
  ('${J[4]}', '${DRV}', 'bluray', 'Oppenheimer',        2023, 'ripped_partial',   '{"seed":true}'::jsonb,                                              false, NULL, NULL, now()-interval '3 hour', now()-interval '2 hour', now()-interval '3 hour', 'https://image.tmdb.org/t/p/w300/8Gxv8gSFCU0XGDykEGv7zR1n2ua.jpg'),
  ('${J[5]}', '${DRV}', 'dvd',    'Scratched Disc',     2010, 'failed',           '{"seed":true}'::jsonb,                                              false, NULL, NULL, now()-interval '1 day',  NULL,                    now()-interval '1 day',  NULL),
- ('${J[6]}', '${DRV}', 'cd',     'Abbey Road',         1969, 'ripped',           jsonb_build_object('seed',true,'artist','The Beatles','album','Abbey Road','tracks', '${ABBEY_TRACKS}'::jsonb), false, 1, 1, now()-interval '6 hour', now()-interval '5 hour', now()-interval '6 hour', 'https://coverartarchive.org/release/6bb3793b-f991-378e-9bff-0bd3117f2298/front'),
- ('${J[7]}', '${DRV}', 'cd',     'The Wall',           1979, 'awaiting_user_id', jsonb_build_object('seed',true,'artist','Pink Floyd','album','The Wall','tracks', '${WALL_TRACKS}'::jsonb),  false, 2, 2, NULL,                    NULL,                    now()-interval '20 min', NULL),
+ ('${J[6]}', '${DRV}', 'cd',     'Abbey Road',         1969, 'ripped',           jsonb_build_object('seed',true,'music',jsonb_build_object('artist','The Beatles','album','Abbey Road','tracks', '${ABBEY_TRACKS}'::jsonb)), false, 1, 1, now()-interval '6 hour', now()-interval '5 hour', now()-interval '6 hour', 'https://coverartarchive.org/release/6bb3793b-f991-378e-9bff-0bd3117f2298/front'),
+ ('${J[7]}', '${DRV}', 'cd',     'The Wall',           1979, 'awaiting_user_id', jsonb_build_object('seed',true,'music',jsonb_build_object('artist','Pink Floyd','album','The Wall','tracks', '${WALL_TRACKS}'::jsonb)),  false, 2, 2, NULL,                    NULL,                    now()-interval '20 min', NULL),
  ('${J[8]}', '${DRV}', 'dvd',    'Cult Double Feature', NULL, 'ripped',          jsonb_build_object('seed',true,'multi_title',true),                  false, NULL, NULL, now()-interval '4 hour', now()-interval '3 hour', now()-interval '4 hour', NULL);
 
 -- Video tracks for The Matrix (J1): main feature + special feature (excluded + custom filename) + a FAILED audio track with last_error.
@@ -292,23 +292,23 @@ INSERT INTO tracks (id, job_id, kind, index, source_ref, label, status, attempts
 -- "match track count" search filter finds the real 17-track Abbey Road release (a
 -- 2-track stub matched 2-track singles instead). Durations mirror ABBEY_TRACKS.
 INSERT INTO tracks (id, job_id, kind, index, source_ref, label, status, attempts, duration_seconds, expected_duration_seconds, output_path) VALUES
- ('${T[6]}',  '${J[6]}', 'audio_track', 0,  '1',  'Come Together',                            'done', 1, 259, 259, '/media/music/The Beatles/Abbey Road/01 Come Together.flac'),
- ('${T[7]}',  '${J[6]}', 'audio_track', 1,  '2',  'Something',                                'done', 1, 182, 182, '/media/music/The Beatles/Abbey Road/02 Something.flac'),
- ('${T[11]}', '${J[6]}', 'audio_track', 2,  '3',  'Maxwell s Silver Hammer',                  'done', 1, 208, 208, '/media/music/The Beatles/Abbey Road/03 Maxwell s Silver Hammer.flac'),
- ('${T[12]}', '${J[6]}', 'audio_track', 3,  '4',  'Oh! Darling',                              'done', 1, 207, 207, '/media/music/The Beatles/Abbey Road/04 Oh! Darling.flac'),
- ('${T[13]}', '${J[6]}', 'audio_track', 4,  '5',  'Octopus s Garden',                         'done', 1, 171, 171, '/media/music/The Beatles/Abbey Road/05 Octopus s Garden.flac'),
- ('${T[14]}', '${J[6]}', 'audio_track', 5,  '6',  'I Want You (She s So Heavy)',              'done', 1, 467, 467, '/media/music/The Beatles/Abbey Road/06 I Want You.flac'),
- ('${T[15]}', '${J[6]}', 'audio_track', 6,  '7',  'Here Comes the Sun',                       'done', 1, 186, 186, '/media/music/The Beatles/Abbey Road/07 Here Comes the Sun.flac'),
- ('${T[16]}', '${J[6]}', 'audio_track', 7,  '8',  'Because',                                  'done', 1, 166, 166, '/media/music/The Beatles/Abbey Road/08 Because.flac'),
- ('${T[17]}', '${J[6]}', 'audio_track', 8,  '9',  'You Never Give Me Your Money',             'done', 1, 242, 242, '/media/music/The Beatles/Abbey Road/09 You Never Give Me Your Money.flac'),
- ('${T[18]}', '${J[6]}', 'audio_track', 9,  '10', 'Sun King',                                 'done', 1, 146, 146, '/media/music/The Beatles/Abbey Road/10 Sun King.flac'),
- ('${T[19]}', '${J[6]}', 'audio_track', 10, '11', 'Mean Mr. Mustard',                         'done', 1, 66,  66,  '/media/music/The Beatles/Abbey Road/11 Mean Mr. Mustard.flac'),
- ('${T[20]}', '${J[6]}', 'audio_track', 11, '12', 'Polythene Pam',                            'done', 1, 72,  72,  '/media/music/The Beatles/Abbey Road/12 Polythene Pam.flac'),
- ('${T[21]}', '${J[6]}', 'audio_track', 12, '13', 'She Came In Through the Bathroom Window',   'done', 1, 117, 117, '/media/music/The Beatles/Abbey Road/13 She Came In Through the Bathroom Window.flac'),
- ('${T[22]}', '${J[6]}', 'audio_track', 13, '14', 'Golden Slumbers',                          'done', 1, 91,  91,  '/media/music/The Beatles/Abbey Road/14 Golden Slumbers.flac'),
- ('${T[23]}', '${J[6]}', 'audio_track', 14, '15', 'Carry That Weight',                        'done', 1, 96,  96,  '/media/music/The Beatles/Abbey Road/15 Carry That Weight.flac'),
- ('${T[24]}', '${J[6]}', 'audio_track', 15, '16', 'The End',                                  'done', 1, 140, 140, '/media/music/The Beatles/Abbey Road/16 The End.flac'),
- ('${T[25]}', '${J[6]}', 'audio_track', 16, '17', 'Her Majesty',                              'done', 1, 25,  25,  '/media/music/The Beatles/Abbey Road/17 Her Majesty.flac');
+ ('${T[6]}',  '${J[6]}', 'audio_track', 1,  '1',  'Come Together',                            'done', 1, 259, 259, '/media/music/The Beatles/Abbey Road/01 Come Together.flac'),
+ ('${T[7]}',  '${J[6]}', 'audio_track', 2,  '2',  'Something',                                'done', 1, 182, 182, '/media/music/The Beatles/Abbey Road/02 Something.flac'),
+ ('${T[11]}', '${J[6]}', 'audio_track', 3,  '3',  'Maxwell s Silver Hammer',                  'done', 1, 208, 208, '/media/music/The Beatles/Abbey Road/03 Maxwell s Silver Hammer.flac'),
+ ('${T[12]}', '${J[6]}', 'audio_track', 4,  '4',  'Oh! Darling',                              'done', 1, 207, 207, '/media/music/The Beatles/Abbey Road/04 Oh! Darling.flac'),
+ ('${T[13]}', '${J[6]}', 'audio_track', 5,  '5',  'Octopus s Garden',                         'done', 1, 171, 171, '/media/music/The Beatles/Abbey Road/05 Octopus s Garden.flac'),
+ ('${T[14]}', '${J[6]}', 'audio_track', 6,  '6',  'I Want You (She s So Heavy)',              'done', 1, 467, 467, '/media/music/The Beatles/Abbey Road/06 I Want You.flac'),
+ ('${T[15]}', '${J[6]}', 'audio_track', 7,  '7',  'Here Comes the Sun',                       'done', 1, 186, 186, '/media/music/The Beatles/Abbey Road/07 Here Comes the Sun.flac'),
+ ('${T[16]}', '${J[6]}', 'audio_track', 8,  '8',  'Because',                                  'done', 1, 166, 166, '/media/music/The Beatles/Abbey Road/08 Because.flac'),
+ ('${T[17]}', '${J[6]}', 'audio_track', 9,  '9',  'You Never Give Me Your Money',             'done', 1, 242, 242, '/media/music/The Beatles/Abbey Road/09 You Never Give Me Your Money.flac'),
+ ('${T[18]}', '${J[6]}', 'audio_track', 10,  '10', 'Sun King',                                 'done', 1, 146, 146, '/media/music/The Beatles/Abbey Road/10 Sun King.flac'),
+ ('${T[19]}', '${J[6]}', 'audio_track', 11, '11', 'Mean Mr. Mustard',                         'done', 1, 66,  66,  '/media/music/The Beatles/Abbey Road/11 Mean Mr. Mustard.flac'),
+ ('${T[20]}', '${J[6]}', 'audio_track', 12, '12', 'Polythene Pam',                            'done', 1, 72,  72,  '/media/music/The Beatles/Abbey Road/12 Polythene Pam.flac'),
+ ('${T[21]}', '${J[6]}', 'audio_track', 13, '13', 'She Came In Through the Bathroom Window',   'done', 1, 117, 117, '/media/music/The Beatles/Abbey Road/13 She Came In Through the Bathroom Window.flac'),
+ ('${T[22]}', '${J[6]}', 'audio_track', 14, '14', 'Golden Slumbers',                          'done', 1, 91,  91,  '/media/music/The Beatles/Abbey Road/14 Golden Slumbers.flac'),
+ ('${T[23]}', '${J[6]}', 'audio_track', 15, '15', 'Carry That Weight',                        'done', 1, 96,  96,  '/media/music/The Beatles/Abbey Road/15 Carry That Weight.flac'),
+ ('${T[24]}', '${J[6]}', 'audio_track', 16, '16', 'The End',                                  'done', 1, 140, 140, '/media/music/The Beatles/Abbey Road/16 The End.flac'),
+ ('${T[25]}', '${J[6]}', 'audio_track', 17, '17', 'Her Majesty',                              'done', 1, 25,  25,  '/media/music/The Beatles/Abbey Road/17 Her Majesty.flac');
 
 -- Multi-title DVD (J8, ripped): a double feature whose 3 video tracks are each a
 -- separate movie. Titles are UNSET on purpose so the disc demonstrates per-track
