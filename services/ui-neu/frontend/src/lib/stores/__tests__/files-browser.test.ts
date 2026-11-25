@@ -274,4 +274,14 @@ describe('noRootsConfigured', () => {
 		b.loading = false;
 		expect(b.noRootsConfigured).toBe(false);
 	});
+
+	it('stays false when the roots read failed but the root from the URL loaded', async () => {
+		const b = new FilesBrowser();
+		mockRoots.mockRejectedValueOnce(new Error('roots down'));
+		await b.loadRoots();
+		mockDir.mockResolvedValueOnce(listingOf([entry('a')]));
+		await b.navigate('RAW', '');
+		expect(b.error).toBeNull();
+		expect(b.noRootsConfigured).toBe(false);
+	});
 });
