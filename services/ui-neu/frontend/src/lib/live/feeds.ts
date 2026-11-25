@@ -60,9 +60,13 @@ function byteEta(sample: LiveSample): number | null {
 	return Math.round(Math.max(0, bytesTotal - bytesDone) / rateBps);
 }
 
-/** The percentage covers the whole disc, so the baseline holds across tracks; only a backwards jump resets it. */
-function isStaleBaseline(baseline: RipBaseline, pct: number): boolean {
-	return pct < baseline.atPct - 1;
+/**
+ * A drop of more than 1 point from the previous sample starts a new baseline.
+ * A disc-wide percentage never drops, so the baseline holds across tracks; a
+ * per-title one starts over at each title, which this catches.
+ */
+function isBackwardsJump(lastPct: number, pct: number): boolean {
+	return pct < lastPct - 1;
 }
 
 function percentEta(baseline: RipBaseline, pct: number, now: number): number | null {
@@ -92,12 +96,15 @@ function readRip(payload: Payload): LiveSample {
  */
 export function createRipFeed(): (payload: Payload, now: number) => LiveSample {
 	let baseline: RipBaseline | null = null;
+	let lastPct = 0;
 	return (payload, now) => {
 		const sample = readRip(payload);
 		const { pct } = sample;
 		const published = sample.etaSeconds ?? byteEta(sample);
 		if (pct === null) return { ...sample, etaSeconds: published };
-		if (baseline === null || isStaleBaseline(baseline, pct)) {
+		const jumped = isBackwardsJump(lastPct, pct);
+		lastPct = pct;
+		if (baseline === null || jumped) {
 			baseline = { atMs: now, atPct: pct };
 			return { ...sample, etaSeconds: published };
 		}
