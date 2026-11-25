@@ -132,8 +132,10 @@ class _HangProc:
         self.stderr = None
         self.kills = 0
         self.reaped = False
+        self.waiting = asyncio.Event()
 
     async def wait(self) -> int:
+        self.waiting.set()
         if self.kills and self._reap_error is not None:
             raise self._reap_error
         await self._killed.wait()
@@ -185,9 +187,13 @@ async def test_timeout_kills_dd_and_stops_progress(monkeypatch: pytest.MonkeyPat
     assert len(seen) == count
 
 
-async def _cancel_mid_copy(tmp_path: Path) -> None:
+async def _cancel_mid_copy(tmp_path: Path, procs: list[_HangProc]) -> None:
+    """Start a rip, wait until its dd is running and being waited on, then cancel it."""
     task = asyncio.create_task(data_rip.rip_data("/dev/sr0", tmp_path / "out"))
-    await asyncio.sleep(0.03)
+    async with asyncio.timeout(5):
+        while not procs:
+            await asyncio.sleep(0.005)
+        await procs[0].waiting.wait()
     task.cancel()
     with pytest.raises(asyncio.CancelledError):
         await task
@@ -196,14 +202,14 @@ async def _cancel_mid_copy(tmp_path: Path) -> None:
 async def test_cancel_mid_copy_kills_dd(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     procs: list[_HangProc] = []
     _patch_hang(monkeypatch, procs)
-    await _cancel_mid_copy(tmp_path)
+    await _cancel_mid_copy(tmp_path, procs)
     assert procs[0].kills == 1 and procs[0].reaped
 
 
 async def test_cancel_mid_copy_swallows_a_failing_reap(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     procs: list[_HangProc] = []
     _patch_hang(monkeypatch, procs, reap_error=RuntimeError("reap failed"))
-    await _cancel_mid_copy(tmp_path)
+    await _cancel_mid_copy(tmp_path, procs)
     assert procs[0].kills == 1 and not procs[0].reaped
 
 
