@@ -21,7 +21,8 @@ from typing import TYPE_CHECKING, Any, Literal, NamedTuple
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import col, select
 
-from arm_backend.constants import CONFIG_SINGLETON_ID
+from arm_backend import job_events
+from arm_backend.config_row import load_config_or_none
 from arm_backend.path_sanitize import sanitize_path_component
 from arm_backend.path_template import (
     NEVER_OPTIONAL,
@@ -31,9 +32,11 @@ from arm_backend.path_template import (
     referenced_tokens,
     required_tokens,
 )
+from arm_backend.identity.ids import current_ids
+from arm_backend.session_routing import routing_media_type
 from arm_backend.slugify import slugify
+from arm_backend.log_safely import log_safely
 from arm_common import (
-    Config,
     Gpu,
     Job,
     MediaType,
@@ -46,7 +49,7 @@ from arm_common import (
 from arm_common.encoders import EncoderSpec, get_encoder, gpu_could_serve, gpu_is_eligible
 from arm_common.enums import SessionApplicationStatus, TranscodeTaskStatus, TranscodeTool
 from arm_common.models import SessionApplication, TranscodeTask
-from arm_common.schemas import CollisionInfo
+from arm_common.schemas import CollisionInfo, MusicTags
 
 if TYPE_CHECKING:
     from arm_backend.ws.hub import WSHub
@@ -71,25 +74,78 @@ def _format_duration_human(seconds: int | None) -> str:
     return f"{hours:02d}h{minutes:02d}m"
 
 
-def _music_track_title(music_meta: dict[str, Any], metadata: dict[str, object], index: int) -> str:
-    """Return the best-effort music title for the 1-based track index, or ''."""
-    # Best-effort per-track music title from the music track list.
+def _music_meta(metadata: dict[str, object]) -> dict[str, Any]:
+    """The job's typed `music` section, or {} when absent or malformed."""
+    raw_music = metadata.get("music")
+    return raw_music if isinstance(raw_music, dict) else {}
+
+
+def _music_tracks(music_meta: dict[str, Any], metadata: dict[str, object]) -> list[Any]:
+    """The music track listing; the bare top-level `tracks` key is the fallback for older rows."""
     tracks_meta = music_meta.get("tracks") or metadata.get("tracks")
-    if isinstance(tracks_meta, list) and 0 <= index - 1 < len(tracks_meta):
+    return tracks_meta if isinstance(tracks_meta, list) else []
+
+
+def _music_track_entry(music_meta: dict[str, Any], metadata: dict[str, object], index: int) -> dict[str, Any]:
+    """The listing entry for the 1-based track index, or {} when there is none."""
+    tracks_meta = _music_tracks(music_meta, metadata)
+    if 0 <= index - 1 < len(tracks_meta):
         entry = tracks_meta[index - 1]
         if isinstance(entry, dict):
-            raw_title = entry.get("title")
-            if isinstance(raw_title, str):
-                return raw_title
-    return ""
+            return entry
+    return {}
+
+
+def _music_track_title(music_meta: dict[str, Any], metadata: dict[str, object], index: int) -> str:
+    """Return the best-effort music title for the 1-based track index, or ''."""
+    raw_title = _music_track_entry(music_meta, metadata, index).get("title")
+    return raw_title if isinstance(raw_title, str) else ""
+
+
+def _str_or_none(value: object) -> str | None:
+    return value if isinstance(value, str) and value else None
+
+
+def _int_or_none(value: object) -> int | None:
+    return value if isinstance(value, int) and not isinstance(value, bool) else None
+
+
+def music_tags_for(job: Job, track: Track) -> MusicTags | None:
+    """The tags `track`'s encoded file carries, or None for a job that is not music.
+
+    Read from the same stored identity the output filename uses, and resolved
+    the same way: the 1-based track index into the music track listing.
+    Unknown fields stay None so the transcoder leaves them out of the file.
+    """
+    if routing_media_type(job) != MediaType.MUSIC:
+        return None
+    metadata: dict[str, object] = job.metadata_json or {}
+    music_meta = _music_meta(metadata)
+    entry = _music_track_entry(music_meta, metadata, track.index)
+    track_total = len(_music_tracks(music_meta, metadata))
+    # The release's artist: the stored listing has no per-track artist.
+    artist = _str_or_none(music_meta.get("artist") or metadata.get("artist"))
+    return MusicTags(
+        artist=artist,
+        album_artist=artist,
+        album=_str_or_none(music_meta.get("album") or metadata.get("album")),
+        title=_str_or_none(entry.get("title")),
+        year=job.year,
+        disc_number=job.disc_number if job.disc_number is not None else _int_or_none(entry.get("disc_number")),
+        track_number=track.index,
+        track_total=track_total or None,
+        musicbrainz_release_id=current_ids(job).musicbrainz_release,
+    )
 
 
 def _effective_identity(job: Job, track: Track) -> tuple[str, int | None, int | None]:
     """Return the track's effective (title, year, season), falling back to the job's."""
     # Per-track identity overrides job-level (null = inherit). Multi-title discs
     # set these; a movie's single track leaves them null and inherits job identity.
+    # A track with its own title is its own identity: its year is its own too
+    # (none when unset), never the disc's.
     eff_title = track.title or job.title or ""
-    eff_year = track.year if track.year is not None else job.year
+    eff_year = track.year if track.title else job.year
     eff_season = track.season if track.season is not None else job.season
     return eff_title, eff_year, eff_season
 
@@ -104,6 +160,16 @@ def _episode_label(track: Track) -> str:
     return f"{track.episode_number:02d}"
 
 
+def _track_number(track: Track) -> int:
+    """The track's number in a file name: video titles count from 1, other kinds keep their index."""
+    return track.index + 1 if track.kind == TrackKind.VIDEO_TITLE else track.index
+
+
+def _track_label(track: Track, number: int) -> str:
+    """`Track NN` for a track with no title of its own, empty for a track that names itself."""
+    return "" if track.title else f"Track {number:02d}"
+
+
 def _build_track_ctx(
     job: Job,
     track: Track,
@@ -111,12 +177,11 @@ def _build_track_ctx(
 ) -> dict[str, str]:
     """Build the per-track template context using real (not synthetic) job/track data."""
     metadata: dict[str, object] = job.metadata_json or {}
-    track_index_padded = f"{track.index:02d}"
+    track_number = _track_number(track)
 
-    # Music naming reads the typed `music` section (§3.4); the bare
-    # top-level keys are the pre-0032 fallback.
-    raw_music = metadata.get("music")
-    music_meta: dict[str, Any] = raw_music if isinstance(raw_music, dict) else {}
+    # Music naming reads the typed `music` section; the bare
+    # top-level keys are the fallback for older rows.
+    music_meta = _music_meta(metadata)
 
     track_title = _music_track_title(music_meta, metadata, track.index)
 
@@ -133,7 +198,7 @@ def _build_track_ctx(
         "year": str(eff_year) if eff_year is not None else "",
         "show": sanitize_path_component(job.title or ""),
         # Per-track season (set by a disc map or episode match) wins over the
-        # job-level season; the metadata.get() fallback remains for pre-G-14 rows.
+        # job-level season; the metadata.get() fallback remains for rows without a per-track season.
         # Ints are zero-padded to match the S{NN}D{NN} convention (docs/developers/architecture/02 § TV).
         "season": sanitize_path_component(
             f"{eff_season:02d}" if eff_season is not None else str(metadata.get("season") or "")
@@ -141,7 +206,9 @@ def _build_track_ctx(
         "disc": sanitize_path_component(
             f"{job.disc_number:02d}" if job.disc_number is not None else str(metadata.get("disc") or "")
         ),
-        "track": track_index_padded,
+        "track": f"{track_number:02d}",
+        "track_label": _track_label(track, track_number),
+        "edition": sanitize_path_component(track.edition or ""),
         "episode": episode,
         "episode_title": sanitize_path_component(track.episode_name or ""),
         "duration_human": _format_duration_human(track.expected_duration_seconds or track.duration_seconds),
@@ -164,9 +231,9 @@ _EXT = re.compile(r"\.[A-Za-z0-9]+$")
 
 
 def _episode_tokens_required(job: Job, track: Track, session: Session) -> bool:
-    """Episode tokens must resolve for episode titles (and, as before, for
+    """Episode tokens must resolve for episode titles (and for
     titles of unknown role on a TV disc); a bonus film or extra on a TV disc
-    renders them empty instead of failing the whole apply (spec 5).
+    renders them empty instead of failing the whole apply.
 
     An unidentified job (`job.media_type is None`) can still be applied to a
     TV session (`auto_session.py` allows and documents this); for a
@@ -439,7 +506,7 @@ async def transcode_enabled_now(db: AsyncSession) -> bool:
 
     if not effective_transcode_capable(settings):
         return False
-    cfg = (await db.execute(select(Config).where(col(Config.id) == CONFIG_SINGLETON_ID))).scalar_one_or_none()
+    cfg = await load_config_or_none(db)
     return cfg is None or cfg.transcode_enabled is not False
 
 
@@ -498,6 +565,29 @@ class AggregateOutcome(NamedTuple):
 
     transitioned_to: SessionApplicationStatus | None
     event_type: str | None  # "session.completed" / "session.partial" / "session.failed"
+    done: int = 0  # task counts once the application settled; 0 while it has not
+    failed: int = 0
+    total: int = 0
+
+
+# Settled by `aggregate_session_application` once every task finished; a
+# re-queued failed task puts the application back in flight.
+_REOPENABLE_APPLICATION_STATUSES: frozenset[SessionApplicationStatus] = frozenset(
+    {SessionApplicationStatus.FAILED, SessionApplicationStatus.DONE_PARTIAL, SessionApplicationStatus.DONE}
+)
+
+
+def reopen_session_application(application: SessionApplication) -> bool:
+    """Put a settled application back to RUNNING (completed_at cleared) after
+    one of its failed tasks was re-queued, so the job reads as transcoding
+    again and the aggregate settles it afresh when the retry finishes.
+    Returns whether it changed; an application still in flight is left as is.
+    The caller commits."""
+    if application.status not in _REOPENABLE_APPLICATION_STATUSES:
+        return False
+    application.status = SessionApplicationStatus.RUNNING
+    application.completed_at = None
+    return True
 
 
 async def aggregate_session_application(
@@ -540,7 +630,13 @@ async def aggregate_session_application(
 
     application.status = target
     application.completed_at = datetime.now(UTC)
-    return AggregateOutcome(transitioned_to=target, event_type=event)
+    return AggregateOutcome(
+        transitioned_to=target,
+        event_type=event,
+        done=done_count,
+        failed=len(statuses) - done_count,
+        total=len(statuses),
+    )
 
 
 async def emit_session_outcome(
@@ -580,9 +676,30 @@ async def emit_task_failed(hub: "WSHub", db: AsyncSession, task: TranscodeTask) 
     )
 
 
-async def settle_session_application(db: AsyncSession, hub: "WSHub", application: SessionApplication) -> None:
+async def settle_session_application(
+    db: AsyncSession, hub: "WSHub", application: SessionApplication
+) -> AggregateOutcome:
     """Recompute the application's status from its tasks and announce a terminal
-    transition; the caller commits."""
+    transition. The caller commits, logs its task's own milestone, then passes the
+    outcome to `log_session_settled`."""
     outcome = await aggregate_session_application(db, application)
     if outcome.event_type is not None:
         await emit_session_outcome(hub, db, application, outcome.event_type)
+    return outcome
+
+
+async def log_session_settled(db: AsyncSession, application: SessionApplication, outcome: AggregateOutcome) -> None:
+    """Log `session.completed` for a committed terminal transition; nothing when the
+    application did not settle. A failure in the logging is logged, never raised."""
+    if outcome.event_type is not None:
+        await log_safely("session.completed", _log_session_settled(db, application, outcome))
+
+
+async def _log_session_settled(db: AsyncSession, application: SessionApplication, outcome: AggregateOutcome) -> None:
+    """Log `session.completed` with the settled application's task counts."""
+    job = (await db.execute(select(Job).where(col(Job.id) == application.job_id))).scalar_one_or_none()
+    if job is None:
+        return
+    job_events.log_session_completed(
+        job, outcome.done, outcome.failed, outcome.total, session_application_id=application.id
+    )

@@ -80,8 +80,11 @@ jobs:
       # Zero-infra unit test for the writability/readability guard, same seam.
       - name: Entrypoint writability guard suite
         run: bash services/_common/test-entrypoint-guard.sh
-      # Zero-infra assertions that the dev installer + compose template no
-      # longer enumerate drives (drive lifecycle §5).
+      # Zero-infra unit test for the private TLS key copy, same seam.
+      - name: Entrypoint TLS key suite
+        run: bash services/_common/test-entrypoint-tls.sh
+      # Zero-infra assertions that the dev installer + compose template do not
+      # enumerate drives.
       - name: setup-dev / compose template suite
         run: bash devtools/test-setup-dev.sh
       # Zero-infra suites for the production installer: the armctl launcher,
@@ -136,7 +139,7 @@ jobs:
       - run: npm run check
       # style lint: bans inline utility styling outside the allowed layout
       # families (see devtools/ui-neu-style-lint.mjs and docs/developers/ui/ui-neu-theming.md)
-      - run: node --test devtools/ui-neu-style-lint.test.mjs
+      - run: node --test devtools/ui-neu-style-lint.test.mjs devtools/check-field-docs-links.test.mjs
         working-directory: .
       - run: npm run lint:styles
 
@@ -154,6 +157,8 @@ jobs:
           cache: 'npm'
           cache-dependency-path: services/ui-neu/frontend/package-lock.json
       - run: npm ci
+      # tests for ui-neu's own ESLint rules (eslint-rules/)
+      - run: npm run test:lint-rules
       - run: npm run lint
       - run: npm run format:check
 
@@ -217,6 +222,14 @@ jobs:
         run: |
           if ! git diff --exit-code services/ui-neu/frontend/src/lib/types/api.gen.ts; then
             echo "::error::ui-neu api.gen.ts is out of sync with services/ui-neu/openapi.snapshot.json; run bash services/ui-neu/scripts/codegen.sh and commit."
+            exit 1
+          fi
+      - name: Regenerate the UI copy of the field docs registry
+        run: bash devtools/regen-field-docs.sh
+      - name: Fail if the UI copy drifted from field_docs.json
+        run: |
+          if ! git diff --exit-code services/ui-neu/frontend/src/lib/docs/field-docs.json; then
+            echo "::error::the UI copy of the field docs registry is out of sync with packages/arm_common/arm_common/field_docs.json; run bash devtools/regen-field-docs.sh and commit."
             exit 1
           fi
 

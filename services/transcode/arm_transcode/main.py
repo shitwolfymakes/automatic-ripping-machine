@@ -24,12 +24,17 @@ import logging
 import os
 import ssl
 import sys
+import tempfile
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from arm_common import configure_service_logging, with_log_context
 from arm_common.encoders import EncoderSpec
+from arm_common.schemas.handbrake import HandbrakeSettings
 from arm_common.schemas import (
     HardwareCaps,
+    MusicTags,
     RegisterTranscoderResponse,
     TranscodePresetView,
     WSEnvelope,
@@ -45,7 +50,9 @@ from arm_transcode.engines.ffmpeg_vaapi import transcode_ffmpeg_vaapi
 from arm_transcode.engines.handbrake_engine import encoder_args as handbrake_encoder_args
 from arm_transcode.ffmpeg_audio import transcode_audio
 from arm_transcode.handbrake import ProgressCallback, transcode_handbrake
+from arm_transcode.handbrake_preset_file import materialise_for_encode, settings_of, write_preset_file
 from arm_transcode.heartbeat import HeartbeatPump, ProgressState
+from arm_transcode.schema_file import dump_schema
 from arm_transcode.ws_client import EnvelopeHandler, WSClient
 
 
@@ -140,24 +147,78 @@ async def _encode_ffmpeg_vaapi(
         )
 
 
+async def _encode_handbrake_builtin(
+    *,
+    preset: TranscodePresetView,
+    spec: EncoderSpec | None,
+    raw_input: Path,
+    final_output: Path,
+    progress_callback: ProgressCallback,
+) -> int:
+    """The run for a preset without settings: `--preset <preset_ref> --encoder X`."""
+    with atomic_output(final_output) as tmp:
+        return await transcode_handbrake(
+            input_path=raw_input,
+            output_path=tmp,
+            preset_ref=preset.preset_ref,
+            extra_args=preset.extra_args,
+            encoder_args=handbrake_encoder_args(spec),
+            progress_callback=progress_callback,
+        )
+
+
+async def _encode_handbrake_settings(
+    *,
+    preset: TranscodePresetView,
+    settings: HandbrakeSettings,
+    spec: EncoderSpec | None,
+    raw_input: Path,
+    final_output: Path,
+    progress_callback: ProgressCallback,
+) -> int:
+    """Run HandBrakeCLI from the preset's materialised settings, validated before launch."""
+    materialised = materialise_for_encode(preset, settings, spec)
+    # The transcoder has no per-task work directory; this one lives for the encode.
+    with tempfile.TemporaryDirectory(prefix="arm-hb-") as work_dir:
+        preset_file = write_preset_file(Path(work_dir), materialised.preset_file)
+        with atomic_output(final_output) as tmp:
+            return await transcode_handbrake(
+                input_path=raw_input,
+                output_path=tmp,
+                preset_ref=preset.preset_ref,
+                extra_args=preset.extra_args,
+                encoder_args=materialised.flags,
+                preset_file=preset_file,
+                progress_callback=progress_callback,
+            )
+
+
 async def _encode_handbrake(
     *,
-    preset_ref: str,
-    extra_args: str | None,
+    preset: TranscodePresetView,
+    spec: EncoderSpec | None,
     raw_input: Path,
     final_output: Path,
     progress_callback: ProgressCallback,
 ) -> int:
     """Run HandBrakeCLI into an atomic output and return the size written."""
-    with atomic_output(final_output) as tmp:
-        return await transcode_handbrake(
-            input_path=raw_input,
-            output_path=tmp,
-            preset_ref=preset_ref,
-            extra_args=extra_args,
-            encoder_args=handbrake_encoder_args(selected_encoder()),
+    settings = settings_of(preset)
+    if settings is None:
+        return await _encode_handbrake_builtin(
+            preset=preset,
+            spec=spec,
+            raw_input=raw_input,
+            final_output=final_output,
             progress_callback=progress_callback,
         )
+    return await _encode_handbrake_settings(
+        preset=preset,
+        settings=settings,
+        spec=spec,
+        raw_input=raw_input,
+        final_output=final_output,
+        progress_callback=progress_callback,
+    )
 
 
 async def _encode_audio(
@@ -167,8 +228,11 @@ async def _encode_audio(
     final_output: Path,
     duration_seconds: int | None,
     progress_callback: ProgressCallback,
+    music_tags: MusicTags | None,
+    cover_path: Path | None,
 ) -> int:
-    """Run the ffmpeg audio engine into an atomic output and return the size written."""
+    """Run the ffmpeg audio engine into an atomic output, tagged with `music_tags`
+    and the `cover_path` image, and return the size written."""
     # The ripper's abcde stage produced .wav files; we re-encode to
     # `preset.container.value` (flac, mp3) here.
     target = preset.preset_ref or preset.container.value
@@ -179,7 +243,15 @@ async def _encode_audio(
             preset_ref=target,
             duration_seconds=duration_seconds,
             progress_callback=progress_callback,
+            tags=music_tags,
+            cover_path=cover_path,
         )
+
+
+def _lacks_base(tool: TranscodeTool, preset: TranscodePresetView) -> bool:
+    """True when the preset has no `preset_ref` and needs one: every preset except HandBrake with settings."""
+    settings_run = tool == TranscodeTool.HANDBRAKE and settings_of(preset) is not None
+    return preset.preset_ref is None and not settings_run
 
 
 async def _encode(
@@ -190,8 +262,11 @@ async def _encode(
     final_output: Path,
     duration_seconds: int | None,
     progress_callback: ProgressCallback,
+    music_tags: MusicTags | None,
+    cover_path: Path | None,
 ) -> int:
-    """Run the engine `tool` selects and return the size it wrote."""
+    """Run the engine `tool` selects and return the size it wrote; only the
+    audio engine writes `music_tags` and the cover."""
     if tool == TranscodeTool.NONE:
         return transcode_none(raw_input, final_output)
 
@@ -209,13 +284,13 @@ async def _encode(
             progress_callback=progress_callback,
         )
 
-    if preset is None or preset.preset_ref is None:
+    if preset is None or _lacks_base(tool, preset):
         raise RuntimeError(f"transcode tool={tool.value} requires a preset_ref")
 
     if tool == TranscodeTool.HANDBRAKE:
         return await _encode_handbrake(
-            preset_ref=preset.preset_ref,
-            extra_args=preset.extra_args,
+            preset=preset,
+            spec=spec,
             raw_input=raw_input,
             final_output=final_output,
             progress_callback=progress_callback,
@@ -228,6 +303,8 @@ async def _encode(
             final_output=final_output,
             duration_seconds=duration_seconds,
             progress_callback=progress_callback,
+            music_tags=music_tags,
+            cover_path=cover_path,
         )
 
     raise RuntimeError(f"unknown transcode tool={tool.value}")
@@ -242,6 +319,8 @@ async def _run_encoder(
     duration_seconds: int | None,
     state: ProgressState,
     cancel_event: asyncio.Event,
+    music_tags: MusicTags | None = None,
+    cover_path: Path | None = None,
 ) -> int:
     """Encode with the engine for `tool`, recording progress on `state`; returns the size written."""
     size = await _encode(
@@ -251,6 +330,8 @@ async def _run_encoder(
         final_output=final_output,
         duration_seconds=duration_seconds,
         progress_callback=_progress_recorder(state, cancel_event),
+        music_tags=music_tags,
+        cover_path=cover_path,
     )
     state.pct = 100
     return size
@@ -288,7 +369,44 @@ async def _report_complete(
         size_bytes=size,
         duration_seconds=duration,
     )
-    logger.info("task complete output=%s size=%d", relative, size)
+    logger.debug("task complete output=%s size=%d", relative, size)
+
+
+_COVER_SUFFIXES = {"image/jpeg": ".jpg", "image/png": ".png"}
+
+
+async def _download_cover_art(api: BackendClient, task_id: str, workdir: Path) -> Path | None:
+    """Save the track's cover into `workdir`; None when it has none, it is not
+    a JPEG or PNG, or the download fails. Missing art never fails an encode."""
+    try:
+        fetched = await api.cover_art(task_id)
+    except Exception as exc:
+        logger.warning("cover art download failed; encoding without it: %s", exc)
+        return None
+    if fetched is None:
+        logger.info("no cover art for this track")
+        return None
+    content, content_type = fetched
+    suffix = _COVER_SUFFIXES.get(content_type)
+    if suffix is None:
+        logger.warning("cover art type %r cannot be embedded; encoding without it", content_type)
+        return None
+    path = workdir / f"cover{suffix}"
+    path.write_bytes(content)
+    return path
+
+
+@asynccontextmanager
+async def _cover_art_file(api: BackendClient, task_id: str, *, wanted: bool) -> AsyncIterator[Path | None]:
+    """The track's cover as a temp file for the encode's lifetime, or None.
+
+    Only a music track (`wanted`) asks the Backend for one; the file is
+    removed when the encode is done."""
+    if not wanted:
+        yield None
+        return
+    with tempfile.TemporaryDirectory(prefix="arm-cover-") as workdir:
+        yield await _download_cover_art(api, task_id, Path(workdir))
 
 
 async def _encode_and_report(
@@ -308,7 +426,10 @@ async def _encode_and_report(
 
     state = ProgressState()
     try:
-        async with HeartbeatPump(api=api, ws=ws, task_id=task_id, state=state):
+        async with (
+            HeartbeatPump(api=api, ws=ws, task_id=task_id, state=state),
+            _cover_art_file(api, task_id, wanted=registered.music_tags is not None) as cover_path,
+        ):
             size = await _run_encoder(
                 tool=tool,
                 preset=preset,
@@ -317,6 +438,8 @@ async def _encode_and_report(
                 duration_seconds=duration,
                 state=state,
                 cancel_event=cancel_event,
+                music_tags=registered.music_tags,
+                cover_path=cover_path,
             )
     except CancelRequested:
         await api.fail(task_id, last_error="cancelled by user")
@@ -352,7 +475,7 @@ async def _run_task(*, cfg: TranscoderConfig, api: BackendClient, ssl_ctx: ssl.S
         await ws.wait_until_connected(timeout=10.0)
 
         registered = await api.register(task_id=cfg.task_id, hw_caps=_detect_hw_caps())
-        # Phase 12 — once register lands we have job_id / track_id /
+        # Once registered we have job_id / track_id /
         # session_application_id; everything below logs with full context.
         # `job_id` lives on `source_track`, not on the task row.
         with with_log_context(
@@ -370,7 +493,7 @@ async def _run_task(*, cfg: TranscoderConfig, api: BackendClient, ssl_ctx: ssl.S
 async def run() -> int:
     cfg = TranscoderConfig()
     configure_service_logging(cfg.service_name, level=cfg.log_level)
-    logger.info("transcoder starting task_id=%s host=%s", cfg.task_id, cfg.hostname)
+    logger.debug("transcoder starting task_id=%s host=%s", cfg.task_id, cfg.hostname)
 
     api = BackendClient(
         base_url=cfg.backend_url,
@@ -387,11 +510,12 @@ async def run() -> int:
 
 
 def main() -> int:
+    if "--dump-schema" in sys.argv[1:]:
+        return dump_schema()
     if "--probe-encoders" in sys.argv[1:]:
-        # Deprecated compatibility mode. The install-time HandBrakeCLI --help
-        # scrape this used to run is gone; an installer or drill script that
+        # Deprecated compatibility mode: an installer or drill script that
         # still invokes this flag gets an empty result rather than a crash.
-        # The backend now treats install-time encoder lists as hints only and
+        # The backend treats install-time encoder lists as hints only and
         # probes each GPU device for real via --probe-device, so an empty
         # {} here is a truthful "nothing probed", not an over-claim.
         print("--probe-encoders is deprecated; the backend probes each GPU with --probe-device", file=sys.stderr)

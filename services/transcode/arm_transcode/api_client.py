@@ -20,6 +20,7 @@ from arm_common.schemas import (
     RegisterTranscoderResponse,
     TranscodeTaskView,
 )
+from arm_transcode.schema_file import baked_schema_hash
 
 
 class BackendClient:
@@ -51,10 +52,20 @@ class BackendClient:
         task_id: str,
         hw_caps: HardwareCaps,
     ) -> RegisterTranscoderResponse:
-        req = RegisterTranscoderRequest(task_id=task_id, hostname=self._hostname, hw_caps=hw_caps)
+        req = RegisterTranscoderRequest(
+            task_id=task_id, hostname=self._hostname, hw_caps=hw_caps, schema_hash=baked_schema_hash()
+        )
         r = await self._client.post("/api/transcoder/register", json=req.model_dump())
         r.raise_for_status()
         return RegisterTranscoderResponse.model_validate(r.json())
+
+    async def cover_art(self, task_id: str) -> tuple[bytes, str] | None:
+        """The music track's cover as (content, content type); None when it has none (404)."""
+        r = await self._client.get(f"/api/transcoder/tasks/{task_id}/cover-art")
+        if r.status_code == 404:
+            return None
+        r.raise_for_status()
+        return r.content, r.headers.get("content-type", "")
 
     async def claim(self, task_id: str) -> ClaimTaskResponse:
         r = await self._client.post(f"/api/transcoder/tasks/{task_id}/claim")

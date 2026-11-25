@@ -1,4 +1,4 @@
-"""Auth and UI-side response schemas (Phase 5).
+"""Auth and UI-side response schemas.
 
 Login / logout / change-password live here. Read-side `JobDetailView` and
 `ConfigView` / `ConfigUpdateRequest` are also UI-shaped projections — kept
@@ -11,7 +11,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-from arm_common.enums import PreviouslyRippedAction, RetentionPolicy, UserRole
+from arm_common.enums import MissMediaType, MissTitlesKept, PreviouslyRippedAction, RetentionPolicy, UserRole
 from arm_common.schemas.jobs import DiscFingerprintView, JobView, PreviousRipView, TrackView
 
 
@@ -53,15 +53,16 @@ class ConfigView(BaseModel):
     auto_rip_on_insert: bool
     block_on_miss: bool
     community_keydb_enabled: bool
-    # Drive scanner tunables (spec §2) — operator-editable, read every tick.
+    # Drive scanner tunables — operator-editable, read every tick.
     drive_scan_interval_seconds: int
     drive_detected_prune_days: int
     # Transcode dispatcher parallelism cap — operator-editable, read every
-    # tick (moved from the MAX_PARALLEL_TRANSCODES env var, which now only
-    # seeds this on first boot).
+    # tick (the MAX_PARALLEL_TRANSCODES env var only seeds it on first boot).
     max_parallel_transcodes: int
     # ISO-source ripping: concurrent ISO rips, 1 to 8 (default 1).
     max_parallel_iso_rips: int
+    # Shortest title the scan lists and the rip writes, in seconds.
+    min_title_length_seconds: int
     # transcode_enabled: the runtime switch (a Config DB column, editable).
     # transcode_capable: the deployment capability (read-only, derived from env
     # Settings, not a Config column). capable=False renders the toggle locked.
@@ -78,6 +79,8 @@ class ConfigView(BaseModel):
     hold_for_review: bool
     manual_wait_seconds: int
     on_previously_ripped: PreviouslyRippedAction
+    miss_media_type: MissMediaType
+    miss_titles_kept: MissTitlesKept
     default_retention_policy: RetentionPolicy
     notification_apprise_urls: list[str]
     notifications_enabled: bool
@@ -92,7 +95,7 @@ class ConfigView(BaseModel):
     makemkv_key_valid: bool | None = None
     makemkv_key_state: str | None = None
     makemkv_key_checked_at: datetime | None = None
-    # Drive whose ripper last reported the key status (setup step 4 "checked by").
+    # Drive whose ripper last reported the key status (the setup walkthrough's "checked by").
     makemkv_key_checked_by_drive_id: str | None = None
     updated_by_user_id: str | None
     updated_at: datetime | None
@@ -112,6 +115,7 @@ class ConfigUpdateRequest(BaseModel):
     drive_detected_prune_days: int | None = None
     max_parallel_transcodes: int | None = None
     max_parallel_iso_rips: int | None = None
+    min_title_length_seconds: int | None = None
     transcode_enabled: bool | None = None
     makemkv_sdf_enabled: bool | None = None
     thediscdb_enabled: bool | None = None
@@ -124,6 +128,8 @@ class ConfigUpdateRequest(BaseModel):
     hold_for_review: bool | None = None
     manual_wait_seconds: int | None = None
     on_previously_ripped: PreviouslyRippedAction | None = None
+    miss_media_type: MissMediaType | None = None
+    miss_titles_kept: MissTitlesKept | None = None
     notifications_enabled: bool | None = None
     movie_sources: list[str] | None = None
     music_sources: list[str] | None = None

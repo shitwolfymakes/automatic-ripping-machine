@@ -122,6 +122,35 @@ async def test_dispatcher_all_miss_returns_none():
     assert result is None
 
 
+@respx.mock
+async def test_dispatcher_cd_with_an_html_reply_from_musicbrainz_is_a_miss_not_a_crash():
+    """A proxy error page answering 200 is one provider's error: identify
+    ends without a match instead of raising (which answered the ripper 500
+    and left it retrying with the drive held)."""
+    respx.get("https://musicbrainz.org/ws/2/discid/abc123").mock(
+        return_value=httpx.Response(200, text="<html>Proxy error</html>")
+    )
+    async with httpx.AsyncClient() as client:
+        dispatcher = MetadataDispatcher(client)
+        scan = ScanResult(disc_type=DiscType.CD, musicbrainz_disc_id="abc123")
+        result = await dispatcher.identify(scan, _config())
+    assert result is None
+    assert [(a["source"], a["outcome"]) for a in dispatcher.last_attempts] == [("musicbrainz", "error")]
+
+
+@respx.mock
+async def test_dispatcher_html_reply_from_one_provider_does_not_stop_the_walk():
+    respx.get("https://api.themoviedb.org/3/search/movie").mock(return_value=httpx.Response(200, json={"results": []}))
+    respx.get("https://api.themoviedb.org/3/search/tv").mock(return_value=httpx.Response(200, json={"results": []}))
+    respx.get("https://www.omdbapi.com/").mock(return_value=httpx.Response(200, text="<html>captive portal</html>"))
+    async with httpx.AsyncClient() as client:
+        dispatcher = MetadataDispatcher(client)
+        scan = ScanResult(disc_type=DiscType.DVD, volume_label="OBSCURE_TITLE")
+        result = await dispatcher.identify(scan, _config(episode_sources=["tmdb"]))
+    assert result is None
+    assert ("omdb", "error") in [(a["source"], a["outcome"]) for a in dispatcher.last_attempts]
+
+
 async def test_dispatcher_data_short_circuits():
     async with httpx.AsyncClient() as client:
         dispatcher = MetadataDispatcher(client)
@@ -571,7 +600,7 @@ async def test_identify_keeps_a_hint_that_is_only_a_year(monkeypatch):
 
 
 async def test_identify_from_imdb_walks_the_ranked_sources():
-    """D-1: the exact-id lookup asks the enabled sources for the kind in rank
+    """The exact-id lookup asks the enabled sources for the kind in rank
     order; an unconfigured source is skipped and the hit carries its source id."""
     from arm_backend.metadata.base import MetadataResult
 
@@ -668,7 +697,7 @@ async def test_identify_from_imdb_uses_the_kind_list():
 
 
 async def test_label_candidate_skipped_when_the_label_hint_is_ignored():
-    """D-4: with `label` removed from disc_hint_sources the volume label is not
+    """With `label` removed from disc_hint_sources the volume label is not
     searched; only the hint title (and its year-free retry) is."""
     searched: list[str] = []
 
@@ -691,7 +720,7 @@ async def test_label_candidate_skipped_when_the_label_hint_is_ignored():
         assert await dispatcher.identify(scan, cfg) is None
         assert searched == []
         assert await dispatcher.identify(scan, cfg, title_hint="Heat") is None
-    # The label's year still narrows the hint search (D-4 gates the candidate, not the year).
+    # The label's year still narrows the hint search (the hint gate applies to the candidate, not the year).
     assert searched == ["movie:Heat:1995", "tv:Heat:1995"]
 
 
@@ -981,7 +1010,7 @@ async def test_fill_external_ids_timeout_keeps_the_hit(monkeypatch):
 
 async def test_title_search_is_kind_major(monkeypatch):
     """All movie sources before any TV source for a movie-shaped candidate:
-    tmdb movie, omdb movie, tmdb tv (spec D-6). OMDb is a movie source only in
+    tmdb movie, omdb movie, tmdb tv. OMDb is a movie source only in
     the automatic order."""
     from arm_backend.metadata import sources as sources_mod
 
@@ -1072,7 +1101,7 @@ async def test_movie_order_follows_movie_sources():
 
 async def test_tv_order_follows_episode_sources():
     """The TV title walk reads the operator's episode list; ids with no adapter
-    yet (tvmaze, tvdb) are skipped and OMDb is not in the list (spec §10)."""
+    yet (tvmaze, tvdb) are skipped and OMDb is not in the list."""
     calls: list[str] = []
 
     def _source(sid: str):
@@ -1133,7 +1162,7 @@ async def test_crc64_lookup_skipped_when_the_switch_is_off():
 
 
 async def test_fill_external_ids_adds_the_tmdb_id_to_a_tvmaze_hit():
-    """S-10: a non-TMDb hit with an IMDb id gets its TMDb id from TMDb /find
+    """A non-TMDb hit with an IMDb id gets its TMDb id from TMDb /find
     when TMDb is configured, so the episode stage can use every provider."""
     from arm_backend.metadata.base import MetadataResult
 

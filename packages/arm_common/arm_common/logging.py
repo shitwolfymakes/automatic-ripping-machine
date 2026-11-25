@@ -1,4 +1,4 @@
-"""Phase 12 — structured JSONL logging shared by every v3 service.
+"""Structured JSONL logging shared by every v3 service.
 
 `configure_service_logging(service_name)` is what each service's `main.py`
 calls in place of `logging.basicConfig`. It installs a single
@@ -16,8 +16,11 @@ does NOT copy the current context — wrap with
 Explicit `extra={"job_id": ...}` on a single call site overrides the
 ambient contextvar (record `__dict__` wins).
 
-JSONL shape pinned by `docs/developers/architecture/05-cross-cutting.md § Logging`:
-`{ts, level, service, job_id, track_id, session_application_id, msg, extra}`.
+Every line carries exactly `{ts, level, service, logger, job_id, track_id,
+session_application_id, event, msg, fields, exc}`. `event` is a stable dotted
+name set by `log_event` (null on plain lines), `fields` holds the structured
+values of that event plus any other caller `extra=`, and `exc` is the
+formatted traceback or null.
 """
 
 from __future__ import annotations
@@ -34,9 +37,8 @@ from typing import Any
 from collections.abc import Iterator
 
 # `_RESERVED_LOGRECORD_KEYS` are the names `logging` already populates on
-# every LogRecord; anything matching is *not* an `extra=` arg the caller
-# passed in. We strip these before dumping `record.__dict__` into the
-# `extra` field of the JSON line.
+# every LogRecord, plus the keys the line schema owns; anything matching is
+# *not* a free-form `extra=` value. Everything else goes into `fields`.
 _RESERVED_LOGRECORD_KEYS: frozenset[str] = frozenset(
     {
         "name",
@@ -61,13 +63,19 @@ _RESERVED_LOGRECORD_KEYS: frozenset[str] = frozenset(
         "process",
         "taskName",
         "message",
-        # Our own correlation keys — promoted to top-level fields, not in `extra`.
+        # Schema keys carried on the record, promoted to top-level line keys.
+        "event",
+        "fields",
         "job_id",
         "track_id",
         "session_application_id",
     }
 )
 
+
+# Chatty third-party loggers held at WARNING while the root level is INFO or above
+# (uvicorn.error carries the WebSocket open/close lines; its real errors are WARNING and up).
+QUIET_LOGGERS: tuple[str, ...] = ("httpx", "httpcore", "uvicorn.access", "uvicorn.error")
 
 _job_id: ContextVar[str | None] = ContextVar("arm_log_job_id", default=None)
 _track_id: ContextVar[str | None] = ContextVar("arm_log_track_id", default=None)
@@ -88,15 +96,13 @@ def _correlation_ids(record: logging.LogRecord) -> dict[str, str | None]:
     }
 
 
-def _extra_fields(record: logging.LogRecord) -> dict[str, Any]:
-    """The caller-supplied extra fields of this record, stamped with the source logger name."""
-    extra: dict[str, Any] = {
+def _fields(record: logging.LogRecord) -> dict[str, Any]:
+    """The structured fields of this record: caller `extra=` values merged with `log_event`'s `fields`."""
+    fields: dict[str, Any] = {
         k: v for k, v in record.__dict__.items() if k not in _RESERVED_LOGRECORD_KEYS and not k.startswith("_")
     }
-    # Stamp the source logger name so the LogTailer can self-filter records
-    # emitted from the WS hub during fan-out (loop guard).
-    extra.setdefault("logger", record.name)
-    return extra
+    fields.update(getattr(record, "fields", None) or {})
+    return fields
 
 
 class JsonFormatter(logging.Formatter):
@@ -107,19 +113,25 @@ class JsonFormatter(logging.Formatter):
         self._service = service
 
     def format(self, record: logging.LogRecord) -> str:
-        extra = _extra_fields(record)
-
         line: dict[str, Any] = {
             "ts": datetime.fromtimestamp(record.created, UTC).isoformat(),
             "level": record.levelname.lower(),
             "service": self._service,
+            "logger": record.name,
             **_correlation_ids(record),
+            "event": getattr(record, "event", None),
             "msg": record.getMessage(),
-            "extra": extra,
+            "fields": _fields(record),
+            "exc": self.formatException(record.exc_info) if record.exc_info else None,
         }
-        if record.exc_info:
-            line["extra"]["exc"] = self.formatException(record.exc_info)
         return json.dumps(line, default=str)
+
+
+def log_event(
+    logger: logging.Logger, event: str, message: str, /, *, level: int = logging.INFO, **fields: object
+) -> None:
+    """Log `message` as the named `event`, carrying `fields` as the line's structured values."""
+    logger.log(level, message, extra={"event": event, "fields": fields})
 
 
 def _build_file_handler(log_dir: str, service_name: str, formatter: logging.Formatter) -> logging.Handler | None:
@@ -144,6 +156,13 @@ def _build_file_handler(log_dir: str, service_name: str, formatter: logging.Form
     return file_handler
 
 
+def _apply_quiet_loggers(root_level: int) -> None:
+    """Hold `QUIET_LOGGERS` at WARNING while the root level is INFO or above; otherwise inherit the root level."""
+    quiet_level = logging.WARNING if root_level >= logging.INFO else logging.NOTSET
+    for name in QUIET_LOGGERS:
+        logging.getLogger(name).setLevel(quiet_level)
+
+
 def configure_service_logging(service_name: str, log_dir: str = "/logs", level: str = "info") -> None:
     """Install JSONL logging on the root logger for one service.
 
@@ -156,6 +175,7 @@ def configure_service_logging(service_name: str, log_dir: str = "/logs", level: 
     formatter = JsonFormatter(service_name)
     root = logging.getLogger()
     root.setLevel(level.upper())
+    _apply_quiet_loggers(root.level)
     for handler in list(root.handlers):
         root.removeHandler(handler)
 

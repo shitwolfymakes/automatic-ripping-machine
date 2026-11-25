@@ -9,6 +9,12 @@ class DiscType(StrEnum):
     UNKNOWN = "unknown"
 
 
+# Video discs: a miss parks in review with every title listed, and an
+# unidentified rip of one finishes plain ripped. Any other disc that misses
+# keeps the plain miss path.
+VIDEO_DISC_TYPES: frozenset[DiscType] = frozenset({DiscType.DVD, DiscType.BLURAY})
+
+
 class DriveStatus(StrEnum):
     ONLINE = "online"
     OFFLINE = "offline"
@@ -46,7 +52,7 @@ class DriveLifecycle(StrEnum):
 
     DETECTED = "detected"  # seen by the scanner, no decision yet
     IGNORED = "ignored"  # operator said "not ARM's" — never nag, never prune
-    ENROLLED = "enrolled"  # operator said "ARM's" — a ripper serves it (Plan 3 spawns it)
+    ENROLLED = "enrolled"  # operator said "ARM's" — a ripper serves it
     RETIRED = "retired"  # a virtual (ISO) drive whose one-shot rip has ended
 
 
@@ -152,7 +158,7 @@ RESOLVABLE_PRESERVE_JOB_STATUSES: frozenset[JobStatus] = frozenset(
 )
 RESOLVABLE_JOB_STATUSES: frozenset[JobStatus] = RESOLVABLE_PROMOTE_JOB_STATUSES | RESOLVABLE_PRESERVE_JOB_STATUSES
 # Session apply (POST /jobs/{id}/transcode). OK = resolve outputs now (or park
-# as no_tracks pre-rip); PARK = park as waiting_identify until identity lands.
+# as no_tracks pre-rip); PARK = park as waiting_identify until the job is identified.
 APPLY_OK_JOB_STATUSES: frozenset[JobStatus] = frozenset(
     {JobStatus.IDENTIFIED, JobStatus.AWAITING_REVIEW, JobStatus.RIPPED, JobStatus.RIPPED_PARTIAL}
 )
@@ -186,8 +192,7 @@ class TrackKind(StrEnum):
 
 class TrackRole(StrEnum):
     """What one title on a disc is. Set by identity sources via the resolver
-    (arm_backend.identity) or by the operator; replaces the old free-text
-    role and the per-track video_type."""
+    (arm_backend.identity) or by the operator."""
 
     MAIN = "main"
     EPISODE = "episode"
@@ -202,6 +207,58 @@ class MediaType(StrEnum):
     MUSIC = "music"
     DATA = "data"
     ISO = "iso"
+
+
+class MusicTagField(StrEnum):
+    """What a music session writes into each encoded track: one value per
+    `MusicTags` field, then the embedded cover. Settings order."""
+
+    ARTIST = "artist"
+    ALBUM_ARTIST = "album_artist"
+    ALBUM = "album"
+    TITLE = "title"
+    TRACK_NUMBER = "track_number"
+    TRACK_TOTAL = "track_total"
+    DISC_NUMBER = "disc_number"
+    YEAR = "year"
+    MUSICBRAINZ_RELEASE_ID = "musicbrainz_release_id"
+    COVER = "cover"
+
+
+class MusicCoverSize(StrEnum):
+    """The Cover Art Archive front cover a music session embeds: a thumbnail
+    whose longest side is this many pixels, or the image as uploaded. The
+    archive sends the original when it is smaller than the size asked for."""
+
+    PX_250 = "250"
+    PX_500 = "500"
+    PX_1200 = "1200"
+    SOURCE = "source"
+
+
+class MusicCoverMaxSize(StrEnum):
+    """The largest cover file a music session embeds. A Cover Art Archive cover
+    over it gives way to the next smaller size; UNLIMITED embeds any size."""
+
+    KB_500 = "500kb"
+    MB_1 = "1mb"
+    MB_2 = "2mb"
+    MB_5 = "5mb"
+    MB_10 = "10mb"
+    UNLIMITED = "unlimited"
+
+
+# Encoding settings do not depend on whether a video is a film or an episode,
+# so a movie and a TV transcode preset are interchangeable.
+VIDEO_MEDIA_TYPES: frozenset[MediaType] = frozenset({MediaType.MOVIE, MediaType.TV})
+
+
+def transcode_preset_media_types(session_media_type: MediaType) -> frozenset[MediaType]:
+    """The transcode preset media types that fit a session of this media type: both video types for a movie or TV
+    session, else its own."""
+    if session_media_type in VIDEO_MEDIA_TYPES:
+        return VIDEO_MEDIA_TYPES
+    return frozenset({session_media_type})
 
 
 class TrackSelection(StrEnum):
@@ -241,6 +298,21 @@ class ContainerFormat(StrEnum):
     NONE = "none"
 
 
+class MissMediaType(StrEnum):
+    """The media type a DVD or Blu-ray that misses identification starts with."""
+
+    MOVIE = "movie"
+    TV = "tv"
+
+
+class MissTitlesKept(StrEnum):
+    """Which titles an unidentified disc keeps: every title, or what the routed
+    session's rip preset would keep."""
+
+    ALL = "all"
+    PRESET = "preset"
+
+
 class PreviouslyRippedAction(StrEnum):
     """What identify does with a disc whose fingerprint matches an earlier rip
     (a job in POST_RIP_JOB_STATUSES, on any drive)."""
@@ -275,6 +347,14 @@ class TranscodeTaskStatus(StrEnum):
     IN_PROGRESS = "in_progress"
     DONE = "done"
     FAILED = "failed"
+
+
+# A task that may hold a spawned transcoder or a GPU claim: queued (it can be
+# spawned and claim a GPU before its /claim) or in progress. A job with one
+# cannot be deleted (the cascade would pull the task out from under it).
+ACTIVE_TRANSCODE_TASK_STATUSES: frozenset[TranscodeTaskStatus] = frozenset(
+    {TranscodeTaskStatus.QUEUED, TranscodeTaskStatus.IN_PROGRESS}
+)
 
 
 class GpuVendor(StrEnum):
@@ -351,7 +431,7 @@ class MakemkvSdfState(StrEnum):
 
 
 class UserRole(StrEnum):
-    """Fixed two-account model (spec 2026-07-12-basic-user-management-design).
+    """Fixed two-account model.
 
     ADMIN — the single writer; the only account that can hold a session.
     GUEST — read-everything/write-nothing; acquired by having no token at all
@@ -366,7 +446,7 @@ class UserRole(StrEnum):
 
 
 class SetupStep(StrEnum):
-    """First-run setup walkthrough steps, in walkthrough order (setup spec 2026-10-01).
+    """First-run setup walkthrough steps, in walkthrough order.
 
     Stored as VARCHAR keys inside Config.setup_progress JSON, validated in the app.
     """

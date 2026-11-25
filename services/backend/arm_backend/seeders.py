@@ -36,6 +36,7 @@ from arm_common import (
 )
 
 from arm_backend.constants import ADMIN_USERNAME, CONFIG_SINGLETON_ID, GUEST_USERNAME
+from arm_backend.min_title_length import env_min_title_length_seconds
 from arm_backend.notification_dispatcher import DEFAULT_INBOX_EVENT_TYPES
 from arm_backend.notifications.inbox_listener import INBOX_CHANNEL_ID
 
@@ -122,6 +123,7 @@ async def _seed_config_singleton(session: AsyncSession) -> None:
                 # NULL until the next one made Settings show a different cap
                 # from the one the dispatcher used.
                 max_parallel_transcodes=settings.MAX_PARALLEL_TRANSCODES,
+                min_title_length_seconds=env_min_title_length_seconds(),
             )
         )
         await session.flush()
@@ -139,6 +141,14 @@ async def _seed_config_singleton(session: AsyncSession) -> None:
     # the column is authoritative and Settings edits stick.
     if existing.max_parallel_transcodes is None:
         existing.max_parallel_transcodes = settings.MAX_PARALLEL_TRANSCODES
+        session.add(existing)
+        await session.flush()
+
+    # One-shot backfill for the env->DB move of the minimum title length:
+    # NULL means this install has never seen the column, so seed it from the
+    # ripper min-length env value (default 120).
+    if existing.min_title_length_seconds is None:
+        existing.min_title_length_seconds = env_min_title_length_seconds()
         session.add(existing)
         await session.flush()
 
@@ -345,7 +355,7 @@ SESSIONS: list[dict[str, Any]] = [
         "media_type": MediaType.MOVIE,
         "rip_preset_id": "rpr_builtin_movie_main_feature",
         "transcode_preset_id": "tpr_builtin_plex_1080p_h265",
-        "output_path_template": "{title} ({year?})/{title} ({year?}) - Track {track} - {transcode_slug}.{ext}",
+        "output_path_template": "{title} ({year?}) [{edition?}]/{title} ({year?}) [{edition?}] ({track_label?}) - {transcode_slug}.{ext}",
     },
     {
         "id": "ses_builtin_movie_plex_1080p_gpu",
@@ -353,7 +363,7 @@ SESSIONS: list[dict[str, Any]] = [
         "media_type": MediaType.MOVIE,
         "rip_preset_id": "rpr_builtin_movie_main_feature",
         "transcode_preset_id": "tpr_builtin_plex_1080p_h265_gpu",
-        "output_path_template": "{title} ({year?})/{title} ({year?}) - Track {track} - {transcode_slug}.{ext}",
+        "output_path_template": "{title} ({year?}) [{edition?}]/{title} ({year?}) [{edition?}] ({track_label?}) - {transcode_slug}.{ext}",
     },
     {
         "id": "ses_builtin_movie_plex_2160p",
@@ -361,7 +371,7 @@ SESSIONS: list[dict[str, Any]] = [
         "media_type": MediaType.MOVIE,
         "rip_preset_id": "rpr_builtin_movie_main_feature",
         "transcode_preset_id": "tpr_builtin_plex_2160p_hevc",
-        "output_path_template": "{title} ({year?})/{title} ({year?}) - Track {track} - {transcode_slug}.{ext}",
+        "output_path_template": "{title} ({year?}) [{edition?}]/{title} ({year?}) [{edition?}] ({track_label?}) - {transcode_slug}.{ext}",
     },
     {
         "id": "ses_builtin_movie_archive",
@@ -369,7 +379,7 @@ SESSIONS: list[dict[str, Any]] = [
         "media_type": MediaType.MOVIE,
         "rip_preset_id": "rpr_builtin_movie_archive",
         "transcode_preset_id": "tpr_builtin_passthrough_mkv",
-        "output_path_template": "{title} ({year?})/{title} ({year?}) - Track {track} ({duration_human}) - {transcode_slug}.{ext}",
+        "output_path_template": "{title} ({year?}) [{edition?}]/{title} ({year?}) [{edition?}] ({track_label?}) ({duration_human}) - {transcode_slug}.{ext}",
     },
     {
         # Same `rpr_builtin_movie_archive` (every title), but each track is
@@ -381,7 +391,7 @@ SESSIONS: list[dict[str, Any]] = [
         "media_type": MediaType.MOVIE,
         "rip_preset_id": "rpr_builtin_movie_archive",
         "transcode_preset_id": "tpr_builtin_plex_1080p_h265_gpu",
-        "output_path_template": "{title} ({year?})/{title} ({year?}) - Track {track} ({duration_human}) - {transcode_slug}.{ext}",
+        "output_path_template": "{title} ({year?}) [{edition?}]/{title} ({year?}) [{edition?}] ({track_label?}) ({duration_human}) - {transcode_slug}.{ext}",
     },
     {
         "id": "ses_builtin_tv_plex_1080p",
@@ -434,7 +444,7 @@ SESSIONS: list[dict[str, Any]] = [
 ]
 
 
-# --- Built-in session routes (G-17) --------------------------------------------
+# --- Built-in session routes --------------------------------------------
 
 # A music disc routes to a music session out of the box; video stays on the
 # drive default to preserve existing behavior (no video routes seeded).
@@ -445,7 +455,7 @@ SESSION_ROUTES: list[dict[str, Any]] = [
 
 
 async def _seed_session_routes(session: AsyncSession) -> None:
-    """Seed the built-in session routes exactly once (I1).
+    """Seed the built-in session routes exactly once.
 
     Unlike the id-keyed builtins above, `SessionRoute` rows have no
     deterministic id to key an idempotent per-row insert on (their natural

@@ -36,6 +36,11 @@ from arm_backend.transcode_dispatcher import (
 )
 from arm_backend.ws import WSHub
 from arm_common import (
+    DiscType,
+    Job,
+    JobStatus,
+    Track,
+    TrackKind,
     Gpu,
     GpuStatus,
     GpuVendor,
@@ -48,6 +53,7 @@ from arm_common import (
 )
 from arm_common.enums import ContainerFormat, MediaType, TranscodeTool
 from tests._fakes import FakeSession
+from tests._logs import LineCapture
 
 
 def _settings(**overrides: Any) -> Settings:
@@ -556,7 +562,7 @@ async def test_any_encoder_prefers_vendor_rank() -> None:
 
 
 async def test_any_webm_encoder_skips_vaapi_devices() -> None:
-    """D-071: an any_* WebM preset must not land on a VAAPI device, whose
+    """An any_* WebM preset must not land on a VAAPI device, whose
     ffmpeg engine cannot write WebM; it takes another vendor or CPU."""
     db = _build_db(
         encoder="any_av1",
@@ -684,18 +690,16 @@ def test_gpu_awaiting_probe_reads_the_active_dispatcher() -> None:
     assert gpu_awaiting_probe(gpu) is False
 
 
-async def test_spawn_pending_keeps_a_task_queued_while_its_device_awaits_a_probe(
-    caplog: pytest.LogCaptureFixture,
-) -> None:
+async def test_spawn_pending_keeps_a_task_queued_while_its_device_awaits_a_probe(job_log: LineCapture) -> None:
     db = _never_probed_db("qsv_h265")
     docker = MagicMock()
     disp = TranscodeDispatcher(_settings(), _db_factory(db), docker, WSHub())
     disp.pending_probe_gpu_ids.add("gpu_0")
-    with caplog.at_level("INFO", logger="arm_backend.transcode_dispatcher"):
-        assert await disp.spawn_pending(db) == 0
+    assert await disp.spawn_pending(db) == 0
     docker.containers.run.assert_not_called()
     assert db.rows["transcode_tasks"][0].status == TranscodeTaskStatus.QUEUED
-    assert "(waiting for GPU probe)" in caplog.text
+    (line,) = job_log.lines(event="transcode.waiting")
+    assert line["fields"]["reason"] == "waiting for GPU probe"
 
 
 async def test_any_encoder_all_eligible_busy_queues() -> None:
@@ -1106,3 +1110,274 @@ async def test_qsv_spawn_uses_override_without_checking_variant_exists() -> None
     await disp.spawn_pending(db)
     assert docker_client.containers.run.call_args.kwargs["image"] == "custom-qsv:latest"
     docker_client.images.get.assert_not_called()
+
+
+# --- claim-time HandBrake settings check -----------------------
+
+
+def _store_with_fixture_schema() -> Any:
+    from arm_backend.handbrake_schema_store import SchemaStore
+    from tests._hb_schema import fixture_schema
+
+    store = SchemaStore()
+    store.replace(fixture_schema())
+    return store
+
+
+def _invalid_blocks(*families: str) -> dict[str, Any]:
+    return {"common": {}, "encoders": {f: {"VideoPreset": "nope"} for f in families}}
+
+
+_NV_AND_QSV = [
+    (GpuVendor.NVENC, GpuStatus.AVAILABLE, ["h265"], None),
+    (GpuVendor.QSV, GpuStatus.AVAILABLE, ["h265"], None),
+]
+_AMD_ONLY = [(GpuVendor.VAAPI, GpuStatus.AVAILABLE, ["h265"], None)]
+
+
+def _settings_db(
+    settings: dict[str, Any] | None,
+    *,
+    encoder: str = "any_h265",
+    gpus: list[tuple[GpuVendor, GpuStatus, list[str], str | None]] | None = None,
+    preset_ref: str = "H.265 MKV 1080p30",
+) -> FakeSession:
+    db = _build_db(encoder=encoder, gpus=_NV_AND_QSV if gpus is None else gpus)
+    preset = db.rows["transcode_presets"][0]
+    preset.handbrake_settings = settings
+    preset.preset_ref = preset_ref
+    return db
+
+
+def _settings_dispatcher(db: FakeSession, store: Any = "fixture", docker: Any = None) -> TranscodeDispatcher:
+    schema_store = _store_with_fixture_schema() if store == "fixture" else store
+    return TranscodeDispatcher(_settings(), _db_factory(db), docker or MagicMock(), WSHub(), schema_store=schema_store)
+
+
+async def _settings_claim(db: FakeSession, store: Any = "fixture") -> GpuAssignment:
+    return await _claim(db, _settings_dispatcher(db, store))
+
+
+async def test_valid_settings_claim_the_nvidia_device() -> None:
+    db = _settings_db({"common": {}, "encoders": {"nvenc_h265": {"VideoPreset": "slow"}}})
+    assignment = await _settings_claim(db)
+    assert assignment.gpu is db.rows["gpus"][0]
+    assert assignment.encoder is not None and assignment.encoder.id == "nvenc_h265"
+
+
+async def test_an_invalid_nvenc_family_reroutes_to_qsv(caplog: pytest.LogCaptureFixture) -> None:
+    db = _settings_db(_invalid_blocks("nvenc_h265"))
+    with caplog.at_level("INFO", logger="arm_backend.transcode_dispatcher"):
+        assignment = await _settings_claim(db)
+    assert assignment.gpu is db.rows["gpus"][1]
+    assert assignment.encoder is not None and assignment.encoder.id == "qsv_h265"
+    skipped = [r.getMessage() for r in caplog.records if r.getMessage().startswith("skipping ")]
+    assert skipped == [
+        "skipping nvenc_h265 for task txt_1: 'nope' is not one of fastest, faster, fast, medium, slow, slower, "
+        "slowest for nvenc_h265"
+    ]
+
+
+async def test_nvenc_and_qsv_invalid_with_no_cpu_block_spawns_on_cpu(caplog: pytest.LogCaptureFixture) -> None:
+    db = _settings_db(_invalid_blocks("nvenc_h265", "qsv_h265"))
+    with caplog.at_level("INFO", logger="arm_backend.transcode_dispatcher"):
+        assignment = await _settings_claim(db)
+    assert assignment.action == "spawn"
+    assert assignment.gpu is None
+    assert assignment.encoder is not None and assignment.encoder.id == "cpu_h265"
+    assert all(g.status == GpuStatus.AVAILABLE for g in db.rows["gpus"])
+    skipped = [r.getMessage().split(":")[0] for r in caplog.records if r.getMessage().startswith("skipping ")]
+    assert skipped == ["skipping nvenc_h265 for task txt_1", "skipping qsv_h265 for task txt_1"]
+
+
+async def test_every_family_invalid_fails_the_task_with_every_reason() -> None:
+    db = _settings_db(_invalid_blocks("nvenc_h265", "qsv_h265", "x265"))
+    disp = _settings_dispatcher(db)
+    await disp.spawn_pending(db)
+    task = db.rows["transcode_tasks"][0]
+    assert task.status == TranscodeTaskStatus.FAILED
+    assert task.last_error.startswith("no valid encoder for this preset: nvenc_h265: 'nope' is not one of")
+    assert "; qsv_h265: 'nope' is not one of" in task.last_error
+    assert "; x265: 'nope' is not one of" in task.last_error
+
+
+async def test_a_pinned_invalid_family_fails_the_task() -> None:
+    db = _settings_db(_invalid_blocks("nvenc_h265"), encoder="nvenc_h265")
+    assignment = await _settings_claim(db)
+    assert assignment.action == "fail"
+    assert str(assignment.reason).startswith("no valid encoder for this preset: nvenc_h265: 'nope'")
+    assert db.rows["gpus"][0].status == GpuStatus.AVAILABLE
+
+
+async def test_a_cpu_encoder_with_an_invalid_block_fails_the_task() -> None:
+    db = _settings_db(_invalid_blocks("x265"), encoder="cpu_h265")
+    assignment = await _settings_claim(db)
+    assert assignment.action == "fail"
+    assert str(assignment.reason).startswith("no valid encoder for this preset: x265: 'nope'")
+
+
+async def test_the_preset_encoder_fails_when_its_base_family_is_invalid() -> None:
+    db = _settings_db(_invalid_blocks("x265"), encoder="preset")
+    assignment = await _settings_claim(db)
+    assert assignment.action == "fail"
+    assert assignment.encoder is None
+    assert str(assignment.reason).startswith("no valid encoder for this preset: x265: 'nope'")
+
+
+async def test_an_unknown_base_preset_fails_the_task_with_its_message() -> None:
+    db = _settings_db(_invalid_blocks("x265"), preset_ref="No Such Preset")
+    assignment = await _settings_claim(db)
+    assert assignment == GpuAssignment(
+        gpu=None, encoder=None, action="fail", reason="HandBrake 1.11.1 has no built-in preset named 'No Such Preset'"
+    )
+
+
+@pytest.mark.parametrize("store", [None, "empty"])
+async def test_without_a_loaded_schema_settings_are_not_checked(store: Any) -> None:
+    from arm_backend.handbrake_schema_store import SchemaStore
+
+    db = _settings_db(_invalid_blocks("nvenc_h265", "qsv_h265", "x265"))
+    assignment = await _settings_claim(db, SchemaStore() if store == "empty" else None)
+    assert assignment.gpu is db.rows["gpus"][0]
+    assert assignment.encoder is not None and assignment.encoder.id == "nvenc_h265"
+
+
+@pytest.mark.parametrize("store", [None, "empty"])
+async def test_without_a_loaded_schema_a_settings_preset_never_lands_on_vaapi(store: Any) -> None:
+    """No schema is needed: the ffmpeg VAAPI engine cannot apply HandBrake settings."""
+    from arm_backend.handbrake_schema_store import SchemaStore
+
+    db = _settings_db(_invalid_blocks("x265"), gpus=_AMD_ONLY)
+    assignment = await _settings_claim(db, SchemaStore() if store == "empty" else None)
+    assert assignment == GpuAssignment(gpu=None, encoder=assignment.encoder, action="spawn")
+    assert assignment.encoder is not None and assignment.encoder.id == "cpu_h265"
+    assert db.rows["gpus"][0].status == GpuStatus.AVAILABLE
+
+
+async def test_settings_on_an_amd_only_host_spawn_on_cpu_never_vaapi() -> None:
+    db = _settings_db({"common": {}, "encoders": {"x265": {"VideoPreset": "slow"}}}, gpus=_AMD_ONLY)
+    assignment = await _settings_claim(db)
+    assert assignment == GpuAssignment(gpu=None, encoder=assignment.encoder, action="spawn")
+    assert assignment.encoder is not None and assignment.encoder.id == "cpu_h265"
+    assert db.rows["gpus"][0].status == GpuStatus.AVAILABLE
+
+
+async def test_no_settings_on_an_amd_only_host_claim_vaapi_as_today() -> None:
+    db = _settings_db(None, gpus=_AMD_ONLY)
+    assignment = await _settings_claim(db)
+    assert assignment.gpu is db.rows["gpus"][0]
+    assert assignment.encoder is not None and assignment.encoder.id == "vaapi_h265"
+
+
+async def test_a_queued_claim_logs_no_skipped_family(caplog: pytest.LogCaptureFixture) -> None:
+    gpus = [
+        (GpuVendor.NVENC, GpuStatus.AVAILABLE, ["h265"], None),
+        (GpuVendor.QSV, GpuStatus.BUSY, ["h265"], "txt_other"),
+    ]
+    db = _settings_db(_invalid_blocks("nvenc_h265"), gpus=gpus)
+    with caplog.at_level("INFO", logger="arm_backend.transcode_dispatcher"):
+        assignment = await _settings_claim(db)
+    assert assignment.action == "queue"
+    assert not [r for r in caplog.records if r.getMessage().startswith("skipping ")]
+
+
+# --- once-per-wait GPU log ----------------------------------------------------
+
+
+def _busy_gpu_db(encoder: str = "any_h265") -> FakeSession:
+    db = _build_db(encoder=encoder, gpus=[(GpuVendor.QSV, GpuStatus.BUSY, ["h264", "h265"], "other-task")])
+    db.rows["jobs"] = [
+        Job(
+            id="job_01JZXR7K3M5Q8N4VWA00000001",
+            drive_id="d",
+            disc_type=DiscType.DVD,
+            status=JobStatus.RIPPED,
+            metadata_json={},
+        )
+    ]
+    db.rows["tracks"] = [
+        Track(id="trk_1", job_id="job_01JZXR7K3M5Q8N4VWA00000001", kind=TrackKind.VIDEO_TITLE, index=1, source_ref="1")
+    ]
+    return db
+
+
+def _wait_states(job_log: LineCapture) -> list[str]:
+    return [line["fields"]["state"] for line in job_log.lines(event="transcode.waiting")]
+
+
+async def test_a_gpu_wait_logs_once_and_resumes_when_the_task_spawns(job_log: LineCapture) -> None:
+    db = _busy_gpu_db()
+    disp = TranscodeDispatcher(_settings(), _db_factory(db), MagicMock(), WSHub())
+    for _ in range(3):
+        assert await disp.spawn_pending(db) == 0
+    assert _wait_states(job_log) == ["waiting"]
+    (waiting,) = job_log.lines(event="transcode.waiting")
+    assert waiting["msg"] == "transcode waiting for a GPU encoder (any_h265): track 1/1"
+    assert waiting["job_id"] == "job_01JZXR7K3M5Q8N4VWA00000001"
+
+    gpu = db.rows["gpus"][0]
+    gpu.status, gpu.claimed_by_task_id = GpuStatus.AVAILABLE, None
+    assert await disp.spawn_pending(db) == 1
+    assert _wait_states(job_log) == ["waiting", "resumed"]
+
+
+async def test_a_spawned_task_not_yet_claimed_does_not_wait_again(job_log: LineCapture) -> None:
+    """Until its transcoder claims it the spawned task is still QUEUED, and the next tick finds its GPU
+    busy (claimed by the task itself); that is not a new wait."""
+    db = _busy_gpu_db()
+    disp = TranscodeDispatcher(_settings(), _db_factory(db), MagicMock(), WSHub())
+    await disp.spawn_pending(db)
+    gpu = db.rows["gpus"][0]
+    gpu.status, gpu.claimed_by_task_id = GpuStatus.AVAILABLE, None
+    assert await disp.spawn_pending(db) == 1
+    assert db.rows["transcode_tasks"][0].status == TranscodeTaskStatus.QUEUED
+    assert await disp.spawn_pending(db) == 0
+    assert await disp.spawn_pending(db) == 0
+    assert _wait_states(job_log) == ["waiting", "resumed"]
+
+    # Once the task leaves the queue it is forgotten: queued again later, it waits afresh.
+    db.rows["transcode_tasks"][0].status = TranscodeTaskStatus.IN_PROGRESS
+    await disp.spawn_pending(db)
+    db.rows["transcode_tasks"][0].status = TranscodeTaskStatus.QUEUED
+    await disp.spawn_pending(db)
+    assert _wait_states(job_log) == ["waiting", "resumed", "waiting"]
+
+
+async def test_the_wait_check_runs_after_the_pass_commits(job_log: LineCapture) -> None:
+    db = _busy_gpu_db()
+    disp = TranscodeDispatcher(_settings(), _db_factory(db), MagicMock(), WSHub())
+    await disp.spawn_pending(db)
+    db.call_log.clear()
+    await disp.spawn_pending(db)
+    assert db.call_log[-2:] == ["commit", "execute"]
+
+
+async def test_a_waiting_task_that_is_cancelled_resumes_once(job_log: LineCapture) -> None:
+    db = _busy_gpu_db()
+    disp = TranscodeDispatcher(_settings(), _db_factory(db), MagicMock(), WSHub())
+    await disp.spawn_pending(db)
+    db.rows["transcode_tasks"] = []  # DELETE /api/transcodes/{id}
+    await disp.spawn_pending(db)
+    await disp.spawn_pending(db)
+    assert _wait_states(job_log) == ["waiting", "resumed"]
+    (resumed,) = job_log.lines(event="transcode.waiting")[1:]
+    assert resumed["job_id"] == "job_01JZXR7K3M5Q8N4VWA00000001" and resumed["fields"]["task_id"] == "txt_1"
+
+
+async def test_a_waiting_task_that_then_fails_resumes(job_log: LineCapture) -> None:
+    db = _busy_gpu_db(encoder="qsv_h265")
+    disp = TranscodeDispatcher(_settings(), _db_factory(db), MagicMock(), WSHub())
+    await disp.spawn_pending(db)
+    db.rows["gpus"] = []  # the pinned vendor's GPU is gone: the task can never run
+    await disp.spawn_pending(db)
+    assert db.rows["transcode_tasks"][0].status == TranscodeTaskStatus.FAILED
+    assert _wait_states(job_log) == ["waiting", "resumed"]
+
+
+async def test_the_spawn_line_is_debug(caplog: pytest.LogCaptureFixture) -> None:
+    db = _build_db(encoder="preset", gpus=[])
+    disp = TranscodeDispatcher(_settings(), _db_factory(db), MagicMock(), WSHub())
+    with caplog.at_level("DEBUG", logger="arm_backend.transcode_dispatcher"):
+        assert await disp.spawn_pending(db) == 1
+    (record,) = [r for r in caplog.records if r.getMessage().startswith("transcode spawned")]
+    assert record.levelname == "DEBUG"

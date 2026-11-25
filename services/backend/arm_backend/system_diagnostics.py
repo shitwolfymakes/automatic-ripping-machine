@@ -5,8 +5,8 @@ created at startup and re-ensured before every read — see `ensure_roots`);
 this endpoint reports only what cannot be healed from inside a container:
 a mount that is read-only or wrong-owner (v3 never chowns user mounts —
 docs/developers/architecture/06-deployment.md), no rippers registered yet, a missing config
-row. The ported UI's settings System-Health panel and first-run wizard
-render it (Tier-12)."""
+row. The settings System-Health panel and the first-run walkthrough
+render it."""
 
 import asyncio
 import os
@@ -19,12 +19,14 @@ from arm_backend.config import effective_transcode_capable, settings
 from arm_backend.constants import CONFIG_SINGLETON_ID
 from arm_backend.makemkv_status import makemkv_state_detail
 from arm_backend.ripper_manager import RipperManager
+from arm_backend.transcode_access_message import ACCESS_ERROR_PREFIX
 from arm_backend.transcode_dispatcher import TranscodeDispatcher
 from arm_backend.transcode_queue import count_queued_encode_tasks
 from arm_backend.utils import default_roots
 from arm_common import (
     Config,
     Drive,
+    Gpu,
     DriveKind,
     DriveLifecycle,
     DriveStatus,
@@ -50,7 +52,7 @@ def system_roots(request: Request) -> dict[str, str]:
 
 
 # Host-side bind source for each container root, so the report can print the
-# exact `chown` the operator runs on the server (setup spec §6.3).
+# exact `chown` the operator runs on the server.
 _HOST_PATH_SETTING = {
     "MEDIA_ROOT": "ARM_HOST_MEDIA_PATH",
     "RAW_ROOT": "ARM_HOST_RAW_PATH",
@@ -186,7 +188,18 @@ async def _ripper_only_status(db: AsyncSession) -> tuple[str, str | None]:
     return tc_status, tc_detail
 
 
-async def _probed_transcoder_status(dispatcher: TranscodeDispatcher) -> tuple[str, str | None, list[DiagnosticDetail]]:
+async def _gpu_folder_problem(db: AsyncSession) -> str | None:
+    """An enabled GPU's probe found a folder the transcoder cannot use."""
+    gpus = (await db.execute(select(Gpu))).scalars().all()
+    for gpu in gpus:
+        if gpu.enabled and (gpu.probe_error or "").startswith(ACCESS_ERROR_PREFIX):
+            return gpu.probe_error
+    return None
+
+
+async def _probed_transcoder_status(
+    dispatcher: TranscodeDispatcher, db: AsyncSession
+) -> tuple[str, str | None, list[DiagnosticDetail]]:
     # probe() pings a possibly-remote ssh docker host; run it off the
     # event loop so a slow/unreachable host doesn't block the server.
     ok, detail = await asyncio.to_thread(dispatcher.probe)
@@ -201,6 +214,9 @@ async def _probed_transcoder_status(dispatcher: TranscodeDispatcher) -> tuple[st
             f"{dispatcher.backend_url_warning} (ARM_TRANSCODE_BACKEND_URL_CHECK=warn: spawning anyway)",
             tc_details,
         )
+    folder_problem = await _gpu_folder_problem(db)
+    if folder_problem:
+        return "warning", folder_problem, tc_details
     return "ok", None, tc_details
 
 
@@ -214,7 +230,7 @@ async def _transcoder_status(
         return "warning", "transcoder dispatcher not running", []
     if not dispatcher.host_paths_set():
         return "warning", "transcoder disabled: ARM_HOST_*_PATH not set", []
-    return await _probed_transcoder_status(dispatcher)
+    return await _probed_transcoder_status(dispatcher, db)
 
 
 def _transcoder_location() -> tuple[str, str | None]:
@@ -303,7 +319,7 @@ async def online_enrolled_drives(db: AsyncSession) -> list[Drive]:
     """Online drives a ripper actually serves.
 
     Scanner-created DETECTED rows and virtual ISO rows are ``online`` by default,
-    so ``status`` alone would count a drive that is merely plugged in (D-149).
+    so ``status`` alone would count a drive that is merely plugged in.
     """
     stmt = (
         select(Drive)

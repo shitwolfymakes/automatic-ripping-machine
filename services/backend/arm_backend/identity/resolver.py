@@ -1,5 +1,5 @@
 """Pick one value per identity field from every source's proposals and apply
-it with provenance (design spec section 6.1). Pure: no I/O, no session."""
+it with provenance. Pure: no I/O, no session."""
 
 from __future__ import annotations
 
@@ -16,8 +16,8 @@ from arm_backend.identity.sources.base import TIER_BY_CAPABILITY, Capability
 
 logger = logging.getLogger(__name__)
 
-# Old apply_map forced these two regardless of the current value; every other
-# field was fill-if-empty. Kept so pre-provenance rows behave as before.
+# These two are applied regardless of the current value; every other field is
+# fill-if-empty. Kept so pre-provenance rows behave consistently.
 _UNGUARDED_ATTRS = {"role", "excluded"}
 _DEFAULTS: dict[str, Any] = {"excluded": False}
 # Episode matches are winner-takes-all: two providers' placements of the same
@@ -57,7 +57,7 @@ def _usable_sources(
         if source_id not in tiers:
             logger.debug("identity resolver: ignoring unknown source %s", source_id)
             continue
-        # PR 4: a source the operator unchecked contributes nothing unless
+        # A source the operator unchecked contributes nothing unless
         # pinned; it stays in `known_sources` (via `tiers`), so fields it
         # owned still reset to default when nothing else claims them.
         if source_id in disabled and source_id not in pinned:

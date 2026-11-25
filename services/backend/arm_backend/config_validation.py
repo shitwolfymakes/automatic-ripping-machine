@@ -49,7 +49,7 @@ def _validate_enum_fields(fields: dict[str, Any], cfg: Config) -> None:
 
 def _validate_positive_ints(fields: dict[str, Any]) -> None:
     # The number inputs send null for an emptied box; these columns are NOT
-    # NULL, so refuse it here rather than 500 on the commit (D-096).
+    # NULL, so refuse it here rather than 500 on the commit.
     for key in (
         "drive_scan_interval_seconds",
         "drive_detected_prune_days",
@@ -65,6 +65,20 @@ def _validate_manual_wait(fields: dict[str, Any]) -> None:
         # 0 is a real choice: no countdown, the held disc starts at once.
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail="manual_wait_seconds must be 0 or a positive integer"
+        )
+
+
+MAX_MIN_TITLE_LENGTH_SECONDS = 3600
+
+
+def _validate_min_title_length(fields: dict[str, Any]) -> None:
+    value = fields.get("min_title_length_seconds", 0)
+    # 0 is a real choice: list and rip every title MakeMKV finds. An hour is
+    # the ceiling; anything longer would drop most features.
+    if value is None or not 0 <= value <= MAX_MIN_TITLE_LENGTH_SECONDS:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"min_title_length_seconds must be 0 to {MAX_MIN_TITLE_LENGTH_SECONDS} seconds",
         )
 
 
@@ -127,7 +141,7 @@ def _validate_auto_apply_flags(fields: dict[str, Any]) -> None:
 
 def _validate_not_null_columns(fields: dict[str, Any]) -> None:
     # Catch-all for the rest of the NOT NULL columns: a JSON null would
-    # otherwise reach the commit and 500 (D-164). The checks above keep their
+    # otherwise reach the commit and 500. The checks above keep their
     # field-specific messages.
     columns = sa_inspect(Config).columns
     for key, value in fields.items():
@@ -139,6 +153,7 @@ def validate_config_update(fields: dict[str, Any], raw: dict[str, Any], cfg: Con
     _validate_enum_fields(fields, cfg)
     _validate_positive_ints(fields)
     _validate_manual_wait(fields)
+    _validate_min_title_length(fields)
     _validate_on_previously_ripped(fields)
     _validate_iso_rip_cap(fields)
     _validate_transcode_enabled_not_null(fields)

@@ -3,14 +3,16 @@
 from typing import Any
 
 from arm_backend.metadata.base import MetadataResult
+from arm_common import Job
+from arm_common.enums import MusicCoverSize
 
-# TMDB serves posters from a CDN; `w500` (500px-wide) is the v2 default
-# and renders fine for thumbnail and detail-card use. Full hashed path is
+# TMDB serves posters from a CDN; `w500` (500px-wide) is the size used
+# here and renders fine for thumbnail and detail-card use. Full hashed path is
 # `{base}{poster_path}` where poster_path is the leading-slash fragment
 # returned in the API payload.
 TMDB_POSTER_BASE_URL = "https://image.tmdb.org/t/p/w500"
 # Cover Art Archive front-cover endpoints (sized `front-250` variant, matching
-# neu). Both 404 for entities with no uploaded art.
+# the web UI). Both 404 for entities with no uploaded art.
 #
 # Cover-art strategy (the canonical MusicBrainz Picard model): use the
 # per-RELEASE cover as the primary so distinct pressings show distinct covers,
@@ -20,6 +22,60 @@ TMDB_POSTER_BASE_URL = "https://image.tmdb.org/t/p/w500"
 # (common) case of an art-less regional pressing.
 COVERART_RELEASE_FRONT_URL_TEMPLATE = "https://coverartarchive.org/release/{mbid}/front-250"
 COVERART_GROUP_FRONT_URL_TEMPLATE = "https://coverartarchive.org/release-group/{mbid}/front-250"
+# The cover embedded in a music file: the session's size, not the UI thumbnail.
+_COVERART_PREFIX = "https://coverartarchive.org/"
+_COVERART_THUMBNAIL = "/front-250"
+_COVERART_FRONT_BY_SIZE: dict[MusicCoverSize, str] = {
+    MusicCoverSize.PX_250: "/front-250",
+    MusicCoverSize.PX_500: "/front-500",
+    MusicCoverSize.PX_1200: "/front-1200",
+    MusicCoverSize.SOURCE: "/front",
+}
+# Where an embedded cover steps down to when one size is too large to embed.
+_COVERART_SIZES_LARGEST_FIRST: tuple[MusicCoverSize, ...] = (
+    MusicCoverSize.SOURCE,
+    MusicCoverSize.PX_1200,
+    MusicCoverSize.PX_500,
+    MusicCoverSize.PX_250,
+)
+
+
+def _is_http_url(url: str | None) -> bool:
+    return isinstance(url, str) and url.startswith(("http://", "https://"))
+
+
+def _automatic_cover_variants(url: str | None, size: MusicCoverSize) -> tuple[str, ...]:
+    """The automatic cover's URLs to try, largest first: a Cover Art Archive
+    thumbnail in `size`, then in each smaller size; any other URL as given.
+    Empty when there is no automatic cover."""
+    if not _is_http_url(url):
+        return ()
+    auto = str(url)
+    if not auto.startswith(_COVERART_PREFIX):
+        return (auto,)
+    sizes = _COVERART_SIZES_LARGEST_FIRST[_COVERART_SIZES_LARGEST_FIRST.index(size) :]
+    # A URL without the thumbnail suffix comes out the same in every size: try it once.
+    return tuple(dict.fromkeys(auto.replace(_COVERART_THUMBNAIL, _COVERART_FRONT_BY_SIZE[s], 1) for s in sizes))
+
+
+def cover_art_candidates(job: Job, size: MusicCoverSize) -> list[tuple[str, ...]]:
+    """The covers to try for a music track's embedded art, in order, each as
+    the URLs to try for it, largest first.
+
+    The operator's override first, used exactly as entered; then the
+    automatic cover, a Cover Art Archive one in `size` and then each smaller
+    size, so a cover over the session's file size limit can give way to a
+    smaller one. Empty when the job has neither.
+    """
+    candidates: list[tuple[str, ...]] = []
+    auto = _automatic_cover_variants(job.poster_url, size)
+    manual = job.poster_url_manual
+    # An override that is the automatic cover in this size is tried as the automatic cover, smaller sizes and all.
+    if _is_http_url(manual) and auto[:1] != (manual,):
+        candidates.append((str(manual),))
+    if auto:
+        candidates.append(auto)
+    return candidates
 
 
 def _tmdb_poster(payload: dict[str, Any]) -> str | None:

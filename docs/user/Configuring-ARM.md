@@ -139,6 +139,30 @@ transcoded as reusable objects you manage in the UI:
 - **Sessions** — a named bundle of transcode work you apply to a job; a drive
   can have a default session so finished rips transcode automatically.
 
+A music session that encodes also picks the tags ARM writes into each track
+(**Music file tags** in the session editor): artist, album artist, album,
+track title, track number, track total, disc number, year, MusicBrainz release
+ID, and the embedded cover art. A new session writes them all; a tag that is
+not ticked is left out of the file. Built-in sessions can't be edited, so clone
+one (Music to FLAC, say) to change its tags, and keep a clone for each
+behaviour you want. In an MP3 the track total is written as part of the track
+number (`4/12`), so it is only written when the track number is too.
+
+With the cover ticked, **Cover art size** picks the Cover Art Archive image to
+embed: 250, 500 or 1200 px on its longest side, or the original upload. New
+sessions use 500 px. A cover uploaded smaller than the size chosen is embedded
+as uploaded, and a cover URL you enter on a job is used as entered, whatever
+the size.
+
+**Max cover file size** caps how large a cover file a track embeds: 500 KB,
+1, 2, 5 or 10 MB, or Unlimited. New sessions use 2 MB. When the Cover Art
+Archive image at the chosen size is over the limit, ARM embeds the next smaller
+size that fits (1200, then 500, then 250 px), and the same happens for an image
+type a music file can't hold. A cover URL you enter on a job is never resized:
+if it is over the limit, the automatic cover is used instead. Covers larger
+than the image cache's limit (`ARM_IMAGE_CACHE_MAX_BYTES`, 2 MB by default)
+are downloaded again for each track.
+
 ARM seeds sensible built-in presets on first boot, so you don't have to create
 any to get started. See [Web UI](Web-UI) for the pages that manage them.
 

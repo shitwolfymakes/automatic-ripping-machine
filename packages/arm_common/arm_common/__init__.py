@@ -6,6 +6,7 @@ from arm_common.encoders import (
 from arm_common.logging import (
     JsonFormatter,
     configure_service_logging,
+    log_event,
     with_log_context,
 )
 from arm_common.enums import (
@@ -28,6 +29,8 @@ from arm_common.enums import (
     MakemkvSdfState,
     MediaType,
     OutputMode,
+    MissMediaType,
+    MissTitlesKept,
     PreviouslyRippedAction,
     RetentionPolicy,
     SessionApplicationStatus,
@@ -58,6 +61,7 @@ from arm_common.models import (
     SessionApplication,
     SessionRoute,
     Track,
+    HandbrakeSchemaRecord,
     TranscodePreset,
     TranscodeTask,
     User,
@@ -99,6 +103,8 @@ __all__ = [
     "NotificationDispatchLog",
     "NotificationInbox",
     "OutputMode",
+    "MissMediaType",
+    "MissTitlesKept",
     "PreviouslyRippedAction",
     "RetentionPolicy",
     "RipPreset",
@@ -111,6 +117,7 @@ __all__ = [
     "TrackRole",
     "TrackSelection",
     "TrackStatus",
+    "HandbrakeSchemaRecord",
     "TranscodePreset",
     "TranscodeTask",
     "TranscodeTaskStatus",
@@ -120,6 +127,7 @@ __all__ = [
     "VideoCodec",
     "configure_service_logging",
     "get_encoder",
+    "log_event",
     "new_id",
     "with_log_context",
 ]

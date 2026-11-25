@@ -100,6 +100,19 @@ These rules apply to every change in every service. A PR that breaks one is not 
 
 Be ruthless about it. Each module, class, function and component does one thing, and its name says what that thing is. If describing a function takes an "and", split it. Keep I/O, parsing, decisions and side effects in separate functions so each one can be tested alone. New behaviour gets its own function, not another branch in an existing one.
 
+### Reuse and consolidate
+
+Every fix or feature starts by finding what the codebase already has for the job, and the change is scoped to include that consolidation:
+
+- **Reuse before writing.** Use the existing function, callback, payload, component or helper that already does the job (in the same service or `arm_common`). A second path that does the same job reuses the first one's code, never a parallel copy.
+- **Extract at the second use.** When the code you need exists in one place, extract it into a shared helper and move both callers onto it. The extraction is its own commit, before the change that needs it.
+- **Migrate what you touch.** A touched area that still has its own copy of a shared pattern moves onto the shared one in the same PR.
+- **Improve the shared piece.** When a change improves behaviour that a shared piece provides, change the shared piece so every caller gets it.
+- **Same contract everywhere.** A new source of an existing kind of data (a new rip tool, a new provider) emits the existing event, payload and log shape, so consumers need no source-specific handling.
+- **Clean up while there.** Comments in touched code describe the code as it is now; dev-history notes in touched code are removed.
+
+A touched symbol's coverage includes its nested closures: coverage.py and V8 report each one as its own region, so fold them into the named symbol before judging it.
+
 ### Cognitive complexity of 15 or less
 
 No function may have a cognitive complexity greater than 15. Confirm it with the **SonarQube for IDE** extension in the local VS Code: rule S3776 (Python and JavaScript/TypeScript, default threshold 15) reports each violation in the Problems panel for the open file. Open every file the diff touches and clear its S3776 warnings before opening the PR. Claude reads the same diagnostics through the VS Code `getDiagnostics` tool.
@@ -124,6 +137,17 @@ cd services/ui-neu/frontend && npx vitest run --coverage --coverage.include='src
 ```
 
 Any missing line or branch inside a touched symbol fails the rule. Use `# pragma: no cover` or `/* v8 ignore next */` only for code that cannot run, with a comment saying why.
+
+### ui-neu file layout
+
+Under `services/ui-neu/frontend/src/lib`; `npm run lint` enforces module and component file names, not test file names (`unicorn/filename-case`).
+
+1. **Names:** kebab-case for every `.ts`, `.js` and `.svelte.ts` file and every folder (`session-routes.ts`, `handbrake-schema.svelte.ts`, `drive-card/`); Svelte components stay PascalCase (`DataTable.svelte`). In code: camelCase for variables, functions and properties; PascalCase for types, interfaces and components.
+2. **Tests:** in a `__tests__/` folder beside the code they test, never a loose sibling `*.test.ts`. `src/lib/__tests__/` holds only tests of modules that sit directly in `src/lib/` and the layout guards; it is not a catch-all. A test file is named after its module (`data-table.test.ts` tests `data-table.ts`; extra suites use a dotted suffix: `data-table.cells.test.ts`). Shared test data lives in `__fixtures__/` (`src/lib/__fixtures__/` when several folders use it).
+3. **Logic home:** pure logic lives in `lib/<domain>/` (handbrake, sessions, jobs, drives, ...), Svelte components in `components/<domain>/` (same domain names as `lib/` where both exist), and `lib/utils/` holds only generic helpers with no domain knowledge. Generic UI helpers live in `lib/ui/` (`lib/ui/data-table.ts` for `DataTable.svelte`). Test setup and render helpers live in `lib/testing/`; `features.ts` (app-wide feature flags) is the only module left at the `lib/` root.
+4. **Layer folders:** `api/` (HTTP clients), `stores/` (stateful runes and stores), `types/`, `styles/` and `themes/` keep their folders; their files are kebab-case. Stateful `.svelte.ts` rune modules live in `stores/`.
+5. **Dependency direction:** `lib/` outside `components/` never imports from `components/` (`no-restricted-imports` enforces it). `components/shared/` holds generic building blocks and components used by two or more domains.
+6. **Components:** every component lives in `components/<domain>/`; none sits at the `components/` root. The app shell is in `components/layout/`, shared building blocks in `components/shared/`, and a parent component's child components in a folder nested inside its domain (`components/drives/drive-card/`). `src/lib/__tests__/component-layout.test.ts` enforces the folder list.
 
 ## Gotchas / invariants
 

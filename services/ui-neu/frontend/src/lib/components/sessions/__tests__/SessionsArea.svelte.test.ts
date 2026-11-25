@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
-import { renderComponent, screen, fireEvent, cleanup, waitFor } from '$lib/test-utils';
+import { renderComponent, screen, fireEvent, cleanup, waitFor, within } from '$lib/testing/render';
 import type { MediaType } from '$lib/types/api.gen';
 
 vi.mock('$lib/api/sessions', () => ({
@@ -10,28 +10,44 @@ vi.mock('$lib/api/sessions', () => ({
 	cloneSession: vi.fn(),
 	previewTemplate: vi.fn().mockResolvedValue({ resolved: 'p', error: null })
 }));
-vi.mock('$lib/api/ripPresets', () => ({
+vi.mock('$lib/api/session-routes', () => ({
+	fetchSessionRoutes: vi.fn().mockResolvedValue([]),
+	upsertSessionRoute: vi.fn(),
+	deleteSessionRoute: vi.fn()
+}));
+vi.mock('$lib/api/rip-presets', () => ({
 	fetchRipPresets: vi.fn(),
 	createRipPreset: vi.fn(),
 	updateRipPreset: vi.fn(),
 	deleteRipPreset: vi.fn()
 }));
-vi.mock('$lib/api/transcodePresets', () => ({
+vi.mock('$lib/api/transcode-presets', () => ({
 	fetchTranscodePresets: vi.fn(),
 	createTranscodePreset: vi.fn(),
 	updateTranscodePreset: vi.fn(),
 	deleteTranscodePreset: vi.fn()
 }));
+vi.mock('$lib/api/handbrake-schema', () => ({
+	fetchHandbrakeSchema: vi.fn().mockRejectedValue(new Error('No HandBrake schema loaded yet')),
+	fetchBuiltinPreset: vi.fn(),
+	refreshHandbrakeSchema: vi.fn()
+}));
 // The preset form's encoders store follows transcode.events; keep jsdom off a real socket.
+vi.mock('$lib/api/settings', () => ({
+	saveArmConfig: vi.fn(() => Promise.resolve({ success: true }))
+}));
+
 vi.mock('$lib/api/ws', () => ({
 	wsClient: { start: vi.fn(), subscribe: vi.fn(() => () => {}) }
 }));
 
 import { fetchSessions } from '$lib/api/sessions';
-import { fetchRipPresets, createRipPreset } from '$lib/api/ripPresets';
-import { fetchTranscodePresets, createTranscodePreset } from '$lib/api/transcodePresets';
+import { fetchSessionRoutes } from '$lib/api/session-routes';
+import { fetchRipPresets, createRipPreset } from '$lib/api/rip-presets';
+import { fetchTranscodePresets, createTranscodePreset } from '$lib/api/transcode-presets';
 import { deleteSession, cloneSession } from '$lib/api/sessions';
 import SessionsArea from '../SessionsArea.svelte';
+import type { SettingsGroup } from '$lib/types/api.gen';
 import { setTranscoderEnabled } from '$lib/stores/config';
 
 const makeSession = (id = 's1', name = 'ses Alpha') => ({
@@ -43,6 +59,9 @@ const makeSession = (id = 's1', name = 'ses Alpha') => ({
 	transcode_preset_id: null,
 	output_path_template: 'movies/{title}.{ext}',
 	overrides_json: null,
+	music_tag_fields: [],
+	music_cover_size: '500' as const,
+	music_cover_max_size: '2mb' as const,
 	created_by_user_id: null,
 	created_at: null,
 	updated_at: null
@@ -69,7 +88,7 @@ const makeTranscode = (id = 't1', name = 'tc t1') => ({
 	is_builtin: false,
 	tool: 'handbrake' as const,
 	preset_ref: null,
-	preset_json: null,
+	handbrake_settings: null,
 	container: 'mkv' as const,
 	encoder: 'any_h265',
 	extra_args: null,
@@ -125,7 +144,7 @@ it('tab switches back from a preset tab to sessions', async () => {
 	renderComponent(SessionsArea);
 	await screen.findByText(/ses /i);
 	await fireEvent.click(screen.getByRole('tab', { name: /rip presets/i }));
-	await fireEvent.click(screen.getByRole('tab', { name: /^sessions$/i }));
+	await fireEvent.click(screen.getByRole('tab', { name: /^sessions\b/i }));
 	expect(screen.getByText('ses Alpha')).toBeInTheDocument();
 });
 
@@ -133,7 +152,7 @@ it('new session opens the builder', async () => {
 	renderComponent(SessionsArea);
 	await screen.findByText('ses Alpha');
 	await fireEvent.click(screen.getByRole('button', { name: /new session/i }));
-	expect(screen.getByRole('heading', { name: /create a session/i })).toBeInTheDocument();
+	expect(screen.getByRole('heading', { name: 'New session' })).toBeInTheDocument();
 });
 
 it('builder cancel hides the builder', async () => {
@@ -141,18 +160,17 @@ it('builder cancel hides the builder', async () => {
 	await screen.findByText('ses Alpha');
 	await fireEvent.click(screen.getByRole('button', { name: /new session/i }));
 	await fireEvent.click(screen.getByRole('button', { name: /^cancel$/i }));
-	expect(screen.queryByRole('heading', { name: /create a session/i })).not.toBeInTheDocument();
+	expect(screen.queryByRole('heading', { name: 'New session' })).not.toBeInTheDocument();
 });
 
-// FIX 1: delete requires confirm dialog
+// delete requires confirm dialog
 describe('session delete — confirm flow', () => {
 	it('clicking Delete opens a confirm dialog; confirming calls deleteSession then reloads', async () => {
 		vi.mocked(deleteSession).mockResolvedValue(undefined);
 		renderComponent(SessionsArea);
 		await screen.findByText('ses Alpha');
 
-		// Find the session card Delete button by its position inside the card
-		// (SessionCard renders one delete button; there's no dialog yet)
+		// The first Delete button is the first session row's
 		const deleteBtns = screen.getAllByRole('button', { name: /^delete$/i });
 		await fireEvent.click(deleteBtns[0]);
 
@@ -206,13 +224,13 @@ it('inline rip create form opens over the builder', async () => {
 	await screen.findByText('ses Alpha');
 	await fireEvent.click(screen.getByRole('button', { name: /new session/i }));
 	// Choose + Create new rip preset from the select in the builder
-	const ripSel = screen.getByLabelText(/rip preset/i) as HTMLSelectElement;
+	const ripSel = screen.getByLabelText(/^rip preset/i) as HTMLSelectElement;
 	await fireEvent.change(ripSel, { target: { value: '__create_rip__' } });
-	// RipPresetForm should now appear as stacked dialog
+	// RipPresetForm should appear as stacked dialog
 	await waitFor(() => expect(screen.getByRole('dialog', { name: /new rip preset|create rip/i })).toBeInTheDocument());
 });
 
-// FIX 3: rewritten inline-create save test — exercises the real save path
+// inline-create save test — exercises the real save path
 it('inline rip create: saving a new preset closes the form, reloads, and returns to builder', async () => {
 	const newRip = makeRip('r2', 'My New Rip');
 	vi.mocked(createRipPreset).mockResolvedValue(newRip as any);
@@ -223,20 +241,20 @@ it('inline rip create: saving a new preset closes the form, reloads, and returns
 	await fireEvent.click(screen.getByRole('button', { name: /new session/i }));
 
 	// Open the inline create form
-	const ripSel = screen.getByLabelText(/rip preset/i) as HTMLSelectElement;
+	const ripSel = screen.getByLabelText(/^rip preset/i) as HTMLSelectElement;
 	await fireEvent.change(ripSel, { target: { value: '__create_rip__' } });
 
 	// Wait for the stacked dialog
 	const dialog = await screen.findByRole('dialog', { name: /new rip preset|create rip/i });
 	expect(dialog).toBeInTheDocument();
+	expect(dialog).toHaveAttribute('data-stacked', 'true');
 
 	// Fill in the preset name (required field)
 	const nameInput = screen.getByTestId('preset-name') as HTMLInputElement;
 	await fireEvent.input(nameInput, { target: { value: 'My New Rip' } });
 
 	// Submit the form
-	const submitBtn = screen.getByTestId('preset-submit');
-	await fireEvent.click(submitBtn);
+	await fireEvent.click(within(dialog).getByRole('button', { name: 'Save' }));
 
 	// createRipPreset should have been called
 	await waitFor(() => expect(createRipPreset).toHaveBeenCalled());
@@ -250,10 +268,10 @@ it('inline rip create: saving a new preset closes the form, reloads, and returns
 	await waitFor(() => expect(fetchRipPresets).toHaveBeenCalledTimes(2));
 
 	// Builder slide-over should still be open
-	expect(screen.getByRole('heading', { name: /create a session/i })).toBeInTheDocument();
+	expect(screen.getByRole('heading', { name: 'New session' })).toBeInTheDocument();
 });
 
-// FIX 2: library Edit button opens the RipPresetForm with the existing preset
+// library Edit button opens the RipPresetForm with the existing preset
 it('Rip presets tab Edit button opens RipPresetForm with the existing preset', async () => {
 	// Only a rip preset (no transcode preset) to keep a single Edit button
 	vi.mocked(fetchTranscodePresets).mockResolvedValue([]);
@@ -264,7 +282,7 @@ it('Rip presets tab Edit button opens RipPresetForm with the existing preset', a
 	await fireEvent.click(screen.getByRole('tab', { name: /rip presets/i }));
 	await screen.findByRole('heading', { name: /rip presets/i });
 
-	// The rip preset row shows Edit (custom preset) — only one Edit button now
+	// The rip preset row shows Edit (custom preset) — only one Edit button
 	const editBtn = screen.getByRole('button', { name: /^edit$/i });
 	await fireEvent.click(editBtn);
 
@@ -306,7 +324,7 @@ describe('ripper-only deployment (not transcode-capable)', () => {
 		renderComponent(SessionsArea);
 		await screen.findByText('ses Raw');
 		await fireEvent.click(screen.getByRole('button', { name: /new session/i }));
-		const tcSel = screen.getByLabelText(/transcode preset/i) as HTMLSelectElement;
+		const tcSel = screen.getByLabelText(/^transcode preset/i) as HTMLSelectElement;
 		const labels = Array.from(tcSel.options).map((o) => o.textContent?.trim());
 		expect(labels).toContain('tc passthrough');
 		expect(labels).not.toContain('tc t1');
@@ -327,5 +345,269 @@ describe('ripper-only deployment (not transcode-capable)', () => {
 		await screen.findByText('ses Encode');
 		await fireEvent.click(screen.getByRole('tab', { name: /transcode presets/i }));
 		expect(screen.getByText('tc t1')).toBeInTheDocument();
+	});
+});
+
+describe('every editor opens a sidebar', () => {
+	it('"+ Create new transcode preset..." in the session slide-over opens the sidebar', async () => {
+		renderComponent(SessionsArea);
+		await screen.findByText(/ses /i);
+		await fireEvent.click(screen.getByRole('button', { name: /new session/i }));
+		await fireEvent.change(screen.getByLabelText(/^transcode preset/i), { target: { value: '__create_tc__' } });
+		const sidebar = await screen.findByRole('dialog', { name: 'New transcode preset' });
+		expect(sidebar).toHaveTextContent('Import HandBrake preset');
+		expect(within(sidebar).getByRole('button', { name: 'Save' })).toBeInTheDocument();
+	});
+
+	it('Edit on a transcode preset opens the sidebar, not the dialog', async () => {
+		renderComponent(SessionsArea);
+		await screen.findByText(/ses /i);
+		await fireEvent.click(screen.getByRole('tab', { name: /transcode presets/i }));
+		await fireEvent.click(await screen.findByRole('button', { name: /^edit$/i }));
+		const sidebar = await screen.findByRole('dialog', { name: 'Edit transcode preset' });
+		expect(sidebar).toHaveTextContent('Save');
+	});
+
+	it('a new rip preset opens the rip preset sidebar, not the old modal', async () => {
+		renderComponent(SessionsArea);
+		await screen.findByText(/ses /i);
+		await fireEvent.click(screen.getByRole('tab', { name: /rip presets/i }));
+		await fireEvent.click(screen.getByRole('button', { name: /new rip preset/i }));
+		const dialog = await screen.findByRole('dialog', { name: 'New rip preset' });
+		expect(dialog).not.toHaveTextContent('Import HandBrake preset');
+		expect(dialog).toHaveAttribute('data-stacked', 'false');
+		expect(document.querySelector('.sessions-area-inline-modal')).toBeNull();
+	});
+});
+
+describe('the sidebar stacked over the session slide-over', () => {
+	it('layers above the builder, and an outside click closes only the sidebar', async () => {
+		renderComponent(SessionsArea);
+		await screen.findByText(/ses /i);
+		await fireEvent.click(screen.getByRole('button', { name: /new session/i }));
+		await fireEvent.change(screen.getByLabelText(/^transcode preset/i), { target: { value: '__create_tc__' } });
+		const sidebar = await screen.findByRole('dialog', { name: 'New transcode preset' });
+		expect(sidebar).toHaveAttribute('data-stacked', 'true');
+		const scrim = document.querySelector('.slide-over-scrim[data-stacked="true"]') as HTMLElement;
+		await fireEvent.click(scrim);
+		await waitFor(() => expect(screen.queryByRole('dialog', { name: 'New transcode preset' })).not.toBeInTheDocument());
+		expect(screen.getByRole('heading', { name: 'New session' })).toBeInTheDocument();
+	});
+});
+
+describe('the page header and view switch', () => {
+	it('holds the presets note in the header for every view', async () => {
+		renderComponent(SessionsArea);
+		await screen.findByText('ses Alpha');
+		const note = /Presets are reusable building blocks: each preset can be used by multiple sessions/;
+		expect(screen.getByText(note)).toBeInTheDocument();
+		await fireEvent.click(screen.getByRole('tab', { name: /rip presets/i }));
+		expect(screen.getAllByText(note)).toHaveLength(1);
+	});
+
+	it('is a segmented control of four tabs, the list views showing their counts', async () => {
+		renderComponent(SessionsArea);
+		await screen.findByText('ses Alpha');
+		const tabs = screen.getAllByRole('tab');
+		expect(tabs.map((t) => t.textContent?.replace(/\s+/g, ' ').trim())).toEqual([
+			'Sessions 1',
+			'Rip presets 1',
+			'Transcode presets 1',
+			'Defaults'
+		]);
+		expect(tabs[0]).toHaveAttribute('aria-selected', 'true');
+		expect(tabs[3]).toHaveAttribute('aria-selected', 'false');
+	});
+
+	it('Defaults shows the matrix, with no search, source filter or type chips', async () => {
+		renderComponent(SessionsArea);
+		await screen.findByText('ses Alpha');
+		expect(screen.getByRole('searchbox')).toBeInTheDocument();
+		await fireEvent.click(screen.getByRole('tab', { name: 'Defaults' }));
+		expect(screen.getByRole('tab', { name: 'Defaults' })).toHaveAttribute('aria-selected', 'true');
+		expect(await screen.findByLabelText('Movie, Any disc')).toBeInTheDocument();
+		expect(fetchSessionRoutes).toHaveBeenCalled();
+		expect(screen.queryByRole('searchbox')).not.toBeInTheDocument();
+		expect(screen.queryByLabelText('Filter by source')).not.toBeInTheDocument();
+		expect(screen.queryByRole('table', { name: 'Sessions' })).not.toBeInTheDocument();
+	});
+});
+
+describe('Defaults view auto-apply', () => {
+	const DEFAULTS = {
+		name: 'Defaults',
+		fields: [
+			{
+				key: 'auto_transcode_on_idle',
+				group: 'Defaults',
+				tier: 'operator',
+				label: 'Apply these defaults automatically after each rip',
+				help: '',
+				type: 'bool',
+				editable: true,
+				enum_values: null
+			},
+			{
+				key: 'miss_media_type',
+				group: 'Defaults',
+				tier: 'operator',
+				label: 'Treat unidentified video discs as',
+				help: 'Starts as this type.',
+				type: 'enum',
+				editable: true,
+				enum_values: ['movie', 'tv'],
+				enum_labels: { movie: 'Movie', tv: 'TV' }
+			}
+		]
+	} as SettingsGroup;
+	const LABEL = 'Apply these defaults automatically after each rip';
+
+	async function openDefaults(onsave = vi.fn()) {
+		renderComponent(SessionsArea, {
+			props: { defaultsGroup: DEFAULTS, config: { auto_transcode_on_idle: false, miss_media_type: 'movie' }, onsave }
+		});
+		await screen.findByText('ses Alpha');
+		await fireEvent.click(screen.getByRole('tab', { name: 'Defaults' }));
+		return onsave;
+	}
+
+	afterEach(() => setTranscoderEnabled(true));
+
+	it('shows auto-apply as a switch above the matrix that reports its key and value, with no Save button', async () => {
+		setTranscoderEnabled(true);
+		const onsave = await openDefaults();
+		const toggle = await screen.findByRole('switch', { name: LABEL });
+		const cell = await screen.findByLabelText('Movie, Any disc');
+		const heading = screen.getByRole('heading', { name: 'Defaults' });
+		const lede = screen.getByText(/These are all optional/);
+		const panel = screen.getByTestId('defaults-auto-apply');
+		expect(panel).toHaveClass('panel');
+		expect(panel).toContainElement(toggle);
+		// Heading, then the auto-apply panel, then the matrix's description and the matrix.
+		expect(heading.compareDocumentPosition(panel) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+		expect(panel.compareDocumentPosition(lede) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+		expect(lede.compareDocumentPosition(cell) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+		expect(screen.queryByRole('button', { name: 'Save' })).not.toBeInTheDocument();
+		await fireEvent.click(toggle);
+		expect(onsave).toHaveBeenCalledWith('auto_transcode_on_idle', true);
+	});
+
+	it('shows an enum Defaults field as a select that saves the chosen option', async () => {
+		setTranscoderEnabled(true);
+		const onsave = await openDefaults();
+		const select = await screen.findByRole('combobox', { name: 'Treat unidentified video discs as' });
+		expect(select).toHaveValue('movie');
+		expect(
+			within(select)
+				.getAllByRole('option')
+				.map((o) => o.textContent)
+		).toEqual(['Movie', 'TV']);
+		expect(screen.getByTestId('defaults-auto-apply')).toContainElement(select);
+		await fireEvent.change(select, { target: { value: 'tv' } });
+		expect(onsave).toHaveBeenCalledWith('miss_media_type', 'tv');
+	});
+
+	it('renders an enum Defaults field with no options and no saved value as an empty select', async () => {
+		setTranscoderEnabled(true);
+		const bare = { ...DEFAULTS.fields[1], enum_values: null, enum_labels: null };
+		renderComponent(SessionsArea, {
+			props: { defaultsGroup: { ...DEFAULTS, fields: [bare] }, config: {}, onsave: vi.fn() }
+		});
+		await screen.findByText('ses Alpha');
+		await fireEvent.click(screen.getByRole('tab', { name: 'Defaults' }));
+		const select = await screen.findByRole('combobox', { name: 'Treat unidentified video discs as' });
+		expect(within(select).queryAllByRole('option')).toHaveLength(0);
+		expect((select as HTMLSelectElement).value).toBe('');
+	});
+
+	it('falls back to the raw value for an enum option that has no label', async () => {
+		setTranscoderEnabled(true);
+		const unlabelled = { ...DEFAULTS.fields[1], enum_labels: null };
+		renderComponent(SessionsArea, {
+			props: { defaultsGroup: { ...DEFAULTS, fields: [unlabelled] }, config: {}, onsave: vi.fn() }
+		});
+		await screen.findByText('ses Alpha');
+		await fireEvent.click(screen.getByRole('tab', { name: 'Defaults' }));
+		const select = await screen.findByRole('combobox', { name: 'Treat unidentified video discs as' });
+		expect(
+			within(select)
+				.getAllByRole('option')
+				.map((o) => o.textContent)
+		).toEqual(['movie', 'tv']);
+	});
+
+	it('hides auto-apply on a ripper-only deployment and keeps the matrix', async () => {
+		setTranscoderEnabled(false);
+		await openDefaults();
+		expect(await screen.findByLabelText('Movie, Any disc')).toBeInTheDocument();
+		expect(screen.queryByRole('switch', { name: LABEL })).not.toBeInTheDocument();
+		expect(screen.getByRole('combobox', { name: 'Treat unidentified video discs as' })).toBeInTheDocument();
+	});
+
+	it('leaves out the Defaults panel on a ripper-only deployment when auto-apply is its only field', async () => {
+		setTranscoderEnabled(false);
+		renderComponent(SessionsArea, {
+			props: { defaultsGroup: { ...DEFAULTS, fields: [DEFAULTS.fields[0]] }, config: {}, onsave: vi.fn() }
+		});
+		await screen.findByText('ses Alpha');
+		await fireEvent.click(screen.getByRole('tab', { name: 'Defaults' }));
+		expect(await screen.findByLabelText('Movie, Any disc')).toBeInTheDocument();
+		expect(screen.queryByTestId('defaults-auto-apply')).not.toBeInTheDocument();
+	});
+});
+
+describe('creating a preset from the session sidebar keeps the session form', () => {
+	async function typeSessionName() {
+		await fireEvent.click(screen.getByRole('button', { name: /new session/i }));
+		await fireEvent.input(screen.getByLabelText(/session name/i), { target: { value: 'Keep me' } });
+		await fireEvent.input(screen.getByLabelText(/^output path/i), { target: { value: 'keep/{title}.{ext}' } });
+	}
+
+	it('a new rip preset is selected in the form, and the other unsaved edits stay', async () => {
+		const newRip = makeRip('r2', 'My New Rip');
+		vi.mocked(createRipPreset).mockResolvedValue(newRip as any);
+		vi.mocked(fetchRipPresets).mockResolvedValueOnce([makeRip()]).mockResolvedValue([makeRip(), newRip]);
+		renderComponent(SessionsArea);
+		await screen.findByText('ses Alpha');
+		await typeSessionName();
+		await fireEvent.change(screen.getByLabelText(/^rip preset/i), { target: { value: '__create_rip__' } });
+		const sidebar = await screen.findByRole('dialog', { name: 'New rip preset' });
+		await fireEvent.input(within(sidebar).getByTestId('preset-name'), { target: { value: 'My New Rip' } });
+		await fireEvent.click(within(sidebar).getByRole('button', { name: 'Save' }));
+		await waitFor(() => expect(screen.queryByRole('dialog', { name: 'New rip preset' })).not.toBeInTheDocument());
+		await waitFor(() => expect(screen.getByLabelText(/^rip preset/i)).toHaveValue('r2'));
+		expect(screen.getByLabelText(/session name/i)).toHaveValue('Keep me');
+		expect(screen.getByLabelText(/^output path/i)).toHaveValue('keep/{title}.{ext}');
+		expect(screen.getByRole('dialog', { name: 'New session' })).toBeInTheDocument();
+	});
+
+	it('a new transcode preset is selected in the form, and the other unsaved edits stay', async () => {
+		const newTc = makeTranscode('t2', 'tc new');
+		vi.mocked(createTranscodePreset).mockResolvedValue(newTc as any);
+		vi.mocked(fetchTranscodePresets)
+			.mockResolvedValueOnce([makeTranscode()])
+			.mockResolvedValue([makeTranscode(), newTc]);
+		renderComponent(SessionsArea);
+		await screen.findByText('ses Alpha');
+		await typeSessionName();
+		await fireEvent.change(screen.getByLabelText(/^transcode preset/i), { target: { value: '__create_tc__' } });
+		const tcDialog = await screen.findByRole('dialog', { name: 'New transcode preset' });
+		await fireEvent.input(screen.getByTestId('tp-name'), { target: { value: 'tc new' } });
+		await fireEvent.click(within(tcDialog).getByRole('button', { name: 'Save' }));
+		await waitFor(() => expect(screen.queryByRole('dialog', { name: 'New transcode preset' })).not.toBeInTheDocument());
+		await waitFor(() => expect(screen.getByLabelText(/^transcode preset/i)).toHaveValue('t2'));
+		expect(screen.getByLabelText(/session name/i)).toHaveValue('Keep me');
+		expect(screen.getByLabelText(/^output path/i)).toHaveValue('keep/{title}.{ext}');
+	});
+
+	it('Escape closes only the stacked preset sidebar, not the session sidebar under it', async () => {
+		renderComponent(SessionsArea);
+		await screen.findByText('ses Alpha');
+		await typeSessionName();
+		await fireEvent.change(screen.getByLabelText(/^rip preset/i), { target: { value: '__create_rip__' } });
+		await screen.findByRole('dialog', { name: 'New rip preset' });
+		await fireEvent.keyDown(document, { key: 'Escape' });
+		await waitFor(() => expect(screen.queryByRole('dialog', { name: 'New rip preset' })).not.toBeInTheDocument());
+		expect(screen.getByLabelText(/session name/i)).toHaveValue('Keep me');
 	});
 });

@@ -18,7 +18,7 @@ from arm_common import (
     TrackStatus,
     TranscodeTaskStatus,
 )
-from arm_common.enums import TERMINAL_JOB_STATUSES
+from arm_common.enums import ACTIVE_TRANSCODE_TASK_STATUSES, TERMINAL_JOB_STATUSES
 from arm_common.models import TranscodeTask
 from arm_common.schemas import (
     DiscFingerprintView,
@@ -34,6 +34,10 @@ from arm_common.schemas.job_metadata import previously_ripped_job_id
 
 def _summarize_rip_progress(tracks: list[Track]) -> RipProgressSummary:
     """Aggregate `tracks` (one job's worth) into a `RipProgressSummary`.
+
+    Progress covers every title the drive reads, excluded ones included:
+    MakeMKV rips them too, so the counts and the current track follow the
+    drive. The rip's outcome (`rip_outcome_counts`) counts kept tracks only.
 
     `current_track_index` is the 1-based ordinal among tracks sorted by
     `Track.index` of the row in `IN_PROGRESS`. The dispatcher transitions
@@ -62,8 +66,8 @@ def _summarize_rip_progress(tracks: list[Track]) -> RipProgressSummary:
 
 # A session_application counts as "terminal" for the job-done rollup when its
 # own status is terminal, OR it fanned out 0 tasks and isn't genuinely waiting
-# to be identified (the rip-only / all-excluded 0-task QUEUED deadlock — see
-# the design doc; absorbed here in the read layer).
+# to be identified (the rip-only / all-excluded 0-task QUEUED deadlock, absorbed
+# here in the read layer).
 _TERMINAL_SESSION_STATUSES: frozenset[SessionApplicationStatus] = frozenset(
     {
         SessionApplicationStatus.DONE,
@@ -94,7 +98,7 @@ def _parked_apps_are_settled(job: Job) -> bool:
     a failed or abandoned job never drains. A RIPPED_AWAITING_IDENTIFY job's
     (or an unidentified RIPPED_PARTIAL one's) parked application is still
     waiting for resolve to drain it, but it is waiting on identity, not
-    transcoding, so it is settled for the rollup too (D-142);
+    transcoding, so it is settled for the rollup too;
     `parked_session_ids` shows it as waiting."""
     return job.status in TERMINAL_JOB_STATUSES
 
@@ -135,6 +139,7 @@ def _summarize_transcode_progress(
     tasks_total = len(tasks)
     tasks_done = sum(1 for t in tasks if t.status == TranscodeTaskStatus.DONE)
     tasks_failed = sum(1 for t in tasks if t.status == TranscodeTaskStatus.FAILED)
+    tasks_active = sum(1 for t in tasks if t.status in ACTIVE_TRANSCODE_TASK_STATUSES)
     percent = (sum(t.progress_pct for t in tasks) / tasks_total) if tasks_total else 100.0
 
     state: Literal["transcoding", "done", "done_partial", "failed"]
@@ -154,6 +159,7 @@ def _summarize_transcode_progress(
         tasks_done=tasks_done,
         tasks_failed=tasks_failed,
         percent=round(percent, 1),
+        tasks_active=tasks_active,
     )
 
 

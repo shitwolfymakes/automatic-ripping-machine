@@ -1,8 +1,12 @@
-"""Transcoder ↔ Backend REST endpoints (Phase 7).
+"""Transcoder ↔ Backend REST endpoints.
 
-Five endpoints per `03-protocol.md § Transcode container ↔ Backend`:
+The endpoints per `03-protocol.md § Transcode container ↔ Backend`:
 - `POST /register` — bootstrap; transcoder receives the task, session, preset,
-  source track, and the `raw_input_path` it should read from.
+  source track, the `raw_input_path` it should read from, and a music
+  track's tags (only those the task's session switches on).
+- `GET /tasks/{task_id}/cover-art` — a music track's cover to embed: the
+  operator's poster override, else the automatic cover; 404 when neither
+  can be fetched as a JPEG or PNG, or the cover is switched off.
 - `POST /tasks/{task_id}/claim` — atomic CAS to `in_progress`. First claim
   on a session_application also flips the application to RUNNING and emits
   `session.started`.
@@ -19,17 +23,28 @@ Five endpoints per `03-protocol.md § Transcode container ↔ Backend`:
 import logging
 from datetime import UTC, datetime
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Request, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import col, select
 
+from arm_backend import transcode_task_events
 from arm_backend.auth import require_service_token
 from arm_backend.db import get_session
 from arm_backend.gpu_claim import release_gpu_for_task
-from arm_backend.routers._deps import get_hub
-from arm_backend.transcode_apply import settle_session_application
+from arm_backend.handbrake_schema_runner import HandbrakeSchemaRunner
+from arm_backend.handbrake_schema_store import SchemaStore, get_schema_store
+from arm_backend.log_safely import log_safely
+from arm_backend.metadata.poster import cover_art_candidates
+from arm_backend.preset_views import preset_view
+from arm_backend.routers._deps import get_hub, get_schema_runner
+from arm_backend.routers.images import ImageTooLarge, ImageUnavailable, fetch_allowed_image
+from arm_backend.session_routing import routing_media_type
+from arm_backend.music_tag_settings import cover_max_bytes, music_tag_fields_setting, session_music_tags
+from arm_backend.transcode_apply import log_session_settled, music_tags_for, settle_session_application
 from arm_backend.ws import WSHub
 from arm_common import (
+    Gpu,
+    MediaType,
     Session,
     SessionApplication,
     SessionApplicationStatus,
@@ -37,7 +52,9 @@ from arm_common import (
     TranscodeTask,
     TranscodeTaskStatus,
 )
-from arm_common.models import Track
+from arm_common.enums import MusicCoverSize
+from arm_common.models import Job, Track
+from arm_common.music_tags import COVER
 from arm_common.schemas import (
     ClaimTaskResponse,
     CompleteTaskRequest,
@@ -47,7 +64,6 @@ from arm_common.schemas import (
     RegisterTranscoderResponse,
     SessionView,
     TrackView,
-    TranscodePresetView,
     TranscodeTaskView,
 )
 
@@ -63,6 +79,14 @@ async def _load_task(db: AsyncSession, task_id: str) -> TranscodeTask:
     return row
 
 
+async def _load_task_session(db: AsyncSession, task: TranscodeTask) -> Session:
+    """The session whose application queued this task."""
+    application = (
+        await db.execute(select(SessionApplication).where(col(SessionApplication.id) == task.session_application_id))
+    ).scalar_one()
+    return (await db.execute(select(Session).where(col(Session.id) == application.session_id))).scalar_one()
+
+
 def _require_owner(task: TranscodeTask, hostname: str | None) -> None:
     if not hostname:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="missing X-ARM-Hostname header")
@@ -73,10 +97,32 @@ def _require_owner(task: TranscodeTask, hostname: str | None) -> None:
         )
 
 
+_PREDATES_SETTINGS = "transcode image predates HandBrake settings; rebuild or pull it"
+
+
+def _refuse_image_without_settings_support(req: RegisterTranscoderRequest, preset: TranscodePreset | None) -> None:
+    """An image that reports no schema hash cannot apply HandBrake settings, so it must not get a preset that has them."""
+    if req.schema_hash is None and preset is not None and preset.handbrake_settings:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=_PREDATES_SETTINGS)
+
+
+def _request_schema_refresh(
+    req: RegisterTranscoderRequest, store: SchemaStore, runner: HandbrakeSchemaRunner | None
+) -> None:
+    """Version skew: an image whose schema differs from ours (or ours is missing) triggers a background refresh."""
+    if req.schema_hash is None or runner is None:
+        return
+    current = store.current()
+    if current is None or current.content_hash != req.schema_hash:
+        runner.request_refresh_if_hash_differs(req.schema_hash)
+
+
 @router.post("/register", response_model=RegisterTranscoderResponse)
 async def register(
     req: RegisterTranscoderRequest,
     db: AsyncSession = Depends(get_session),
+    store: SchemaStore = Depends(get_schema_store),
+    runner: HandbrakeSchemaRunner | None = Depends(get_schema_runner),
 ) -> RegisterTranscoderResponse:
     task = await _load_task(db, req.task_id)
     if task.status not in (TranscodeTaskStatus.QUEUED, TranscodeTaskStatus.IN_PROGRESS):
@@ -94,10 +140,7 @@ async def register(
             detail=f"task is claimed by a different host: {task.claimed_by}",
         )
 
-    application = (
-        await db.execute(select(SessionApplication).where(col(SessionApplication.id) == task.session_application_id))
-    ).scalar_one()
-    sess = (await db.execute(select(Session).where(col(Session.id) == application.session_id))).scalar_one()
+    sess = await _load_task_session(db, task)
     transcode_preset: TranscodePreset | None = None
     if sess.transcode_preset_id is not None:
         transcode_preset = (
@@ -111,15 +154,76 @@ async def register(
             detail=f"source track {track.id} has no output_path on disk; rip not yet complete",
         )
 
+    _refuse_image_without_settings_support(req, transcode_preset)
+    _request_schema_refresh(req, store, runner)
+    gpus = list((await db.execute(select(Gpu))).scalars().all())
+    job = (await db.execute(select(Job).where(col(Job.id) == track.job_id))).scalar_one()
     media_root = request_media_root()
     return RegisterTranscoderResponse(
         task=TranscodeTaskView.model_validate(task),
         session=SessionView.model_validate(sess),
-        transcode_preset=TranscodePresetView.model_validate(transcode_preset) if transcode_preset is not None else None,
+        transcode_preset=preset_view(transcode_preset, store.current(), gpus) if transcode_preset is not None else None,
         source_track=TrackView.model_validate(track),
         raw_input_path=track.output_path,
         media_root=media_root,
+        music_tags=session_music_tags(music_tags_for(job, track), sess),
     )
+
+
+# The picture types FLAC and ID3 players all read; anything else is skipped.
+_EMBEDDABLE_COVER_TYPES = frozenset({"image/jpeg", "image/png"})
+
+
+@router.get("/tasks/{task_id}/cover-art")
+async def cover_art(task_id: str, db: AsyncSession = Depends(get_session)) -> Response:
+    task = await _load_task(db, task_id)
+    track = (await db.execute(select(Track).where(col(Track.id) == task.source_track_id))).scalar_one()
+    job = (await db.execute(select(Job).where(col(Job.id) == track.job_id))).scalar_one()
+    if routing_media_type(job) != MediaType.MUSIC:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="no cover art")
+    sess = await _load_task_session(db, task)
+    if COVER not in music_tag_fields_setting(sess):
+        logger.info("cover art task_id=%s skipped: switched off in session %s", task_id, sess.id)
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="cover art switched off")
+    cover = await _first_embeddable_cover(task_id, job, sess.music_cover_size, cover_max_bytes(sess))
+    if cover is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="no cover art")
+    return cover
+
+
+async def _first_embeddable_cover(
+    task_id: str, job: Job, size: MusicCoverSize, max_bytes: int | None
+) -> Response | None:
+    """The override, else the automatic cover in `size` or the largest smaller
+    size within `max_bytes`: the first that can be fetched as an embeddable
+    image. None when neither can."""
+    for variants in cover_art_candidates(job, size):
+        cover = await _largest_embeddable_variant(task_id, variants, max_bytes)
+        if cover is not None:
+            return cover
+    return None
+
+
+async def _largest_embeddable_variant(
+    task_id: str, variants: tuple[str, ...], max_bytes: int | None
+) -> Response | None:
+    """The first of one cover's `variants`, largest first, that fits `max_bytes`
+    and can be embedded. A variant too large, or of a type the files can't
+    embed, gives way to the next smaller one; any other failure means the
+    cover can't be had, so the rest are not tried. None when no variant serves."""
+    for url in variants:
+        try:
+            content, media_type = await fetch_allowed_image(url, max_bytes=max_bytes)
+        except ImageTooLarge:
+            logger.info("cover art task_id=%s url=%s skipped: over %s bytes", task_id, url, max_bytes)
+            continue
+        except ImageUnavailable as e:
+            logger.info("cover art task_id=%s url=%s skipped: %s", task_id, url, e.detail)
+            return None
+        if media_type in _EMBEDDABLE_COVER_TYPES:
+            return Response(content=content, media_type=media_type)
+        logger.info("cover art task_id=%s url=%s skipped: type %s", task_id, url, media_type)
+    return None
 
 
 def request_media_root() -> str:
@@ -200,7 +304,8 @@ async def claim(
     )
     await db.commit()
     await db.refresh(task)
-    logger.info("transcode claim task_id=%s host=%s attempts=%d", task.id, task.claimed_by, task.attempts)
+    logger.debug("transcode claim task_id=%s host=%s attempts=%d", task.id, task.claimed_by, task.attempts)
+    await log_safely("transcode.started", transcode_task_events.announce_started(db, task))
     return ClaimTaskResponse(task=TranscodeTaskView.model_validate(task))
 
 
@@ -218,6 +323,7 @@ async def heartbeat(
             status_code=status.HTTP_409_CONFLICT,
             detail=f"task is in status={task.status.value}, not in_progress",
         )
+    previous_pct = task.progress_pct
     task.claim_heartbeat_at = datetime.now(UTC)
     task.progress_pct = req.progress_pct
     task.current_pass = req.current_pass
@@ -226,6 +332,9 @@ async def heartbeat(
     task.avg_fps = req.avg_fps
     await db.commit()
     await db.refresh(task)
+    await log_safely(
+        "transcode.progress", transcode_task_events.announce_progress(db, task, previous_pct, req.progress_pct)
+    )
     return task
 
 
@@ -272,10 +381,14 @@ async def complete(
         session=db,
     )
 
-    await settle_session_application(db, hub, application)
+    outcome = await settle_session_application(db, hub, application)
     await db.commit()
     await db.refresh(task)
-    logger.info("transcode complete task_id=%s output=%s", task.id, task.output_path)
+    logger.debug("transcode complete task_id=%s output=%s", task.id, task.output_path)
+    await log_safely(
+        "transcode.completed", transcode_task_events.announce_completed(db, task, req.output_path, req.size_bytes)
+    )
+    await log_session_settled(db, application, outcome)
     return task
 
 
@@ -317,8 +430,10 @@ async def fail(
         session=db,
     )
 
-    await settle_session_application(db, hub, application)
+    outcome = await settle_session_application(db, hub, application)
     await db.commit()
     await db.refresh(task)
-    logger.warning("transcode fail task_id=%s last_error=%s", task.id, task.last_error)
+    logger.debug("transcode fail task_id=%s last_error=%s", task.id, task.last_error)
+    await log_safely("transcode.failed", transcode_task_events.announce_failed(db, task, req.last_error))
+    await log_session_settled(db, application, outcome)
     return task

@@ -26,14 +26,18 @@ from arm_backend.ws import WSHub
 from arm_common import (
     Config,
     ContainerFormat,
+    DiscType,
     Gpu,
     GpuStatus,
     GpuVendor,
+    Job,
+    JobStatus,
     MediaType,
     Session,
     SessionApplication,
     SessionApplicationStatus,
     Track,
+    TrackStatus,
     TranscodePreset,
     TranscodeTask,
     TranscodeTaskStatus,
@@ -41,6 +45,7 @@ from arm_common import (
 )
 from arm_common.enums import TrackKind
 from tests._fakes import FakeSession
+from tests._logs import LineCapture, log_commits
 
 
 def _settings(**overrides: Any) -> Settings:
@@ -80,8 +85,8 @@ def _db_factory(db: FakeSession) -> Any:
 
 def _app_with_one_task(status: TranscodeTaskStatus, *, passthrough: bool = False, **task_kwargs: Any) -> FakeSession:
     """One session_application + one task. Defaults to an ENCODE task (a real
-    HANDBRAKE preset resolves via the session), matching the pre-Task-6
-    container-spawn tests. `passthrough=True` gives the session no
+    HANDBRAKE preset resolves via the session), the container-spawn
+    path. `passthrough=True` gives the session no
     transcode_preset_id, so `is_passthrough_preset` routes the task through
     `execute_passthrough_task` instead of the container-spawn path.
     """
@@ -268,7 +273,7 @@ async def test_spawn_remote_without_backend_url_warns_and_falls_back(
 ) -> None:
     # A remote docker host with no routable backend URL is a misconfig: the
     # spawned container falls back to the in-network arm-backend:8443 which it
-    # cannot resolve. We keep the fallback (spec-compliant) but warn loudly.
+    # cannot resolve. We keep the fallback but warn loudly.
     db = _app_with_one_task(TranscodeTaskStatus.QUEUED)
     db.rows["transcode_tasks"][0].created_at = datetime.now(UTC)
     docker = MagicMock()
@@ -310,20 +315,20 @@ async def test_spawn_injects_transcode_puid_pgid_when_configured() -> None:
     assert kwargs["environment"]["PGID"] == "1000"
 
 
-async def test_spawn_omits_puid_pgid_when_not_configured() -> None:
-    # Default (empty) ARM_TRANSCODE_PUID/PGID must NOT inject PUID/PGID —
-    # the spawned container keeps the image's default drop uid/gid.
+async def test_spawn_uses_the_stack_puid_pgid_when_no_override() -> None:
+    # Empty ARM_TRANSCODE_PUID/PGID: the transcoder drops to the stack's
+    # PUID/PGID like every other service, not the image's default uid.
     db = _app_with_one_task(TranscodeTaskStatus.QUEUED)
     db.rows["transcode_tasks"][0].created_at = datetime.now(UTC)
     docker = MagicMock()
-    disp = TranscodeDispatcher(_settings(), _db_factory(db), docker, WSHub())
+    disp = TranscodeDispatcher(_settings(PUID="1001", PGID="1001"), _db_factory(db), docker, WSHub())
 
     spawned = await disp.spawn_pending(db)
     assert spawned == 1
 
     kwargs = docker.containers.run.call_args.kwargs
-    assert "PUID" not in kwargs["environment"]
-    assert "PGID" not in kwargs["environment"]
+    assert kwargs["environment"]["PUID"] == "1001"
+    assert kwargs["environment"]["PGID"] == "1001"
 
 
 async def test_spawn_caps_at_max_parallel() -> None:
@@ -402,8 +407,8 @@ async def test_spawn_caps_at_max_parallel() -> None:
 
 
 async def test_spawn_holds_encode_when_host_paths_unset() -> None:
-    # No-transcode-mode contract: unset ARM_HOST_*_PATH no longer disables the
-    # whole dispatcher tick; it just holds ENCODE tasks (which need the
+    # No-transcode-mode contract: unset ARM_HOST_*_PATH does not disable the
+    # whole dispatcher tick; it only holds ENCODE tasks (which need the
     # container volume mounts) in QUEUED for a later tick.
     db = _app_with_one_task(TranscodeTaskStatus.QUEUED, created_at=datetime.now(UTC))
     docker = MagicMock()
@@ -471,7 +476,7 @@ async def test_spawn_continues_after_one_failure() -> None:
 
 
 async def test_spawn_pending_runs_spawn_container_via_to_thread(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Fix 76-4: `_spawn_container` does a blocking docker call (and, on the
+    """`_spawn_container` does a blocking docker call (and, on the
     SSH-rebuild path, a blocking TCP+SSH handshake that can take tens of
     seconds against a black-holed host) — it must run off the event loop via
     `asyncio.to_thread`, not synchronously inline in `spawn_pending`. Pin the
@@ -580,7 +585,7 @@ async def test_spawn_no_retry_without_factory() -> None:
 async def test_spawn_factory_returns_none_keeps_old_client(
     caplog: pytest.LogCaptureFixture, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """I2: `docker_factory.build_docker_client` returns None on any factory
+    """`docker_factory.build_docker_client` returns None on any factory
     failure, not an exception. Assigning `self._docker = None` would make
     every LATER spawn raise AttributeError instead of following the
     transport-death path — permanently wedging the dispatcher. The old
@@ -621,7 +626,7 @@ async def test_spawn_factory_returns_none_keeps_old_client(
 
 
 async def test_spawn_successful_rebuild_closes_old_client(monkeypatch: pytest.MonkeyPatch) -> None:
-    """I2: when the factory returns a working client, the old (dead) client
+    """When the factory returns a working client, the old (dead) client
     is best-effort closed so its resources (e.g. the SSH transport) don't
     leak (here at once; in production after RETIRED_CLIENT_CLOSE_DELAY_SECONDS)."""
     monkeypatch.setattr(docker_client_mod, "RETIRED_CLIENT_CLOSE_DELAY_SECONDS", 0.0)
@@ -701,7 +706,7 @@ async def test_probe_without_factory_reports_dead_transport() -> None:
 async def test_spawn_pending_recovers_when_the_probe_gate_hits_a_dead_transport() -> None:
     """The wedge seen on a live host: the spawn gate probes first, the dead
     client fails `ping`, every encode task is held, and `containers.run` (the
-    only place that used to rebuild) is never reached. The probe's own
+    only other place that rebuilds) is never reached. The probe's own
     recovery must let the same tick spawn on the fresh client."""
     db = _app_with_one_task(TranscodeTaskStatus.QUEUED)
     db.rows["transcode_tasks"][0].created_at = datetime.now(UTC)
@@ -1806,6 +1811,36 @@ async def test_arm_inprogress_sweep_skips_when_media_root_missing(tmp_path: Path
     assert deleted == 0
 
 
+async def test_arm_inprogress_sweep_removes_an_orphaned_backup_staging_folder(tmp_path: Path) -> None:
+    """A disc backup copied across filesystems is staged as a folder,
+    `<Title>.arm-inprogress`; one left by a crash is half a disc, and a live
+    backup task's staging folder is kept."""
+    media = tmp_path / "media"
+    orphan = media / "Iron Man (2008).arm-inprogress"
+    (orphan / "BDMV").mkdir(parents=True)
+    (orphan / "BDMV" / "index.bdmv").write_bytes(b"half")
+    live = media / "Live Movie (2024).arm-inprogress"
+    (live / "BDMV").mkdir(parents=True)
+
+    db = FakeSession()
+    db.rows["transcode_tasks"] = [
+        TranscodeTask(
+            id="txt_live",
+            session_application_id="sap_x",
+            source_track_id="trk_x",
+            status=TranscodeTaskStatus.IN_PROGRESS,
+            output_path="Live Movie (2024)",
+            attempts=1,
+            progress_pct=50,
+        )
+    ]
+    disp = TranscodeDispatcher(_settings(), _db_factory(db), MagicMock(), WSHub())
+
+    assert await disp.sweeps.sweep_arm_inprogress(media) == 1
+    assert not orphan.exists()
+    assert live.exists()
+
+
 # ---- cancel running ----------------------------------------------------------
 
 
@@ -1840,7 +1875,7 @@ async def test_cancel_running_emits_ws_then_docker_stop_fallback_then_deletes(
 
 
 async def test_cancel_running_releases_the_tasks_gpu(monkeypatch: pytest.MonkeyPatch) -> None:
-    """D-057: a docker-stopped transcoder never calls /fail; the delete must
+    """A docker-stopped transcoder never calls /fail; the delete must
     free its GPU, not leave it BUSY with a nulled claim."""
     db = _app_with_one_task(TranscodeTaskStatus.IN_PROGRESS, claimed_by="host", attempts=1)
     db.rows["gpus"] = [
@@ -1869,7 +1904,7 @@ async def test_cancel_running_releases_the_tasks_gpu(monkeypatch: pytest.MonkeyP
 
 
 async def test_cancel_running_stops_an_in_process_passthrough_copy(monkeypatch: pytest.MonkeyPatch) -> None:
-    """D-066: an in-process passthrough has no container; cancel_running
+    """An in-process passthrough has no container; cancel_running
     sets its copy's cancel event."""
     import threading
 
@@ -2083,3 +2118,103 @@ async def test_spawn_rebuild_tolerates_old_client_close_failure(monkeypatch: pyt
     assert disp._docker is fresh
     dead.close.assert_called_once()
     fresh.containers.run.assert_called_once()
+
+
+# ---- job log of a task failed by the dispatcher or the sweep ---------------
+
+
+def _with_job_and_track(db: FakeSession) -> FakeSession:
+    db.rows["jobs"] = [
+        Job(
+            id="job_01JZXR7K3M5Q8N4VWA00000001",
+            drive_id="drv_x",
+            disc_type=DiscType.DVD,
+            title="Iron Man",
+            year=2008,
+            status=JobStatus.RIPPED,
+            metadata_json={},
+        )
+    ]
+    db.rows["tracks"] = [
+        Track(
+            id="trk_1",
+            job_id="job_01JZXR7K3M5Q8N4VWA00000001",
+            kind=TrackKind.VIDEO_TITLE,
+            index=1,
+            source_ref="1",
+            status=TrackStatus.DONE,
+            attempts=0,
+        )
+    ]
+    log_commits(db)
+    return db
+
+
+_FAILURE_ORDER = ("commit", "transcode.failed", "session.completed")
+
+
+async def test_a_task_failed_before_spawn_logs_its_failure_then_the_session(job_log: LineCapture) -> None:
+    db = _with_job_and_track(_app_with_one_task(TranscodeTaskStatus.QUEUED))
+    disp = TranscodeDispatcher(_settings(), _db_factory(db), MagicMock(), WSHub())
+
+    await disp._fail_queued_task(db, db.rows["transcode_tasks"][0], "no GPU can encode av1")
+
+    assert job_log.events(*_FAILURE_ORDER) == ["commit", "transcode.failed", "session.completed"]
+    (failed,) = job_log.lines(event="transcode.failed")
+    assert failed["msg"] == "track 1/1 transcode failed: no GPU can encode av1"
+    assert failed["job_id"] == "job_01JZXR7K3M5Q8N4VWA00000001" and failed["track_id"] == "trk_1"
+
+
+async def test_a_task_failed_before_spawn_survives_a_failed_milestone_log(
+    job_log: LineCapture, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from arm_backend import transcode_dispatcher
+
+    async def _broken(*_args: Any) -> None:
+        raise RuntimeError("log bug")
+
+    monkeypatch.setattr(transcode_dispatcher, "announce_failed", _broken)
+    db = _with_job_and_track(_app_with_one_task(TranscodeTaskStatus.QUEUED))
+    disp = TranscodeDispatcher(_settings(), _db_factory(db), MagicMock(), WSHub())
+
+    await disp._fail_queued_task(db, db.rows["transcode_tasks"][0], "no GPU can encode av1")
+
+    assert db.rows["transcode_tasks"][0].status == TranscodeTaskStatus.FAILED
+    assert job_log.events(*_FAILURE_ORDER) == ["commit", "session.completed"]
+    assert job_log.lines(level="error")[-1]["msg"] == "could not log the transcode.failed milestone"
+
+
+async def test_a_stale_hard_fail_logs_its_failure_then_the_session(job_log: LineCapture) -> None:
+    db = _with_job_and_track(
+        _app_with_one_task(
+            TranscodeTaskStatus.IN_PROGRESS,
+            claimed_by="dead-host",
+            claim_heartbeat_at=datetime.now(UTC) - timedelta(seconds=200),
+            attempts=3,
+        )
+    )
+    disp = TranscodeDispatcher(_settings(ARM_TRANSCODE_MAX_ATTEMPTS=3), _db_factory(db), MagicMock(), WSHub())
+
+    assert await disp.sweeps.sweep_stale_claims(db) == 1
+
+    assert job_log.events(*_FAILURE_ORDER) == ["commit", "transcode.failed", "session.completed"]
+    (failed,) = job_log.lines(event="transcode.failed")
+    assert failed["msg"] == "track 1/1 transcode failed: exceeded retry limit after stale claim (attempts=3)"
+    (session_done,) = job_log.lines(event="session.completed")
+    assert session_done["msg"] == "transcode failed: 0/1"
+
+
+async def test_a_stale_reset_logs_no_failure(job_log: LineCapture) -> None:
+    db = _with_job_and_track(
+        _app_with_one_task(
+            TranscodeTaskStatus.IN_PROGRESS,
+            claimed_by="dead-host",
+            claim_heartbeat_at=datetime.now(UTC) - timedelta(seconds=200),
+            attempts=1,
+        )
+    )
+    disp = TranscodeDispatcher(_settings(), _db_factory(db), MagicMock(), WSHub())
+
+    assert await disp.sweeps.sweep_stale_claims(db) == 1
+
+    assert job_log.events(*_FAILURE_ORDER) == ["commit"]

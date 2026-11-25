@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
-import { renderComponent, screen, fireEvent, cleanup, waitFor, within } from '$lib/test-utils';
+import { renderComponent, screen, fireEvent, cleanup, waitFor, within } from '$lib/testing/render';
 import FilesPage from '../+page.svelte';
 import * as stores from '$app/stores';
 import * as auth from '$lib/stores/auth';
@@ -319,7 +319,7 @@ describe('roots', () => {
 		mockFetchRoots.mockResolvedValue([]);
 		renderComponent(FilesPage);
 		await waitFor(() => expect(mockFetchRoots).toHaveBeenCalled());
-		await waitFor(() => expect(document.querySelectorAll('tr[aria-busy="true"]').length).toBe(8));
+		expect(await screen.findByText('No media directories configured')).toBeInTheDocument();
 		expect(screen.queryByRole('group', { name: 'File root tabs' })).not.toBeInTheDocument();
 		expect(mockFetchDirectory).not.toHaveBeenCalled();
 	});
@@ -386,18 +386,26 @@ describe('listing states', () => {
 		expect(screen.queryByText(/read-only mount/)).not.toBeInTheDocument();
 	});
 
-	it('goes up through the .. row when the listing has a parent', async () => {
+	it('goes up through the row that names the root, one level below it', async () => {
 		dirs['raw::a'] = listing([file('inner.mkv')], { subpath: 'a', parent_subpath: '' });
 		setUrl('http://localhost/files?root=raw&subpath=a');
 		await renderPage('inner.mkv');
-		await fireEvent.click(screen.getByRole('button', { name: '..' }));
+		await fireEvent.click(screen.getByRole('button', { name: 'Up to Raw' }));
 		await screen.findByText('movie.mkv');
 		expect(mockFetchDirectory).toHaveBeenLastCalledWith('raw', '');
 	});
 
-	it('shows no .. row at the top of a root', async () => {
-		await renderPage();
+	it('names the parent folder in the up row deeper down', async () => {
+		dirs['raw::a/b'] = listing([file('inner.mkv')], { subpath: 'a/b', parent_subpath: 'a' });
+		setUrl('http://localhost/files?root=raw&subpath=a/b');
+		await renderPage('inner.mkv');
+		expect(screen.getByRole('button', { name: 'Up to a' })).toBeInTheDocument();
 		expect(screen.queryByRole('button', { name: '..' })).not.toBeInTheDocument();
+	});
+
+	it('shows no up row at the top of a root', async () => {
+		await renderPage();
+		expect(screen.queryByRole('button', { name: /^Up to / })).not.toBeInTheDocument();
 	});
 
 	it('refreshes the current directory from the toolbar', async () => {
@@ -511,6 +519,21 @@ describe('rename', () => {
 		expect(screen.getByText('Renamed to film.mkv')).toBeInTheDocument();
 		await vi.advanceTimersByTimeAsync(200);
 		await waitFor(() => expect(screen.queryByText('Renamed to film.mkv')).not.toBeInTheDocument());
+	});
+
+	it("keeps a later message up for its own 3 seconds, not the earlier one's", async () => {
+		vi.useFakeTimers({ shouldAdvanceTime: true });
+		await renderPage();
+		await rename('movie.mkv', 'film.mkv');
+		await screen.findByText('Renamed to film.mkv');
+		await vi.advanceTimersByTimeAsync(2000);
+		mockRename.mockRejectedValueOnce(new Error('Name taken'));
+		await rename('movie.mkv', 'clip.mkv');
+		await screen.findByText('Name taken');
+		await vi.advanceTimersByTimeAsync(2000);
+		expect(screen.getByText('Name taken')).toBeInTheDocument();
+		await vi.advanceTimersByTimeAsync(1100);
+		await waitFor(() => expect(screen.queryByText('Name taken')).not.toBeInTheDocument());
 	});
 });
 
@@ -696,12 +719,12 @@ describe('new folder', () => {
 });
 
 describe('bulk move picker', () => {
-	const pickerPath = () => document.querySelector('.files-page-picker-path')?.textContent;
+	const pickerPath = () => document.querySelector('.file-move-path')?.textContent;
 	const moveButton = () => screen.getByRole('button', { name: 'Move here' });
-	const pickerPanel = () => document.querySelector('.modal .files-page-orphan-panel') as HTMLElement;
+	const pickerPanel = () => document.querySelector('[role="dialog"][aria-label^="Move"]') as HTMLElement;
 	const pickerFolder = (name: string) =>
 		waitFor(() => {
-			const el = Array.from(pickerPanel().querySelectorAll('.files-page-picker-row-folder')).find(
+			const el = Array.from(pickerPanel().querySelectorAll('.file-move-row-folder')).find(
 				(b) => b.textContent?.trim() === name
 			);
 			expect(el).toBeTruthy();
@@ -733,9 +756,7 @@ describe('bulk move picker', () => {
 		expect(screen.getByText('current')).toBeInTheDocument();
 		expect(moveButton()).toBeDisabled();
 		expect(moveButton()).toHaveAttribute('title', 'Navigate to a different folder first');
-		const names = Array.from(document.querySelectorAll('.files-page-picker-row-folder')).map((b) =>
-			b.textContent?.trim()
-		);
+		const names = Array.from(document.querySelectorAll('.file-move-row-folder')).map((b) => b.textContent?.trim());
 		expect(names).toEqual(['subfolder', 'other']);
 		expect(screen.queryByText('No subfolders')).not.toBeInTheDocument();
 	});
@@ -745,9 +766,7 @@ describe('bulk move picker', () => {
 		await selectRow('subfolder');
 		await fireEvent.click(screen.getByRole('button', { name: /^Move \d+$/ }));
 		await screen.findByText('Browse to the destination folder');
-		const names = Array.from(document.querySelectorAll('.files-page-picker-row-folder')).map((b) =>
-			b.textContent?.trim()
-		);
+		const names = Array.from(document.querySelectorAll('.file-move-row-folder')).map((b) => b.textContent?.trim());
 		expect(names).toEqual(['other']);
 	});
 
@@ -862,10 +881,10 @@ describe('bulk move picker', () => {
 		mockFetchDirectory.mockReturnValueOnce(pending.promise);
 		await fireEvent.click(screen.getByRole('button', { name: /^Move 1$/ }));
 		await screen.findByText('Browse to the destination folder');
-		expect(document.querySelector('.modal .spin')).toBeInTheDocument();
+		expect(document.querySelector('[role="dialog"] .spin')).toBeInTheDocument();
 		expect(screen.queryByText('No subfolders')).not.toBeInTheDocument();
 		pending.resolve(dirs['raw::']);
-		await waitFor(() => expect(document.querySelector('.modal .spin')).not.toBeInTheDocument());
+		await waitFor(() => expect(document.querySelector('[role="dialog"] .spin')).not.toBeInTheDocument());
 	});
 
 	it('labels an unknown root by its key', async () => {
@@ -922,7 +941,7 @@ describe('bulk move picker', () => {
 
 	it('closes by clicking the backdrop', async () => {
 		await openPicker('movie.mkv');
-		await fireEvent.click(screen.getByRole('button', { name: 'Close dialog' }));
+		await fireEvent.click(document.querySelector('.slide-over-scrim') as HTMLElement);
 		expect(screen.queryByText('Browse to the destination folder')).not.toBeInTheDocument();
 	});
 });
@@ -1001,7 +1020,7 @@ describe('orphan folders modal', () => {
 		await fireEvent.click(screen.getByTitle('Orphan folders'));
 		await screen.findByText('Orphan Folders');
 	}
-	const modal = () => document.querySelector('.files-page-orphan-panel') as HTMLElement;
+	const modal = () => document.querySelector('.files-page-dialog-panel') as HTMLElement;
 	const modalCheckboxes = () => within(modal()).queryAllByRole('checkbox');
 
 	it('shows a loading message while the folders load', async () => {

@@ -1,4 +1,4 @@
-"""Rip from ISO: the virtual-drive lifecycle (spec 6.2).
+"""Rip from ISO: the virtual-drive lifecycle.
 
 A virtual drive is created `enrolled` with a one-shot ripper container
 (restart policy "no") and becomes `retired` once that rip ends. The ripper
@@ -27,6 +27,7 @@ from sqlmodel import col, select
 from arm_backend import iso_prepare
 from arm_backend.session_drain import cancel_parked_applications
 from arm_backend.config import settings
+from arm_backend.rip_outcome import rip_outcome_counts
 from arm_backend.ripper_manager import RipperManager, RipperManagerError
 from arm_common import (
     Drive,
@@ -36,7 +37,6 @@ from arm_common import (
     Job,
     JobStatus,
     Track,
-    TrackStatus,
 )
 from arm_common.enums import PRE_RIP_JOB_STATUSES, TERMINAL_JOB_STATUSES
 
@@ -147,6 +147,7 @@ async def _fail_job(db: AsyncSession, hub: WSHub, job: Job) -> None:
     payload `rip_complete` sends plus the reason. Job has no reason column;
     the reason lives in the persisted event's payload."""
     tracks = (await db.execute(select(Track).where(col(Track.job_id) == job.id))).scalars().all()
+    done, failed, total = rip_outcome_counts(tracks)
     job.status = JobStatus.FAILED
     job.ripped_at = datetime.now(UTC)
     db.add(job)
@@ -159,9 +160,9 @@ async def _fail_job(db: AsyncSession, hub: WSHub, job: Job) -> None:
             "job_id": job.id,
             "drive_id": job.drive_id,
             "status": job.status.value,
-            "tracks_done": sum(1 for t in tracks if t.status == TrackStatus.DONE),
-            "tracks_failed": sum(1 for t in tracks if t.status == TrackStatus.FAILED),
-            "tracks_total": len(tracks),
+            "tracks_done": done,
+            "tracks_failed": failed,
+            "tracks_total": total,
             "reason": STOPPED_UNEXPECTEDLY,
         },
         job_id=job.id,

@@ -1,4 +1,4 @@
-"""The episode stage (design spec 5, 6.2, 6.3, 9): match a TV disc's titles
+"""The episode stage: match a TV disc's titles
 against each ranked provider's episode list and record the result as one
 tier-3 `SourceClaims` per provider.
 
@@ -33,13 +33,16 @@ from sqlmodel import col, select
 from arm_common import Config, Job, Track, TrackKind
 from arm_common.enums import MediaType, TrackRole
 from arm_common.schemas import ExternalIds
+from arm_common.logging import with_log_context
 from arm_common.schemas.identity import JobClaim, SourceClaims, TrackClaim
+
+from arm_backend import job_events
 
 from arm_backend.identity.episode_holds import SeasonFit, hold_reasons
 from arm_backend.identity.episode_siblings import episode_range, sibling_discs, sibling_rows, sibling_seasons
 from arm_backend.identity.episodes.continuity import SiblingDisc, align_runs, rank_seasons, start_anchor
 from arm_backend.identity.episodes.matcher import effective_tolerance
-from arm_backend.identity.episodes.model import Episode, MatchResult, TitleIn
+from arm_backend.identity.episodes.model import Episode, MatchResult, TitleIn, TitleMatch
 from arm_backend.identity.episodes.providers.base import EpisodeListProvider
 from arm_backend.identity.http import SourceError, SourceMiss
 from arm_backend.identity.ids import resolve_show_ids
@@ -81,7 +84,7 @@ class SourceOutcome:
 
 
 def is_tv_candidate(job: Job, tracks: Sequence[Track]) -> bool:
-    """Spec 5 gate: the job is TV, or any track is already an episode."""
+    """Gate: the job is TV, or any track is already an episode."""
     return job.media_type == MediaType.TV or any(t.role == TrackRole.EPISODE for t in tracks)
 
 
@@ -112,7 +115,7 @@ def operator_placed(tracks: Sequence[Track]) -> dict[int, frozenset[int]]:
 
 def _eligible(tracks: Sequence[Track]) -> list[TitleIn]:
     """Selected video titles with a length whose role is unknown or episode
-    (C6), other than ones the operator placed by hand. A role this stage itself set on an earlier run (provenance is an
+    other than ones the operator placed by hand. A role this stage itself set on an earlier run (provenance is an
     episode source, e.g. `extra` for a skipped title) does not count as known,
     so a re-run can still place that title."""
     out: list[TitleIn] = []
@@ -131,7 +134,7 @@ def _eligible(tracks: Sequence[Track]) -> list[TitleIn]:
 def _ordered_providers(
     job: Job, providers: Sequence[EpisodeListProvider], only_source: str | None, cfg: Config
 ) -> list[EpisodeListProvider]:
-    """The operator's enabled sources in rank order (PR 4). The job's pinned
+    """The operator's enabled sources in rank order. The job's pinned
     source runs first even when unchecked, and an explicit `only_source`
     (a manual /match) runs regardless of the settings."""
     by_id = {p.source_id: p for p in providers}
@@ -164,7 +167,7 @@ def season_scan_order(
 
 
 def _nominal(remaining: Sequence[Episode], titles: Sequence[TitleIn], tolerance: int) -> bool:
-    """C4: every known runtime is a whole number of broadcast slots, and fewer
+    """Every known runtime is a whole number of broadcast slots, and fewer
     than half the episode-shaped titles fit any of them (extras never count; a
     disc with no episode-shaped title is judged on all of them)."""
     known = {e.runtime_s for e in remaining if e.runtime_s}
@@ -324,7 +327,7 @@ def _ok_claims(
 
 def _known_season(job: Job, opts: StageOptions) -> int | None:
     """The season to match against without scanning: the option, else the
-    job's season unless this stage itself set it (F1). A season an episode
+    job's season unless this stage itself set it. A season an episode
     source picked by scanning stays a scan, so re-runs keep proposing it
     and their inputs stay the same."""
     if opts.scan_seasons:
@@ -338,8 +341,8 @@ def _known_season(job: Job, opts: StageOptions) -> int | None:
 
 def _tolerance(job: Job, source_id: str, opts: StageOptions, cfg: Config) -> int:
     """The option when given; else, for the pinned episode source, the
-    tolerance the operator's `/match` stored in its inputs (I3), so a default
-    background run asks the same question and C7 input equality holds."""
+    tolerance the operator's `/match` stored in its inputs, so a default
+    background run asks the same question and the stored inputs compare equal."""
     if opts.tolerance is not None:
         return opts.tolerance
     claims = claims_of(job)
@@ -354,7 +357,7 @@ def _tolerance(job: Job, source_id: str, opts: StageOptions, cfg: Config) -> int
 def _kept_inputs(
     prior_inputs: Mapping[str, Any], known_season: int | None, disc_number: int | None, tolerance: int
 ) -> dict[str, Any]:
-    """The keep-path inputs (I2, M3, R2): when the provider cannot be asked,
+    """The keep-path inputs: when the provider cannot be asked,
     the show id is the one the last stored entry used, and the rest is this
     request's, so put_source keeps the last good claims only when the
     request is unchanged. With no known previous show id (none stored, or
@@ -418,7 +421,7 @@ async def _match(
     inputs: dict[str, Any],
 ) -> SourceOutcome:
     """One provider's outcome. Fills `inputs` as soon as they are known so an
-    error raised later still carries them (C7)."""
+    error raised later still carries them."""
     source_id = provider.source_id
     reason = provider.configured(ctx.cfg)
     if reason is not None:
@@ -435,7 +438,7 @@ async def _match(
     try:
         ids = await resolve_show_ids(ctx.job, [provider], persist=ctx.opts.apply, raise_errors=True)
     except SourceError:
-        # M3: a transient failure, not "show not found".
+        # A transient failure, not "show not found".
         inputs.update(kept)
         raise
     show_id = getattr(ids, provider.id_field, None)
@@ -465,7 +468,7 @@ async def _match(
 def _error(job: Job, source_id: str, e: Exception, inputs: dict[str, Any], now: datetime) -> SourceOutcome:
     """An error entry carrying the request inputs; `nominal_runtimes` (known
     only after a fetch) is carried from the last stored entry so put_source
-    keeps the last good claims exactly when the request is unchanged (C7)."""
+    keeps the last good claims exactly when the request is unchanged."""
     if inputs:
         previous = claims_of(job).sources.get(source_id)
         inputs = {**inputs, "nominal_runtimes": previous.inputs.get("nominal_runtimes") if previous else None}
@@ -491,8 +494,8 @@ async def compute_episode_claims(
     opts: StageOptions,
 ) -> list[SourceOutcome]:
     """Every tried provider's outcome, in the order tried. Stops after the
-    first confident, well-covered result (spec 5); later providers are not
-    called. One provider failing never fails the stage (spec 9)."""
+    first confident, well-covered result; later providers are not
+    called. One provider failing never fails the stage."""
     job_tracks = await _job_tracks(session, job)
     titles = _eligible(job_tracks)
     if not titles:
@@ -521,11 +524,30 @@ async def compute_episode_claims(
     return outcomes
 
 
+def _episode_span(matches: Sequence[TitleMatch]) -> tuple[int, int]:
+    """The first and last episode number the matches cover."""
+    return min(m.episode for m in matches), max(m.episode_end or m.episode for m in matches)
+
+
+def _log_matched(job: Job, outcomes: Sequence[SourceOutcome]) -> None:
+    """Log the first outcome that matched at least one title; nothing when none did."""
+    matched = next((o.result for o in outcomes if o.claims.status == "ok" and o.result and o.result.matches), None)
+    if matched is not None:
+        job_events.log_episodes_matched(
+            job,
+            len(matched.matches),
+            len(matched.skipped),
+            job.title,
+            matched.matches[0].season,
+            _episode_span(matched.matches),
+        )
+
+
 async def apply_episode_outcomes(session: AsyncSession, job: Job, outcomes: Sequence[SourceOutcome]) -> ResolveOutcome:
     """Store every outcome with `put_source`, then resolve. Flushes; the
     caller commits.
 
-    Split out from `run_episode_stage` (Task 8 fix round 1) so a caller that
+    Split out from `run_episode_stage` so a caller that
     runs `compute_episode_claims` off a snapshot taken before a slow network
     round-trip can re-select `job` fresh immediately before this call —
     applying stale outcomes to a row a concurrent PATCH/resolve has since
@@ -535,10 +557,12 @@ async def apply_episode_outcomes(session: AsyncSession, job: Job, outcomes: Sequ
     (`resolver.resolve`) applies a held "ok" result as a guess and reports
     it through `episode_unsure`, rather than this stage rewriting the stored
     claim (and a same-inputs error that makes `put_source` keep the prior
-    good "ok" entry stays applicable too, per F8)."""
+    good "ok" entry stays applicable too)."""
     for outcome in outcomes:
         put_source(job, outcome.source_id, outcome.claims)
-    return await resolve_job(session, job)
+    resolved = await resolve_job(session, job)
+    _log_matched(job, outcomes)
+    return resolved
 
 
 def found_ids_from_outcomes(outcomes: Sequence[SourceOutcome], providers: Sequence[EpisodeListProvider]) -> ExternalIds:
@@ -548,9 +572,9 @@ def found_ids_from_outcomes(outcomes: Sequence[SourceOutcome], providers: Sequen
     with show-id persistence off (`StageOptions.apply=False`) and needs to
     fold newly found ids onto a job it re-selects and commits separately —
     see `ids.merge_new_ids` — rather than relying on an in-place mutation
-    `compute_episode_claims` never made (Task 9 F2: `merge_new_ids(fresh_job,
-    current_ids(job))` was dead code once `job` and `fresh_job` are the same
-    object and persistence was off — nothing was ever mutated to merge)."""
+    `compute_episode_claims` never made (`merge_new_ids(fresh_job,
+    current_ids(job))` would be dead code when `job` and `fresh_job` are the same
+    object and persistence is off — nothing is ever mutated to merge)."""
     id_field_by_source = {p.source_id: p.id_field for p in providers}
     found: dict[str, str] = {}
     for outcome in outcomes:
@@ -573,6 +597,7 @@ async def run_episode_stage(
     opts: StageOptions,
 ) -> tuple[list[SourceOutcome], ResolveOutcome]:
     """Compute, store every outcome, resolve, flush. The caller commits."""
-    outcomes = await compute_episode_claims(session, job, providers, cfg, opts)
-    resolved = await apply_episode_outcomes(session, job, outcomes)
+    with with_log_context(job_id=job.id):
+        outcomes = await compute_episode_claims(session, job, providers, cfg, opts)
+        resolved = await apply_episode_outcomes(session, job, outcomes)
     return outcomes, resolved

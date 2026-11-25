@@ -1,11 +1,11 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { createRawSnippet } from 'svelte';
-import { renderComponent, screen, fireEvent, cleanup, waitFor, within } from '$lib/test-utils';
+import { renderComponent, screen, fireEvent, cleanup, waitFor, within } from '$lib/testing/render';
 import SchemaConfigForm from '../SchemaConfigForm.svelte';
 import { ApiError } from '$lib/api/client';
-import { sectionFields } from '$lib/utils/settings-sections';
+import { sectionFields } from '$lib/settings/sections';
 import type { SettingsGroup, KeyCheckResponse, ConfigFieldMeta } from '$lib/types/api.gen';
-import { IDENTITY_METAS, IDENTITY_DEFAULTS } from '$lib/utils/__tests__/fixtures/identity-metas';
+import { IDENTITY_METAS, IDENTITY_DEFAULTS } from '$lib/__fixtures__/identity-metas';
 
 const saveArmConfig = vi.fn((_config: Record<string, unknown>) => Promise.resolve({ success: true }));
 const checkApiKey = vi.fn((_name: string, _value?: string): Promise<KeyCheckResponse> =>
@@ -20,8 +20,8 @@ vi.mock('$lib/api/settings', () => ({
 // here it's a spy over the real implementation so most tests see the real
 // Metadata sections while the layout-hints test below can swap in a fixed
 // shape without depending on the production section map.
-vi.mock('$lib/utils/settings-sections', async () => {
-	const actual = await vi.importActual<typeof import('$lib/utils/settings-sections')>('$lib/utils/settings-sections');
+vi.mock('$lib/settings/sections', async () => {
+	const actual = await vi.importActual<typeof import('$lib/settings/sections')>('$lib/settings/sections');
 	return { ...actual, sectionFields: vi.fn(actual.sectionFields) };
 });
 
@@ -89,7 +89,7 @@ describe('SchemaConfigForm', () => {
 	it('renders a control per editable field, seeded from config', async () => {
 		renderComponent(SchemaConfigForm, { props: { group: GROUP, config: CONFIG } });
 		expect((screen.getByRole('combobox', { name: /provider/i }) as HTMLSelectElement).value).toBe('tmdb');
-		expect(screen.getByLabelText(/tmdb key/i)).toBeInTheDocument();
+		expect(screen.getByLabelText(/^tmdb key$/i)).toBeInTheDocument();
 	});
 
 	it('saves only changed fields, omitting an untouched <hidden> secret', async () => {
@@ -104,14 +104,14 @@ describe('SchemaConfigForm', () => {
 
 	it('includes a secret in the payload when the user types a new value', async () => {
 		renderComponent(SchemaConfigForm, { props: { group: GROUP, config: CONFIG } });
-		await fireEvent.input(screen.getByLabelText(/tmdb key/i), { target: { value: 'new-key' } });
+		await fireEvent.input(screen.getByLabelText(/^tmdb key$/i), { target: { value: 'new-key' } });
 		await fireEvent.click(screen.getByRole('button', { name: /save/i }));
 		await waitFor(() => expect(saveArmConfig).toHaveBeenCalled());
 		expect(saveArmConfig.mock.calls[0][0].tmdb_api_key).toBe('new-key');
 	});
 
 	it('resends a reverted field on a second save instead of diffing against the stale original config', async () => {
-		// I1: uncheck/re-check (here: change/revert) in one visit must not diff
+		// uncheck/re-check (here: change/revert) in one visit must not diff
 		// against the original `config` prop, which the parent never refreshes.
 		renderComponent(SchemaConfigForm, { props: { group: GROUP, config: CONFIG } });
 		const select = screen.getByRole('combobox', { name: /provider/i });
@@ -129,13 +129,13 @@ describe('SchemaConfigForm', () => {
 
 	it('holds a saved secret as <hidden> in the baseline and clears the field back to its masked state', async () => {
 		renderComponent(SchemaConfigForm, { props: { group: GROUP, config: CONFIG } });
-		await fireEvent.input(screen.getByLabelText(/tmdb key/i), { target: { value: 'new-key' } });
+		await fireEvent.input(screen.getByLabelText(/^tmdb key$/i), { target: { value: 'new-key' } });
 		await fireEvent.click(screen.getByRole('button', { name: /save/i }));
 		await waitFor(() => expect(saveArmConfig).toHaveBeenCalledTimes(1));
 
 		// The field itself goes back to the masked, empty state (never leaves the
 		// raw secret rendered once it's saved)...
-		const input = screen.getByLabelText(/tmdb key/i) as HTMLInputElement;
+		const input = screen.getByLabelText(/^tmdb key$/i) as HTMLInputElement;
 		expect(input.value).toBe('');
 		expect(input.placeholder).toMatch(/set, leave blank to keep/i);
 
@@ -155,7 +155,7 @@ describe('SchemaConfigForm key-check button', () => {
 
 	it('calls checkApiKey with the unsaved value when the user typed a new key', async () => {
 		renderComponent(SchemaConfigForm, { props: { group: GROUP, config: CONFIG } });
-		await fireEvent.input(screen.getByLabelText(/tmdb key/i), { target: { value: 'unsaved-key' } });
+		await fireEvent.input(screen.getByLabelText(/^tmdb key$/i), { target: { value: 'unsaved-key' } });
 		await fireEvent.click(tmdbCheckButton());
 		await waitFor(() => expect(checkApiKey).toHaveBeenCalledWith('tmdb', 'unsaved-key'));
 	});
@@ -469,7 +469,7 @@ describe('SchemaConfigForm Identity section', () => {
 
 	it('Save still submits a changed movie_auto_apply', async () => {
 		renderComponent(SchemaConfigForm, { props: { group: IDENTIFICATION, config: { ...IDENTITY_DEFAULTS } } });
-		await fireEvent.click(screen.getByRole('checkbox', { name: 'Apply confident matches · Movies' }));
+		await fireEvent.click(screen.getByRole('checkbox', { name: 'Apply confident matches | Movies' }));
 		await fireEvent.click(screen.getByRole('button', { name: 'Save' }));
 		await waitFor(() => expect(saveArmConfig).toHaveBeenCalled());
 		expect(saveArmConfig.mock.calls[0][0]).toEqual({ movie_auto_apply: false });
@@ -499,7 +499,7 @@ describe('SchemaConfigForm Identity section', () => {
 	});
 });
 
-describe('SchemaConfigForm setup walkthrough modes (setup spec §7.3)', () => {
+describe('SchemaConfigForm setup walkthrough modes', () => {
 	type FormApi = { save(): Promise<boolean>; isDirty(): boolean; isSet(key: string): boolean };
 
 	it('deferred + bare: no title or Save row; save() writes the same payload Settings would', async () => {
@@ -511,7 +511,7 @@ describe('SchemaConfigForm setup walkthrough modes (setup spec §7.3)', () => {
 		const form = component as unknown as FormApi;
 		expect(form.isDirty()).toBe(false);
 		expect(form.isSet('tmdb_api_key')).toBe(false);
-		await fireEvent.input(screen.getByLabelText(/tmdb key/i), { target: { value: 'abc' } });
+		await fireEvent.input(screen.getByLabelText(/^tmdb key$/i), { target: { value: 'abc' } });
 		expect(form.isDirty()).toBe(true);
 		expect(form.isSet('tmdb_api_key')).toBe(true);
 		expect(await form.save()).toBe(true);

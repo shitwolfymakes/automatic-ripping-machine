@@ -1,5 +1,8 @@
+// Open arms the coverage tool reports that are Svelte's, not the page's: the
+// delete dialog's title and message each interpolate `{deleteDialog.name}`,
+// which compiles to `(...) ?? ''`, and the dialog's name is always a string.
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
-import { renderComponent, screen, fireEvent, cleanup, waitFor, within } from '$lib/test-utils';
+import { renderComponent, screen, fireEvent, cleanup, waitFor, within } from '$lib/testing/render';
 import FilesPage from '../+page.svelte';
 import { createFileEntry, createFolderEntry } from '$lib/components/__fixtures__/files';
 
@@ -184,6 +187,17 @@ describe('Files Page', () => {
 			});
 		});
 
+		it('says no media directories are configured when there are no roots', async () => {
+			vi.mocked(fetchRoots).mockResolvedValueOnce([]);
+			const { container } = renderComponent(FilesPage);
+			await waitFor(() => {
+				expect(screen.getByText('No media directories configured')).toBeInTheDocument();
+			});
+			expect(container.querySelector('.files-page-listing')).toBeNull();
+			expect(container.querySelector('[data-file-roots]')).toBeNull();
+			expect(mockFetchDirectory).not.toHaveBeenCalled();
+		});
+
 		it('shows error when fetchDirectory fails', async () => {
 			mockFetchDirectory.mockRejectedValueOnce(new Error('Permission denied'));
 			renderComponent(FilesPage);
@@ -274,9 +288,9 @@ describe('Files Page', () => {
 			});
 
 			// "subfolder" should NOT appear in the picker list (it's the selected folder)
-			const pickerDialog = screen.getByText(/Move 1 item/).closest('.modal-panel');
+			const pickerDialog = screen.getByText(/Move 1 item/).closest('[role="dialog"]');
 			// Within the dialog, subfolder should not be a navigation option
-			const folderButtons = pickerDialog?.querySelectorAll('button.files-page-picker-row-folder');
+			const folderButtons = pickerDialog?.querySelectorAll('button.file-move-row-folder');
 			const folderNames = Array.from(folderButtons ?? []).map((b) => b.textContent?.trim());
 			expect(folderNames.some((n) => n?.includes('subfolder'))).toBe(false);
 		});

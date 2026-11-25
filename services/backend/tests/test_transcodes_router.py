@@ -227,7 +227,7 @@ def test_delete_terminal_no_application_no_hub(signing_key: bytes) -> None:
 
 
 def test_delete_queued_task_releases_its_spawn_time_gpu_claim(signing_key: bytes) -> None:
-    """D-057: the GPU is claimed at spawn, while the task is still QUEUED."""
+    """The GPU is claimed at spawn, while the task is still QUEUED."""
     db = FakeSession()
     app, token = _make_app(signing_key, db)
     db.rows["transcode_tasks"] = [_task("txt_q", status=TranscodeTaskStatus.QUEUED)]
@@ -265,7 +265,7 @@ def test_stats_counts_tasks_and_gpus(signing_key: bytes) -> None:
 
 
 def test_stats_counts_queued_encode_tasks_apart_from_passthrough(signing_key: bytes) -> None:
-    """D-067: the Transcoder page's ripper-only branch shows how many encode
+    """The Transcoder page's ripper-only branch shows how many encode
     tasks are held; a queued passthrough is not one of them."""
     db = FakeSession()
     _seed_encode_and_passthrough_queue(db)
@@ -276,7 +276,7 @@ def test_stats_counts_queued_encode_tasks_apart_from_passthrough(signing_key: by
 
 
 async def test_queued_encode_count_does_not_query_per_task() -> None:
-    """D-067 follow-up: the Transcoder page polls this, so it reads each table
+    """The Transcoder page polls this, so it reads each table
     once rather than three queries per queued task."""
     from arm_backend.transcode_queue import count_queued_encode_tasks
 
@@ -411,6 +411,59 @@ def test_retry_failed_requeues_and_resets(signing_key: bytes) -> None:
     assert db.rows["transcode_tasks"][0].status == TranscodeTaskStatus.QUEUED
 
 
+@pytest.mark.parametrize("app_status", [SessionApplicationStatus.FAILED, SessionApplicationStatus.DONE_PARTIAL])
+def test_retry_reopens_a_settled_session_application(signing_key: bytes, app_status: SessionApplicationStatus) -> None:
+    """The application was settled when its last task failed. Retrying puts it
+    back to running (completed_at cleared), as re-applying the session does,
+    so the job reads as transcoding again and the aggregate settles it afresh
+    when the retry finishes."""
+    from arm_backend.job_views import _summarize_transcode_progress
+
+    db = FakeSession()
+    application = SessionApplication(
+        id="sap_1",
+        session_id="ses_1",
+        job_id="job_1",
+        status=app_status,
+        completed_at=datetime.now(UTC),
+    )
+    db.rows["session_applications"] = [application]
+    db.rows["transcode_tasks"] = [
+        _task("txt_done", status=TranscodeTaskStatus.DONE),
+        _task("txt_f", status=TranscodeTaskStatus.FAILED),
+    ]
+    hub = _CapturingHub()
+    app, token = _make_app(signing_key, db, hub=hub)
+    with TestClient(app) as c:
+        r = c.post("/api/transcodes/txt_f/retry", headers=_auth(token))
+    assert r.status_code == 200, r.text
+    assert application.status == SessionApplicationStatus.RUNNING
+    assert application.completed_at is None
+    assert [(e["event_type"], e["payload"]) for e in hub.events] == [
+        ("task.retried", {"task_id": "txt_f", "session_application_id": "sap_1"})
+    ]
+    summary = _summarize_transcode_progress([application], db.rows["transcode_tasks"])
+    assert summary is not None and summary.state == "transcoding"
+
+
+def test_retry_leaves_a_running_session_application_running(signing_key: bytes) -> None:
+    """Another task of the session is still encoding: nothing to reopen."""
+    db = FakeSession()
+    application = SessionApplication(
+        id="sap_1", session_id="ses_1", job_id="job_1", status=SessionApplicationStatus.RUNNING
+    )
+    db.rows["session_applications"] = [application]
+    db.rows["transcode_tasks"] = [
+        _task("txt_run", status=TranscodeTaskStatus.IN_PROGRESS),
+        _task("txt_f", status=TranscodeTaskStatus.FAILED),
+    ]
+    app, token = _make_app(signing_key, db, hub=_CapturingHub())
+    with TestClient(app) as c:
+        r = c.post("/api/transcodes/txt_f/retry", headers=_auth(token))
+    assert r.status_code == 200, r.text
+    assert application.status == SessionApplicationStatus.RUNNING
+
+
 def test_retry_non_failed_409(signing_key: bytes) -> None:
     db = FakeSession()
     db.rows["transcode_tasks"] = [_task("txt_run", status=TranscodeTaskStatus.IN_PROGRESS)]
@@ -505,6 +558,36 @@ def test_log_zip_returns_zip(signing_key: bytes, tmp_path: Path, monkeypatch: py
     zf = zipfile.ZipFile(io.BytesIO(r.content))
     assert zf.namelist() == ["arm-transcode-zip000000001.log"]
     assert b"zipline" in zf.read("arm-transcode-zip000000001.log")
+
+
+def test_log_zip_reads_the_log_off_the_event_loop(
+    signing_key: bytes, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """/logs is often a network share: the blocking read runs in a worker
+    thread, where there is no running event loop, so one slow download can't
+    stall every other request."""
+    import asyncio
+
+    loop_running: list[bool] = []
+
+    def spy(path: Path) -> list[str]:
+        try:
+            asyncio.get_running_loop()
+            loop_running.append(True)
+        except RuntimeError:
+            loop_running.append(False)
+        return ["zipline\n"]
+
+    monkeypatch.setattr(tx_router, "LOG_DIR", tmp_path)
+    monkeypatch.setattr(tx_router, "file_log_slice", spy)
+    db = FakeSession()
+    db.rows["transcode_tasks"] = [_task("txt_zip000000002", status=TranscodeTaskStatus.DONE)]
+    _write_task_log(tmp_path, "txt_zip000000002", ["zipline"])
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as c:
+        r = c.get("/api/transcodes/txt_zip000000002/log.zip", headers=_auth(token))
+    assert r.status_code == 200, r.text
+    assert loop_running == [False]
 
 
 def test_log_zip_no_file_404(signing_key: bytes, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

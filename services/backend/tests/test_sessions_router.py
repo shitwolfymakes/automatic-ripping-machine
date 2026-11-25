@@ -29,6 +29,7 @@ from arm_common import (
     TranscodeTool,
     User,
 )
+from arm_common.enums import MusicCoverMaxSize, MusicCoverSize
 from arm_common.models.user import GUEST_ROLE
 
 from tests._fakes import FakeSession
@@ -215,7 +216,7 @@ def test_create_session_rejects_media_type_mismatch(signing_key: bytes) -> None:
 
 def test_patch_builtin_name_409(signing_key: bytes) -> None:
     # The seeder re-syncs a built-in's name on every boot, so a rename would
-    # silently revert; the router refuses it instead (D-146).
+    # silently revert; the router refuses it instead.
     db = FakeSession()
     _seed(db)
     app, token = _make_app(signing_key, db)
@@ -435,7 +436,8 @@ def test_create_rejects_unknown_transcode_preset(signing_key: bytes) -> None:
     assert "unknown transcode_preset_id" in r.json()["detail"]
 
 
-def test_create_rejects_transcode_media_mismatch(signing_key: bytes) -> None:
+def test_create_accepts_a_tv_transcode_preset_on_a_movie_session(signing_key: bytes) -> None:
+    """Encoding settings do not depend on movie vs TV: a preset of either fits a session of either."""
     db = FakeSession()
     _seed(db)
     db.rows["transcode_presets"].append(_tv_transcode_preset())
@@ -449,8 +451,58 @@ def test_create_rejects_transcode_media_mismatch(signing_key: bytes) -> None:
     }
     with TestClient(app) as client:
         r = client.post("/api/sessions", json=body, headers=_auth(token))
+    assert r.status_code == 201, r.text
+    assert r.json()["transcode_preset_id"] == "tpr_tv"
+
+
+def test_create_rejects_a_music_transcode_preset_on_a_movie_session(signing_key: bytes) -> None:
+    db = FakeSession()
+    _seed(db)
+    db.rows["transcode_presets"].append(
+        TranscodePreset(
+            id="tpr_flac",
+            name="FLAC",
+            media_type=MediaType.MUSIC,
+            is_builtin=True,
+            tool=TranscodeTool.ABCDE,
+            container=ContainerFormat.FLAC,
+            encoder="preset",
+        )
+    )
+    app, token = _make_app(signing_key, db)
+    body = {
+        "name": "Movie session w/ FLAC",
+        "media_type": "movie",
+        "rip_preset_id": "rpr_movie",
+        "transcode_preset_id": "tpr_flac",
+        "output_path_template": "{title} ({year}).{ext}",
+    }
+    with TestClient(app) as client:
+        r = client.post("/api/sessions", json=body, headers=_auth(token))
     assert r.status_code == 400
-    assert "transcode_preset.media_type=tv" in r.json()["detail"]
+    assert "transcode_preset.media_type=music" in r.json()["detail"]
+
+
+def test_patch_accepts_a_tv_transcode_preset_on_a_movie_session(signing_key: bytes) -> None:
+    db = FakeSession()
+    _seed(db)
+    db.rows["transcode_presets"].append(_tv_transcode_preset())
+    db.rows["sessions"].append(
+        Session(
+            id="ses_movie_user",
+            name="Mine",
+            media_type=MediaType.MOVIE,
+            is_builtin=False,
+            rip_preset_id="rpr_movie",
+            transcode_preset_id=None,
+            output_path_template="{title} ({year}).mkv",
+        )
+    )
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as client:
+        r = client.patch("/api/sessions/ses_movie_user", json={"transcode_preset_id": "tpr_tv"}, headers=_auth(token))
+    assert r.status_code == 200, r.text
+    assert r.json()["transcode_preset_id"] == "tpr_tv"
 
 
 def test_create_without_transcode_preset(signing_key: bytes) -> None:
@@ -645,3 +697,366 @@ def test_clone_preserves_overrides_json(signing_key: bytes) -> None:
     src = next(s for s in db.rows["sessions"] if s.id == "ses_with_overrides")
     clone = next(s for s in db.rows["sessions"] if s.id == out["id"])
     assert clone.overrides_json is not src.overrides_json
+
+
+# --- music file tags ---
+
+_ALL_TAGS = [
+    "artist",
+    "album_artist",
+    "album",
+    "title",
+    "track_number",
+    "track_total",
+    "disc_number",
+    "year",
+    "musicbrainz_release_id",
+    "cover",
+]
+_MUSIC_TEMPLATE = "{artist}/{album}/{track} - {track_title}"
+
+
+def _seed_music(db: FakeSession) -> None:
+    _seed(db)
+    db.rows["rip_presets"].append(
+        RipPreset(
+            id="rpr_music",
+            name="Music: Standard CD",
+            media_type=MediaType.MUSIC,
+            is_builtin=True,
+            track_selection=TrackSelection.ALL_TRACKS,
+            identification_mode=IdentificationMode.REQUIRED,
+            output_mode=OutputMode.TRACKS,
+        )
+    )
+    db.rows["sessions"].append(
+        Session(
+            id="ses_music",
+            name="My music",
+            media_type=MediaType.MUSIC,
+            is_builtin=False,
+            rip_preset_id="rpr_music",
+            output_path_template=_MUSIC_TEMPLATE,
+            music_tag_fields=["artist", "title", "cover"],
+        )
+    )
+
+
+def _create_music(client: TestClient, token: str, **extra: Any) -> Any:
+    body = {
+        "name": "Music, tags trimmed",
+        "media_type": "music",
+        "rip_preset_id": "rpr_music",
+        "output_path_template": _MUSIC_TEMPLATE,
+        **extra,
+    }
+    return client.post("/api/sessions", json=body, headers=_auth(token))
+
+
+def test_create_music_session_writes_every_tag_by_default(signing_key: bytes) -> None:
+    db = FakeSession()
+    _seed_music(db)
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as client:
+        r = _create_music(client, token)
+    assert r.status_code == 201, r.text
+    assert r.json()["music_tag_fields"] == _ALL_TAGS
+
+
+def test_create_music_session_stores_the_chosen_tags(signing_key: bytes) -> None:
+    db = FakeSession()
+    _seed_music(db)
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as client:
+        r = _create_music(client, token, music_tag_fields=["title", "track_number"])
+    assert r.status_code == 201, r.text
+    assert r.json()["music_tag_fields"] == ["title", "track_number"]
+    row = next(s for s in db.rows["sessions"] if s.id == r.json()["id"])
+    assert row.music_tag_fields == ["title", "track_number"]
+    assert all(type(v) is str for v in row.music_tag_fields)  # plain values, not enum members
+
+
+def test_create_rejects_music_tags_on_a_movie_session(signing_key: bytes) -> None:
+    db = FakeSession()
+    _seed(db)
+    app, token = _make_app(signing_key, db)
+    body = {
+        "name": "Movie",
+        "media_type": "movie",
+        "rip_preset_id": "rpr_movie",
+        "output_path_template": "{title} ({year})/{title}.{ext}",
+        "music_tag_fields": ["artist"],
+    }
+    with TestClient(app) as client:
+        r = client.post("/api/sessions", json=body, headers=_auth(token))
+    assert r.status_code == 400
+    assert r.json()["detail"] == "music_tag_fields applies to music sessions only"
+    assert len(db.rows["sessions"]) == 1
+
+
+def test_update_music_session_tags(signing_key: bytes) -> None:
+    db = FakeSession()
+    _seed_music(db)
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as client:
+        r = client.patch("/api/sessions/ses_music", json={"music_tag_fields": []}, headers=_auth(token))
+    assert r.status_code == 200, r.text
+    assert r.json()["music_tag_fields"] == []
+    assert next(s for s in db.rows["sessions"] if s.id == "ses_music").music_tag_fields == []
+
+
+def test_update_stores_the_tags_as_plain_values(signing_key: bytes) -> None:
+    db = FakeSession()
+    _seed_music(db)
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as client:
+        r = client.patch("/api/sessions/ses_music", json={"music_tag_fields": ["title", "cover"]}, headers=_auth(token))
+    assert r.status_code == 200, r.text
+    row = next(s for s in db.rows["sessions"] if s.id == "ses_music")
+    assert row.music_tag_fields == ["title", "cover"]
+    assert all(type(v) is str for v in row.music_tag_fields)  # plain values, not enum members
+
+
+def test_update_leaves_music_tags_alone_when_not_sent(signing_key: bytes) -> None:
+    db = FakeSession()
+    _seed_music(db)
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as client:
+        r = client.patch("/api/sessions/ses_music", json={"name": "Renamed"}, headers=_auth(token))
+    assert r.status_code == 200, r.text
+    assert r.json()["music_tag_fields"] == ["artist", "title", "cover"]
+
+
+@pytest.mark.parametrize(
+    ("value", "status", "detail"),
+    [
+        (None, 400, "music_tag_fields must not be null"),
+        (["artist", "artist"], 400, "music_tag_fields: duplicate values"),
+        (["genre"], 422, None),
+    ],
+)
+def test_update_rejects_a_bad_tag_list(signing_key: bytes, value: object, status: int, detail: str | None) -> None:
+    db = FakeSession()
+    _seed_music(db)
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as client:
+        r = client.patch("/api/sessions/ses_music", json={"music_tag_fields": value}, headers=_auth(token))
+    assert r.status_code == status
+    if detail is not None:
+        assert r.json()["detail"] == detail
+    assert next(s for s in db.rows["sessions"] if s.id == "ses_music").music_tag_fields == ["artist", "title", "cover"]
+
+
+def test_update_rejects_music_tags_on_a_movie_session(signing_key: bytes) -> None:
+    db = FakeSession()
+    _seed(db)
+    db.rows["sessions"].append(
+        Session(
+            id="ses_movie",
+            name="Movie",
+            media_type=MediaType.MOVIE,
+            is_builtin=False,
+            rip_preset_id="rpr_movie",
+            output_path_template="{title}.{ext}",
+        )
+    )
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as client:
+        r = client.patch("/api/sessions/ses_movie", json={"music_tag_fields": ["artist"]}, headers=_auth(token))
+    assert r.status_code == 400
+    assert r.json()["detail"] == "music_tag_fields applies to music sessions only"
+
+
+def test_clone_keeps_the_music_tags(signing_key: bytes) -> None:
+    db = FakeSession()
+    _seed_music(db)
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as client:
+        r = client.post("/api/sessions/ses_music/clone", json={"name": "Copy"}, headers=_auth(token))
+    assert r.status_code == 201, r.text
+    assert r.json()["music_tag_fields"] == ["artist", "title", "cover"]
+    src = next(s for s in db.rows["sessions"] if s.id == "ses_music")
+    clone = next(s for s in db.rows["sessions"] if s.id == r.json()["id"])
+    assert clone.music_tag_fields is not src.music_tag_fields
+
+
+def test_update_accepts_a_rip_preset_of_the_session_media_type(signing_key: bytes) -> None:
+    db = FakeSession()
+    _seed_music(db)
+    db.rows["rip_presets"].append(
+        RipPreset(
+            id="rpr_music_fast",
+            name="Music: Fast",
+            media_type=MediaType.MUSIC,
+            is_builtin=False,
+            track_selection=TrackSelection.ALL_TRACKS,
+            identification_mode=IdentificationMode.REQUIRED,
+            output_mode=OutputMode.TRACKS,
+        )
+    )
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as client:
+        r = client.patch("/api/sessions/ses_music", json={"rip_preset_id": "rpr_music_fast"}, headers=_auth(token))
+    assert r.status_code == 200, r.text
+    assert r.json()["rip_preset_id"] == "rpr_music_fast"
+
+
+# --- music cover size ---
+
+
+def test_create_music_session_embeds_the_500px_cover_by_default(signing_key: bytes) -> None:
+    db = FakeSession()
+    _seed_music(db)
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as client:
+        r = _create_music(client, token)
+    assert r.status_code == 201, r.text
+    assert r.json()["music_cover_size"] == "500"
+
+
+def test_create_music_session_stores_the_chosen_cover_size(signing_key: bytes) -> None:
+    db = FakeSession()
+    _seed_music(db)
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as client:
+        r = _create_music(client, token, music_cover_size="source")
+    assert r.status_code == 201, r.text
+    assert r.json()["music_cover_size"] == "source"
+    assert next(s for s in db.rows["sessions"] if s.id == r.json()["id"]).music_cover_size == "source"
+
+
+def test_create_rejects_a_cover_size_on_a_movie_session(signing_key: bytes) -> None:
+    db = FakeSession()
+    _seed(db)
+    app, token = _make_app(signing_key, db)
+    body = {
+        "name": "Movie",
+        "media_type": "movie",
+        "rip_preset_id": "rpr_movie",
+        "output_path_template": "{title} ({year})/{title}.{ext}",
+        "music_cover_size": "1200",
+    }
+    with TestClient(app) as client:
+        r = client.post("/api/sessions", json=body, headers=_auth(token))
+    assert r.status_code == 400
+    assert r.json()["detail"] == "music_cover_size applies to music sessions only"
+
+
+def test_update_music_session_cover_size(signing_key: bytes) -> None:
+    db = FakeSession()
+    _seed_music(db)
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as client:
+        r = client.patch("/api/sessions/ses_music", json={"music_cover_size": "1200"}, headers=_auth(token))
+    assert r.status_code == 200, r.text
+    assert r.json()["music_cover_size"] == "1200"
+    assert next(s for s in db.rows["sessions"] if s.id == "ses_music").music_cover_size == "1200"
+
+
+@pytest.mark.parametrize(
+    ("value", "status", "detail"),
+    [(None, 400, "music_cover_size must not be null"), ("300", 422, None), ("front", 422, None)],
+)
+def test_update_rejects_a_bad_cover_size(signing_key: bytes, value: object, status: int, detail: str | None) -> None:
+    db = FakeSession()
+    _seed_music(db)
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as client:
+        r = client.patch("/api/sessions/ses_music", json={"music_cover_size": value}, headers=_auth(token))
+    assert r.status_code == status
+    if detail is not None:
+        assert r.json()["detail"] == detail
+    assert next(s for s in db.rows["sessions"] if s.id == "ses_music").music_cover_size == "500"
+
+
+def test_clone_keeps_the_cover_size(signing_key: bytes) -> None:
+    db = FakeSession()
+    _seed_music(db)
+    next(s for s in db.rows["sessions"] if s.id == "ses_music").music_cover_size = MusicCoverSize.PX_1200
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as client:
+        r = client.post("/api/sessions/ses_music/clone", json={"name": "Copy"}, headers=_auth(token))
+    assert r.status_code == 201, r.text
+    assert r.json()["music_cover_size"] == "1200"
+
+
+# --- music cover file size limit ---
+
+
+def test_create_music_session_limits_the_cover_to_2mb_by_default(signing_key: bytes) -> None:
+    db = FakeSession()
+    _seed_music(db)
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as client:
+        r = _create_music(client, token)
+    assert r.status_code == 201, r.text
+    assert r.json()["music_cover_max_size"] == "2mb"
+
+
+def test_create_music_session_stores_the_chosen_cover_limit(signing_key: bytes) -> None:
+    db = FakeSession()
+    _seed_music(db)
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as client:
+        r = _create_music(client, token, music_cover_size="source", music_cover_max_size="unlimited")
+    assert r.status_code == 201, r.text
+    assert r.json()["music_cover_max_size"] == "unlimited"
+    row = next(s for s in db.rows["sessions"] if s.id == r.json()["id"])
+    # Stored as plain values, the way an update stores them.
+    assert (row.music_cover_size, row.music_cover_max_size) == ("source", "unlimited")
+    assert type(row.music_cover_max_size) is str
+
+
+def test_create_rejects_a_cover_limit_on_a_movie_session(signing_key: bytes) -> None:
+    db = FakeSession()
+    _seed(db)
+    app, token = _make_app(signing_key, db)
+    body = {
+        "name": "Movie",
+        "media_type": "movie",
+        "rip_preset_id": "rpr_movie",
+        "output_path_template": "{title} ({year})/{title}.{ext}",
+        "music_cover_max_size": "5mb",
+    }
+    with TestClient(app) as client:
+        r = client.post("/api/sessions", json=body, headers=_auth(token))
+    assert r.status_code == 400
+    assert r.json()["detail"] == "music_cover_max_size applies to music sessions only"
+
+
+def test_update_music_session_cover_limit(signing_key: bytes) -> None:
+    db = FakeSession()
+    _seed_music(db)
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as client:
+        r = client.patch("/api/sessions/ses_music", json={"music_cover_max_size": "10mb"}, headers=_auth(token))
+    assert r.status_code == 200, r.text
+    assert r.json()["music_cover_max_size"] == "10mb"
+    assert next(s for s in db.rows["sessions"] if s.id == "ses_music").music_cover_max_size == "10mb"
+
+
+@pytest.mark.parametrize(
+    ("value", "status", "detail"),
+    [(None, 400, "music_cover_max_size must not be null"), ("3mb", 422, None), ("2097152", 422, None)],
+)
+def test_update_rejects_a_bad_cover_limit(signing_key: bytes, value: object, status: int, detail: str | None) -> None:
+    db = FakeSession()
+    _seed_music(db)
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as client:
+        r = client.patch("/api/sessions/ses_music", json={"music_cover_max_size": value}, headers=_auth(token))
+    assert r.status_code == status
+    if detail is not None:
+        assert r.json()["detail"] == detail
+    assert next(s for s in db.rows["sessions"] if s.id == "ses_music").music_cover_max_size == "2mb"
+
+
+def test_clone_keeps_the_cover_limit(signing_key: bytes) -> None:
+    db = FakeSession()
+    _seed_music(db)
+    next(s for s in db.rows["sessions"] if s.id == "ses_music").music_cover_max_size = MusicCoverMaxSize.MB_5
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as client:
+        r = client.post("/api/sessions/ses_music/clone", json={"name": "Copy"}, headers=_auth(token))
+    assert r.status_code == 201, r.text
+    assert r.json()["music_cover_max_size"] == "5mb"

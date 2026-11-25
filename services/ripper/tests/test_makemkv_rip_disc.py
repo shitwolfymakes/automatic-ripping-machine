@@ -7,7 +7,7 @@ attribute per-title outcomes. Confirms:
 
   - PRGT "Saving title #N" transitions current_title and emits
     on_title_start once per title.
-  - PRGV ramps fire on_title_progress against the right title.
+  - PRGV's disc-wide `total/max` drives on_disc_progress for the save phase.
   - MSG:5003 captures per-title failure reason; the matching file is
     absent from the output dir, so the title comes back FAILED with
     that reason rather than "produced no .mkv".
@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import logging
 from pathlib import Path
 from typing import Any
 
@@ -30,7 +31,11 @@ import arm_ripper.rip.makemkv_process as makemkv_process
 import arm_ripper.rip.makemkv_rip as makemkv_rip
 import arm_ripper.rip.makemkv_stream as makemkv_stream
 import arm_ripper.rip.subprocess_cleanup as subprocess_cleanup
+from arm_common.enums import TrackKind, TrackStatus
+from arm_common.schemas import TrackView
+
 from arm_ripper.rip.makemkv_rip import rip_disc
+from arm_ripper.rip.optical_rip import rip_optical
 from arm_ripper.rip.result import RipResult
 
 
@@ -252,9 +257,7 @@ async def test_rip_disc_falls_back_to_disc_progress_when_no_per_title_prgt(monke
     `total/max` channel, not get silently dropped.
 
     This is the regression that made the dashboard bar stay at 0 % for
-    the entire rip even though the file was being written: the streamer
-    gated `on_title_progress` on `current_title is not None` and had no
-    fallback for the disc-overall case."""
+    the entire rip even though the file was being written."""
     _stub_subprocess(
         monkeypatch,
         [
@@ -267,14 +270,10 @@ async def test_rip_disc_falls_back_to_disc_progress_when_no_per_title_prgt(monke
     )
     (tmp_path / "Disc_t00.mkv").write_bytes(b"x" * 64)
 
-    title_progress: list[tuple[int, float]] = []
     disc_progress: list[float] = []
 
     async def on_title_start(_idx: int) -> None:
         return None
-
-    async def on_title_progress(idx: int, frac: float) -> None:
-        title_progress.append((idx, frac))
 
     async def on_disc_progress(frac: float) -> None:
         disc_progress.append(frac)
@@ -285,13 +284,10 @@ async def test_rip_disc_falls_back_to_disc_progress_when_no_per_title_prgt(monke
         minlength_seconds=120,
         eligible_source_indexes=[0],
         on_title_start=on_title_start,
-        on_title_progress=on_title_progress,
         on_disc_progress=on_disc_progress,
     )
 
     assert result.overall_error is None
-    # No "Saving title N" PRGT → on_title_progress must never have fired.
-    assert title_progress == []
     # Disc-level callback got the `total/max` channel (not `current/max`).
     assert disc_progress == [0.05, 0.25, 0.95]
 
@@ -304,12 +300,9 @@ async def test_rip_disc_pre_save_phase_prgv_is_silently_dropped(monkeypatch, tmp
 
     If the streamer fired `on_disc_progress` for those, the rips
     store would publish a 70-80% bar to the dashboard, then snap to
-    0% when PRGC:5017,0 fires per-title progress — and the ETA
-    baseline (anchored at the first sample) would treat the snap as
-    a sustained negative pctDelta, holding ETA null until per-title
-    progress climbs back past the pre-rip peak (basically forever
-    on a long main feature). Gate fixes the regression: PRGV before
-    PRGT:5024 is silent."""
+    0% when the save phase starts, and the ETA baseline (anchored at
+    the first sample) would hold ETA null until the bar climbed back
+    past the pre-rip peak. PRGV before the save phase is silent."""
     _stub_subprocess(
         monkeypatch,
         [
@@ -320,19 +313,15 @@ async def test_rip_disc_pre_save_phase_prgv_is_silently_dropped(monkeypatch, tmp
             # Save phase begins.
             'PRGT:5024,0,"Saving all titles to MKV files"',
             'PRGC:5017,0,"Saving to MKV file"',
-            "PRGV:5000,1000,10000",  # per-op 0.5, attributed to title
+            "PRGV:5000,1000,10000",  # per-op 0.5, disc-overall 0.1
         ],
     )
     (tmp_path / "Disc_t00.mkv").write_bytes(b"x" * 64)
 
-    title_progress: list[tuple[int, float]] = []
     disc_progress: list[float] = []
 
     async def on_title_start(_idx: int) -> None:
         return None
-
-    async def on_title_progress(idx: int, frac: float) -> None:
-        title_progress.append((idx, frac))
 
     async def on_disc_progress(frac: float) -> None:
         disc_progress.append(frac)
@@ -343,23 +332,19 @@ async def test_rip_disc_pre_save_phase_prgv_is_silently_dropped(monkeypatch, tmp
         minlength_seconds=120,
         eligible_source_indexes=[0],
         on_title_start=on_title_start,
-        on_title_progress=on_title_progress,
         on_disc_progress=on_disc_progress,
     )
 
     assert result.overall_error is None
-    # Pre-rip PRGV → silent. Per-title PRGV after PRGC:5017,0 fires for source 0.
-    assert title_progress == [(0, 0.5)]
-    # Disc-level fallback never fired — pre-rip gated, save phase had PRGC:5017.
-    assert disc_progress == []
+    # Pre-rip PRGV → silent; the save phase reports the disc-overall total.
+    assert disc_progress == [0.1]
 
 
 @pytest.mark.asyncio
-async def test_rip_disc_per_title_progress_takes_precedence_over_disc(monkeypatch, tmp_path):
-    """When a per-title "Saving title #N" PRGT has identified the
-    in-flight title, PRGV drives `on_title_progress` (per-op channel)
-    and the disc-level callback stays silent — the per-title
-    behaviour established in v2 is preserved unchanged."""
+async def test_rip_disc_reports_the_disc_wide_total_once_a_saving_title_milestone_names_a_title(monkeypatch, tmp_path):
+    """A "Saving title #N" PRGT names the in-flight title, which starts
+    the save phase even without PRGT:5024. PRGV then reports the
+    disc-overall `total/max`, not the per-title `current/max`."""
     _stub_subprocess(
         monkeypatch,
         [
@@ -370,14 +355,10 @@ async def test_rip_disc_per_title_progress_takes_precedence_over_disc(monkeypatc
     )
     (tmp_path / "Disc_t00.mkv").write_bytes(b"x" * 64)
 
-    title_progress: list[tuple[int, float]] = []
     disc_progress: list[float] = []
 
     async def on_title_start(_idx: int) -> None:
         return None
-
-    async def on_title_progress(idx: int, frac: float) -> None:
-        title_progress.append((idx, frac))
 
     async def on_disc_progress(frac: float) -> None:
         disc_progress.append(frac)
@@ -388,13 +369,11 @@ async def test_rip_disc_per_title_progress_takes_precedence_over_disc(monkeypatc
         minlength_seconds=120,
         eligible_source_indexes=[0],
         on_title_start=on_title_start,
-        on_title_progress=on_title_progress,
         on_disc_progress=on_disc_progress,
     )
 
     assert result.overall_error is None
-    assert title_progress == [(0, 0.5), (0, 1.0)]
-    assert disc_progress == []
+    assert disc_progress == [0.1, 0.5]
 
 
 @pytest.mark.asyncio
@@ -406,8 +385,8 @@ async def test_rip_disc_prgc_5017_fires_on_title_start_with_mapped_source_idx(mo
 
     With a sparse eligible list (e.g. {3, 7} after some sub-minlength
     titles dropped), PRGC:5017,0 must fire `on_title_start(3)` and
-    PRGC:5017,1 must fire `on_title_start(7)` — and PRGV between
-    them must attribute progress to the right source index."""
+    PRGC:5017,1 must fire `on_title_start(7)`. PRGV in between reports
+    the disc-overall total, which keeps climbing across titles."""
     _stub_subprocess(
         monkeypatch,
         [
@@ -423,14 +402,10 @@ async def test_rip_disc_prgc_5017_fires_on_title_start_with_mapped_source_idx(mo
     (tmp_path / "Disc_t01.mkv").write_bytes(b"y" * 64)
 
     starts: list[int] = []
-    title_progress: list[tuple[int, float]] = []
     disc_progress: list[float] = []
 
     async def on_title_start(idx: int) -> None:
         starts.append(idx)
-
-    async def on_title_progress(idx: int, frac: float) -> None:
-        title_progress.append((idx, frac))
 
     async def on_disc_progress(frac: float) -> None:
         disc_progress.append(frac)
@@ -441,17 +416,14 @@ async def test_rip_disc_prgc_5017_fires_on_title_start_with_mapped_source_idx(mo
         minlength_seconds=120,
         eligible_source_indexes=[3, 7],
         on_title_start=on_title_start,
-        on_title_progress=on_title_progress,
         on_disc_progress=on_disc_progress,
     )
 
     assert result.overall_error is None
     # output positions 0,1 mapped via eligible_source_indexes → 3,7
     assert starts == [3, 7]
-    # PRGV between PRGC:5017 events attributed to the active source idx
-    assert title_progress == [(3, 0.5), (7, 0.9)]
-    # disc-overall fallback never fires because PRGC:5017 set current_title
-    assert disc_progress == []
+    # PRGV reports the disc-overall total, not each title's own fraction
+    assert disc_progress == [0.1, 0.5]
 
 
 @pytest.mark.asyncio
@@ -739,7 +711,7 @@ class _HangingProc(_FakeProc):
 
 
 async def test_rip_disc_stop_kills_makemkvcon_and_reports_the_lost_drive(monkeypatch, tmp_path):
-    """D-133: once the caller sets `stop` (the drive dropped off the bus),
+    """Once the caller sets `stop` (the drive dropped off the bus),
     makemkvcon is killed at once instead of failing title after title."""
     proc = _HangingProc()
 
@@ -845,48 +817,90 @@ async def test_run_makemkvcon_cancelled_swallows_a_reap_error_and_still_cancels(
     assert proc.waits_after_kill == 1  # the reap ran, raised, and was swallowed
 
 
-async def test_streamer_suspended_at_exit_is_cancelled_and_later_lines_are_dropped(monkeypatch):
-    # Current behaviour, pinned for the guidelines refactor (#435): the cleanup cancels the streamer before
-    # the drain. Filed as a defect.
-    proc = _FakeProc(
-        [
-            (line + "\n").encode()
-            for line in (
-                _DIAG_LINE,
-                'PRGT:5024,0,"Saving all titles to MKV files"',
-                'PRGC:5017,0,"Saving to MKV file"',
-                "PRGV:5000,1000,10000",  # on_title_progress suspends here
-                'MSG:1002,32,1,"LIBMKV_TRACE: Late","LIBMKV_TRACE: %1","Late"',
-                'PRGC:5017,1,"Saving to MKV file"',
-            )
-        ]
-    )
+_LATE_LINES = (
+    _DIAG_LINE,
+    'PRGT:5024,0,"Saving all titles to MKV files"',
+    'PRGC:5017,0,"Saving to MKV file"',
+    "PRGV:5000,1000,10000",  # on_disc_progress is still running here when makemkvcon exits
+    'MSG:1002,32,1,"LIBMKV_TRACE: Late","LIBMKV_TRACE: %1","Late"',
+    'PRGC:5017,1,"Saving to MKV file"',
+)
+
+
+def _slow_progress() -> tuple[makemkv_stream.RipCallbacks, asyncio.Event]:
+    """A progress callback still awaiting (a backend call) when makemkvcon exits."""
+    entered = asyncio.Event()
+
+    async def on_disc_progress(_frac: float) -> None:
+        entered.set()
+        await asyncio.sleep(0.05)
+
+    return makemkv_stream.RipCallbacks(on_disc_progress=on_disc_progress), entered
+
+
+async def test_lines_after_a_callback_running_at_exit_are_still_processed(monkeypatch):
+    """#455: the cleanup cancelled the streamer before draining it, so a
+    callback in progress at exit was cut off and every line after it was lost
+    (the last progress, the move to the next title, MakeMKV's diagnostics)."""
+    proc = _FakeProc([(line + "\n").encode() for line in _LATE_LINES])
     _spawn(monkeypatch, proc)
     state = makemkv_stream.ParserState()
-    entered = asyncio.Event()
-    never = asyncio.Event()
-
-    async def on_title_progress(_idx: int, _frac: float) -> None:
-        entered.set()
-        await never.wait()
+    callbacks, entered = _slow_progress()
 
     error = await asyncio.wait_for(
-        makemkv_process.run_makemkvcon(
-            ["makemkvcon"],
-            state,
-            callbacks=makemkv_stream.RipCallbacks(on_title_progress=on_title_progress),
-            eligible_source_indexes=[3, 7],
-        ),
+        makemkv_process.run_makemkvcon(["makemkvcon"], state, callbacks=callbacks, eligible_source_indexes=[3, 7]),
         timeout=2.0,
     )
 
     assert error is None
     assert entered.is_set()
-    # Applied before the suspension.
-    assert state.diagnostics == ["LIBMKV_TRACE: Exception"]
+    assert state.diagnostics == ["LIBMKV_TRACE: Exception", "LIBMKV_TRACE: Late"]
+    assert 7 in state.titles
+
+
+async def test_a_failed_exit_reports_the_diagnostics_that_came_after_a_slow_callback(monkeypatch):
+    """The lost lines are where MakeMKV says why it failed: without them a
+    failed rip reported only "makemkvcon failed: exit=1"."""
+    proc = _FakeProc([(line + "\n").encode() for line in _LATE_LINES], returncode=1)
+    _spawn(monkeypatch, proc)
+    callbacks, _entered = _slow_progress()
+
+    error = await asyncio.wait_for(
+        makemkv_process.run_makemkvcon(
+            ["makemkvcon"], makemkv_stream.ParserState(), callbacks=callbacks, eligible_source_indexes=[3, 7]
+        ),
+        timeout=2.0,
+    )
+
+    assert error is not None and "LIBMKV_TRACE: Late" in error
+
+
+async def test_a_callback_stuck_at_exit_is_cut_off_after_the_drain_timeout(monkeypatch, caplog):
+    """A callback that never returns (a backend call retrying against a dead
+    backend) must not hang a finished rip: the drain gives up and says so."""
+    monkeypatch.setattr(makemkv_process, "DRAIN_TIMEOUT_SECONDS", 0.05)
+    proc = _FakeProc([(line + "\n").encode() for line in _LATE_LINES])
+    _spawn(monkeypatch, proc)
+    state = makemkv_stream.ParserState()
+    never = asyncio.Event()
+
+    async def on_disc_progress(_frac: float) -> None:
+        await never.wait()
+
+    with caplog.at_level("WARNING", logger="arm_ripper.rip.makemkv_process"):
+        error = await asyncio.wait_for(
+            makemkv_process.run_makemkvcon(
+                ["makemkvcon"],
+                state,
+                callbacks=makemkv_stream.RipCallbacks(on_disc_progress=on_disc_progress),
+                eligible_source_indexes=[3, 7],
+            ),
+            timeout=2.0,
+        )
+
+    assert error is None
     assert state.current_title == 3
-    # Dropped after it: the late diagnostic and the move to title 7.
-    assert 7 not in state.titles
+    assert "still processing makemkvcon output" in caplog.text
 
 
 async def test_run_makemkvcon_nonzero_exit_without_stderr_reports_the_exit_code(monkeypatch):
@@ -1194,3 +1208,135 @@ def test_failed_titles_does_not_mutate_ripped():
     ripped = {1: RipResult(ok=True)}
     makemkv_rip._failed_titles(_state_with_reasons(t2="bad"), [3], ripped)
     assert list(ripped) == [1]
+
+
+async def test_rip_disc_logs_the_makemkvcon_command_line_at_debug(monkeypatch, tmp_path, caplog):
+    _stub_subprocess(monkeypatch, ['MSG:1005,0,1,"MakeMKV started","%1 started","..."'])
+    with caplog.at_level(logging.DEBUG, logger="arm_ripper.rip.makemkv"):
+        await rip_disc(device_path="/dev/sr0", output_dir=tmp_path, minlength_seconds=600, eligible_source_indexes=[])
+    lines = [r for r in caplog.records if r.getMessage().startswith("makemkvcon mkv all")]
+    assert [r.levelno for r in lines] == [logging.DEBUG]
+
+
+# --- rip_optical against the faked makemkvcon: pairing and --minlength ------
+
+_RIP_OK_LINES = [
+    'MSG:5036,0,2,"Copy complete. 2 titles saved.","Copy complete. %1 %2","2","titles"',
+]
+
+
+def _view(idx: int, duration_seconds: int, *, excluded: bool = False) -> TrackView:
+    return TrackView(
+        id=f"trk_{idx}",
+        job_id="job_test",
+        kind=TrackKind.VIDEO_TITLE,
+        index=idx,
+        source_ref=str(idx),
+        status=TrackStatus.QUEUED,
+        output_path=None,
+        size_bytes=None,
+        duration_seconds=duration_seconds,
+        attempts=0,
+        last_error=None,
+        excluded=excluded,
+    )
+
+
+def _capture_makemkvcon(monkeypatch) -> dict[str, Any]:
+    """Fake a clean `makemkvcon mkv … all` run and record its argv."""
+    captured: dict[str, Any] = {}
+    encoded = [(line + "\n").encode() for line in _RIP_OK_LINES]
+
+    async def fake_create_subprocess_exec(*args: Any, **_kwargs: Any) -> _FakeProc:
+        captured["argv"] = list(args)
+        return _FakeProc(list(encoded))
+
+    monkeypatch.setattr(makemkv_rip.asyncio, "create_subprocess_exec", fake_create_subprocess_exec)
+    return captured
+
+
+async def _rip_optical_results(
+    tmp_path: Path, tracks: list[TrackView], min_length_seconds: int
+) -> dict[str, RipResult]:
+    results: dict[str, RipResult] = {}
+
+    async def on_start(_track: TrackView) -> None:
+        return None
+
+    async def on_done(track: TrackView, result: RipResult) -> None:
+        results[track.id] = result
+
+    await rip_optical(
+        device_path="/dev/sr0",
+        tracks=tracks,
+        output_dir=tmp_path,
+        on_track_start=on_start,
+        on_track_done=on_done,
+        on_track_progress=None,
+        min_length_seconds=min_length_seconds,
+    )
+    return results
+
+
+async def test_rip_optical_credits_each_title_with_its_own_file_when_one_is_excluded(monkeypatch, tmp_path):
+    """MakeMKV writes `_t00` for title 1 and `_t01` for title 3. Title 1 is
+    excluded but still listed, so title 3 is paired with `_t01`, not `_t00`."""
+    _capture_makemkvcon(monkeypatch)
+    (tmp_path / "DISC_t00.mkv").write_bytes(b"a" * 600)
+    (tmp_path / "DISC_t01.mkv").write_bytes(b"b" * 7200)
+    tracks = [_view(1, 600, excluded=True), _view(3, 7200)]
+
+    results = await _rip_optical_results(tmp_path, tracks, 120)
+
+    assert results["trk_3"].output_path == tmp_path / "DISC_t01.mkv"
+    assert results["trk_3"].size_bytes == 7200
+    assert results["trk_1"].output_path == tmp_path / "DISC_t00.mkv"
+    assert results["trk_1"].size_bytes == 600
+
+
+async def test_rip_optical_rips_down_to_the_minimum_it_is_given(monkeypatch, tmp_path):
+    """The caller settles the minimum (never below the scan's); rip_optical
+    uses it for the command and for the eligible list alike."""
+    captured = _capture_makemkvcon(monkeypatch)
+    (tmp_path / "DISC_t00.mkv").write_bytes(b"a" * 64)
+    (tmp_path / "DISC_t01.mkv").write_bytes(b"b" * 64)
+
+    results = await _rip_optical_results(tmp_path, [_view(1, 30), _view(2, 90), _view(3, 3000)], 60)
+
+    assert "--minlength=60" in captured["argv"]
+    assert results["trk_2"].output_path == tmp_path / "DISC_t00.mkv"
+    assert results["trk_3"].output_path == tmp_path / "DISC_t01.mkv"
+    assert results["trk_1"].error == "track duration 30s below minlength=60s; makemkvcon skipped it"
+
+
+async def test_rip_optical_passes_a_higher_minimum_through(monkeypatch, tmp_path):
+    captured = _capture_makemkvcon(monkeypatch)
+
+    await _rip_optical_results(tmp_path, [_view(1, 3000)], 300)
+
+    assert "--minlength=300" in captured["argv"]
+
+
+def _scanned_view(idx: int, scan_seconds: int) -> TrackView:
+    """A track as rip-start sends it: the scan length set, the post-rip length not yet known."""
+    return _view(idx, 0).model_copy(update={"duration_seconds": None, "expected_duration_seconds": scan_seconds})
+
+
+async def test_rip_optical_pairs_by_scan_length_when_the_session_minimum_is_above_the_scans(monkeypatch, tmp_path):
+    """Listed at a 60 s minimum, ripped at a session minimum of 300 s: MakeMKV
+    writes only title 2, and the 90 s and 200 s titles are reported too short
+    instead of taking its file."""
+    from arm_ripper.makemkv_minlength import rip_min_length_seconds
+
+    captured = _capture_makemkvcon(monkeypatch)
+    (tmp_path / "DISC_t00.mkv").write_bytes(b"f" * 7200)
+    tracks = [_scanned_view(1, 90), _scanned_view(2, 7200), _scanned_view(3, 200)]
+
+    results = await _rip_optical_results(tmp_path, tracks, rip_min_length_seconds(300, 60))
+
+    assert "--minlength=300" in captured["argv"]
+    assert results["trk_2"].output_path == tmp_path / "DISC_t00.mkv"
+    assert results["trk_1"].output_path is None
+    assert results["trk_1"].error == "track duration 90s below minlength=300s; makemkvcon skipped it"
+    assert results["trk_3"].output_path is None
+    assert results["trk_3"].error == "track duration 200s below minlength=300s; makemkvcon skipped it"

@@ -1,4 +1,4 @@
-"""Phase 12 — singleton tail of `/logs/*.log` → `logs.{job_id}` WS topic.
+"""Singleton tail of `/logs/*.log` → `logs.{job_id}` WS topic.
 
 A single asyncio task started in the FastAPI lifespan, mirroring the shape
 of `NotificationDispatcher`. Each tick:
@@ -16,7 +16,7 @@ of `NotificationDispatcher`. Each tick:
    `logs.{job_id}` (`hub.subscriber_count`), emit the line as a
    `log.line` event with `persist=False`.
 
-Loop guard: records emitted by the WS hub itself (`extra.logger`
+Loop guard: records emitted by the WS hub itself (`logger`
 starting with `arm_backend.ws.hub`) are skipped before WS emit only —
 they're still appended to the per-job file (file writes have no
 feedback risk; the hub-emit-failure log is genuinely diagnostic).
@@ -49,7 +49,7 @@ logger = logging.getLogger("arm_backend.log_tailer")
 _TICK_INTERVAL_SECONDS = 0.25
 # Hub topic the tailer publishes on. `{job_id}` is filled per-line.
 _LOG_TOPIC_PREFIX = "logs."
-# Loop-guard: records whose `extra.logger` starts with this prefix are
+# Loop-guard: records whose `logger` starts with this prefix are
 # emitted from the hub's own broadcast path. If the hub fails to send a
 # log line and logs the failure, that failure record would otherwise
 # feed back into the tailer.
@@ -215,11 +215,9 @@ class LogTailer:
         await asyncio.to_thread(self._append_per_job_log, job_id, line)
 
         # Loop guard: don't re-emit hub's own emit-failure logs.
-        extra = record.get("extra")
-        if isinstance(extra, dict):
-            src_logger = extra.get("logger")
-            if isinstance(src_logger, str) and src_logger.startswith(_HUB_LOGGER_PREFIX):
-                return
+        src_logger = record.get("logger")
+        if isinstance(src_logger, str) and src_logger.startswith(_HUB_LOGGER_PREFIX):
+            return
 
         topic = f"{_LOG_TOPIC_PREFIX}{job_id}"
         if self._hub.subscriber_count(topic) == 0:

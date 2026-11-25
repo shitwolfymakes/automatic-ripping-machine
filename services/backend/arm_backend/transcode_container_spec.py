@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from arm_backend.config import Settings
+from arm_backend.stack_identity import stack_identity_env
 from arm_common import Gpu, TranscodeTask
 from arm_common.encoders import EncoderSpec
 from arm_common.enums import GpuVendor
@@ -19,13 +20,16 @@ logger = logging.getLogger(__name__)
 
 def container_identity_env(settings: Settings, gpu_vendor: GpuVendor | None) -> dict[str, str]:
     env: dict[str, str] = {}
-    # Override the drop uid/gid so the transcoder writes /media as the
-    # owner of the (possibly remote) media export, instead of the
-    # entrypoint's default uid. Empty settings leave the default in place.
-    if settings.ARM_TRANSCODE_PUID:
-        env["PUID"] = settings.ARM_TRANSCODE_PUID
-    if settings.ARM_TRANSCODE_PGID:
-        env["PGID"] = settings.ARM_TRANSCODE_PGID
+    # The transcoder writes the same raw/logs/media dirs as every other
+    # service, so it drops to the stack's PUID/PGID. ARM_TRANSCODE_PUID/PGID
+    # override that, e.g. for a remote media export owned by a NAS user.
+    # Nothing set at all leaves the entrypoint's default in place.
+    env.update(
+        stack_identity_env(
+            settings,
+            overrides={"PUID": settings.ARM_TRANSCODE_PUID, "PGID": settings.ARM_TRANSCODE_PGID},
+        )
+    )
     # VAAPI/QSV: the entrypoint self-derives the render gid from the
     # mounted node; an explicit ARM_RENDER_GID is a forced OVERRIDE
     # (passed through as RENDER_GID, which wins in the entrypoint).
@@ -71,10 +75,9 @@ def gpu_run_kwargs(gpu: Gpu) -> dict[str, Any]:
 
             kwargs["runtime"] = "nvidia"
             kwargs["device_requests"] = [docker.types.DeviceRequest(**base_kwargs)]
-        # docker-py is a hard dependency (pyproject) — this fallback is dead.
+        # docker-py is a hard dependency (pyproject), so this fallback never runs;
+        # it only keeps the kwarg shape correct should the import ever fail.
         except ImportError:  # pragma: no cover
-            # Legacy guard from when docker-py was test-optional. Kept
-            # so the kwarg shape stays correct if that ever regresses.
             kwargs["runtime"] = "nvidia"
             fallback = {
                 "Driver": base_kwargs["driver"],
@@ -109,7 +112,7 @@ def task_env(settings: Settings, task: TranscodeTask, backend_url: str) -> dict[
         "ARM_BACKEND_URL": backend_url,
         "ARM_SERVICE_TOKEN": settings.ARM_SERVICE_TOKEN,
         "ARM_LOG_LEVEL": settings.ARM_LOG_LEVEL,
-        # Phase 12 — per-task log filename so parallel transcoders don't
+        # Per-task log filename so parallel transcoders don't
         # clobber a shared `/logs/arm-transcode.log` rotation.
         "ARM_SERVICE_NAME": f"arm-transcode-{task.id[-12:]}",
     }

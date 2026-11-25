@@ -1,5 +1,5 @@
 /* Design tokens. Primitives (the raw palette) are private to this file;
-   components and themes reference the semantic roles only (spec 5).
+   components and themes reference the semantic roles only.
    Colour roles live in @theme so Tailwind also emits them as utilities
    for @apply. Themes override the roles under [data-scheme]. */
 
@@ -18,7 +18,8 @@
 	/* surfaces */
 	--color-page: rgb(232, 240, 255);
 	--color-surface: rgb(241, 247, 255);
-	--color-surface-raised: rgb(255, 255, 255);
+	/* Derived from the surface, so a scheme that sets only --color-surface themes it too. */
+	--color-surface-raised: color-mix(in srgb, var(--color-surface) 30%, white);
 	--color-backdrop: rgb(0 0 0 / 0.5);
 
 	/* borders */
@@ -111,7 +112,7 @@
 .dark {
 	--color-page: rgb(13, 16, 28);
 	--color-surface: rgb(22, 28, 45);
-	--color-surface-raised: rgb(30, 37, 58);
+	--color-surface-raised: color-mix(in srgb, var(--color-surface) 94%, white);
 	--color-backdrop: rgb(0 0 0 / 0.6);
 	--color-border: color-mix(in srgb, var(--color-primary) 22%, transparent);
 	--color-border-strong: color-mix(in srgb, var(--color-primary) 38%, transparent);

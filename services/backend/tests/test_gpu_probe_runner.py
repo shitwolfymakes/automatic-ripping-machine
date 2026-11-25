@@ -48,6 +48,10 @@ def _settings(**overrides: Any) -> Settings:
         "ARM_LOG_LEVEL": "info",
         "ARM_DOCKER_NETWORK": "armv3_default",
         "ARM_TRANSCODE_DISPATCH_INTERVAL_SECONDS": 5,
+        "ARM_HOST_RAW_PATH": "/srv/arm/raw",
+        "ARM_HOST_MEDIA_PATH": "/mnt/nas/media",
+        "ARM_HOST_LOGS_PATH": "/srv/arm/logs",
+        "ARM_HOST_CERTS_PATH": "/srv/arm/certs",
     }
     base.update(overrides)
     return Settings.model_construct(**base)
@@ -285,6 +289,36 @@ async def test_stale_image_or_failed_probe_says_to_rebuild(
     assert container.logs_calls == [{"stdout": True, "stderr": False}, {"stdout": False, "stderr": True}]
 
 
+async def test_a_folder_the_transcoder_cannot_write_is_reported_plainly_and_keeps_verified_encoders() -> None:
+    stderr = (
+        b"arm: dropping to 1000:1000\n"
+        b"FATAL: /logs is not writable by arm (PUID:PGID=1000:1000); dir owner is 1001:1001.\n"
+        b"       ARM does not chown user-mounted volumes.\n"
+    )
+    runner, db, _docker, hub, _d = _build([_gpu(encoder_kinds=["h264"])], _Container(status=1, stderr=stderr))
+
+    await runner.probe_gpu("gpu_1")
+
+    row = db.rows["gpus"][0]
+    assert row.encoder_kinds == ["h264"]
+    assert row.probe_error == (
+        "Transcodes will fail: the transcoder runs as user 1000:1000, but its logs folder /srv/arm/logs on this "
+        "machine is owned by 1001:1001. Set ARM_TRANSCODE_PUID=1001 and ARM_TRANSCODE_PGID=1001 in .env, or make "
+        "the folder writable by 1000:1000. Then re-probe the GPU in Settings > Transcoding, or restart ARM."
+    )
+    assert hub.events[0][1] == "gpu.probed"
+
+
+async def test_a_raw_folder_the_transcoder_cannot_read_uses_the_read_wording() -> None:
+    stderr = b"FATAL: /raw is not readable by arm (read-only mount) (PUID:PGID=1000:1000); dir owner is 1001:1001.\n"
+    runner, db, *_ = _build([_gpu(encoder_kinds=["h264"])], _Container(status=1, stderr=stderr))
+    await runner.probe_gpu("gpu_1")
+    row = db.rows["gpus"][0]
+    assert row.encoder_kinds == ["h264"]
+    assert row.probe_error is not None
+    assert "cannot read its raw rips folder /srv/arm/raw on this machine" in row.probe_error
+
+
 async def test_exit_3_reports_the_test_clip_failure_with_stderr() -> None:
     stderr = b"line1\nline2\nline3\nline4\nline5\ncould not generate the test clip: \xff libavfilter missing\n"
     runner, db, *_ = _build([_gpu()], _Container(status=3, stderr=stderr))
@@ -345,7 +379,7 @@ async def test_wait_timeout_removes_container_and_records_timeout() -> None:
     row = db.rows["gpus"][0]
     assert container.removed == [True]
     assert container.logs_calls == []
-    # D-070: the probe never got to test the device, so its verified
+    # The probe never got to test the device, so its verified
     # encoders stand; only the error is recorded.
     assert row.encoder_kinds == ["h264"]
     assert row.probe_error is not None
@@ -368,7 +402,7 @@ async def test_wait_failure_that_is_not_a_timeout_is_recorded() -> None:
 
 
 async def test_infra_failures_keep_the_verified_encoders() -> None:
-    """D-070: a container that cannot start or a docker wait error says
+    """A container that cannot start or a docker wait error says
     nothing about the device; wiping its list would fail pinned tasks."""
     container = _Container(wait_exc=RuntimeError("connection reset"))
     runner, db, *_ = _build([_gpu(encoder_kinds=["h264", "hevc"])], container)
@@ -408,7 +442,7 @@ async def test_container_created_but_not_started_is_removed() -> None:
 
 
 async def test_a_device_docker_refuses_verifies_nothing() -> None:
-    """D-070 follow-up: a start failure naming the device (node removed, driver
+    """A start failure naming the device (node removed, driver
     broken) is about the device, not the infrastructure, so the row must stop
     advertising its old encoders; tasks then fall back to the CPU."""
     runner, db, docker, *_ = _build([_gpu(encoder_kinds=["h264", "hevc"])])
@@ -605,11 +639,32 @@ async def test_spawn_kwargs_for_a_qsv_row() -> None:
         "RENDER_GID": "993",
     }
     assert kw["devices"] == ["/dev/dri/renderD129:/dev/dri/renderD129:rwm"]
-    assert "volumes" not in kw
+    # The task's own folders, by their host paths, so the entrypoint checks
+    # them under the transcoder's identity before the probe runs.
+    assert kw["volumes"] == {
+        "/srv/arm/raw": {"bind": "/raw", "mode": "ro"},
+        "/mnt/nas/media": {"bind": "/media", "mode": "rw"},
+        "/srv/arm/logs": {"bind": "/logs", "mode": "rw"},
+        "/srv/arm/certs/arm-ca.crt": {"bind": "/etc/ssl/arm/arm-ca.crt", "mode": "ro"},
+    }
     assert kw["network"] is None
     assert kw["detach"] is True
     assert kw["auto_remove"] is False
     assert kw["labels"] == {"arm.gpu_probe": "gpu_1"}
+
+
+@pytest.mark.parametrize(
+    "unset", ["ARM_HOST_RAW_PATH", "ARM_HOST_MEDIA_PATH", "ARM_HOST_LOGS_PATH", "ARM_HOST_CERTS_PATH"]
+)
+async def test_the_probe_mounts_no_folders_while_a_host_path_is_unset(unset: str) -> None:
+    # Without every host path the probe has no real folders to check, so it
+    # verifies the device as it would without mounts instead of failing to start.
+    runner, db, docker, *_ = _build([_gpu()], **{unset: ""})
+    await runner.probe_gpu("gpu_1")
+    assert docker is not None
+    (kw,) = docker.containers.calls
+    assert "volumes" not in kw
+    assert db.rows["gpus"][0].encoder_kinds == ["h265"]
 
 
 async def test_spawn_kwargs_for_an_nvenc_row() -> None:
@@ -658,6 +713,21 @@ async def test_boot_pass_probes_enabled_unprobed_or_unverified_rows_sequentially
     assert by_id["gpu_c"].probed_at is None
     assert by_id["gpu_d"].encoder_kinds == ["h265"]  # a failed row is retried at boot
     assert by_id["gpu_e"].probed_at == probed
+
+
+async def test_boot_pass_rechecks_a_verified_gpu_that_reported_a_folder_problem() -> None:
+    probed = datetime(2026, 9, 1, tzinfo=UTC)
+    rows = [
+        _gpu("gpu_a", probed_at=probed, encoder_kinds=["h264"], probe_error="Transcodes will fail: old folder problem"),
+        _gpu("gpu_b", GpuVendor.VAAPI, device_path="/dev/dri/renderD129", probed_at=probed, encoder_kinds=["h264"]),
+    ]
+    runner, db, docker, *_ = _build(rows)
+    assert docker is not None
+
+    await runner.probe_unprobed()
+
+    assert [kw["environment"]["ARM_GPU_DEVICE"] for kw in docker.containers.calls] == ["/dev/dri/renderD128"]
+    assert db.rows["gpus"][0].probe_error is None  # fixed folder: the stale advice is gone after a restart
 
 
 async def test_boot_pass_reserves_every_target_before_the_first_probe() -> None:

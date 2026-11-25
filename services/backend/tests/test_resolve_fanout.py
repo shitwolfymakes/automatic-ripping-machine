@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import secrets
 from pathlib import Path
+from typing import Any
 
 
 import pytest
@@ -46,6 +47,7 @@ from arm_common import (
 )
 
 from tests._fakes import FakeSession
+from tests._logs import LineCapture
 
 
 @pytest.fixture
@@ -280,8 +282,8 @@ def test_resolve_fans_out_multiple_waiting_identify_applications(signing_key: by
 
 def test_resolve_ripped_awaiting_identify_status_fans_out(signing_key: bytes, tmp_path: Path) -> None:
     """Fan-out isn't gated on AWAITING_USER_ID specifically — a ripped
-    placeholder drains the same way, promoting to RIPPED (its rip is done;
-    G-09) rather than IDENTIFIED."""
+    placeholder drains the same way, promoting to RIPPED (its rip is done)
+    rather than IDENTIFIED."""
     db = FakeSession()
     hub = _CapturingHub()
     _seed(db, job_status=JobStatus.RIPPED_AWAITING_IDENTIFY)
@@ -445,7 +447,7 @@ def test_resolve_fan_out_session_missing_returns_outcome(signing_key: bytes, tmp
 
 
 def test_resolve_media_mismatch_keeps_application_parked(signing_key: bytes, tmp_path: Path) -> None:
-    """G-04: resolve sets `job.media_type` from the identify call, then
+    """Resolve sets `job.media_type` from the identify call, then
     drains parked applications. A session applied before identity was known
     (e.g. a movie session routed to what turns out to be a music CD) must
     stay parked with `skipped_reason='media_mismatch'` instead of fanning
@@ -602,7 +604,7 @@ def test_resolve_on_held_disc_with_review_tracks_keeps_application_parked(signin
 def test_resolve_commits_identity_before_after_rip_drain_raises(
     signing_key: bytes, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Fix 75-2 regression: a drain exception inside after_rip must not
+    """A drain exception inside after_rip must not
     destroy the operator's resolve.
 
     `drain_parked_applications_after_rip` wraps `fan_out_waiting_identify_applications`
@@ -657,7 +659,7 @@ def test_resolve_commits_identity_before_after_rip_drain_raises(
 
 
 def test_resolve_ripped_placeholder_promotes_to_ripped_and_runs_after_rip(signing_key: bytes, tmp_path: Path) -> None:
-    """G-09: resolving a ripped_awaiting_identify placeholder promotes it to
+    """Resolving a ripped_awaiting_identify placeholder promotes it to
     RIPPED (its rip is done — IDENTIFIED would claim otherwise), clears the
     spent `unidentified` flag, and runs the same post-rip pass rip-complete
     runs: the parked application fans out against the just-resolved title."""
@@ -690,19 +692,25 @@ def test_resolve_ripped_placeholder_promotes_to_ripped_and_runs_after_rip(signin
     assert any(e["event_type"] == "session.queued" for e in hub.events)
 
 
+@pytest.mark.parametrize("job_status", [JobStatus.RIPPED, JobStatus.RIPPED_PARTIAL])
 @pytest.mark.parametrize(("flags", "expect_after_rip"), [({"unidentified": True}, True), ({}, False)])
-def test_resolve_unidentified_partial_rip_runs_after_rip(
-    signing_key: bytes, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, flags: dict, expect_after_rip: bool
+def test_resolve_unidentified_ripped_job_runs_after_rip(
+    signing_key: bytes,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    job_status: JobStatus,
+    flags: dict,
+    expect_after_rip: bool,
 ) -> None:
-    """D-027: rip-complete skips after_rip for an unidentified RIPPED_PARTIAL
-    job, so resolve must run it (auto-apply of the pending/default session as
-    well as the drain), not only the parked-application fan-out. An
-    identified partial rip already had after_rip at rip-complete."""
+    """Identifying a ripped disc that was still unidentified clears the flag
+    and runs the after-rip step once, so auto-apply (which waited on the
+    flag) can now queue the routed session under the right name. An
+    identified rip already had its after-rip step at rip-complete."""
     import arm_backend.identity.resolve_service as resolve_service
 
     db = FakeSession()
     hub = _CapturingHub()
-    _seed(db, job_status=JobStatus.RIPPED_PARTIAL)
+    _seed(db, job_status=job_status)
     db.rows["jobs"][0].metadata_json = {"flags": flags}
     calls: list[str] = []
 
@@ -724,5 +732,72 @@ def test_resolve_unidentified_partial_rip_runs_after_rip(
             headers=_auth(token),
         )
     assert r.status_code == 200, r.text
-    assert r.json()["job"]["status"] == "ripped_partial"
+    assert r.json()["job"]["status"] == job_status.value
+    assert r.json()["job"]["metadata_json"]["flags"]["unidentified"] is False
     assert calls == (["after_rip"] if expect_after_rip else ["fan_out"])
+
+
+@pytest.mark.parametrize(
+    ("flags", "path"),
+    [({}, "resolve fan-out"), ({"unidentified": True}, "after-rip drain")],
+)
+def test_resolve_logs_session_applied_once_per_queued_application(
+    signing_key: bytes, tmp_path: Path, job_log: LineCapture, flags: dict[str, bool], path: str
+) -> None:
+    db = FakeSession()
+    _seed(db, job_status=JobStatus.RIPPED_AWAITING_IDENTIFY, extra_sessions=1)
+    db.rows["jobs"][0].metadata_json = dict(flags)
+    app, token = _make_app(signing_key, db, tmp_path, _CapturingHub())
+    with TestClient(app) as client:
+        r = client.post(
+            "/api/jobs/job_01JZXR7K3M5Q8N4VWA00000001/resolve",
+            json={"title": "Iron Man", "year": 2008},
+            headers=_auth(token),
+        )
+    assert r.status_code == 200, r.text
+    lines = job_log.lines(event="session.applied")
+    assert sorted(line["msg"] for line in lines) == [
+        "Extra 0 applied (manual): 1 transcode queued",
+        "My Plex applied (manual): 1 transcode queued",
+    ], path
+    assert {line["job_id"] for line in lines} == {"job_01JZXR7K3M5Q8N4VWA00000001"}
+
+
+@pytest.mark.parametrize("flags", [{}, {"unidentified": True}])
+def test_resolve_survives_a_failing_session_applied_log(
+    signing_key: bytes, tmp_path: Path, job_log: LineCapture, monkeypatch: pytest.MonkeyPatch, flags: dict[str, bool]
+) -> None:
+    from arm_backend import job_events
+
+    def _boom(*_a: Any, **_k: Any) -> None:
+        raise RuntimeError("log bug")
+
+    monkeypatch.setattr(job_events, "log_session_applied", _boom)
+    db = FakeSession()
+    _seed(db, job_status=JobStatus.RIPPED_AWAITING_IDENTIFY)
+    db.rows["jobs"][0].metadata_json = dict(flags)
+    app, token = _make_app(signing_key, db, tmp_path, _CapturingHub())
+    with TestClient(app) as client:
+        r = client.post(
+            "/api/jobs/job_01JZXR7K3M5Q8N4VWA00000001/resolve",
+            json={"title": "Iron Man", "year": 2008},
+            headers=_auth(token),
+        )
+    assert r.status_code == 200, r.text
+    assert job_log.lines(level="error")[-1]["msg"] == "could not log the session.applied milestone"
+
+
+def test_resolve_logs_in_the_jobs_context(signing_key: bytes, tmp_path: Path, job_log: LineCapture) -> None:
+    db = FakeSession()
+    _seed(db, job_status=JobStatus.RIPPED_AWAITING_IDENTIFY)
+    app, token = _make_app(signing_key, db, tmp_path, _CapturingHub())
+    with TestClient(app) as client:
+        r = client.post(
+            "/api/jobs/job_01JZXR7K3M5Q8N4VWA00000001/resolve",
+            json={"title": "Iron Man", "year": 2008},
+            headers=_auth(token),
+        )
+    assert r.status_code == 200, r.text
+    (line,) = [entry for entry in job_log.lines(logger_prefix="arm_backend.identity.resolve_service")]
+    assert line["msg"] == "resolve -> identified title=Iron Man fan_out=1"
+    assert line["job_id"] == "job_01JZXR7K3M5Q8N4VWA00000001"

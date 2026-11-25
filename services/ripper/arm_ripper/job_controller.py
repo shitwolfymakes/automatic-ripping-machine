@@ -1,12 +1,12 @@
 import asyncio
 import contextlib
 import logging
-from collections.abc import AsyncIterator, Callable
+from collections.abc import AsyncIterator, Awaitable, Callable
 from typing import Any
 
 import httpx
 
-from arm_common import DiscType, Job, JobStatus, with_log_context
+from arm_common import DiscType, Job, JobStatus, log_event, with_log_context
 from arm_common.schemas import JobView, RipStartResponse, ScanResult, WSEnvelope
 from arm_ripper import raw_dir
 from arm_ripper.backend_client import BackendClient
@@ -16,9 +16,11 @@ from arm_ripper.disc_rip import DiscRip
 from arm_ripper.drive_handle import DriveHandle
 from arm_ripper.eject import Ejector
 from arm_ripper.makemkv_prep import MakeMKVPrep
+from arm_ripper.makemkv_minlength import DEFAULT_MIN_TITLE_LENGTH_SECONDS
 from arm_ripper.ripper_config import ripper_config_or_none
 from arm_ripper.resolution_wait import IDENTIFY_WAIT, RESOLUTION_TIMEOUT_UNSET, REVIEW_WAIT, ResolutionWaiter, WaitSpec
-from arm_ripper.rip.dispatcher import DEFAULT_MIN_LENGTH_SECONDS
+from arm_ripper.rip.dispatcher import NO_RIP_TOOL, rip_tool
+from arm_ripper.rip_events import disc_type_label, rip_started_message
 from arm_ripper.disc_scan import scan_or_none
 from arm_ripper.drive_poll import DriveState, read_drive_status
 from arm_ripper.source import is_file_source
@@ -44,6 +46,25 @@ def _previously_ripped(response: httpx.Response) -> bool:
     return isinstance(detail, dict) and detail.get("reason") == "previously_ripped"
 
 
+def _log_rip_started(disc_type: DiscType, rip_start: RipStartResponse, **extra_fields: Any) -> None:
+    """Log the `rip.started` event for the rip about to run."""
+    track_count = len(rip_start.tracks)
+    tool = rip_tool(disc_type, rip_start.tracks)
+    if tool == NO_RIP_TOOL:
+        logger.warning("rip cannot start: no rip path for %s", disc_type_label(disc_type))
+        return
+    log_event(
+        logger,
+        "rip.started",
+        rip_started_message(disc_type_label(disc_type), track_count, rip_start.rip_preset_id, tool),
+        disc_type=disc_type.value,
+        track_count=track_count,
+        preset=rip_start.rip_preset_id,
+        tool=tool,
+        **extra_fields,
+    )
+
+
 class JobController:
     """Drives one disc through scan → identify → rip → eject."""
 
@@ -54,7 +75,7 @@ class JobController:
         *,
         ws: WSClient | None = None,
         device_path: str | DriveHandle | None = None,
-        default_min_length_seconds: int = DEFAULT_MIN_LENGTH_SECONDS,
+        default_min_length_seconds: int = DEFAULT_MIN_TITLE_LENGTH_SECONDS,
         resolution_timeout: float | None = RESOLUTION_TIMEOUT_UNSET,  # type: ignore[assignment]
     ) -> None:
         self._client = client
@@ -78,12 +99,10 @@ class JobController:
             self._device = DriveHandle.fixed(device_path)
         # Umount/eject is its own job; it reads the same shared handle.
         self._ejector = Ejector(self._device)
-        # Host-side baseline `--minlength` for `makemkvcon mkv all`. The
-        # backend can override per-rip via `RipStartResponse.min_length_seconds`
-        # (resolved from the Session's `overrides_json["min_length_seconds"]`);
-        # when no override is sent we fall back to this value. Injected by
-        # `main.py` from `ARM_MIN_LENGTH_SECONDS`; tests get the dispatcher
-        # default (600).
+        # Host minimum title length, injected by `main.py` from
+        # `ARM_MIN_LENGTH_SECONDS`: it stands in for the backend's minimum
+        # title length setting when the config can't be read before a scan,
+        # or rip-start comes from a backend that sends none.
         self._default_min_length_seconds = default_min_length_seconds
         # Parks a held job until it leaves its gate. `resolution_timeout` is the ceiling on an
         # AWAITING_USER_ID / AWAITING_REVIEW park, in seconds; None means wait indefinitely — source
@@ -107,7 +126,7 @@ class JobController:
     @property
     def _device_path(self) -> str | None:
         """Read-only view of the shared DriveHandle. Only the poll loop writes
-        the handle (spec §4) — a controller-side write would let a stale
+        the handle — a controller-side write would let a stale
         pickup path override the node the loop just resolved."""
         return self._device.current
 
@@ -136,22 +155,49 @@ class JobController:
                 self._active_task = None
                 self._active_job_id = None
 
-    async def pickup(self, job: JobView, device_path: str) -> None:
-        """Re-acquire a rip-ready job from a heartbeat reprobe.
+    def _start_pipeline(self, job_id: str, body: Callable[[], Awaitable[None]], what: str) -> asyncio.Task[None] | None:
+        """Run `body` for `job_id` as the drive's pipeline in a task of its own and return that task, or None while
+        another pipeline owns the drive.
 
-        Claims _active_task before starting so is_idle() returns False from the
-        moment we enter, preventing a double-rip if heartbeat fires again while
-        the pipeline is starting up. The actual rip runs via _run_rip, which
-        follows the same path as a normal pipeline (rip-start → execute → complete
-        → eject) but skips scan/identify since the job already exists.
+        The callers (the heartbeat loop, and boot recovery from amain or the poll loop) must keep running while the
+        rip does. Run inline in their task, the rip blocked heartbeats for its whole length, and job.abandoned, which
+        cancels the active task, cancelled the caller instead: the heartbeat loop for good, or amain, exiting the
+        ripper. The task is the active one from the moment it is created, so a heartbeat before it first runs neither
+        starts a second pipeline nor misses an abandon of this job. An error ends only the task, logged.
+        """
+        if not self.is_idle():
+            logger.info("%s skipped for job_id=%s: controller already busy", what, job_id)
+            return None
+
+        async def run() -> None:
+            try:
+                async with self._claim(job_id):
+                    with with_log_context(job_id=job_id):
+                        await body()
+            except Exception:
+                logger.exception("%s failed for job_id=%s", what, job_id)
+
+        task = asyncio.create_task(run(), name=f"{what}:{job_id}")
+        self._active_task = task
+        self._active_job_id = job_id
+        return task
+
+    async def pickup(self, job: JobView, device_path: str) -> asyncio.Task[None] | None:
+        """Re-acquire a rip-ready job from a heartbeat reprobe; returns the rip's task without waiting for it, or
+        None when the controller is busy.
+
+        The actual rip runs via _run_rip, which follows the same path as a normal pipeline (rip-start → execute →
+        complete → eject) but skips scan/identify since the job already exists.
         """
         if not self.is_idle():
             logger.debug("pickup ignored: controller already busy")
-            return
-        async with self._claim(job.id):
-            with with_log_context(job_id=job.id):
-                logger.info("pickup: re-acquiring job %s status=%s", job.id, job.status.value)
-                await self._run_rip(job, device_path)
+            return None
+
+        async def body() -> None:
+            logger.info("pickup: re-acquiring job %s status=%s", job.id, job.status.value)
+            await self._run_rip(job, device_path)
+
+        return self._start_pipeline(job.id, body, "pickup")
 
     async def on_ws_command(self, envelope: WSEnvelope) -> None:
         """Handler registered for `ripper.commands.{drive_id}` topic: runs the handler for the command's event
@@ -291,6 +337,13 @@ class JobController:
         cfg = await ripper_config_or_none(self._client, "auto-rip config lookup", "proceeding fail-open")
         return cfg is None or cfg.auto_rip_on_insert
 
+    async def _min_title_length(self) -> int:
+        """The configured minimum title length the scan lists titles down to, or the host minimum when the config
+        can't be read."""
+        fallback = self._default_min_length_seconds
+        cfg = await ripper_config_or_none(self._client, "minimum title length lookup", f"using {fallback}s")
+        return fallback if cfg is None else cfg.min_title_length_seconds
+
     async def _run_pipeline(self, device_path: str, *, pending_session_id: str | None) -> None:
         async with self._claim(None):
             # Refresh the MakeMKV key before makemkvcon first touches
@@ -298,7 +351,7 @@ class JobController:
             # container up across a beta-key rotation doesn't scan/rip
             # protected discs with a stale key.
             await self._makemkv.prepare()
-            scan_result = await scan_or_none(device_path)
+            scan_result = await scan_or_none(device_path, await self._min_title_length())
             if scan_result is None:
                 return
 
@@ -307,7 +360,7 @@ class JobController:
                 return
             self._active_job_id = job.id
 
-            # Phase 12 — every log line below carries job_id once identify lands.
+            # Every log line below carries job_id once identify lands.
             with with_log_context(job_id=job.id):
                 if not await self._pass_gate(job, IDENTIFY_WAIT):
                     return
@@ -389,12 +442,7 @@ class JobController:
 
     async def _run_rip(self, job: Job | JobView, device_path: str) -> None:
         rip_start = await self._backend.rip_start(job.id)
-        logger.info(
-            "rip-start job_id=%s preset=%s tracks=%d",
-            job.id,
-            rip_start.rip_preset_id,
-            len(rip_start.tracks),
-        )
+        _log_rip_started(job.disc_type, rip_start)
         await self._execute_rip(
             job_id=job.id,
             disc_type=job.disc_type,
@@ -402,51 +450,58 @@ class JobController:
             rip_start=rip_start,
         )
 
-    async def recover_held_job(self, job: JobView, device_path: str) -> None:
-        """Reboot recovery for a disc that was PAUSED in the review gate
-        (timed review gate §6.3). Re-park the review wait so the operator can
-        still Start it; on Start (-> ripping) or auto-start (-> identified), run
-        the rip. Unlike resume_inflight_job this does NOT wipe /raw or re-rip —
+    async def recover_held_job(self, job: JobView, device_path: str) -> asyncio.Task[None] | None:
+        """Reboot recovery for a disc that was PAUSED in the review gate.
+        Re-park the review wait so the operator can still Start it; on Start
+        (-> ripping) or auto-start (-> identified), run the rip. Unlike
+        resume_inflight_job this does NOT wipe /raw or re-rip —
         the disc never ripped. A re-parked disc waits for an explicit Start; it
         does not auto-rip on boot even if its countdown had expired.
-        """
-        async with self._claim(job.id):
-            with with_log_context(job_id=job.id):
-                logger.info("reboot recovery: re-parking held job %s", job.id)
-                resolved = await self._waiter.await_resolution(job.id, REVIEW_WAIT)
-                if resolved is None:
-                    return
-                job = resolved
-                if job.status not in (JobStatus.IDENTIFIED, JobStatus.RIPPING):
-                    logger.info("recovered job %s in status %s; not ripping", job.id, job.status.value)
-                    return
-                await self._run_rip(job, device_path)
 
-    async def resume_inflight_job(self, job: JobView, device_path: str) -> None:
-        """Phase 9 — drive a crash-recovered rip from the boot probe.
+        Returns the pipeline's task without waiting for it (the wait for Start
+        can last indefinitely), or None when the controller is busy.
+        """
+
+        async def body() -> None:
+            logger.info("reboot recovery: re-parking held job %s", job.id)
+            resolved = await self._waiter.await_resolution(job.id, REVIEW_WAIT)
+            if resolved is None:
+                return
+            if resolved.status not in (JobStatus.IDENTIFIED, JobStatus.RIPPING):
+                logger.info("recovered job %s in status %s; not ripping", resolved.id, resolved.status.value)
+                return
+            await self._run_rip(resolved, device_path)
+
+        return self._start_pipeline(job.id, body, "reboot recovery")
+
+    async def resume_inflight_job(self, job: JobView, device_path: str) -> asyncio.Task[None] | None:
+        """Drive a crash-recovered rip from the boot probe.
 
         The backend's `/resume` endpoint resets tracks to QUEUED and
         sets `resumed_from_crash=True`; we then run the same rip-loop
         as a fresh disc would.
 
-        Claims the single-flight gate exactly like `recover_held_job`, so a
-        crash-resumed rip is abandonable via `job.abandoned` and makes
-        `is_idle()` False (no double-rip from the heartbeat re-probe or from
-        a reattach boot probe).
+        Holds the single-flight gate like `recover_held_job`, so a crash-resumed
+        rip is abandonable via `job.abandoned` and makes `is_idle()` False (no
+        double-rip from the heartbeat re-probe or from a reattach boot probe).
+        Returns the rip's task without waiting for it, or None when the
+        controller is busy.
         """
-        async with self._claim(job.id):
-            with with_log_context(job_id=job.id):
-                # Crash-resume skips the scan path, so refresh the key here too —
-                # a rip resumed days after a crash must not run on a stale key.
-                await self._makemkv.prepare()
-                rip_start = await self._client.resume(job.id)
-                logger.info("rip-resume job_id=%s tracks=%d", job.id, len(rip_start.tracks))
-                await self._execute_rip(
-                    job_id=job.id,
-                    disc_type=job.disc_type,
-                    device_path=device_path,
-                    rip_start=rip_start,
-                )
+
+        async def body() -> None:
+            # Crash-resume skips the scan path, so refresh the key here too —
+            # a rip resumed days after a crash must not run on a stale key.
+            await self._makemkv.prepare()
+            rip_start = await self._client.resume(job.id)
+            _log_rip_started(job.disc_type, rip_start, resumed=True)
+            await self._execute_rip(
+                job_id=job.id,
+                disc_type=job.disc_type,
+                device_path=device_path,
+                rip_start=rip_start,
+            )
+
+        return self._start_pipeline(job.id, body, "crash resume")
 
     async def _execute_rip(
         self,

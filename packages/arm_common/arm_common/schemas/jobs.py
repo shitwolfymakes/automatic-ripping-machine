@@ -24,7 +24,7 @@ from arm_common.schemas.job_metadata import ExternalIds, IdentityFacts, JobMetad
 
 
 class ResolveMatch(BaseModel):
-    """A search result the operator picked (match picker spec 3.6). Its
+    """A search result the operator picked (from the match picker). Its
     presence makes `external_ids` replace the stored show ids wholesale."""
 
     model_config = ConfigDict(extra="forbid")
@@ -62,7 +62,7 @@ class ResolveRequest(BaseModel):
     collapse to the same `None` once parsed.
     """
 
-    # Unknown keys are a caller bug: the free-form metadata bag is gone (G-03/§3.4).
+    # Unknown keys are a caller bug: there is no free-form metadata bag.
     model_config = ConfigDict(extra="forbid")
 
     title: str
@@ -142,8 +142,8 @@ class BulkDeleteJobsRequest(BaseModel):
 class BulkDeleteJobsResponse(BaseModel):
     """DELETE /api/jobs response. `deleted_ids` lists the jobs whose DB
     rows were removed; `skipped_non_terminal` lists job IDs that were
-    refused because they were still in flight (caller should abandon
-    them first if they really want them gone)."""
+    refused because they were still in flight: ripping (abandon them
+    first) or transcoding (cancel their transcodes first)."""
 
     deleted_ids: list[str]
     skipped_non_terminal: list[str]
@@ -183,7 +183,8 @@ class TranscodeProgressSummary(BaseModel):
     are terminal. `None` on `JobView` means no session was applied (the job
     is `ripped`/awaiting action). Live per-task percent flows on the
     `transcode.progress.{task_id}` WS topic; `percent` here is a poll-time
-    mean of the job's task `progress_pct`.
+    mean of the job's task `progress_pct`. `tasks_active` counts the queued
+    and in-progress tasks: while it is above 0 the job cannot be deleted.
     """
 
     state: Literal["transcoding", "done", "done_partial", "failed"]
@@ -191,6 +192,7 @@ class TranscodeProgressSummary(BaseModel):
     tasks_done: int
     tasks_failed: int
     percent: float
+    tasks_active: int = 0
 
 
 class JobActions(BaseModel):
@@ -207,12 +209,14 @@ class JobActions(BaseModel):
     can_delete: bool
 
 
-def job_actions_for(status: JobStatus) -> JobActions:
+def job_actions_for(status: JobStatus, *, transcode_active: bool = False) -> JobActions:
+    """`transcode_active`: a queued or running transcode task, which a delete
+    would pull out from under its transcoder, so the delete is refused."""
     return JobActions(
         can_resolve=status in RESOLVABLE_JOB_STATUSES,
         can_apply=status in APPLY_OK_JOB_STATUSES or status in APPLY_PARK_JOB_STATUSES,
         can_abandon=status in NON_TERMINAL_JOB_STATUSES,
-        can_delete=status in TERMINAL_JOB_STATUSES,
+        can_delete=status in TERMINAL_JOB_STATUSES and not transcode_active,
     )
 
 
@@ -229,7 +233,7 @@ class JobView(BaseModel):
     status: JobStatus
     title: str | None
     year: int | None
-    # Identity columns (step 2): the identified kind, the user-supplied TV
+    # Identity columns: the identified kind, the user-supplied TV
     # season, and the explicit per-rip session choice.
     media_type: MediaType | None = None
     season: int | None = None
@@ -263,13 +267,14 @@ class JobView(BaseModel):
     @computed_field  # type: ignore[prop-decorator]
     @property
     def actions(self) -> JobActions:
-        return job_actions_for(self.status)
+        progress = self.transcode_progress
+        return job_actions_for(self.status, transcode_active=progress is not None and progress.tasks_active > 0)
 
     @computed_field  # type: ignore[prop-decorator]
     @property
     def looks_episodic(self) -> bool:
         """The stored scan looks like a TV disc (several same-length episode
-        titles, no feature): the title search defaults to TV (spec 3.3)."""
+        titles, no feature): the title search defaults to TV."""
         scan = self.metadata_json.scan_result
         return bool(scan and _looks_episodic(scan.titles))
 
@@ -277,7 +282,7 @@ class JobView(BaseModel):
     @property
     def has_series(self) -> bool:
         """A TV show is known: a TMDb id of kind tv, a TVDB or TVmaze id, or a
-        show id some episode source resolved (spec 3.4). False means the
+        show id some episode source resolved. False means the
         Match Episodes tab asks for the series first."""
         identity = self.metadata_json.identity
         ids = identity.external_ids if identity else None
@@ -303,9 +308,9 @@ class HeldJobView(BaseModel):
     """Boot-probe payload for a disc held in AWAITING_REVIEW (timed review gate).
 
     `paused` is true when the held disc should survive a ripper reboot as a hold
-    (global `ripping_paused` on — or, once it lands, a per-job pause). The ripper
-    uses it to choose re-park (paused) vs. abandon-and-self-heal (counting down)
-    on restart. See the timed-review-gate spec §6.3.
+    (global `ripping_paused`, or the per-job `manual_pause` set by review-pause).
+    The ripper uses it to choose re-park (paused) vs. abandon-and-self-heal
+    (counting down) on restart.
     """
 
     job: JobView
@@ -313,7 +318,15 @@ class HeldJobView(BaseModel):
 
 
 TrackRevertField = Literal[
-    "role", "title", "season", "episode_number", "episode_number_end", "episode_name", "custom_filename", "excluded"
+    "role",
+    "title",
+    "edition",
+    "season",
+    "episode_number",
+    "episode_number_end",
+    "episode_name",
+    "custom_filename",
+    "excluded",
 ]
 
 
@@ -329,6 +342,7 @@ class TrackEditRequest(BaseModel):
     track_id: str
     title: str | None = None
     year: int | None = None
+    edition: str | None = None
     imdb_id: str | None = None
     poster_url: str | None = None
     role: TrackRole | None = None
@@ -414,11 +428,13 @@ class RipStartResponse(BaseModel):
     rip_preset_id: str
     tracks: list[TrackView]
     # Per-rip `--minlength` override resolved from the Session's
-    # `overrides_json["min_length_seconds"]`. None means "use the
-    # ripper's host-side baseline" (`ARM_MIN_LENGTH_SECONDS`, default
-    # 600). Surfaced here so the ripper doesn't have to read Session
-    # state itself.
+    # `overrides_json["min_length_seconds"]`. None means no override.
+    # Surfaced here so the ripper doesn't have to read Session state itself.
     min_length_seconds: int | None = None
+    # The minimum title length the disc's scan listed titles with (the
+    # configured setting for an older scan). The rip never goes below it, so
+    # it writes no title the scan did not list. None from an older backend.
+    min_title_length_seconds: int | None = None
 
 
 # The one definition of apply/fan-out skip reasons — the backend engine
@@ -426,7 +442,7 @@ class RipStartResponse(BaseModel):
 # wire schema and the engine can never drift.
 #
 # "no_tracks" — no Track rows exist yet (pre-rip-start apply); fans out once
-# rip-complete/resolve drains it. "no_outputs" (Fix 75-7) — Track rows DO
+# rip-complete/resolve drains it. "no_outputs" — Track rows DO
 # exist but none qualify for this session's media_type/exclusion, so
 # compute_outputs legitimately resolves zero paths; re-applying after the
 # rip won't change that outcome the way "no_tracks" implies it will.

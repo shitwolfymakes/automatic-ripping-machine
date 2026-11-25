@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import col, select
 
-from arm_backend import iso_prepare
+from arm_backend import iso_prepare, job_events
 from arm_backend.auth import (
     require_drive_owner_by_job,
     require_drive_owner_by_track,
@@ -15,6 +15,7 @@ from arm_backend.auth import (
 from arm_backend.session_drain import after_rip, cancel_parked_applications
 from arm_backend.crash_recovery import reset_job_for_recovery
 from arm_backend.db import get_session
+from arm_backend.log_safely import log_safely, log_safely_sync
 from arm_backend.metadata import MetadataDispatcher
 from arm_backend.identify_flow import DiscAlreadyRippedError, IdentifyFlow, RippingPausedError, UnknownDriveError
 from arm_backend.rip_preset_resolution import (
@@ -29,7 +30,9 @@ from arm_backend.identity.pipeline import resolve_job
 from arm_backend.identity.proposals import record_preset
 from arm_backend.identity.stage_runner import EpisodeStageRunner
 from arm_backend.routers._deps import get_hub, get_stage_runner
-from arm_backend.track_selection import DiscBackupNeedsBluray, select_tracks
+from arm_backend.min_title_length import env_min_title_length_seconds, min_title_length_seconds
+from arm_backend.rip_outcome import kept_tracks, rip_outcome_counts
+from arm_backend.track_selection import DiscBackupNeedsBluray, select_rip_tracks
 from arm_backend.ws import WSHub
 from arm_common import (
     Config,
@@ -44,7 +47,8 @@ from arm_common import (
     RipPreset,
     TrackStatus,
 )
-from arm_common.enums import NON_TERMINAL_JOB_STATUSES, DriveKind, DriveSourceKind
+from arm_common.enums import NON_TERMINAL_JOB_STATUSES, VIDEO_DISC_TYPES, DriveKind, DriveSourceKind
+from arm_common.logging import with_log_context
 from arm_common.models import Track
 from arm_common.models._columns import enum_value_str
 from arm_common.schemas import (
@@ -136,7 +140,7 @@ async def get_ripper_config(
 
     `drive_id` resolves auto-rip per drive: a non-null Drive.drive_mode
     overrides the global Config.auto_rip_on_insert default; NULL follows it
-    (setup spec 2026-10-01 D1). Rippers that omit it get the global value.
+    Rippers that omit it get the global value.
     """
     cfg = (await session.execute(select(Config).where(col(Config.id) == CONFIG_SINGLETON_ID))).scalar_one_or_none()
     if cfg is None:
@@ -153,6 +157,7 @@ async def get_ripper_config(
         makemkv_sdf_enabled=bool(cfg.makemkv_sdf_enabled),
         ripping_paused=bool(cfg.ripping_paused),
         manual_wait_seconds=int(cfg.manual_wait_seconds) if cfg.manual_wait_seconds is not None else 60,
+        min_title_length_seconds=min_title_length_seconds(cfg),
     )
 
 
@@ -179,9 +184,9 @@ async def heartbeat(req: RipperHeartbeatRequest, session: AsyncSession = Depends
     drive.media_status = req.media_status
     drive.media_status_at = now
     drive.last_seen_at = now
-    # Spec §1: for an enrolled drive the ripper is authoritative on presence.
+    # For an enrolled drive the ripper is authoritative on presence.
     # DETACHED = the node has no hardware behind it right now. ERROR (identity
-    # mismatch, Plan 3) is an operator problem and is never auto-cleared.
+    # mismatch) is an operator problem and is never auto-cleared.
     if req.media_status is DriveMediaStatus.DETACHED:
         drive.present = False
         if drive.status is not DriveStatus.ERROR:
@@ -218,7 +223,7 @@ async def iso_prepare_report(
 async def get_drive(drive_id: str, session: AsyncSession = Depends(get_session)) -> Drive:
     """This ripper's own row. Port-identity rippers read `device_path` from
     it while their drive is absent — the scanner keeps that current by port
-    (spec §2), and the ripper cannot see a renumbering by itself without a
+    and the ripper cannot see a renumbering by itself without a
     by-id link. Returns the table model: the ripper validates it as `Drive`."""
     drive = (await session.execute(select(Drive).where(col(Drive.id) == drive_id))).scalar_one_or_none()
     if drive is None:
@@ -328,8 +333,7 @@ async def register(req: RegisterRequest, session: AsyncSession = Depends(get_ses
     ownership token every X-ARM-Hostname check compares, never used to look
     the row up. Identity is checked, never rewritten: a by-id mismatch means
     the container is bound to a different physical drive than the row, so
-    the row goes ERROR and the container is left running for diagnosis
-    (spec §1, §3)."""
+    the row goes ERROR and the container is left running for diagnosis."""
     drive = (await session.execute(select(Drive).where(col(Drive.id) == req.drive_id))).scalar_one_or_none()
     if drive is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown drive_id: {req.drive_id}")
@@ -339,7 +343,7 @@ async def register(req: RegisterRequest, session: AsyncSession = Depends(get_ses
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=detail)
     if drive.by_id_name and drive.by_id_name != req.by_id_name:
         # The row has a by-id binding — the ripper must report the same one.
-        # None on the ripper's side counts as different (spec §1): a
+        # None on the ripper's side counts as different: a
         # port-identity container registering against a by-id-bound row is
         # exactly the identity mismatch this check exists to catch.
         if req.by_id_name is None:
@@ -417,13 +421,9 @@ async def get_job(job_id: str, session: AsyncSession = Depends(get_session)) -> 
 
 
 async def _routed_rip_choice(session: AsyncSession, job: Job) -> tuple[str, int | None]:
-    # Fix 75-8: resolve the routed session ONCE for this request — the preset
-    # choice and the min-length override both derive from the same `sess`
-    # (previously each of resolve_rip_preset_id_for_job,
-    # resolve_rip_preset_for_job, and resolve_min_length_override
-    # independently re-ran resolve_routed_session_id + its own Session
-    # SELECT, up to three times per request with three warning emissions on
-    # a missing routed row).
+    # Resolve the routed session ONCE for this request — the preset choice and
+    # the min-length override both derive from the same `sess`, so there is one
+    # Session SELECT and one warning on a missing routed row.
     sess = await load_routed_session(session, job)
     try:
         preset_id = rip_preset_id_from_session(sess, job.disc_type)
@@ -441,24 +441,34 @@ async def _job_tracks(session: AsyncSession, job_id: str) -> Sequence[Track]:
     )
 
 
-def _rip_start_response(
-    job: Job, preset_id: str, tracks: Sequence[Track], min_length_seconds: int | None
+async def _title_length_floor(session: AsyncSession, job: Job) -> int:
+    """The minimum title length the job's scan listed titles with, or the configured one for a scan that did not
+    record it."""
+    recorded = ((job.metadata_json or {}).get("scan_result") or {}).get("min_title_length_seconds")
+    if recorded is not None:
+        return int(recorded)
+    cfg = (await session.execute(select(Config).where(col(Config.id) == CONFIG_SINGLETON_ID))).scalar_one_or_none()
+    return env_min_title_length_seconds() if cfg is None else min_title_length_seconds(cfg)
+
+
+async def _rip_start_response(
+    session: AsyncSession, job: Job, preset_id: str, tracks: Sequence[Track], min_length_seconds: int | None
 ) -> RipStartResponse:
     return RipStartResponse(
         job_id=job.id,
         rip_preset_id=preset_id,
         tracks=[TrackView.model_validate(t) for t in tracks],
         min_length_seconds=min_length_seconds,
+        min_title_length_seconds=await _title_length_floor(session, job),
     )
 
 
 async def _ensure_ripping(session: AsyncSession, job: Job) -> None:
     # Tracks already exist (crash-resume, or the timed review gate persisted
     # them at identify and the operator's Start already moved the job to
-    # RIPPING). Ensure the RIPPING transition happened — previously this
-    # branch returned early WITHOUT setting RIPPING/started_at, so a
-    # pre-persisted-tracks job never transitioned and the rip never completed
-    # (audit B2). Tolerate already-RIPPING (Start did it); transition if not.
+    # RIPPING). Ensure the RIPPING transition happened (setting RIPPING/started_at),
+    # or a pre-persisted-tracks job would never transition and the rip never
+    # completes. Tolerate already-RIPPING (Start did it); transition if not.
     if job.status != JobStatus.RIPPING:
         job.status = JobStatus.RIPPING
         if job.started_at is None:
@@ -505,7 +515,7 @@ async def _select_or_fail(
     # whatever the scan found, so it never lands in the no-titles handling
     # below; a FOLDER preset on anything but a Blu-ray is refused here.
     try:
-        new_tracks = select_tracks(job.id, scan, preset)
+        new_tracks = select_rip_tracks(job.id, scan, preset)
     except DiscBackupNeedsBluray as exc:
         # Fail the job with the reason on its event: the ripper gives up on a
         # 4xx, and the job would otherwise sit IDENTIFIED with nothing to say why.
@@ -521,7 +531,7 @@ async def _select_or_fail(
         reason = FOLDER_NO_TITLES if virtual.source_kind == DriveSourceKind.FOLDER else ISO_NO_TITLES
         await _fail_titleless_source(session, hub, job, reason)
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=reason)
-    if not new_tracks:
+    if not kept_tracks(new_tracks):
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="track selection produced zero tracks",
@@ -555,6 +565,23 @@ async def _emit_rip_started(session: AsyncSession, hub: WSHub, job: Job, preset_
     await session.commit()
 
 
+async def _announce_rip(
+    session: AsyncSession,
+    hub: WSHub,
+    stage_runner: EpisodeStageRunner | None,
+    job: Job,
+    preset_id: str,
+    tracks: Sequence[Track],
+) -> None:
+    """Emit rip.started for a rip this request began and schedule the
+    episode stage when the job may hold episodes. Both count only the kept
+    tracks: an excluded title is ripped but is not what the rip is for."""
+    kept = kept_tracks(tracks)
+    await _emit_rip_started(session, hub, job, preset_id, len(kept))
+    if stage_runner is not None and is_tv_candidate(job, kept):
+        stage_runner.schedule(job.id)
+
+
 @router.post("/jobs/{job_id}/rip-start", response_model=RipStartResponse)
 async def rip_start(
     job: Job = Depends(require_drive_owner_by_job),
@@ -562,35 +589,38 @@ async def rip_start(
     hub: WSHub = Depends(get_hub),
     stage_runner: EpisodeStageRunner | None = Depends(get_stage_runner),
 ) -> RipStartResponse:
-    preset_id, min_length_seconds = await _routed_rip_choice(session, job)
+    with with_log_context(job_id=job.id):
+        preset_id, min_length_seconds = await _routed_rip_choice(session, job)
 
-    existing = await _job_tracks(session, job.id)
-    if existing:
-        await _ensure_ripping(session, job)
-        return _rip_start_response(job, preset_id, existing, min_length_seconds)
+        existing = await _job_tracks(session, job.id)
+        if existing:
+            # An IDENTIFIED job with tracks is a miss that rips straight away:
+            # this request begins its rip. The operator's Start (already RIPPING)
+            # announced its own; a countdown release keeps the review hold's.
+            begins_rip = job.status == JobStatus.IDENTIFIED
+            await _ensure_ripping(session, job)
+            if begins_rip:
+                await _announce_rip(session, hub, stage_runner, job, preset_id, existing)
+            return await _rip_start_response(session, job, preset_id, existing, min_length_seconds)
 
-    _require_startable(job)
-    scan = _scan_of(job)
-    preset = await _load_rip_preset(session, preset_id)
-    new_tracks = await _select_or_fail(session, hub, job, scan, preset)
-    await _begin_rip(session, job, new_tracks)
+        _require_startable(job)
+        scan = _scan_of(job)
+        preset = await _load_rip_preset(session, preset_id)
+        new_tracks = await _select_or_fail(session, hub, job, scan, preset)
+        await _begin_rip(session, job, new_tracks)
 
-    refreshed = await _job_tracks(session, job.id)
-    logger.info(
-        "rip-start job_id=%s preset=%s tracks=%d",
-        job.id,
-        preset_id,
-        len(refreshed),
-    )
+        refreshed = await _job_tracks(session, job.id)
+        logger.debug(
+            "rip-start preset=%s tracks=%d",
+            preset_id,
+            len(kept_tracks(refreshed)),
+        )
 
-    await _emit_rip_started(session, hub, job, preset_id, len(refreshed))
+        # Without the review hold, identify creates no Track rows, so the stage
+        # it scheduled saw nothing to match. The tracks appear here.
+        await _announce_rip(session, hub, stage_runner, job, preset_id, refreshed)
 
-    # C1: without the review hold, identify creates no Track rows, so the
-    # stage it scheduled saw nothing to match. The tracks appear here.
-    if stage_runner is not None and is_tv_candidate(job, new_tracks):
-        stage_runner.schedule(job.id)
-
-    return _rip_start_response(job, preset_id, refreshed, min_length_seconds)
+        return await _rip_start_response(session, job, preset_id, refreshed, min_length_seconds)
 
 
 @router.post("/jobs/{job_id}/resume", response_model=RipStartResponse)
@@ -599,41 +629,42 @@ async def resume(
     session: AsyncSession = Depends(get_session),
     hub: WSHub = Depends(get_hub),
 ) -> RipStartResponse:
-    """Phase 9 — per-job crash-recovery reset for the 'only ripper crashed'
+    """Per-job crash-recovery reset for the 'only ripper crashed'
     case. Idempotent: re-running on an already-reset job is a no-op.
     Returns the same shape as `rip-start` so the ripper's existing flow
     continues unchanged.
     """
-    if job.status != JobStatus.RIPPING:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=f"job not in ripping state: status={job.status.value}",
+    with with_log_context(job_id=job.id):
+        if job.status != JobStatus.RIPPING:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"job not in ripping state: status={job.status.value}",
+            )
+
+        # One routed-session resolution for this request (see _routed_rip_choice).
+        preset_id, min_length_seconds = await _routed_rip_choice(session, job)
+
+        await reset_job_for_recovery(session, job)
+        await session.commit()
+
+        refreshed = await _job_tracks(session, job.id)
+        logger.info("rip-resume tracks=%d", len(refreshed))
+
+        await hub.emit(
+            topic="ripper.events",
+            event_type="rip.resumed",
+            payload={
+                "job_id": job.id,
+                "drive_id": job.drive_id,
+                "track_count": len(refreshed),
+                "resumed_from_crash": True,
+            },
+            job_id=job.id,
+            session=session,
         )
+        await session.commit()
 
-    # Fix 75-8: one routed-session resolution for this request (see _routed_rip_choice).
-    preset_id, min_length_seconds = await _routed_rip_choice(session, job)
-
-    await reset_job_for_recovery(session, job)
-    await session.commit()
-
-    refreshed = await _job_tracks(session, job.id)
-    logger.info("rip-resume job_id=%s tracks=%d", job.id, len(refreshed))
-
-    await hub.emit(
-        topic="ripper.events",
-        event_type="rip.resumed",
-        payload={
-            "job_id": job.id,
-            "drive_id": job.drive_id,
-            "track_count": len(refreshed),
-            "resumed_from_crash": True,
-        },
-        job_id=job.id,
-        session=session,
-    )
-    await session.commit()
-
-    return _rip_start_response(job, preset_id, refreshed, min_length_seconds)
+        return await _rip_start_response(session, job, preset_id, refreshed, min_length_seconds)
 
 
 @router.get(
@@ -642,7 +673,7 @@ async def resume(
     dependencies=[Depends(require_service_token)],
 )
 async def get_in_flight_job(drive_id: str, session: AsyncSession = Depends(get_session)) -> Job:
-    """Phase 9 — boot-probe lookup. Returns the single RIPPING job assigned
+    """Boot-probe lookup. Returns the single RIPPING job assigned
     to this drive, if any. 404 if the drive is unknown or no in-flight job
     exists. Multiple matches (data-model violation) log + return the first.
     """
@@ -708,9 +739,9 @@ async def get_held_job(drive_id: str, session: AsyncSession = Depends(get_sessio
     """Boot-probe lookup for a disc held in AWAITING_REVIEW (timed review gate).
 
     Returns the held job plus `paused` (true when the disc should survive a ripper
-    reboot as a hold — global `ripping_paused`, or a per-job pause once that
-    lands). The ripper uses `paused` to choose re-park vs. abandon on restart
-    (timed-review-gate spec §6.3). 404 when the drive is unknown or no held job
+    reboot as a hold: global `ripping_paused`, or the per-job `manual_pause` set by
+    review-pause). The ripper uses `paused` to choose re-park vs. abandon on restart.
+    404 when the drive is unknown or no held job
     exists. Distinct from `/in-flight-job` (RIPPING-only) so the two recovery
     paths stay separate.
     """
@@ -761,7 +792,7 @@ async def recovery_abandon(
     session: AsyncSession = Depends(get_session),
     hub: WSHub = Depends(get_hub),
 ) -> Job:
-    """Service-token abandon for ripper reboot recovery (timed review gate §6.3).
+    """Service-token abandon for ripper reboot recovery (timed review gate).
 
     A held disc that was only COUNTING DOWN (not paused) when the ripper restarted
     is abandoned here so the drive frees; the seated disc then re-fires the
@@ -773,23 +804,25 @@ async def recovery_abandon(
     job = (await session.execute(select(Job).where(col(Job.id) == job_id))).scalar_one_or_none()
     if job is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown job_id: {job_id}")
-    if job.status != JobStatus.AWAITING_REVIEW:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=f"recovery-abandon only valid for awaiting_review, got {enum_value_str(job.status)}",
+    with with_log_context(job_id=job.id):
+        if job.status != JobStatus.AWAITING_REVIEW:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"recovery-abandon only valid for awaiting_review, got {enum_value_str(job.status)}",
+            )
+        job.status = JobStatus.ABANDONED
+        session.add(job)
+        await cancel_parked_applications(session, job)
+        await session.flush()
+        await hub.emit(
+            topic="ripper.events",
+            event_type="rip.abandoned",
+            payload={"job_id": job.id, "drive_id": job.drive_id, "status": job.status.value},
+            job_id=job.id,
+            session=session,
         )
-    job.status = JobStatus.ABANDONED
-    session.add(job)
-    await cancel_parked_applications(session, job)
-    await session.flush()
-    await hub.emit(
-        topic="ripper.events",
-        event_type="rip.abandoned",
-        payload={"job_id": job.id, "drive_id": job.drive_id, "status": job.status.value},
-        job_id=job.id,
-        session=session,
-    )
-    return job
+        await session.commit()
+        return job
 
 
 def _start_track(track: Track, req: TrackUpdateRequest) -> None:
@@ -861,6 +894,18 @@ async def _emit_track_event(session: AsyncSession, hub: WSHub, track: Track, new
         await session.commit()
 
 
+async def _log_track_outcome(session: AsyncSession, track: Track, new_status: TrackStatus) -> None:
+    """Log the track's DONE or FAILED milestone; any other target status logs nothing."""
+    log = {TrackStatus.DONE: job_events.log_track_ripped, TrackStatus.FAILED: job_events.log_track_failed}.get(
+        new_status
+    )
+    if log is None:
+        return
+    job = (await session.execute(select(Job).where(col(Job.id) == track.job_id))).scalar_one()
+    tracks = (await session.execute(select(Track).where(col(Track.job_id) == track.job_id))).scalars().all()
+    log(job, track, tracks)
+
+
 @router.patch("/tracks/{track_id}", response_model=TrackView)
 async def update_track(
     req: TrackUpdateRequest,
@@ -868,23 +913,25 @@ async def update_track(
     session: AsyncSession = Depends(get_session),
     hub: WSHub = Depends(get_hub),
 ) -> TrackView:
-    new_status = req.status
-    rule = _TRACK_TRANSITIONS.get(new_status)
-    if rule is None:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=f"target status {new_status.value} not allowed via PATCH",
-        )
-    allowed_from, apply = rule
-    _require_transition(track.status, allowed_from, new_status)
-    apply(track, req)
+    with with_log_context(job_id=track.job_id, track_id=track.id):
+        new_status = req.status
+        rule = _TRACK_TRANSITIONS.get(new_status)
+        if rule is None:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"target status {new_status.value} not allowed via PATCH",
+            )
+        allowed_from, apply = rule
+        _require_transition(track.status, allowed_from, new_status)
+        apply(track, req)
 
-    track.status = new_status
-    await session.commit()
-    await session.refresh(track)
-    await _emit_track_event(session, hub, track, new_status)
+        track.status = new_status
+        await session.commit()
+        await session.refresh(track)
+        await _emit_track_event(session, hub, track, new_status)
+        await log_safely(f"track {new_status.value}", _log_track_outcome(session, track, new_status))
 
-    return TrackView.model_validate(track)
+        return TrackView.model_validate(track)
 
 
 @router.post("/jobs/{job_id}/rip-complete", response_model=JobView)
@@ -894,85 +941,81 @@ async def rip_complete(
     session: AsyncSession = Depends(get_session),
     hub: WSHub = Depends(get_hub),
 ) -> JobView:
-    if job.status != JobStatus.RIPPING:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=f"job not in ripping state: status={job.status.value}",
+    with with_log_context(job_id=job.id):
+        if job.status != JobStatus.RIPPING:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"job not in ripping state: status={job.status.value}",
+            )
+
+        tracks = (await session.execute(select(Track).where(col(Track.job_id) == job.id))).scalars().all()
+        done, failed, total = rip_outcome_counts(tracks)
+
+        job.status = _finished_status(job, done=done, failed=failed, total=total)
+        if job.status == JobStatus.FAILED:
+            # Nothing was ripped, so nothing will ever drain a parked application.
+            await cancel_parked_applications(session, job)
+
+        job.ripped_at = datetime.now(timezone.utc)
+        await session.commit()
+        await session.refresh(job)
+        logger.debug(
+            "rip-complete status=%s done=%d failed=%d total=%d",
+            job.status.value,
+            done,
+            failed,
+            total,
         )
+        log_safely_sync("rip.completed", job_events.log_rip_completed, job, done, failed, total)
 
-    tracks = (await session.execute(select(Track).where(col(Track.job_id) == job.id))).scalars().all()
+        event_type = {
+            JobStatus.RIPPED: "rip.completed",
+            JobStatus.RIPPED_AWAITING_IDENTIFY: "rip.completed",
+            JobStatus.RIPPED_PARTIAL: "rip.partial",
+            JobStatus.FAILED: "rip.failed",
+        }.get(job.status, "rip.completed")
+        await hub.emit(
+            topic="ripper.events",
+            event_type=event_type,
+            payload={
+                "job_id": job.id,
+                "drive_id": job.drive_id,
+                "status": job.status.value,
+                "tracks_done": done,
+                "tracks_failed": failed,
+                "tracks_total": total,
+            },
+            job_id=job.id,
+            session=session,
+        )
+        await session.commit()
 
-    done = sum(1 for t in tracks if t.status == TrackStatus.DONE)
-    failed = sum(1 for t in tracks if t.status == TrackStatus.FAILED)
-    total = len(tracks)
+        if job.status in (JobStatus.RIPPED, JobStatus.RIPPED_PARTIAL) and not _waits_for_identity(job):
+            # Rip done: drain parked applications (an explicit operator choice
+            # wins over the drive default), then auto-apply, which holds off on a
+            # disc that is still unidentified (auto_apply_allowed). A placeholder
+            # that waits for identity gets this pass from resolve instead.
+            await after_rip(session, job, hub)
 
+        return JobView.model_validate(job)
+
+
+def _waits_for_identity(job: Job) -> bool:
+    """Whether a finished rip holds its after-rip pass for resolve: an
+    unidentified non-video disc (a CD that missed with block_on_miss off).
+    An unidentified DVD or Blu-ray does not; its auto-apply waits instead."""
+    return job.disc_type not in VIDEO_DISC_TYPES and flag_is_set(job.metadata_json, "unidentified")
+
+
+def _finished_status(job: Job, *, done: int, failed: int, total: int) -> JobStatus:
+    """The status a rip ends in, from its track outcomes. Partiality wins over
+    a placeholder: RIPPED_PARTIAL has no unidentified variant, and hiding the
+    failed tracks would be worse. A clean placeholder rip parks at
+    RIPPED_AWAITING_IDENTIFY, which resolve promotes to RIPPED."""
     if total == 0 or done == 0:
-        job.status = JobStatus.FAILED
-        # Nothing was ripped, so nothing will ever drain a parked application.
-        await cancel_parked_applications(session, job)
-    elif failed == 0:
-        # A placeholder rip (identify missed, block_on_miss=false) parks at
-        # RIPPED_AWAITING_IDENTIFY: transcode is gated on identity, so the
-        # after-rip hooks wait for resolve (G-09; docs/developers/architecture/02 § placeholder
-        # rips). A PARTIAL unidentified rip stays RIPPED_PARTIAL — the enum
-        # has no partial+unidentified value and losing partiality would hide
-        # failed tracks; it remains resolvable (PRESERVE) either way.
-        if flag_is_set(job.metadata_json, "unidentified"):
-            job.status = JobStatus.RIPPED_AWAITING_IDENTIFY
-        else:
-            job.status = JobStatus.RIPPED
-    else:
-        job.status = JobStatus.RIPPED_PARTIAL
-
-    job.ripped_at = datetime.now(timezone.utc)
-    await session.commit()
-    await session.refresh(job)
-    logger.info(
-        "rip-complete job_id=%s status=%s done=%d failed=%d total=%d",
-        job.id,
-        job.status.value,
-        done,
-        failed,
-        total,
-    )
-
-    event_type = {
-        JobStatus.RIPPED: "rip.completed",
-        JobStatus.RIPPED_AWAITING_IDENTIFY: "rip.completed",
-        JobStatus.RIPPED_PARTIAL: "rip.partial",
-        JobStatus.FAILED: "rip.failed",
-    }.get(job.status, "rip.completed")
-    await hub.emit(
-        topic="ripper.events",
-        event_type=event_type,
-        payload={
-            "job_id": job.id,
-            "drive_id": job.drive_id,
-            "status": job.status.value,
-            "tracks_done": done,
-            "tracks_failed": failed,
-            "tracks_total": total,
-        },
-        job_id=job.id,
-        session=session,
-    )
-    await session.commit()
-
-    # Fix 75-3: the unidentified-flag gate must cover BOTH ripped outcomes,
-    # not just the failed==0 (RIPPED) branch. A RIPPED_PARTIAL placeholder
-    # (identify missed, block_on_miss=false) was falling through to
-    # after_rip unconditionally, fanning out transcodes with paths built
-    # from the raw volume label under the wrong identity. Status handling is
-    # unchanged (partial stays RIPPED_PARTIAL either way) — only after_rip
-    # is gated; a parked application still drains safely once resolve lands
-    # (Fix 75-2 makes that ordering safe).
-    if job.status in (JobStatus.RIPPED, JobStatus.RIPPED_PARTIAL) and not flag_is_set(
-        job.metadata_json, "unidentified"
-    ):
-        # Rip done, identity known: drain parked applications (an explicit
-        # operator choice wins over the drive default), then auto-apply.
-        # RIPPED_AWAITING_IDENTIFY deliberately skips this — transcode is
-        # gated on identity; resolve runs the same hook when it lands.
-        await after_rip(session, job, hub)
-
-    return JobView.model_validate(job)
+        return JobStatus.FAILED
+    if failed:
+        return JobStatus.RIPPED_PARTIAL
+    if _waits_for_identity(job):
+        return JobStatus.RIPPED_AWAITING_IDENTIFY
+    return JobStatus.RIPPED

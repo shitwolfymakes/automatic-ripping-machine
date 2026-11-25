@@ -22,6 +22,7 @@ from arm_common import (
     Config,
     Drive,
     DriveStatus,
+    Job,
     SessionApplication,
     SessionApplicationStatus,
     Track,
@@ -387,7 +388,7 @@ async def test_overwrite_evicts_only_same_job_tasks(tmp_path: Path) -> None:
 
 
 async def test_overwrite_unowned_collision_is_cross_job_not_evicted(tmp_path: Path) -> None:
-    """Fix 76-5: a colliding task whose owning session_application is
+    """A colliding task whose owning session_application is
     missing (existing_job_id=None — Postgres-unreachable via CASCADE in
     real life, but modeled reachable by the fake tier / find_collisions,
     e.g. a dangling session_application_id) must classify as CROSS-JOB, not
@@ -419,7 +420,7 @@ async def test_overwrite_unowned_collision_is_cross_job_not_evicted(tmp_path: Pa
 
 
 async def test_overwrite_mixed_collision_409_reports_full_collision_list(tmp_path: Path) -> None:
-    """Fix 76-6: overwrite=True with BOTH a same-job and a cross-job
+    """`overwrite=True` with BOTH a same-job and a cross-job
     collision must report the FULL collision list in the skip outcome, not
     only the cross-job subset — the cross-job subset is what blocks, but
     the body should still tell the whole truth about every colliding path.
@@ -440,8 +441,8 @@ async def test_overwrite_mixed_collision_409_reports_full_collision_list(tmp_pat
             status=TrackStatus.DONE,
         )
     )
-    path_1 = "Iron Man (2008)/Iron Man - 01 - plex-1080p-h-265.mkv"
-    path_2 = "Iron Man (2008)/Iron Man - 02 - plex-1080p-h-265.mkv"
+    path_1 = "Iron Man (2008)/Iron Man - 02 - plex-1080p-h-265.mkv"
+    path_2 = "Iron Man (2008)/Iron Man - 03 - plex-1080p-h-265.mkv"
     other_job_id = "job_01JZXR7K3M5Q8N4VWA0000000J"
     db.rows["session_applications"] = [
         SessionApplication(
@@ -542,3 +543,92 @@ async def test_drain_survives_a_failed_job_reload_after_rollback(
 
     assert await sdx.drain_parked_applications_after_rip(db, job, CapturingHub()) == []  # type: ignore[arg-type]
     assert "after a failed drain failed" in caplog.text
+
+
+async def test_auto_apply_off_logs_the_routed_session_it_skipped(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    """With auto-apply off, a job left at ripped says in its log which default it did not apply."""
+    _media_root(tmp_path)
+    db = FakeSession()
+    job = _seed(db)
+    _drive_default(db)
+    db.rows["config"][0].auto_transcode_on_idle = False
+    applied: list[Any] = []
+
+    async def _apply(*a: Any, **k: Any) -> None:
+        applied.append(k)
+
+    monkeypatch.setattr(asx, "apply_session_internal", _apply)
+    caplog.set_level("INFO", logger="arm_backend.auto_session")
+
+    await maybe_auto_apply_session(db, job, CapturingHub())
+
+    records = [r for r in caplog.records if r.name == "arm_backend.auto_session" and r.levelname == "INFO"]
+    assert len(records) == 1
+    assert "auto-apply is off" in records[0].getMessage()
+    assert "ses_x" in records[0].getMessage()
+    assert records[0].job_id == job.id
+    assert applied == []
+
+
+def _live_application(db: FakeSession, job: Job) -> None:
+    db.rows["session_applications"] = [
+        SessionApplication(
+            id="sap_live", session_id="ses_x", job_id=job.id, status=SessionApplicationStatus.RUNNING, overwrite=False
+        )
+    ]
+
+
+def _unidentified(db: FakeSession, job: Job) -> None:
+    job.metadata_json = {**(job.metadata_json or {}), "flags": {"unidentified": True}}
+
+
+def _auto_apply_off(db: FakeSession, job: Job) -> None:
+    db.rows["config"][0].auto_transcode_on_idle = False
+
+
+@pytest.mark.parametrize(
+    ("hold", "reason"),
+    [
+        (_live_application, "a session is already applied"),
+        (_unidentified, "waiting for the disc to be identified"),
+        (_auto_apply_off, "auto-apply is off"),
+    ],
+)
+async def test_skipped_route_log_names_the_reason(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture, hold: Any, reason: str
+) -> None:
+    """The one skipped-route line says why auto-apply held back, whichever reason it was."""
+    _media_root(tmp_path)
+    db = FakeSession()
+    job = _seed(db)
+    _drive_default(db)
+    db.rows["config"][0].auto_transcode_on_idle = True
+    hold(db, job)
+    monkeypatch.setattr(asx, "apply_session_internal", _never_applied)
+    caplog.set_level("INFO", logger="arm_backend.auto_session")
+
+    await maybe_auto_apply_session(db, job, CapturingHub())
+
+    records = [r for r in caplog.records if r.name == "arm_backend.auto_session" and r.levelname == "INFO"]
+    assert [r.getMessage() for r in records] == [f"{reason}: routed session ses_x not applied"]
+
+
+async def _never_applied(*_a: Any, **_k: Any) -> None:
+    raise AssertionError("auto-apply applied a session it should have held back")
+
+
+async def test_auto_apply_off_without_a_route_logs_nothing(tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
+    """An unrouted disc with auto-apply off adds no line."""
+    _media_root(tmp_path)
+    db = FakeSession()
+    job = _seed(db)
+    _drive_default(db)
+    db.rows["config"][0].auto_transcode_on_idle = False
+    db.rows["drives"][0].default_session_id = None
+    caplog.set_level("INFO", logger="arm_backend.auto_session")
+
+    await maybe_auto_apply_session(db, job, CapturingHub())
+
+    assert [r for r in caplog.records if r.name == "arm_backend.auto_session"] == []

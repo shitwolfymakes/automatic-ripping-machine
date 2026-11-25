@@ -6,7 +6,7 @@ from urllib.parse import quote
 import httpx
 
 from arm_backend.config import settings
-from arm_backend.metadata.base import LookupError, LookupTimeout, MetadataResult
+from arm_backend.metadata.base import LookupError, LookupTimeout, MetadataResult, json_object
 from arm_backend.metadata.years import year_from
 
 logger = logging.getLogger("arm_backend.metadata.tmdb")
@@ -112,8 +112,7 @@ class TMDBClient:
             parsed = self._parse_one(top, kind)
             if parsed is not None:
                 out.append(parsed)
-        # One detail call per candidate (external ids + credits appended):
-        # the same call count as the old external_ids fan-out, but it also
+        # One detail call per candidate (external ids + credits appended); the call
         # carries the facts the match picker shows. A TV row takes the latest
         # season's `credits`, not `aggregate_credits`: a long-running show's
         # all-seasons credits run to megabytes, and a row shows two names.
@@ -145,8 +144,7 @@ class TMDBClient:
     async def fetch_detail(
         self, tmdb_id: int | str, kind: Literal["movie", "tv"], *, all_seasons: bool = True
     ) -> dict[str, Any]:
-        """`/{kind}/{id}` with external ids and credits appended in one call
-        (match picker spec 3.3). A show's credits cover every season unless
+        """`/{kind}/{id}` with external ids and credits appended in one call. A show's credits cover every season unless
         `all_seasons` is false. Raises LookupError/LookupTimeout."""
         credits = "aggregate_credits" if kind == "tv" and all_seasons else "credits"
         try:
@@ -240,10 +238,7 @@ class TMDBClient:
             raise LookupError("tmdb auth failed")
         if r.status_code != 200:
             raise LookupError(f"tmdb find status={r.status_code}")
-        try:
-            data = r.json()
-        except ValueError as e:
-            raise LookupError("tmdb find returned non-JSON response") from e
+        data = json_object(r, "tmdb find")
         if data.get("movie_results"):
             parsed = self._parse_one(data["movie_results"][0], "movie")
             if parsed is None:

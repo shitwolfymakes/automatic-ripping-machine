@@ -1,16 +1,14 @@
-"""Phase 12 — per-job log query + bug-report zip endpoints.
+"""Per-job log query + bug-report zip endpoints.
 
 Two read-only endpoints scoped to a single `job_id`:
 
 - `GET /api/logs/{job_id}` — NDJSON stream of every line tagged with
-  the requested `job_id`. Sourced from `/logs/jobs/{job_id}.log`
-  (written by `LogTailer`); falls back to scanning `/logs/*.log` when
-  the per-job file is absent (legacy jobs predating the tailer's
-  per-job append). `?limit=N` caps the line count.
+  the requested `job_id`. Sourced only from `/logs/jobs/{job_id}.log`
+  (written by `LogTailer`); empty when that file is absent. `?limit=N`
+  caps the line count.
 
 - `GET /api/logs/{job_id}.zip` — in-memory zip. Single entry sourced
-  from the per-job file when present; legacy fallback walks the
-  service logs and writes one entry per service. Per-entry caps:
+  from the per-job file; no entry when it is absent. Per-entry caps:
   `ARM_LOG_ZIP_PER_ENTRY_LINE_CAP` lines or `ARM_LOG_ZIP_PER_ENTRY_BYTE_CAP`
   bytes (env-tunable; defaults: 5000 lines / 5 MB), whichever hits first.
 
@@ -53,8 +51,11 @@ def list_job_logs(_: User = Depends(require_jwt)) -> list[JobLogFileView]:
 # Declared before `/{job_id}` so FastAPI matches the `.zip` suffix first;
 # otherwise `/{job_id}` would consume `job_x.zip` as a job_id with `.zip`
 # in it and the zip route would be unreachable.
+# Plain `def`, like `list_job_logs`: reading the logs (every service log, on
+# the legacy fallback) is blocking I/O on what is often a network share, so
+# FastAPI runs this in its threadpool instead of stalling the event loop.
 @router.get("/{job_id}.zip")
-async def download_job_logs_zip(
+def download_job_logs_zip(
     job_id: JobIdParam,
     _: User = Depends(require_jwt),
 ) -> Response:

@@ -1,20 +1,12 @@
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
-import { renderComponent, screen, cleanup, waitFor } from '$lib/test-utils';
+import { renderComponent, screen, cleanup, waitFor } from '$lib/testing/render';
 import LogDetailPage from '../[job_id]/+page.svelte';
 
 const fetchJobLog = vi.fn();
 vi.mock('$lib/api/logs', () => ({
 	fetchJobLog: (...a: unknown[]) => fetchJobLog(...a),
 	jobLogDownloadUrl: (id: string) => `/api/logs/${id}.zip`,
-	toLogEntry: (raw: Record<string, unknown>) => ({
-		timestamp: raw.ts ?? null,
-		level: raw.level,
-		logger: raw.service,
-		event: raw.msg,
-		job_id: raw.job_id ?? null,
-		label: null,
-		service: raw.service
-	})
+	toLogEntry: (raw: Record<string, unknown>) => ({ ...raw, ts: raw.ts ?? null })
 }));
 
 const subscribeMock = vi.fn();

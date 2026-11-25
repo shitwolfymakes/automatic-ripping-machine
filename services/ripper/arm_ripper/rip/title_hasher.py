@@ -69,14 +69,14 @@ class TitleHasher:
                 logger.warning("sha256 of %s failed: %s", path.name, exc)
                 digest = None
             else:
-                logger.info("sha256 %s done in %.1fs", path.name, time.monotonic() - started)
+                logger.debug("sha256 %s done in %.1fs", path.name, time.monotonic() - started)
         await then(digest)
 
     async def finish(self, on_progress: OnVerifyProgress | None = None) -> None:
         """Wait for every submitted file, reporting progress while any remain."""
         pending = [t for t in self._tasks if not t.done()]
         if pending:
-            logger.info("verifying %d ripped file(s) still being hashed", len(pending))
+            logger.debug("verifying %d ripped file(s) still being hashed", len(pending))
             gathered = asyncio.gather(*pending)
             done_at_start = self._bytes_done
             started = time.monotonic()

@@ -1,4 +1,4 @@
-"""on_previously_ripped (D-132): a disc whose fingerprint matches an earlier rip
+"""on_previously_ripped: a disc whose fingerprint matches an earlier rip
 is held for the operator, rejected (ejected), or ripped again.
 
 Covers identify's three modes and the one-shot "Rip again" override, the held
@@ -48,6 +48,7 @@ from arm_common.enums import IdentificationMode, OutputMode, TrackKind, TrackSel
 from arm_common.models import Track
 
 from tests._fakes import FakeSession
+from tests._logs import LineCapture
 
 _SERVICE_AUTH = {"Authorization": "Bearer tok-service"}
 _PRIOR = "job_01M4Q4V53S8AC69YM5CKHE11DX"
@@ -217,7 +218,7 @@ def test_hold_overrides_the_timed_review_and_a_missed_identify() -> None:
     missed = _db(PreviouslyRippedAction.HOLD, block_on_miss=True)
     out = _identify(missed, _Hub(), miss=True).json()
     assert out["status"] == "awaiting_review"
-    assert out["title"] == "RESIDENT_EVIL_RETRIBUTION"
+    assert out["title"] == "RESIDENT EVIL RETRIBUTION"
 
 
 def test_hold_still_wins_over_a_held_suggestion() -> None:
@@ -241,10 +242,12 @@ def test_a_failed_or_abandoned_earlier_job_is_not_a_previous_rip() -> None:
         assert "previously_ripped" not in r.json()["metadata_json"]
 
 
-def test_reject_creates_no_job_records_the_event_and_notes_the_drive() -> None:
+def test_reject_creates_no_job_records_the_event_and_notes_the_drive(job_log: LineCapture) -> None:
     db = _db(PreviouslyRippedAction.REJECT)
     hub = _Hub()
     r = _identify(db, hub)
+    [rejected_line] = [line for line in job_log.lines(level="info") if "rejecting it" in line["msg"]]
+    assert rejected_line["msg"] == f"identify drive_id=drv_new: disc already ripped as {_PRIOR}; rejecting it"
     assert r.status_code == 409
     assert r.json()["detail"] == {"reason": "previously_ripped", "job_id": _PRIOR}
     assert _new_jobs(db) == []
@@ -267,10 +270,12 @@ def test_rip_mode_rips_it_again_without_asking() -> None:
 
 
 @pytest.mark.parametrize("action", [PreviouslyRippedAction.HOLD, PreviouslyRippedAction.REJECT])
-def test_rip_again_lets_the_next_identify_through_once(action: PreviouslyRippedAction) -> None:
+def test_rip_again_lets_the_next_identify_through_once(action: PreviouslyRippedAction, job_log: LineCapture) -> None:
     prior = _prior(meta={"flags": {"rerip_allowed": True}})
     db = _db(action, prior=prior)
     r = _identify(db, _Hub())
+    [allowed] = [line for line in job_log.lines(level="info") if "allowed once" in line["msg"]]
+    assert allowed["msg"] == f"identify drive_id=drv_new: rip again of {_PRIOR} allowed once"
     assert r.status_code == 200
     assert r.json()["status"] == "identified"
     assert prior.metadata_json["flags"]["rerip_allowed"] is False  # used up
@@ -560,6 +565,19 @@ def test_a_previously_ripped_hold_has_no_countdown_to_pause() -> None:
     assert db.rows["jobs"][1].wait_start_time is None
 
 
+def test_a_blocked_miss_has_no_countdown_to_pause() -> None:
+    db = _db(PreviouslyRippedAction.HOLD)
+    blocked = _held()
+    blocked.metadata_json = {"flags": {"unidentified": True, "blocked_miss": True}}
+    db.rows["jobs"].append(blocked)
+    client, auth = _jobs_app(db, _Hub())
+    with client:
+        r = client.post(f"/api/jobs/{blocked.id}/review-pause?paused=false", headers=auth)
+    assert r.status_code == 409
+    assert "start it" in r.json()["detail"]
+    assert blocked.wait_start_time is None
+
+
 # --- config ---------------------------------------------------------------------
 
 
@@ -616,3 +634,38 @@ def test_unpausing_does_not_start_a_countdown_on_a_suggestion_hold() -> None:
         assert client.patch("/api/config", json={"ripping_paused": False}, headers=auth).status_code == 200
     assert suggested.wait_start_time is None
     assert plain.wait_start_time is not None
+
+
+def test_hold_emits_identify_held_in_the_new_jobs_context(job_log: LineCapture) -> None:
+    db = _db(PreviouslyRippedAction.HOLD)
+    out = _identify(db, _Hub()).json()
+    [held] = job_log.lines(event="identify.held")
+    assert held["job_id"] == out["id"]
+    assert held["fields"] == {"reason": f"disc already ripped as {_PRIOR}"}
+    assert not any(line["msg"].startswith("identify job_id=") for line in job_log.lines())
+
+
+def test_a_held_suggestion_emits_identify_held(job_log: LineCapture) -> None:
+    db = _db(PreviouslyRippedAction.RIP, movie_auto_apply=False)
+    _identify(db, _Hub())
+    held = job_log.lines(event="identify.held")
+    assert [h["fields"] for h in held] == [
+        {"reason": "movie hit 'Resident Evil' held for confirmation (auto-apply off)"}
+    ]
+
+
+def test_unpausing_does_not_start_a_countdown_on_a_blocked_miss() -> None:
+    """A blocked miss waits for Start with no countdown; a miss parked on the
+    review countdown (unidentified too) gets a fresh one."""
+    db = _db(PreviouslyRippedAction.HOLD)
+    db.rows["config"][0].ripping_paused = True
+    blocked = _held("job_01M4R7CH6DK8PA8MPD79PATMPB")
+    blocked.metadata_json = {"flags": {"unidentified": True, "blocked_miss": True}}
+    counting = _held("job_01M4R7CH6DK8PA8MPD79PATMPC")
+    counting.metadata_json = {"flags": {"unidentified": True}}
+    db.rows["jobs"].extend([blocked, counting])
+    client, auth = _config_client(db)
+    with client:
+        assert client.patch("/api/config", json={"ripping_paused": False}, headers=auth).status_code == 200
+    assert blocked.wait_start_time is None
+    assert counting.wait_start_time is not None

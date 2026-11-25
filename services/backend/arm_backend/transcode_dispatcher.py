@@ -34,10 +34,16 @@ from arm_backend.docker_probe import TtlProbe, probe_backend_url, probe_docker
 from arm_backend.gpu_claim import (
     GpuAssignment,
     assignment_before_device_lookup,
+    assignment_when_only_family_invalid,
     assignment_with_no_candidate,
+    exclude_ffmpeg_engine,
+    exclude_invalid_families,
+    invalid_families_or_failure,
+    issue_messages,
     pick_free_gpu,
     release_gpu_for_task,
 )
+from arm_backend.log_safely import log_safely
 from arm_backend.transcode_container_spec import (
     backend_url_for_spawn,
     container_identity_env,
@@ -49,6 +55,7 @@ from arm_backend.transcode_container_spec import (
 from arm_backend.transcode_image_pool import TranscodeImagePool
 from arm_backend.transcode_images import image_for
 from arm_backend.transcode_sweeps import TranscodeSweeps
+from arm_backend.transcode_task_events import GpuWaitLog, announce_failed
 from arm_backend.transcode_queue import max_parallel_transcodes, resolve_preset_for_task
 from arm_common import (
     Gpu,
@@ -67,7 +74,11 @@ from arm_common.encoders import (
 )
 
 if TYPE_CHECKING:
+    from arm_backend.handbrake_schema_store import SchemaStore
     from arm_backend.ws.hub import WSHub
+    from arm_common.encoders import EncoderSpec
+    from arm_common.handbrake_schema.types import HandbrakeSchema
+    from arm_common.schemas import SettingIssue
 
 logger = logging.getLogger("arm_backend.transcode_dispatcher")
 
@@ -134,9 +145,14 @@ class _SpawnPass:
         # when an encode task is actually ready to spawn.
         self.host_probe = None
 
-        self.encode_slots = await self._free_encode_slots()
+        # Spawned on an earlier pass, not yet claimed: still QUEUED, but its
+        # container exists. It is neither spawned again (#642) nor gives its
+        # encode slot away; `sweep_unclaimed_spawns` handles one that never claims.
+        awaiting_claim = await self._dispatcher._still_awaiting_claim(self._db)
+        self.encode_slots = await self._free_encode_slots() - len(awaiting_claim)
         for task_id in await self._queued_task_ids():
-            await self._handle_queued(task_id)
+            if task_id not in awaiting_claim:
+                await self._handle_queued(task_id)
         if self.held_encode:
             logger.debug(
                 "%d encode task(s) held (enabled=%s docker=%s)",
@@ -145,6 +161,7 @@ class _SpawnPass:
                 self._dispatcher._docker is not None,
             )
         await self._db.commit()
+        await log_safely("transcode.waiting", self._dispatcher.gpu_waits.settle(self._db))
         return self.spawned
 
     async def _free_encode_slots(self) -> int:
@@ -199,7 +216,7 @@ class _SpawnPass:
 
     async def _job_id_for(self, task: TranscodeTask) -> str | None:
         # Load the owning application once so the spawn log lines carry
-        # job_id for the per-job log view (Phase 12).
+        # job_id for the per-job log view.
         application = (
             await self._db.execute(
                 select(SessionApplication).where(col(SessionApplication.id) == task.session_application_id)
@@ -284,19 +301,19 @@ class _SpawnPass:
         # current and still QUEUED, right before we act on it.
         assignment = await self._dispatcher._claim_gpu_for_task(self._db, task, preset)
         if assignment.action == "queue":
-            self._log_waiting(task, assignment)
+            await self._log_waiting(task, assignment)
             return
+        self._dispatcher.gpu_waits.resumed(task_id)
         if assignment.action == "fail":
             await self._fail_isolated(task, task_id, str(assignment.reason))
             return
         await self._spawn_claimed_task(task, task_id, assignment)
 
-    def _log_waiting(self, task: TranscodeTask, assignment: GpuAssignment) -> None:
-        logger.info(
-            "transcode task waiting for GPU encoder=%s task_id=%s%s",
-            assignment.encoder.id if assignment.encoder is not None else None,
-            task.id,
-            f" ({assignment.reason})" if assignment.reason else "",
+    async def _log_waiting(self, task: TranscodeTask, assignment: GpuAssignment) -> None:
+        """Log the task's GPU wait the first time it queues for one (see `GpuWaitLog`)."""
+        encoder = assignment.encoder.id if assignment.encoder is not None else None
+        await log_safely(
+            "transcode.waiting", self._dispatcher.gpu_waits.waiting(self._db, task, encoder, assignment.reason)
         )
 
     async def _fail_isolated(self, task: TranscodeTask, task_id: str, reason: str) -> None:
@@ -329,7 +346,11 @@ class _SpawnPass:
             # thread doesn't put any DB access off the loop.
             await asyncio.to_thread(self._dispatcher._spawn_container, task, assignment=assignment)
             started = True
+            # Recorded before the commit: even if the GPU-claim commit fails,
+            # the container exists and must not be spawned a second time.
+            self._dispatcher._awaiting_claim[task_id] = self._dispatcher._clock()
             self.spawned += 1
+            self._dispatcher.gpu_waits.spawned(task_id)
             self._dispatcher.last_spawn_error = None
             # Commit this task's GPU claim promptly, per-task, right
             # after its container is confirmed running: a later
@@ -401,9 +422,14 @@ class TranscodeDispatcher:
         docker_client: Any,
         hub: WSHub,
         docker_client_factory: Callable[[], Any] | None = None,
+        *,
+        schema_store: SchemaStore | None = None,
     ) -> None:
         self._settings = settings
         self._db_factory = db_factory
+        # The loaded HandBrake schema the claim checks a preset's settings
+        # against; with none (or none loaded) settings are not checked.
+        self._schema_store = schema_store
         # Every docker call goes through this wrapper, which reopens a dead
         # docker-over-SSH transport (see arm_backend.docker_client) and then
         # drops every cached probe answer made against the dead client.
@@ -456,6 +482,14 @@ class TranscodeDispatcher:
         # querying live; it is only ever stale for the window between a GPU
         # being enabled and the next tick or claim.
         self._enabled_gpu_vendors: set[GpuVendor] = set()
+        # Tasks logged as waiting for a GPU: each wait logs once on entry and
+        # once when the task spawns, fails or leaves the queue.
+        self.gpu_waits = GpuWaitLog()
+        # Spawned transcoders that have not claimed their task yet: task id ->
+        # spawn time on `_clock`. Kept in-process like `claimed_gpu_ids`; after
+        # a restart `watch_restart_claims` re-adds the ones still holding a GPU.
+        self._awaiting_claim: dict[str, float] = {}
+        self._clock: Callable[[], float] = time.monotonic
 
     @property
     def docker_client(self) -> HealingDockerClient | None:
@@ -485,6 +519,11 @@ class TranscodeDispatcher:
             self._settings.ARM_TRANSCODE_IMAGE,
             self._tick_interval,
         )
+        try:
+            async with self._db_factory() as db:
+                await self.watch_restart_claims(db)
+        except Exception as exc:  # never keep the loop from starting
+            logger.exception("could not pick up GPU claims left by a restart: %s", exc)
         while not self._stop.is_set():
             try:
                 await self._tick()
@@ -500,6 +539,7 @@ class TranscodeDispatcher:
         async with self._db_factory() as db:
             await self._refresh_enabled_gpu_vendors(db)
             await self.sweeps.sweep_stale_claims(db)
+            await self.sweep_unclaimed_spawns(db)
             await self.sweeps.sweep_orphaned_applications(db)
             await db.commit()
             await self.spawn_pending(db)
@@ -518,6 +558,100 @@ class TranscodeDispatcher:
         `run()`'s per-tick catch-all) and never affects `ok`."""
         all_gpus = (await db.execute(select(Gpu))).scalars().all()
         self._enabled_gpu_vendors = _enabled_vendors(all_gpus)
+
+    # --- spawned, not yet claimed -----------------------------------------------
+
+    async def _still_awaiting_claim(self, db: AsyncSession) -> set[str]:
+        """The tracked spawns whose task is still QUEUED. Forgets the rest: a
+        task that was claimed, finished, failed or deleted needs no watching."""
+        if not self._awaiting_claim:
+            return set()
+        rows = (
+            (await db.execute(select(TranscodeTask).where(col(TranscodeTask.id).in_(tuple(self._awaiting_claim)))))
+            .scalars()
+            .all()
+        )
+        queued = {r.id for r in rows if r.status == TranscodeTaskStatus.QUEUED}
+        for task_id in set(self._awaiting_claim) - queued:
+            del self._awaiting_claim[task_id]
+        return queued
+
+    async def watch_restart_claims(self, db: AsyncSession) -> None:
+        """After a restart, treat every QUEUED task still holding a GPU as
+        spawned now. Its transcoder may have outlived the restart and claim
+        shortly; if it never does, `sweep_unclaimed_spawns` frees the GPU after
+        the stale threshold instead of leaving it BUSY for good (#251)."""
+        claimants = [
+            g.claimed_by_task_id
+            for g in (await db.execute(select(Gpu).where(col(Gpu.status) == GpuStatus.BUSY))).scalars().all()
+            if g.claimed_by_task_id is not None
+        ]
+        if not claimants:
+            return
+        tasks = (
+            (await db.execute(select(TranscodeTask).where(col(TranscodeTask.id).in_(tuple(claimants))))).scalars().all()
+        )
+        now = self._clock()
+        for task in tasks:
+            if task.status == TranscodeTaskStatus.QUEUED:
+                self._awaiting_claim.setdefault(task.id, now)
+
+    async def sweep_unclaimed_spawns(self, db: AsyncSession) -> int:
+        """Recover spawns still unclaimed after ARM_TRANSCODE_STALE_THRESHOLD_SECONDS.
+
+        A transcoder claims within seconds of starting; one that has not (it
+        cannot reach the backend: a wrong URL, a certificate without that
+        address, DNS) would otherwise hold its GPU forever, and on a single-GPU
+        host every other task would wait behind it (#251). Each one is stopped,
+        its GPU released and the attempt counted, ending the task at
+        ARM_TRANSCODE_MAX_ATTEMPTS. Returns how many were recovered.
+        """
+        threshold = self._settings.ARM_TRANSCODE_STALE_THRESHOLD_SECONDS
+        now = self._clock()
+        overdue = [t for t in await self._still_awaiting_claim(db) if now - self._awaiting_claim[t] > threshold]
+        for task_id in overdue:
+            del self._awaiting_claim[task_id]
+            try:
+                await self._recover_unclaimed_spawn(db, task_id, threshold)
+            except Exception as exc:
+                # Never abort the tick; the next tick's spawn pass retries the task.
+                logger.exception("could not recover unclaimed transcode spawn task_id=%s: %s", task_id, exc)
+                await db.rollback()
+        return len(overdue)
+
+    async def _recover_unclaimed_spawn(self, db: AsyncSession, task_id: str, threshold: float) -> None:
+        task = (
+            await db.execute(
+                select(TranscodeTask).where(col(TranscodeTask.id) == task_id).execution_options(populate_existing=True)
+            )
+        ).scalar_one_or_none()
+        if task is None or task.status != TranscodeTaskStatus.QUEUED:
+            return  # claimed (or gone) since the check
+        reason = (
+            f"transcoder never claimed the task within {threshold:g} s of starting (can it reach the backend?); "
+            f"see its log arm-transcode-{task_id[-12:]}.log"
+        )
+        self.last_spawn_error = reason
+        logger.warning("transcode spawn unclaimed, stopping it task_id=%s: %s", task_id, reason)
+        # Stop it first, so a late claim cannot race the next spawn of the task.
+        await asyncio.to_thread(self._stop_task_containers, task_id)
+        self.gpu_waits.unclaimed(task_id)
+        await release_gpu_for_task(db, task_id)
+        task.attempts = (task.attempts or 0) + 1
+        if task.attempts >= self._settings.ARM_TRANSCODE_MAX_ATTEMPTS:
+            await self._fail_queued_task(db, task, f"{reason} (attempts={task.attempts})")
+            return
+        await db.commit()
+
+    def _stop_task_containers(self, task_id: str) -> None:
+        """Stop any container still running for `task_id`; best effort. Blocking."""
+        if self._docker_client is None:
+            return
+        try:
+            for container in self._docker_client.containers.list(filters={"label": f"{_DOCKER_LABEL_KEY}={task_id}"}):
+                container.stop(timeout=5)
+        except Exception as exc:
+            logger.warning("could not stop the unclaimed transcoder task_id=%s: %s", task_id, exc)
 
     # --- spawn loop ---------------------------------------------------------
 
@@ -618,15 +752,45 @@ class TranscodeDispatcher:
         - otherwise no eligible device: `any_<codec>` falls back to
           `cpu_<codec>`; a vendor-pinned encoder fails the task.
         - an encoder id missing from the catalog fails the task.
+        - with a schema loaded and a preset carrying HandBrake settings, the
+          families those settings make invalid are skipped under `any_<codec>`
+          (other devices, then CPU; the task fails only when none is valid)
+          and fail a single-family encoder; an unknown base preset fails the
+          task. A preset carrying HandBrake settings never claims a VAAPI
+          device (ffmpeg engine), schema or not.
 
         Eligibility (enabled, probed, codec verified) is `gpu_is_eligible`;
         a device in `probing_gpu_ids` is never claimed.
         """
         decided = assignment_before_device_lookup(preset)
+        if isinstance(decided, GpuAssignment) and (preset is None or decided.action == "fail"):
+            return decided
+        assert preset is not None  # a no-preset claim is always decided above
+        invalid = invalid_families_or_failure(self._current_schema(), preset)
+        if isinstance(invalid, GpuAssignment):
+            return invalid
+        blocked = assignment_when_only_family_invalid(decided, invalid)
+        if blocked is not None:
+            return blocked
         if isinstance(decided, GpuAssignment):
             return decided
-        assert preset is not None  # a spec is only returned for a real preset
-        spec = decided
+        assignment = await self._claim_device(db, task, preset, decided, invalid)
+        self._log_skipped_families(task, invalid, assignment)
+        return assignment
+
+    def _current_schema(self) -> HandbrakeSchema | None:
+        return self._schema_store.current() if self._schema_store is not None else None
+
+    async def _claim_device(
+        self,
+        db: AsyncSession,
+        task: TranscodeTask,
+        preset: TranscodePreset,
+        spec: EncoderSpec,
+        invalid: dict[str, list[SettingIssue]],
+    ) -> GpuAssignment:
+        """Claim the best free device that can run `spec` for this preset,
+        or decide what to do when none can (`assignment_with_no_candidate`)."""
         codec = str(spec.codec)
         # Filter in Python: `text[]` ANY predicates are awkward to express in
         # SQLAlchemy ORM and the in-memory test fake doesn't grok them. The
@@ -637,12 +801,13 @@ class TranscodeDispatcher:
         # ffmpeg engine cannot write WebM (a pinned vaapi_* + WebM preset is
         # refused at create time).
         all_gpus = [g for g in all_gpus if vendor_supports_container(g.vendor, preset.container)]
+        all_gpus = self._exclude_for_settings(all_gpus, preset, codec, invalid)
         eligible = [
             g for g in all_gpus if gpu_is_eligible(g, codec) and (spec.kind == "any" or g.vendor == spec.vendor)
         ]
         candidates = [g for g in eligible if g.id not in self.probing_gpu_ids]
         if not candidates:
-            return assignment_with_no_candidate(spec, codec, eligible, all_gpus, self.awaiting_probe)
+            return assignment_with_no_candidate(spec, codec, eligible, all_gpus, self.awaiting_probe, invalid)
         gpu = pick_free_gpu(candidates)
         if gpu is None:
             return GpuAssignment(gpu=None, encoder=spec, action="queue")
@@ -652,22 +817,45 @@ class TranscodeDispatcher:
         resolved = spec if spec.kind == "gpu" else gpu_encoder_for(gpu.vendor, codec)
         return GpuAssignment(gpu=gpu, encoder=resolved, action="spawn")
 
+    def _exclude_for_settings(
+        self, gpus: list[Gpu], preset: TranscodePreset, codec: str, invalid: dict[str, list[SettingIssue]]
+    ) -> list[Gpu]:
+        """Drop the devices the preset's HandBrake settings rule out: the
+        ffmpeg VAAPI engine whenever it has settings, schema or not, and
+        the families the claim-time check found invalid (`invalid` is
+        empty without a loaded schema)."""
+        return exclude_invalid_families(exclude_ffmpeg_engine(gpus, preset), codec, invalid)
+
+    def _log_skipped_families(
+        self, task: TranscodeTask, invalid: dict[str, list[SettingIssue]], assignment: GpuAssignment
+    ) -> None:
+        """Log each family the preset's settings ruled out, once for the
+        claim that spawns the task (a queued claim repeats every tick; a
+        failed one carries every family in its reason)."""
+        if assignment.action != "spawn":
+            return
+        for family, issues in invalid.items():
+            logger.info("skipping %s for task %s: %s", family, task.id, issue_messages(issues))
+
     async def _fail_queued_task(self, db: AsyncSession, task: TranscodeTask, reason: str) -> None:
         """Terminal-fail a queued task that can never run as configured, emit
-        `task.failed`, settle its session application, and commit."""
-        from arm_backend.transcode_apply import emit_task_failed, settle_session_application
+        `task.failed`, settle its session application, commit, then log
+        `transcode.failed` and any `session.completed` to the job log."""
+        from arm_backend.transcode_apply import emit_task_failed, log_session_settled, settle_session_application
 
         task.status = TranscodeTaskStatus.FAILED
         task.last_error = reason
-        logger.error("transcode task failed before spawn task_id=%s: %s", task.id, reason)
+        logger.debug("transcode task failed before spawn task_id=%s: %s", task.id, reason)
         await emit_task_failed(self._hub, db, task)
         application = (
             await db.execute(
                 select(SessionApplication).where(col(SessionApplication.id) == task.session_application_id)
             )
         ).scalar_one()
-        await settle_session_application(db, self._hub, application)
+        outcome = await settle_session_application(db, self._hub, application)
         await db.commit()
+        await log_safely("transcode.failed", announce_failed(db, task, reason))
+        await log_session_settled(db, application, outcome)
 
     def host_paths_set(self) -> bool:
         return bool(
@@ -762,7 +950,7 @@ class TranscodeDispatcher:
         # A dead ssh transport is rebuilt and the run retried once by the
         # client; a second failure propagates into spawn_pending's handling.
         container = self._docker_client.containers.run(**run_kwargs)
-        logger.info(
+        logger.debug(
             "transcode spawned task_id=%s container=%s image=%s gpu=%s",
             task.id,
             hostname,

@@ -30,32 +30,11 @@ _DIAGNOSTIC_MSG_CODES = frozenset({1002, 3032, 5003, 5037})
 TITLE_FAIL_CODE = 5003
 
 
-def parse_progress_line(line: str) -> float | None:
-    """Return the per-operation fractional progress [0, 1] from a PRGV
-    line (`current/max`), or None.
+def parse_progress_fractions(line: str) -> tuple[float, float] | None:
+    """Return `(current/max, total/max)`, each clamped to [0, 1], from a PRGV line, or None.
 
-    Used to drive per-title progress when a "Saving title #N" PRGT
-    has previously identified the in-flight title. In `mkv all` mode
-    the per-title PRGT never fires; see `parse_progress_totals` for
-    the disc-overall fallback.
-    """
-    m = _PRGV_RE.match(line.strip())
-    if not m:
-        return None
-    _current, _total, max_ = (int(g) for g in m.groups())
-    if max_ <= 0:
-        return None
-    return min(1.0, max(0.0, _current / max_))
-
-
-def parse_progress_totals(line: str) -> tuple[float, float] | None:
-    """Return (current/max, total/max) from a PRGV line, or None.
-
-    `current/max` is per-operation progress (resets between titles in
-    `mkv ... all` mode); `total/max` is disc-overall progress that
-    advances monotonically across the whole rip. The streamer uses the
-    `total` channel as the disc-level signal when no per-title PRGT
-    has set `current_title`.
+    `current/max` is the current operation's progress, which resets at each
+    title in `mkv ... all` mode; `total/max` is the whole disc's.
     """
     m = _PRGV_RE.match(line.strip())
     if not m:
@@ -63,9 +42,7 @@ def parse_progress_totals(line: str) -> tuple[float, float] | None:
     current, total, max_ = (int(g) for g in m.groups())
     if max_ <= 0:
         return None
-    cur_frac = min(1.0, max(0.0, current / max_))
-    tot_frac = min(1.0, max(0.0, total / max_))
-    return cur_frac, tot_frac
+    return min(1.0, max(0.0, current / max_)), min(1.0, max(0.0, total / max_))
 
 
 def parse_msg_args(line: str) -> tuple[int, list[str]] | None:
@@ -133,8 +110,6 @@ def parse_prgc_save_position(line: str) -> int | None:
     with the second field stepping 0, 1, 2, … through the eligible
     titles in rip order. That position matches the `_tNN.mkv` filename
     suffix and indexes into the dispatcher's `eligible_source_indexes`.
-    Reference v2's parser at arm/ui/jobs/json_api.py:116 which uses the
-    same field.
     """
     m = _PRGC_SAVE_TITLE_RE.match(line.strip())
     if not m:

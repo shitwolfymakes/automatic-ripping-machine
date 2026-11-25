@@ -62,7 +62,7 @@ async def test_seed_config_backfills_missing_signing_key() -> None:
 
 
 async def test_fresh_config_singleton_carries_the_env_parallel_cap(monkeypatch: pytest.MonkeyPatch) -> None:
-    """D-060: a first boot seeds max_parallel_transcodes from the env value,
+    """A first boot seeds max_parallel_transcodes from the env value,
     so Settings and the dispatcher agree before the second boot."""
     from arm_backend.config import settings
 
@@ -166,7 +166,7 @@ async def test_seed_session_routes_skips_when_table_not_empty() -> None:
 
 
 async def test_seed_session_routes_flips_flag_on_fresh_seed(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """I1: a fresh empty DB seeds the built-ins once and flips
+    """A fresh empty DB seeds the built-ins once and flips
     `session_routes_seeded` true so a later boot's empty table (deliberately
     cleared) does not get reseeded."""
     monkeypatch.setattr(seeders, "FIRST_BOOT_LOG", tmp_path / "fb.log")
@@ -179,7 +179,7 @@ async def test_seed_session_routes_flips_flag_on_fresh_seed(tmp_path: Path, monk
 async def test_upgraded_install_with_flag_false_and_empty_routes_seeds_once(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Fix 76-1: simulates an existing deployment that has been through
+    """Simulates an existing deployment that has been through
     migration 0035 under the corrected (conditional) UPDATE — a config row
     already exists with `session_routes_seeded=False` because
     session_routes was empty at migration time (the seeder never shipped
@@ -214,7 +214,7 @@ async def test_upgraded_install_with_flag_false_and_empty_routes_seeds_once(
 async def test_delete_all_routes_then_rerun_seeders_stays_empty(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """I1: clearing every session route and re-running seeders must not
+    """Clearing every session route and re-running seeders must not
     resurrect them — the one-shot marker set on the first boot prevents the
     empty-table gate from re-firing."""
     monkeypatch.setattr(seeders, "FIRST_BOOT_LOG", tmp_path / "fb.log")
@@ -254,7 +254,7 @@ async def test_run_seeders_syncs_builtin_session_templates(tmp_path: Path, monke
     db = FakeSession()
     await run_seeders(db)
     builtin = next(s for s in db.rows["sessions"] if s.id == "ses_builtin_movie_plex_1080p")
-    old = "{title} ({year})/{title} ({year}) - Track {track} - {transcode_slug}.{ext}"
+    old = "{title} ({year?})/{title} ({year?}) - Track {track} - {transcode_slug}.{ext}"
     builtin.output_path_template = old
     from arm_common import Session
 
@@ -272,8 +272,8 @@ async def test_run_seeders_syncs_builtin_session_templates(tmp_path: Path, monke
 
     await run_seeders(db)
 
-    assert (
-        builtin.output_path_template == "{title} ({year?})/{title} ({year?}) - Track {track} - {transcode_slug}.{ext}"
+    assert builtin.output_path_template == (
+        "{title} ({year?}) [{edition?}]/{title} ({year?}) [{edition?}] ({track_label?}) - {transcode_slug}.{ext}"
     )
     clone = next(s for s in db.rows["sessions"] if s.id == "ses_user_clone")
     assert clone.output_path_template == old
@@ -305,3 +305,11 @@ async def test_run_seeders_adds_the_bd_backup_builtins(tmp_path: Path, monkeypat
     assert session.rip_preset_id == "rpr_builtin_bd_backup"
     assert session.transcode_preset_id == "tpr_builtin_iso_passthrough"
     assert session.output_path_template == "{title} ({year?})"
+
+
+def test_builtin_archive_templates_carry_the_duration() -> None:
+    archive = next(r for r in seeders.SESSIONS if r["id"] == "ses_builtin_movie_archive")
+    assert archive["output_path_template"] == (
+        "{title} ({year?}) [{edition?}]/{title} ({year?}) [{edition?}] ({track_label?})"
+        " ({duration_human}) - {transcode_slug}.{ext}"
+    )

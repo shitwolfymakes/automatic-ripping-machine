@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import ssl
 from collections.abc import Awaitable, Callable, Iterator
 from contextlib import contextmanager
@@ -15,7 +16,7 @@ import pytest
 
 import arm_transcode.main as m
 from arm_common import ContainerFormat, MediaType, TranscodeTool
-from arm_common.schemas import HardwareCaps, TranscodePresetView, WSEnvelope
+from arm_common.schemas import HardwareCaps, MusicTags, TranscodePresetView, WSEnvelope
 from arm_transcode.heartbeat import ProgressState
 
 
@@ -27,7 +28,7 @@ def _handbrake_preset(*, preset_ref: str | None, extra_args: str | None = None) 
         is_builtin=True,
         tool=TranscodeTool.HANDBRAKE,
         preset_ref=preset_ref,
-        preset_json=None,
+        handbrake_settings=None,
         container=ContainerFormat.MKV,
         encoder="vaapi_h265",
         extra_args=extra_args,
@@ -57,6 +58,9 @@ class Harness:
         self.size = 4242
         self.encoder_exc: BaseException | None = None
         self.register_exc: BaseException | None = None
+        self.cover: tuple[bytes, str] | None = None
+        self.cover_exc: BaseException | None = None
+        self.cover_seen: bytes | None = None
         self.response = SimpleNamespace(
             task=SimpleNamespace(
                 output_path="Movies/Film/film.mkv", source_track_id="trk1", session_application_id="sa1"
@@ -65,6 +69,7 @@ class Harness:
             transcode_preset=_handbrake_preset(preset_ref="x"),
             raw_input_path="/raw/in.mkv",
             media_root="/media",
+            music_tags=None,
         )
 
     def names(self) -> list[str]:
@@ -91,6 +96,12 @@ def h(monkeypatch: pytest.MonkeyPatch) -> Harness:
             if hs.register_exc is not None:
                 raise hs.register_exc
             return hs.response
+
+        async def cover_art(self, task_id: str) -> tuple[bytes, str] | None:
+            hs.calls.append(("cover_art", task_id))
+            if hs.cover_exc is not None:
+                raise hs.cover_exc
+            return hs.cover
 
         async def claim(self, *args: Any) -> None:
             hs.claim_inside = hs.inside
@@ -146,6 +157,8 @@ def h(monkeypatch: pytest.MonkeyPatch) -> Harness:
     async def fake_run_encoder(**kwargs: Any) -> int:
         hs.encoder_inside = hs.inside
         hs.encoder_kwargs = kwargs
+        cover = kwargs.get("cover_path")
+        hs.cover_seen = cover.read_bytes() if cover is not None else None
         hs.calls.append(("encode", None))
         if hs.encoder_exc is not None:
             raise hs.encoder_exc
@@ -199,6 +212,10 @@ async def test_success(h: Harness) -> None:
     assert h.pump_kwargs["ws"] is not None
     assert isinstance(ek["cancel_event"], asyncio.Event)
     assert not ek["cancel_event"].is_set()
+    assert ek["music_tags"] is None
+    assert ek["cover_path"] is None
+    # No music tags, no music job: the cover is never asked for.
+    assert "cover_art" not in h.names()
 
     assert h.complete_kwargs == {
         "args": ("t1",),
@@ -209,6 +226,62 @@ async def test_success(h: Harness) -> None:
     assert "fail" not in h.names()
     assert h.names().count("close") == 1
     assert h.names()[-1] == "close"
+
+
+async def test_music_tags_reach_the_encoder(h: Harness) -> None:
+    tags = MusicTags(artist="Radiohead", track_number=1)
+    h.response.music_tags = tags  # type: ignore[assignment]
+    assert await m.run() == 0
+    assert h.encoder_kwargs["music_tags"] is tags
+
+
+async def test_cover_art_is_downloaded_for_the_encoder_and_removed_after(h: Harness) -> None:
+    h.response.music_tags = MusicTags(title="Airbag")  # type: ignore[assignment]
+    h.cover = (b"JPEGDATA", "image/jpeg")
+
+    assert await m.run() == 0
+
+    cover = h.encoder_kwargs["cover_path"]
+    assert ("cover_art", "t1") in h.calls
+    assert cover.suffix == ".jpg"
+    assert h.cover_seen == b"JPEGDATA"
+    assert not cover.exists()
+
+
+async def test_png_cover_keeps_its_extension(h: Harness) -> None:
+    h.response.music_tags = MusicTags()  # type: ignore[assignment]
+    h.cover = (b"PNGDATA", "image/png")
+
+    assert await m.run() == 0
+
+    assert h.encoder_kwargs["cover_path"].suffix == ".png"
+
+
+async def test_track_without_cover_art_encodes_without_one(h: Harness) -> None:
+    h.response.music_tags = MusicTags()  # type: ignore[assignment]
+
+    assert await m.run() == 0
+
+    assert h.encoder_kwargs["cover_path"] is None
+
+
+async def test_cover_of_an_unembeddable_type_is_dropped(h: Harness) -> None:
+    h.response.music_tags = MusicTags()  # type: ignore[assignment]
+    h.cover = (b"WEBP", "image/webp")
+
+    assert await m.run() == 0
+
+    assert h.encoder_kwargs["cover_path"] is None
+
+
+async def test_failed_cover_download_never_fails_the_encode(h: Harness) -> None:
+    h.response.music_tags = MusicTags()  # type: ignore[assignment]
+    h.cover_exc = RuntimeError("backend unreachable")
+
+    assert await m.run() == 0
+
+    assert h.encoder_kwargs["cover_path"] is None
+    assert "complete" in h.names()
 
 
 async def test_no_preset_uses_tool_none(h: Harness) -> None:
@@ -334,6 +407,28 @@ async def test_report_complete_sends_path_relative_to_media_root() -> None:
         duration=7,
     )
     assert api.calls == [("t1", {"output_path": "Movies/a.mkv", "size_bytes": 5, "duration_seconds": 7})]
+
+
+async def test_report_complete_logs_the_completion_at_debug(caplog: pytest.LogCaptureFixture) -> None:
+    api = _CompleteRecorder()
+    with caplog.at_level(logging.DEBUG, logger="arm_transcode.main"):
+        await m._report_complete(
+            api=api,  # type: ignore[arg-type]
+            task_id="t1",
+            media_root="/media",
+            final_output=Path("/media/Movies/a.mkv"),
+            size=5,
+            duration=7,
+        )
+    [record] = [r for r in caplog.records if r.getMessage().startswith("task complete output=")]
+    assert record.levelno == logging.DEBUG
+
+
+async def test_startup_line_logs_at_debug(h: Harness, caplog: pytest.LogCaptureFixture) -> None:
+    with caplog.at_level(logging.DEBUG, logger="arm_transcode.main"):
+        assert await m.run() == 0
+    [record] = [r for r in caplog.records if r.getMessage().startswith("transcoder starting")]
+    assert record.levelno == logging.DEBUG
 
 
 async def test_report_complete_output_equal_to_media_root_is_dot() -> None:

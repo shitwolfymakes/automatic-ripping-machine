@@ -34,6 +34,7 @@ from arm_common.schemas.files import (
     MoveRequest,
     RenameRequest,
 )
+from arm_common.schemas.handbrake import HandbrakeSchemaSlimView, HandbrakeSettings, IssueCode, SettingIssue
 from arm_common.schemas.identity import (
     ClaimStatus,
     IdentityClaims,
@@ -78,8 +79,10 @@ from arm_common.schemas.job_metadata import (
     PreviouslyRipped,
     flag_is_set,
     identity_suggestion_of,
+    no_countdown_reason,
     previously_ripped_job_id,
     with_flags,
+    without_flags,
     without_identity_suggestion,
 )
 from arm_common.schemas.jobs import (
@@ -174,6 +177,7 @@ from arm_common.schemas.transcoder import (
     FailTaskRequest,
     HardwareCaps,
     HeartbeatRequest,
+    MusicTags,
     RegisterTranscoderRequest,
     RegisterTranscoderResponse,
     TranscodeStatsView,
@@ -242,6 +246,10 @@ from arm_common.schemas.ws import (
 )
 
 __all__ = [
+    "HandbrakeSchemaSlimView",
+    "HandbrakeSettings",
+    "IssueCode",
+    "SettingIssue",
     "AbandonJobRequest",
     "AppriseChannelConfig",
     "BdDiscMeta",
@@ -353,6 +361,7 @@ __all__ = [
     "SystemDiagnosticCheck",
     "SystemDiagnosticsResponse",
     "RegisterRequest",
+    "MusicTags",
     "RegisterTranscoderRequest",
     "RegisterTranscoderResponse",
     "RenameRequest",
@@ -368,11 +377,13 @@ __all__ = [
     "MusicMeta",
     "MusicTrackMeta",
     "PreviouslyRipped",
+    "no_countdown_reason",
     "previously_ripped_job_id",
     "identity_suggestion_of",
     "without_identity_suggestion",
     "flag_is_set",
     "with_flags",
+    "without_flags",
     "ResolveFanOutOutcomeView",
     "ResolveMatch",
     "ResolveRequest",

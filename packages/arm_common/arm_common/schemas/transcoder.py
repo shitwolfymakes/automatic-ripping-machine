@@ -1,4 +1,4 @@
-"""Phase 7 wire schemas: transcoder ↔ Backend.
+"""Wire schemas: transcoder ↔ Backend.
 
 The transcode container is short-lived and single-purpose; its API surface is
 five endpoints (register / claim / heartbeat / complete / fail). The Backend
@@ -21,8 +21,8 @@ from arm_common.schemas.sessions import (
 
 
 class HardwareCaps(BaseModel):
-    """Self-reported transcoder capabilities. Phase 7 (CPU-only) ignores these;
-    Phase 7b consumes them for GPU dispatch + `gpus` row writes.
+    """Self-reported transcoder capabilities. The Backend does not dispatch on
+    these; GPU eligibility comes from the probed `gpus` rows.
     """
 
     cpu_count: int = Field(ge=1)
@@ -35,6 +35,23 @@ class RegisterTranscoderRequest(BaseModel):
     task_id: str
     hostname: str
     hw_caps: HardwareCaps
+    schema_hash: str | None = None  # content hash of the image's HandBrake schema; None before this feature
+
+
+class MusicTags(BaseModel):
+    """The tags a music track's encoded file carries, from the job's stored
+    MusicBrainz identity. Every field is optional: an unknown one is left
+    out of the file rather than written empty."""
+
+    artist: str | None = None
+    album_artist: str | None = None
+    album: str | None = None
+    title: str | None = None
+    year: int | None = None
+    disc_number: int | None = None
+    track_number: int | None = None
+    track_total: int | None = None
+    musicbrainz_release_id: str | None = None
 
 
 class RegisterTranscoderResponse(BaseModel):
@@ -43,7 +60,8 @@ class RegisterTranscoderResponse(BaseModel):
     `raw_input_path` is the absolute path the transcoder should read from
     (`/raw/<job>/title_tNN.mkv` for video, `/raw/<job>/track_NN.wav` for
     audio, `/raw/<job>/dump.iso` for data). `media_root` plus the task's
-    `output_path` is where the final file lands.
+    `output_path` is where the final file lands. `music_tags` is set for a
+    music job's track only.
     """
 
     task: TranscodeTaskView
@@ -52,6 +70,7 @@ class RegisterTranscoderResponse(BaseModel):
     source_track: TrackView
     raw_input_path: str
     media_root: str
+    music_tags: MusicTags | None = None
 
 
 class ClaimTaskResponse(BaseModel):

@@ -1,20 +1,24 @@
 """End-to-end tests for the `/api/transcoder/*` endpoints.
 
-Uses the same FakeSession + TestClient pattern as the Phase 6 router tests.
+Uses the same FakeSession + TestClient pattern as the other router tests.
 Service-token auth (no JWT plumbing required).
 """
 
 from __future__ import annotations
 
+import logging
 from datetime import UTC, datetime
 from typing import Any, AsyncIterator
 
 
+import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from arm_backend.db import get_session
+from arm_backend.handbrake_schema_store import SchemaStore
 from arm_backend.routers import transcoder as transcoder_router
+from arm_backend.routers.images import ImageTooLarge, ImageUnavailable
 from arm_backend.ws import WSHub
 from arm_common import (
     ContainerFormat,
@@ -37,7 +41,10 @@ from arm_common import (
     TranscodeTaskStatus,
     TranscodeTool,
 )
+from arm_common.enums import MusicCoverMaxSize, MusicCoverSize
 from tests._fakes import FakeSession
+from tests._hb_schema import fixture_schema
+from tests._logs import LineCapture, log_commits
 
 _HOSTNAME = "arm-transcode-abc123"
 _SERVICE_AUTH = {"Authorization": "Bearer tok-service", "X-ARM-Hostname": _HOSTNAME}
@@ -126,9 +133,20 @@ def _seed(db: FakeSession, *, task_status: TranscodeTaskStatus = TranscodeTaskSt
     ]
 
 
-def _make_app(db: FakeSession) -> FastAPI:
+class _FakeRunner:
+    def __init__(self) -> None:
+        self.requested: list[str] = []
+
+    def request_refresh_if_hash_differs(self, schema_hash: str) -> None:
+        self.requested.append(schema_hash)
+
+
+def _make_app(db: FakeSession, *, store: SchemaStore | None = None, runner: _FakeRunner | None = None) -> FastAPI:
     app = FastAPI()
     app.state.ws_hub = WSHub()
+    app.state.handbrake_schema_store = store if store is not None else SchemaStore()
+    if runner is not None:
+        app.state.handbrake_schema_runner = runner
     app.include_router(transcoder_router.router)
 
     async def _override() -> AsyncIterator[FakeSession]:
@@ -158,6 +176,342 @@ def test_register_returns_bundle() -> None:
     assert body["raw_input_path"] == "/raw/job_01JZXR7K3M5Q8N4VWA00000001/title_t01.mkv"
     assert body["transcode_preset"]["preset_ref"] == "H.265 MKV 1080p30"
     assert body["session"]["id"] == "ses_x"
+    # A video job's track carries no music tags.
+    assert body["music_tags"] is None
+
+
+def test_register_returns_music_tags_for_a_cd_track() -> None:
+    db = FakeSession()
+    _seed(db)
+    job = db.rows["jobs"][0]
+    job.disc_type = DiscType.CD
+    job.media_type = MediaType.MUSIC
+    job.title = "OK Computer"
+    job.year = 1997
+    job.metadata_json = {
+        "identity": {"provider": "musicbrainz", "external_ids": {"musicbrainz_release": "mb-rel-1"}},
+        "music": {"artist": "Radiohead", "album": "OK Computer", "tracks": [{"title": "Airbag"}]},
+    }
+    db.rows["tracks"][0].kind = TrackKind.AUDIO_TRACK
+    app = _make_app(db)
+    with TestClient(app) as client:
+        r = client.post(
+            "/api/transcoder/register",
+            json={"task_id": "txt_1", "hostname": _HOSTNAME, "hw_caps": {"cpu_count": 4}},
+            headers=_SERVICE_AUTH,
+        )
+    assert r.status_code == 200, r.text
+    assert r.json()["music_tags"] == {
+        "artist": "Radiohead",
+        "album_artist": "Radiohead",
+        "album": "OK Computer",
+        "title": "Airbag",
+        "year": 1997,
+        "disc_number": None,
+        "track_number": 1,
+        "track_total": 1,
+        "musicbrainz_release_id": "mb-rel-1",
+    }
+
+
+def test_register_sends_only_the_switched_on_tags() -> None:
+    db = FakeSession()
+    _seed(db)
+    db.rows["sessions"][0].music_tag_fields = ["title", "track_number"]
+    job = db.rows["jobs"][0]
+    job.disc_type = DiscType.CD
+    job.media_type = MediaType.MUSIC
+    job.year = 1997
+    job.metadata_json = {"music": {"artist": "Radiohead", "album": "OK Computer", "tracks": [{"title": "Airbag"}]}}
+    db.rows["tracks"][0].kind = TrackKind.AUDIO_TRACK
+    with TestClient(_make_app(db)) as client:
+        r = client.post(
+            "/api/transcoder/register",
+            json={"task_id": "txt_1", "hostname": _HOSTNAME, "hw_caps": {"cpu_count": 4}},
+            headers=_SERVICE_AUTH,
+        )
+    assert r.status_code == 200, r.text
+    assert r.json()["music_tags"] == {
+        "artist": None,
+        "album_artist": None,
+        "album": None,
+        "title": "Airbag",
+        "year": None,
+        "disc_number": None,
+        "track_number": 1,
+        "track_total": None,
+        "musicbrainz_release_id": None,
+    }
+
+
+_AUTO_COVER = "https://coverartarchive.org/release/rel-1/front-250"
+_AUTO_COVER_FULL = "https://coverartarchive.org/release/rel-1/front-500"
+_MANUAL_COVER = "https://posters.lan/mine.jpg"
+
+
+def _seed_cd(db: FakeSession, *, poster_url: str | None = _AUTO_COVER, manual: str | None = None) -> None:
+    _seed(db)
+    job = db.rows["jobs"][0]
+    job.disc_type = DiscType.CD
+    job.media_type = MediaType.MUSIC
+    job.poster_url = poster_url
+    job.poster_url_manual = manual
+
+
+def _stub_images(
+    monkeypatch: pytest.MonkeyPatch,
+    served: dict[str, tuple[bytes, str]],
+    *,
+    too_large: frozenset[str] = frozenset(),
+    caps: list[int | None] | None = None,
+) -> list[str]:
+    """Serve `served` by URL through the image fetch the endpoint uses; a URL in
+    `too_large` is over any cap, and every other URL is unavailable. `caps`
+    collects the size cap of each fetch."""
+    requested: list[str] = []
+
+    async def fake_fetch(url: str, max_bytes: int | None = None) -> tuple[bytes, str]:
+        requested.append(url)
+        if caps is not None:
+            caps.append(max_bytes)
+        if url in too_large:
+            raise ImageTooLarge
+        if url not in served:
+            raise ImageUnavailable("Image unavailable")
+        return served[url]
+
+    monkeypatch.setattr(transcoder_router, "fetch_allowed_image", fake_fetch)
+    return requested
+
+
+def _get_cover(db: FakeSession, task_id: str = "txt_1") -> Any:
+    with TestClient(_make_app(db)) as client:
+        return client.get(f"/api/transcoder/tasks/{task_id}/cover-art", headers=_SERVICE_AUTH)
+
+
+def test_cover_art_serves_the_operator_override_first(monkeypatch: pytest.MonkeyPatch) -> None:
+    db = FakeSession()
+    _seed_cd(db, manual=_MANUAL_COVER)
+    requested = _stub_images(
+        monkeypatch, {_MANUAL_COVER: (b"MINE", "image/jpeg"), _AUTO_COVER_FULL: (b"AUTO", "image/jpeg")}
+    )
+
+    r = _get_cover(db)
+
+    assert r.status_code == 200
+    assert r.content == b"MINE"
+    assert r.headers["content-type"] == "image/jpeg"
+    assert requested == [_MANUAL_COVER]
+
+
+def test_cover_art_falls_back_to_the_automatic_cover(monkeypatch: pytest.MonkeyPatch) -> None:
+    db = FakeSession()
+    _seed_cd(db, manual=_MANUAL_COVER)
+    requested = _stub_images(monkeypatch, {_AUTO_COVER_FULL: (b"AUTO", "image/png")})
+
+    r = _get_cover(db)
+
+    assert r.status_code == 200
+    assert r.content == b"AUTO"
+    assert r.headers["content-type"] == "image/png"
+    assert requested == [_MANUAL_COVER, _AUTO_COVER_FULL]
+
+
+def test_cover_art_skips_an_image_type_the_files_cannot_embed(monkeypatch: pytest.MonkeyPatch) -> None:
+    db = FakeSession()
+    _seed_cd(db, manual=_MANUAL_COVER)
+    _stub_images(monkeypatch, {_MANUAL_COVER: (b"WEBP", "image/webp"), _AUTO_COVER_FULL: (b"AUTO", "image/jpeg")})
+
+    r = _get_cover(db)
+
+    assert r.status_code == 200
+    assert r.content == b"AUTO"
+
+
+def test_cover_art_404_when_no_cover_can_be_fetched(monkeypatch: pytest.MonkeyPatch) -> None:
+    db = FakeSession()
+    _seed_cd(db, manual=_MANUAL_COVER)
+    _stub_images(monkeypatch, {})
+
+    r = _get_cover(db)
+
+    assert r.status_code == 404
+    assert r.json()["detail"] == "no cover art"
+
+
+def test_cover_art_404_when_the_job_has_no_cover(monkeypatch: pytest.MonkeyPatch) -> None:
+    db = FakeSession()
+    _seed_cd(db, poster_url=None)
+    requested = _stub_images(monkeypatch, {})
+
+    assert _get_cover(db).status_code == 404
+    assert requested == []
+
+
+def test_cover_art_404_for_a_video_job(monkeypatch: pytest.MonkeyPatch) -> None:
+    db = FakeSession()
+    _seed(db)
+    db.rows["jobs"][0].poster_url = "https://image.tmdb.org/t/p/w500/x.jpg"
+    requested = _stub_images(monkeypatch, {"https://image.tmdb.org/t/p/w500/x.jpg": (b"P", "image/jpeg")})
+
+    assert _get_cover(db).status_code == 404
+    assert requested == []
+
+
+def test_cover_art_comes_in_the_session_size(monkeypatch: pytest.MonkeyPatch) -> None:
+    db = FakeSession()
+    _seed_cd(db)
+    db.rows["sessions"][0].music_cover_size = MusicCoverSize.PX_1200
+    big = "https://coverartarchive.org/release/rel-1/front-1200"
+    requested = _stub_images(monkeypatch, {big: (b"BIG", "image/jpeg"), _AUTO_COVER_FULL: (b"MID", "image/jpeg")})
+
+    r = _get_cover(db)
+
+    assert r.status_code == 200
+    assert r.content == b"BIG"
+    assert requested == [big]
+
+
+def test_cover_art_404_when_the_cover_is_switched_off(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    db = FakeSession()
+    _seed_cd(db)
+    db.rows["sessions"][0].music_tag_fields = ["artist", "title"]
+    requested = _stub_images(monkeypatch, {_AUTO_COVER_FULL: (b"AUTO", "image/jpeg")})
+
+    with caplog.at_level(logging.INFO, logger="arm_backend.routers.transcoder"):
+        r = _get_cover(db)
+
+    # Told apart from "none could be fetched", in the response and in the log.
+    assert r.status_code == 404
+    assert r.json()["detail"] == "cover art switched off"
+    assert f"cover art task_id=txt_1 skipped: switched off in session {db.rows['sessions'][0].id}" in caplog.messages
+    assert requested == []
+
+
+def test_cover_art_served_when_the_cover_is_switched_on(monkeypatch: pytest.MonkeyPatch) -> None:
+    db = FakeSession()
+    _seed_cd(db)
+    db.rows["sessions"][0].music_tag_fields = ["cover"]
+    _stub_images(monkeypatch, {_AUTO_COVER_FULL: (b"AUTO", "image/jpeg")})
+
+    r = _get_cover(db)
+
+    assert r.status_code == 200
+    assert r.content == b"AUTO"
+
+
+_CAA = "https://coverartarchive.org/release/rel-1/"
+
+
+def test_cover_art_too_large_in_the_original_steps_down_to_the_next_size(monkeypatch: pytest.MonkeyPatch) -> None:
+    db = FakeSession()
+    _seed_cd(db)
+    db.rows["sessions"][0].music_cover_size = MusicCoverSize.SOURCE
+    requested = _stub_images(
+        monkeypatch,
+        {_CAA + "front-1200": (b"1200", "image/jpeg"), _AUTO_COVER_FULL: (b"500", "image/jpeg")},
+        too_large=frozenset({_CAA + "front"}),
+    )
+
+    r = _get_cover(db)
+
+    assert r.status_code == 200
+    assert r.content == b"1200"
+    assert requested == [_CAA + "front", _CAA + "front-1200"]
+
+
+def test_cover_art_steps_down_as_far_as_it_must(monkeypatch: pytest.MonkeyPatch) -> None:
+    db = FakeSession()
+    _seed_cd(db)
+    db.rows["sessions"][0].music_cover_size = MusicCoverSize.SOURCE
+    requested = _stub_images(
+        monkeypatch,
+        {_AUTO_COVER: (b"250", "image/jpeg")},
+        too_large=frozenset({_CAA + "front", _CAA + "front-1200", _AUTO_COVER_FULL}),
+    )
+
+    r = _get_cover(db)
+
+    assert r.content == b"250"
+    assert requested == [_CAA + "front", _CAA + "front-1200", _AUTO_COVER_FULL, _AUTO_COVER]
+
+
+def test_cover_art_404_when_every_size_is_too_large(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    db = FakeSession()
+    _seed_cd(db)
+    db.rows["sessions"][0].music_cover_max_size = MusicCoverMaxSize.KB_500
+    _stub_images(monkeypatch, {}, too_large=frozenset({_AUTO_COVER_FULL, _AUTO_COVER}))
+
+    with caplog.at_level(logging.INFO, logger="arm_backend.routers.transcoder"):
+        r = _get_cover(db)
+
+    assert r.status_code == 404
+    assert r.json()["detail"] == "no cover art"
+    assert f"cover art task_id=txt_1 url={_AUTO_COVER} skipped: over 512000 bytes" in caplog.messages
+
+
+def test_cover_art_original_of_a_type_it_cannot_embed_steps_down(monkeypatch: pytest.MonkeyPatch) -> None:
+    db = FakeSession()
+    _seed_cd(db)
+    db.rows["sessions"][0].music_cover_size = MusicCoverSize.SOURCE
+    _stub_images(monkeypatch, {_CAA + "front": (b"WEBP", "image/webp"), _CAA + "front-1200": (b"1200", "image/jpeg")})
+
+    assert _get_cover(db).content == b"1200"
+
+
+def test_cover_art_missing_cover_does_not_try_smaller_sizes(monkeypatch: pytest.MonkeyPatch) -> None:
+    # A cover with no art has none in any size: no request per size.
+    db = FakeSession()
+    _seed_cd(db)
+    db.rows["sessions"][0].music_cover_size = MusicCoverSize.SOURCE
+    requested = _stub_images(monkeypatch, {_AUTO_COVER: (b"250", "image/jpeg")})
+
+    assert _get_cover(db).status_code == 404
+    assert requested == [_CAA + "front"]
+
+
+def test_cover_art_override_too_large_gives_way_to_the_automatic_cover(monkeypatch: pytest.MonkeyPatch) -> None:
+    db = FakeSession()
+    _seed_cd(db, manual=_MANUAL_COVER)
+    requested = _stub_images(
+        monkeypatch, {_AUTO_COVER_FULL: (b"AUTO", "image/jpeg")}, too_large=frozenset({_MANUAL_COVER})
+    )
+
+    assert _get_cover(db).content == b"AUTO"
+    assert requested == [_MANUAL_COVER, _AUTO_COVER_FULL]
+
+
+@pytest.mark.parametrize(
+    ("max_size", "cap"),
+    [
+        (None, 2 * 1024 * 1024),
+        (MusicCoverMaxSize.MB_10, 10 * 1024 * 1024),
+        (MusicCoverMaxSize.UNLIMITED, None),
+    ],
+)
+def test_cover_art_fetches_within_the_session_file_size_limit(
+    monkeypatch: pytest.MonkeyPatch, max_size: MusicCoverMaxSize | None, cap: int | None
+) -> None:
+    db = FakeSession()
+    _seed_cd(db)
+    if max_size is not None:
+        db.rows["sessions"][0].music_cover_max_size = max_size
+    caps: list[int | None] = []
+    _stub_images(monkeypatch, {_AUTO_COVER_FULL: (b"AUTO", "image/jpeg")}, caps=caps)
+
+    assert _get_cover(db).status_code == 200
+    assert caps == [cap]
+
+
+def test_cover_art_404_unknown_task() -> None:
+    db = FakeSession()
+    _seed_cd(db)
+
+    assert _get_cover(db, task_id="txt_missing").status_code == 404
 
 
 def test_register_refuses_when_track_has_no_output_path() -> None:
@@ -199,7 +553,7 @@ def test_claim_transitions_task_and_application() -> None:
     assert body["task"]["status"] == "in_progress"
     assert body["task"]["claimed_by"] == _HOSTNAME
     assert body["task"]["attempts"] == 1
-    # started_at marks the claim so the UI measures encode time, not queue wait (D-130/D-202).
+    # started_at marks the claim so the UI measures encode time, not queue wait.
     assert db.rows["transcode_tasks"][0].started_at is not None
     assert body["task"]["started_at"] is not None
     assert db.rows["session_applications"][0].status == SessionApplicationStatus.RUNNING
@@ -207,7 +561,7 @@ def test_claim_transitions_task_and_application() -> None:
 
 def test_claim_resets_the_previous_attempts_telemetry() -> None:
     # A retry must not show the failed attempt's ETA or frame rate until its
-    # own first heartbeat (D-242, D-248).
+    # own first heartbeat.
     db = FakeSession()
     _seed(db)
     row = db.rows["transcode_tasks"][0]
@@ -350,7 +704,7 @@ def test_heartbeat_updates_progress_and_timestamp() -> None:
     row = db.rows["transcode_tasks"][0]
     assert row.progress_pct == 42
     # The reported telemetry lands on the row and the view, so a polling
-    # client sees the same ETA and frame rate as the live event (D-242, D-248).
+    # client sees the same ETA and frame rate as the live event.
     assert (row.current_pass, row.eta_seconds, row.fps, row.avg_fps) == ("main", 600, 45.7, 23.5)
     assert (body["current_pass"], body["eta_seconds"], body["fps"], body["avg_fps"]) == ("main", 600, 45.7, 23.5)
 
@@ -527,3 +881,220 @@ def test_fail_409_when_not_in_progress() -> None:
         )
     assert r.status_code == 409
     assert "not in_progress" in r.json()["detail"]
+
+
+def test_register_returns_no_preset_when_session_has_none() -> None:
+    db = FakeSession()
+    _seed(db)
+    db.rows["sessions"][0].transcode_preset_id = None
+    with TestClient(_make_app(db)) as client:
+        r = client.post(
+            "/api/transcoder/register",
+            json={"task_id": "txt_1", "hostname": _HOSTNAME, "hw_caps": {"cpu_count": 4}},
+            headers=_SERVICE_AUTH,
+        )
+    assert r.status_code == 200, r.text
+    assert r.json()["transcode_preset"] is None
+
+
+# --- schema_hash guard and refresh -------------------------------------------
+
+_SETTINGS = {"common": {"PictureWidth": 1280}}
+_PREDATES = "transcode image predates HandBrake settings; rebuild or pull it"
+
+
+def _register(app: FastAPI, **extra: Any) -> Any:
+    body = {"task_id": "txt_1", "hostname": _HOSTNAME, "hw_caps": {"cpu_count": 4}, **extra}
+    with TestClient(app) as client:
+        return client.post("/api/transcoder/register", json=body, headers=_SERVICE_AUTH)
+
+
+def _loaded_store() -> SchemaStore:
+    store = SchemaStore()
+    store.replace(fixture_schema())
+    return store
+
+
+def test_register_refuses_an_image_without_schema_hash_when_the_preset_has_settings() -> None:
+    db = FakeSession()
+    _seed(db)
+    db.rows["transcode_presets"][0].handbrake_settings = _SETTINGS
+    r = _register(_make_app(db))
+    assert r.status_code == 409
+    assert r.json()["detail"] == _PREDATES
+
+
+def test_register_accepts_an_image_without_schema_hash_when_the_preset_has_no_settings() -> None:
+    db = FakeSession()
+    _seed(db)
+    r = _register(_make_app(db))
+    assert r.status_code == 200, r.text
+
+
+def test_register_returns_the_full_preset_view_with_settings() -> None:
+    db = FakeSession()
+    _seed(db)
+    db.rows["transcode_presets"][0].handbrake_settings = _SETTINGS
+    r = _register(_make_app(db), schema_hash="abc")
+    assert r.status_code == 200, r.text
+    preset = r.json()["transcode_preset"]
+    assert preset["handbrake_settings"]["common"] == _SETTINGS["common"]
+    assert "issues" in preset and "host_notes" in preset
+
+
+def test_register_requests_a_refresh_when_the_hash_differs() -> None:
+    db = FakeSession()
+    _seed(db)
+    runner = _FakeRunner()
+    r = _register(_make_app(db, store=_loaded_store(), runner=runner), schema_hash="other")
+    assert r.status_code == 200, r.text
+    assert runner.requested == ["other"]
+
+
+def test_register_requests_a_refresh_when_no_schema_is_loaded() -> None:
+    db = FakeSession()
+    _seed(db)
+    runner = _FakeRunner()
+    r = _register(_make_app(db, runner=runner), schema_hash="other")
+    assert r.status_code == 200, r.text
+    assert runner.requested == ["other"]
+
+
+def test_register_skips_the_refresh_when_the_hash_matches() -> None:
+    db = FakeSession()
+    _seed(db)
+    store = _loaded_store()
+    schema = store.current()
+    assert schema is not None
+    runner = _FakeRunner()
+    r = _register(_make_app(db, store=store, runner=runner), schema_hash=schema.content_hash)
+    assert r.status_code == 200, r.text
+    assert runner.requested == []
+
+
+def test_register_skips_the_refresh_when_the_image_reports_no_hash() -> None:
+    db = FakeSession()
+    _seed(db)
+    runner = _FakeRunner()
+    r = _register(_make_app(db, runner=runner))
+    assert r.status_code == 200, r.text
+    assert runner.requested == []
+
+
+def test_register_without_a_runner_is_a_no_op_refresh() -> None:
+    db = FakeSession()
+    _seed(db)
+    r = _register(_make_app(db), schema_hash="other")
+    assert r.status_code == 200, r.text
+
+
+# --- job-log milestones ----------------------------------------------------
+
+
+def test_container_task_logs_its_milestones(job_log: LineCapture) -> None:
+    """Claim, a heartbeat run and complete log started once, each quarter crossed once, and completed."""
+    db = FakeSession()
+    _seed(db)
+    with TestClient(_make_app(db)) as client:
+        assert client.post("/api/transcoder/tasks/txt_1/claim", headers=_SERVICE_AUTH).status_code == 200
+        for pct in (10, 30, 30, 80, 100):
+            r = client.patch("/api/transcoder/tasks/txt_1/heartbeat", json={"progress_pct": pct}, headers=_SERVICE_AUTH)
+            assert r.status_code == 200, r.text
+        r = client.patch(
+            "/api/transcoder/tasks/txt_1/complete",
+            json={"output_path": "Iron Man (2008)/Iron Man.mkv", "size_bytes": 1024000},
+            headers=_SERVICE_AUTH,
+        )
+        assert r.status_code == 200, r.text
+
+    (started,) = job_log.lines(event="transcode.started")
+    assert started["msg"] == "transcoding track 1/1 to Plex 1080p H.265"
+    assert started["job_id"] == "job_01JZXR7K3M5Q8N4VWA00000001" and started["track_id"] == "trk_1"
+    progress = job_log.lines(event="transcode.progress")
+    assert [line["fields"]["percent"] for line in progress] == [25, 75, 100]
+    (completed,) = job_log.lines(event="transcode.completed")
+    assert completed["fields"]["size_bytes"] == 1024000
+    assert completed["fields"]["output"] == "Iron Man (2008)/Iron Man.mkv"
+    (session_done,) = job_log.lines(event="session.completed")
+    assert session_done["msg"] == "transcode complete: 1/1" and session_done["session_application_id"] == "sap_x"
+    assert job_log.lines(logger_prefix="arm_backend.routers.transcoder") == []
+
+
+def test_container_task_failure_logs_an_error(job_log: LineCapture) -> None:
+    db = FakeSession()
+    _seed(db, task_status=TranscodeTaskStatus.IN_PROGRESS)
+    db.rows["session_applications"][0].status = SessionApplicationStatus.RUNNING
+    with TestClient(_make_app(db)) as client:
+        r = client.patch(
+            "/api/transcoder/tasks/txt_1/fail", json={"last_error": "HandBrakeCLI exited rc=1"}, headers=_SERVICE_AUTH
+        )
+    assert r.status_code == 200, r.text
+    (line,) = job_log.lines(event="transcode.failed")
+    assert line["level"] == "error" and line["msg"] == "track 1/1 transcode failed: HandBrakeCLI exited rc=1"
+    (session_done,) = job_log.lines(event="session.completed")
+    assert session_done["msg"] == "transcode failed: 0/1" and session_done["level"] == "warning"
+
+
+@pytest.mark.parametrize(
+    ("method", "path", "body", "status", "announcer"),
+    [
+        ("post", "claim", None, TranscodeTaskStatus.QUEUED, "announce_started"),
+        ("patch", "heartbeat", {"progress_pct": 50}, TranscodeTaskStatus.IN_PROGRESS, "announce_progress"),
+        ("patch", "complete", {"output_path": "a.mkv"}, TranscodeTaskStatus.IN_PROGRESS, "announce_completed"),
+        ("patch", "fail", {"last_error": "x"}, TranscodeTaskStatus.IN_PROGRESS, "announce_failed"),
+    ],
+)
+def test_a_failed_milestone_log_does_not_fail_the_request(
+    job_log: LineCapture,
+    monkeypatch: pytest.MonkeyPatch,
+    method: str,
+    path: str,
+    body: dict[str, Any] | None,
+    status: TranscodeTaskStatus,
+    announcer: str,
+) -> None:
+    async def _broken(*_args: Any) -> None:
+        raise RuntimeError("log bug")
+
+    monkeypatch.setattr(transcoder_router.transcode_task_events, announcer, _broken)
+    db = FakeSession()
+    _seed(db, task_status=status)
+    with TestClient(_make_app(db)) as client:
+        r = getattr(client, method)(f"/api/transcoder/tasks/txt_1/{path}", json=body, headers=_SERVICE_AUTH)
+    assert r.status_code == 200, r.text
+    assert job_log.lines(level="error")[-1]["msg"].startswith("could not log the transcode.")
+
+
+_SETTLE_ORDER = ("commit", "transcode.completed", "transcode.failed", "session.completed")
+
+
+@pytest.mark.parametrize(
+    ("path", "body", "task_event"),
+    [
+        ("complete", {"output_path": "a.mkv"}, "transcode.completed"),
+        ("fail", {"last_error": "HandBrakeCLI exited rc=1"}, "transcode.failed"),
+    ],
+)
+def test_session_completed_follows_the_commit_and_the_task_line(
+    job_log: LineCapture, path: str, body: dict[str, Any], task_event: str
+) -> None:
+    """The last task's line comes before the session's, and both only once the transition is committed."""
+    db = FakeSession()
+    _seed(db, task_status=TranscodeTaskStatus.IN_PROGRESS)
+    log_commits(db)
+    with TestClient(_make_app(db)) as client:
+        r = client.patch(f"/api/transcoder/tasks/txt_1/{path}", json=body, headers=_SERVICE_AUTH)
+    assert r.status_code == 200, r.text
+    assert job_log.events(*_SETTLE_ORDER) == ["commit", task_event, "session.completed"]
+
+
+@pytest.mark.parametrize(
+    ("path", "body"), [("complete", {"output_path": "a.mkv"}), ("fail", {"last_error": "HandBrakeCLI exited rc=1"})]
+)
+def test_a_failed_commit_logs_no_session_completed(job_log: LineCapture, path: str, body: dict[str, Any]) -> None:
+    db = FakeSession()
+    _seed(db, task_status=TranscodeTaskStatus.IN_PROGRESS)
+    db.commit_raises = RuntimeError("db gone")
+    with TestClient(_make_app(db)) as client, pytest.raises(RuntimeError, match="db gone"):
+        client.patch(f"/api/transcoder/tasks/txt_1/{path}", json=body, headers=_SERVICE_AUTH)
+    assert job_log.lines(event="session.completed") == []

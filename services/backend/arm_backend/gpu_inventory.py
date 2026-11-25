@@ -21,7 +21,8 @@ async def _release_orphaned_gpu_claims(session: AsyncSession, gpus: Sequence[Gpu
     """Free BUSY rows no live task holds: the claim was nulled by a task
     delete (the FK only sets NULL), or its task already finished. A QUEUED
     or IN_PROGRESS claimant may be a transcoder that outlived the restart,
-    so those stay for `sweep_stale_claims`."""
+    so those stay: an IN_PROGRESS one for `sweep_stale_claims`, a QUEUED one
+    for the dispatcher's unclaimed-spawn sweep (`watch_restart_claims`)."""
     released = 0
     for gpu in gpus:
         if gpu.status != GpuStatus.BUSY:

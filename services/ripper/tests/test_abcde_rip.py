@@ -1,15 +1,17 @@
 """End-to-end exercise of `rip_cd` against a faked abcde subprocess.
 
-The fake replaces `asyncio.create_subprocess_exec` with a stub process
-whose stdout streams a canned trace of abcde output. As the trace says
-each track finished reading, the test arranges for the matching
-`track_NN.wav` file to appear in the output directory; `rip_cd` then
-fires its `on_track_done` callback. Covers:
+The fake replaces `asyncio.create_subprocess_exec` with a stub process.
+As abcde 2.9.3 does, the test drops each `trackNN.wav` into the output
+directory and then appends `movetrack-NN` to abcde's status file
+(`abcde.<discid>/status`); `rip_cd` polls that file and fires its
+`on_track_done` callback. Covers:
 
-  - Streaming happy path: each callback fires once, in stream order,
-    with a populated RipResult (size + sha256).
-  - Race tolerance: a track-done log line arrives before the WAV file
-    is on disk; the post-wait sweep catches it.
+  - Live reporting: each track is reported as abcde moves it, while
+    abcde is still running.
+  - Happy path: each callback fires once, in track order, with a
+    populated RipResult (size + sha256).
+  - Late move: a WAV that lands after the last poll is caught by the
+    post-exit sweep.
   - abcde executable missing: synthetic FileNotFoundError → every
     requested track gets a failure callback.
   - abcde exits non-zero: any track that didn't already succeed gets a
@@ -118,32 +120,149 @@ def _write_track_wav(output_dir: Path, idx: int, payload: bytes | None = None) -
     return p
 
 
-def _done_line(track: int) -> str:
-    return f"[wavencode] Track {track:02d}: Reading audio from sectors 1000-2000...done"
+class _RunningProc(_FakeProc):
+    """abcde mid-rip: stdout stays open, with nothing on it, until the test lets the process exit."""
+
+    def __init__(self, exit_now: asyncio.Event) -> None:
+        super().__init__([])
+        self.stdout = self  # type: ignore[assignment]
+        self._exit_now = exit_now
+
+    async def readline(self) -> bytes:
+        await self._exit_now.wait()
+        return b""
+
+
+def _append_status(output_dir: Path, *lines: str) -> None:
+    """Append lines to abcde's status file in its work dir, as abcde 2.9.3 does after each step."""
+    workdir = output_dir / "abcde.fc110d12"
+    workdir.mkdir(exist_ok=True)
+    with (workdir / "status").open("a") as fh:
+        fh.writelines(line + "\n" for line in lines)
+
+
+async def _until(predicate: Any, timeout: float = 1.0) -> None:
+    async with asyncio.timeout(timeout):
+        while not predicate():
+            await asyncio.sleep(0.005)
+
+
+@pytest.mark.asyncio
+async def test_rip_cd_reports_each_track_as_abcde_moves_it_while_abcde_still_runs(monkeypatch, tmp_path):
+    """abcde records `movetrack-NN` in its status file once track NN's WAV is in the output dir. Each track is
+    reported then, while abcde is still ripping the next one, rather than all together when abcde exits."""
+    monkeypatch.setattr(abcde_rip, "STATUS_POLL_SECONDS", 0.01)
+    exit_now = asyncio.Event()
+    fake = _RunningProc(exit_now)
+
+    async def fake_create(*_a: Any, **_kw: Any) -> _RunningProc:
+        return fake
+
+    monkeypatch.setattr(abcde_rip.asyncio, "create_subprocess_exec", fake_create)
+    reported: list[tuple[int, bool, bool]] = []
+
+    async def on_done(idx: int, result: RipResult) -> None:
+        reported.append((idx, result.ok, exit_now.is_set()))
+
+    rip = asyncio.create_task(rip_cd("/dev/sr0", tmp_path, [1, 2], on_track_done=on_done))
+    _append_status(tmp_path, "abcde-version=2.9.3", "readtrack-01")
+    _write_track_wav(tmp_path, 1)
+    _append_status(tmp_path, "movetrack-01", "movetrack-output-wav", "readtrack-02")
+    await _until(lambda: len(reported) == 1)
+    assert reported == [(1, True, False)]
+
+    _write_track_wav(tmp_path, 2)
+    _append_status(tmp_path, "movetrack-02")
+    await _until(lambda: len(reported) == 2)
+    exit_now.set()
+    results = await rip
+
+    assert reported == [(1, True, False), (2, True, False)]
+    assert results[2].output_path == tmp_path / "track02.wav"
+
+
+@pytest.mark.asyncio
+async def test_rip_cd_reports_the_wav_bytes_written_so_far_against_the_expected_total(monkeypatch, tmp_path):
+    """While abcde runs, the rip reports the bytes of every WAV written so far: tracks already moved into the output
+    dir plus the one cdparanoia is still writing in abcde's work dir."""
+    monkeypatch.setattr(abcde_rip, "STATUS_POLL_SECONDS", 0.01)
+    exit_now = asyncio.Event()
+    fake = _RunningProc(exit_now)
+
+    async def fake_create(*_a: Any, **_kw: Any) -> _RunningProc:
+        return fake
+
+    monkeypatch.setattr(abcde_rip.asyncio, "create_subprocess_exec", fake_create)
+    seen: list[tuple[int, int | None]] = []
+
+    async def on_progress(done: int, total: int | None) -> None:
+        seen.append((done, total))
+
+    rip = asyncio.create_task(rip_cd("/dev/sr0", tmp_path, [1, 2], on_progress=on_progress, expected_bytes=5000))
+    _write_track_wav(tmp_path, 1, b"a" * 1000)
+    _append_status(tmp_path, "movetrack-01")
+    (tmp_path / "abcde.fc110d12" / "track02.wav").write_bytes(b"b" * 300)
+    await _until(lambda: (1300, 5000) in seen)
+    exit_now.set()
+    await rip
+
+
+@pytest.mark.asyncio
+async def test_rip_cd_without_a_progress_listener_reports_nothing(monkeypatch, tmp_path):
+    _write_track_wav(tmp_path, 1)
+    _stub_subprocess(monkeypatch, lines=["Grabbing entire CD - tracks: 01"])
+    results = await rip_cd("/dev/sr0", tmp_path, [1], expected_bytes=5000)
+    assert results[1].ok
+
+
+@pytest.mark.asyncio
+async def test_rip_cd_logs_abcde_output_for_the_job_log(monkeypatch, tmp_path, caplog):
+    """abcde's stdout and stderr go to the service log, which the backend copies into the job's log. A line
+    cdparanoia redraws with carriage returns is logged as its last state."""
+    _write_track_wav(tmp_path, 1)
+    _stub_subprocess(
+        monkeypatch,
+        lines=["Grabbing entire CD - tracks: 01"],
+        stderr_lines=["(== PROGRESS == [  >   ] ==)\r(== PROGRESS == [ done ] ==)"],
+    )
+    caplog.set_level("DEBUG", logger="arm_ripper.rip.abcde")
+
+    await rip_cd("/dev/sr0", tmp_path, [1])
+
+    logged = [r.getMessage() for r in caplog.records if r.name == "arm_ripper.rip.abcde"]
+    assert "abcde: Grabbing entire CD - tracks: 01" in logged
+    assert "abcde: (== PROGRESS == [ done ] ==)" in logged
+
+
+@pytest.mark.asyncio
+async def test_rip_cd_fails_a_track_with_the_read_error_abcde_recorded_for_it(monkeypatch, tmp_path):
+    """abcde writes `readtrack-NN: <reader> returned code N` to its errors file when a track cannot be read; that
+    track fails with it, and the others keep the generic reason."""
+    _write_track_wav(tmp_path, 1)
+    workdir = tmp_path / "abcde.fc110d12"
+    workdir.mkdir()
+    (workdir / "errors").write_text("readtrack-02: cdparanoia returned code 1\n")
+    _stub_subprocess(monkeypatch, lines=["Grabbing entire CD - tracks: 01 02 03"])
+
+    results = await rip_cd("/dev/sr0", tmp_path, [1, 2, 3])
+
+    assert results[1].ok
+    assert results[2].error == "abcde could not read the track: cdparanoia returned code 1"
+    assert results[3].error == "abcde did not produce the expected wav file"
 
 
 @pytest.mark.asyncio
 async def test_rip_cd_streams_per_track_callbacks_in_order(monkeypatch, tmp_path):
-    """Happy path. Each of 3 tracks: the done-line arrives, the WAV
-    appears immediately, the callback fires. By end of stream all three
-    are reported with size + sha256."""
-    # Pre-write the WAVs so they're already on disk when the done-line
-    # is parsed (simulates a fast `move` action).
+    """Happy path: abcde moved all three tracks into place; each is reported once, in track order, with size and
+    sha256."""
     paths = [_write_track_wav(tmp_path, i) for i in (1, 2, 3)]
+    _append_status(tmp_path, "movetrack-01", "movetrack-02", "movetrack-03")
     expected_sizes = [p.stat().st_size for p in paths]
     expected_shas = [hashlib.sha256(p.read_bytes()).hexdigest() for p in paths]
 
     _stub_subprocess(
         monkeypatch,
-        lines=[
-            "Grabbing entire CD - tracks: 01 02 03",
-            _done_line(1),
-            "[mv] Track 01: Moving ...done",
-            _done_line(2),
-            "[mv] Track 02: Moving ...done",
-            _done_line(3),
-            "[mv] Track 03: Moving ...done",
-        ],
+        lines=["Grabbing entire CD - tracks: 01 02 03"],
     )
 
     callback_log: list[tuple[int, bool, int | None]] = []
@@ -170,71 +289,9 @@ async def test_rip_cd_streams_per_track_callbacks_in_order(monkeypatch, tmp_path
 
 
 @pytest.mark.asyncio
-async def test_rip_cd_recovers_when_wav_appears_after_done_line(monkeypatch, tmp_path):
-    """The `move` action sometimes finishes after the `Reading...done`
-    line is emitted. The per-line stdout sweep catches the WAV when it
-    appears on a subsequent tick."""
-    appeared: dict[int, bool] = {1: False, 2: False}
-
-    def _maybe_drop_track2() -> None:
-        # On the third stdout read, drop track 2's WAV to disk.
-        # That gives the rip_cd loop time to see the done-line at
-        # read #2 (where the WAV does NOT yet exist), then sweep
-        # again at read #3 (where it DOES).
-        if not appeared[2]:
-            return
-        _write_track_wav(tmp_path, 2)
-
-    # Track 1's WAV is already on disk; track 2's only appears after
-    # we've started reading stdout.
-    _write_track_wav(tmp_path, 1)
-
-    read_count = [0]
-
-    def on_each_read() -> None:
-        read_count[0] += 1
-        # After the third readline (which returns the track-2 done line),
-        # drop the WAV so the NEXT sweep finds it.
-        if read_count[0] == 4:
-            _write_track_wav(tmp_path, 2)
-            appeared[2] = True
-
-    _stub_subprocess(
-        monkeypatch,
-        lines=[
-            "Grabbing entire CD - tracks: 01 02",
-            _done_line(1),
-            _done_line(2),
-            "[mv] Track 02: Moving ...done",
-        ],
-        on_each_stdout_read=on_each_read,
-    )
-
-    callbacks: list[int] = []
-
-    async def on_done(idx: int, _result: RipResult) -> None:
-        callbacks.append(idx)
-
-    results = await rip_cd(
-        device_path="/dev/sr0",
-        output_dir=tmp_path,
-        track_indexes=[1, 2],
-        on_track_done=on_done,
-    )
-
-    # Both tracks finalized; track 2 came in via the post-line sweep.
-    assert sorted(callbacks) == [1, 2]
-    assert results[1].ok
-    assert results[2].ok
-    # Don't deliberately drop in a clean test (silence unused-var warning).
-    _ = _maybe_drop_track2
-
-
-@pytest.mark.asyncio
 async def test_rip_cd_recovers_in_post_wait_sweep_when_wav_lands_after_proc_exits(monkeypatch, tmp_path):
-    """If a WAV file is moved into place AFTER the last stdout line has
-    been read (i.e. between the streamer exiting and proc.wait()
-    returning), the post-wait sweep catches it."""
+    """A WAV moved into place after the last poll (here, while abcde
+    exits) is caught by the post-exit sweep."""
     _write_track_wav(tmp_path, 1)
     # Track 2's WAV will be written by the FakeProc.wait() hook.
 
@@ -248,8 +305,7 @@ async def test_rip_cd_recovers_in_post_wait_sweep_when_wav_lands_after_proc_exit
             _write_track_wav(tmp_path, 2)
             return await super().wait()
 
-    encoded = [(line + "\n").encode() for line in [_done_line(1), _done_line(2)]]
-    fake = _FakeProcWithLateMove(encoded)
+    fake = _FakeProcWithLateMove([b"Grabbing entire CD - tracks: 01 02\n"])
 
     async def fake_create(*_a: Any, **_kw: Any) -> _FakeProcWithLateMove:
         return fake
@@ -292,12 +348,12 @@ async def test_rip_cd_subprocess_not_on_path_fails_every_track(monkeypatch, tmp_
 
 @pytest.mark.asyncio
 async def test_rip_cd_nonzero_exit_fails_unfinished_tracks_with_stderr_tail(monkeypatch, tmp_path):
-    # Track 1 succeeds (WAV on disk + done-line); track 2 was never
+    # Track 1 succeeds (its WAV is on disk for the post-exit sweep); track 2 was never
     # finalised → fails with the stderr tail.
     _write_track_wav(tmp_path, 1)
     _stub_subprocess(
         monkeypatch,
-        lines=[_done_line(1)],
+        lines=["Grabbing entire CD - tracks: 01 02"],
         stderr_lines=["abcde: catastrophic disc-read failure"],
         returncode=2,
     )
@@ -318,6 +374,8 @@ async def test_rip_cd_timeout_fails_unfinished_tracks(monkeypatch, tmp_path):
     timeout failure. Track 1 had already succeeded before the timeout
     so it keeps its success result."""
     _write_track_wav(tmp_path, 1)
+    _append_status(tmp_path, "movetrack-01")
+    monkeypatch.setattr(abcde_rip, "STATUS_POLL_SECONDS", 0.01)
 
     # FakeProc.wait() hangs forever (until kill() lands a returncode);
     # asyncio.wait_for around the stream-and-wait wrapper trips the
@@ -331,8 +389,7 @@ async def test_rip_cd_timeout_fails_unfinished_tracks(monkeypatch, tmp_path):
             await asyncio.sleep(3600)
             return 0
 
-    encoded = [(line + "\n").encode() for line in [_done_line(1)]]
-    fake = _HangingProc(encoded)
+    fake = _HangingProc([b"Grabbing entire CD - tracks: 01 02\n"])
 
     async def fake_create(*_a: Any, **_kw: Any) -> _HangingProc:
         return fake
@@ -354,15 +411,15 @@ async def test_rip_cd_timeout_fails_unfinished_tracks(monkeypatch, tmp_path):
     assert results[1].ok is True
     assert results[2].ok is False
     assert "timed out" in (results[2].error or "")
-    # Track 1's callback fired during the stream; track 2's was fired by
-    # the post-timeout failure sweep.
+    # Track 1's callback fired from a poll during the rip; track 2's was
+    # fired by the post-timeout failure sweep.
     assert sorted(c[0] for c in callbacks) == [1, 2]
 
 
 @pytest.mark.asyncio
 async def test_rip_cd_without_callback_still_returns_dict(monkeypatch, tmp_path):
     _write_track_wav(tmp_path, 1)
-    _stub_subprocess(monkeypatch, lines=[_done_line(1)])
+    _stub_subprocess(monkeypatch, lines=["Grabbing entire CD - tracks: 01 02"])
 
     results = await rip_cd(
         device_path="/dev/sr0",
@@ -392,20 +449,15 @@ async def test_rip_cd_runs_abcde_with_cwd_set_to_output_dir(monkeypatch, tmp_pat
     assert captured.get("cwd") == str(tmp_path)
 
 
-def test_abcde_config_uses_valid_cddbmethod_and_disables_lookup(tmp_path):
-    """Regression: abcde validates `CDDBMETHOD` at startup against an
-    allowlist (cdtext, cddb, musicbrainz). Passing `none` makes it abort
-    with "Unknown lookup method none". To actually skip metadata lookup,
-    set `CDDBAVAIL=N`; keep `CDDBMETHOD` set to a real method so the
-    keyword parses."""
-    conf = abcde_rip._abcde_config(tmp_path)
-    assert 'CDDBAVAIL="N"' in conf
-    assert 'CDDBMETHOD="none"' not in conf
-    # The CDDBMETHOD value, if present, must be one abcde recognises.
-    for line in conf.splitlines():
-        if line.startswith("CDDBMETHOD="):
-            value = line.split("=", 1)[1].strip().strip('"')
-            assert value in {"cdtext", "cddb", "musicbrainz"}
+def test_abcde_config_disables_the_lookup_with_abcdes_own_spelling(tmp_path):
+    """The `move` action turns abcde's lookup phase on (DOCDDB=y), and that phase only honours a lowercase
+    `CDDBAVAIL=n` and only skips the query for the `cddb` method; `musicbrainz` queries regardless. The
+    method must still be one abcde accepts at startup."""
+    lines = abcde_rip._abcde_config(tmp_path).splitlines()
+    assert 'CDDBAVAIL="n"' in lines
+    assert 'CDDBMETHOD="cddb"' in lines
+    assert 'CDDBAVAIL="N"' not in lines
+    assert not any("musicbrainz" in line for line in lines)
 
 
 def test_abcde_config_lands_wavs_at_output_dir_via_force_y(tmp_path):
@@ -452,7 +504,7 @@ async def test_rip_cd_clean_exit_but_wav_missing_yields_failure(monkeypatch, tmp
 
 @pytest.mark.asyncio
 async def test_rip_cd_kills_the_whole_process_group_on_timeout(monkeypatch, tmp_path, killpg_calls):
-    """D-174: abcde forks cdparanoia per track. Killing bash alone left
+    """abcde forks cdparanoia per track. Killing bash alone left
     cdparanoia holding the drive; the spawn must start a new session and
     the kill must target its process group."""
 
@@ -544,6 +596,7 @@ async def test_cd_tracks_finalize_records_the_wav_and_fires_the_callback_once(tm
 
     assert first.ok is True
     assert first.size_bytes == 3
+    assert first.duration_seconds == 0
     assert first.sha256 == hashlib.sha256(b"abc").hexdigest()
     assert tracks.results[1] is first
     assert calls == [(1, first)]
@@ -567,26 +620,37 @@ async def test_cd_tracks_finalize_without_a_callback_still_records_the_result(tm
     assert tracks.results[1].ok is True
 
 
-async def test_cd_tracks_note_line_ignores_lines_that_are_not_track_done(tmp_path):
-    (tmp_path / "track01.wav").write_bytes(b"abc")
+async def test_cd_tracks_finalize_moved_finalizes_requested_moved_tracks_in_track_order(tmp_path):
+    for idx in (1, 2, 3):
+        (tmp_path / f"track{idx:02d}.wav").write_bytes(b"abc")
+    tracks, calls = _recording_tracks(tmp_path, [1, 2])
+
+    await tracks.finalize_moved({3, 2, 1})
+
+    assert [idx for idx, _ in calls] == [1, 2]
+
+
+async def test_cd_tracks_finalize_moved_picks_up_a_moved_track_once_its_wav_is_visible(tmp_path):
     tracks, calls = _recording_tracks(tmp_path, [1])
 
-    await tracks.note_line("Grabbing entire CD...")
-
-    assert tracks.results == {}
-    assert calls == []
-
-
-async def test_cd_tracks_note_line_finalizes_a_logged_track_once_its_wav_lands(tmp_path):
-    tracks, calls = _recording_tracks(tmp_path, [1])
-
-    await tracks.note_line(_done_line(1))
+    await tracks.finalize_moved({1})
     assert tracks.results == {}
 
     (tmp_path / "track01.wav").write_bytes(b"abc")
-    await tracks.note_line("some later line")
+    await tracks.finalize_moved({1})
+    await tracks.finalize_moved({1})
 
-    assert list(tracks.results) == [1]
+    assert [idx for idx, _ in calls] == [1]
+
+
+async def test_finalize_moved_tracks_finalizes_what_the_status_file_lists_as_moved(tmp_path):
+    (tmp_path / "track01.wav").write_bytes(b"abc")
+    (tmp_path / "track02.wav").write_bytes(b"abc")
+    _append_status(tmp_path, "readtrack-01", "movetrack-01", "movetrack-output-wav", "readtrack-02")
+    tracks, calls = _recording_tracks(tmp_path, [1, 2])
+
+    await abcde_rip._finalize_moved_tracks(tmp_path, tracks)
+
     assert [idx for idx, _ in calls] == [1]
 
 
@@ -623,20 +687,13 @@ async def test_cd_tracks_finalize_pending_finalizes_only_tracks_without_a_result
     assert [idx for idx, _ in calls] == [1, 2]
 
 
-async def test_read_until_exit_feeds_every_stdout_line_to_tracks_then_returns_the_exit_code(tmp_path):
-    seen: list[str] = []
-
-    class _RecordingTracks(abcde_rip._CdTracks):
-        async def note_line(self, line: str) -> None:
-            seen.append(line)
-
-    tracks = _RecordingTracks(tmp_path, [1], None)
+async def test_read_until_exit_reads_stdout_to_the_end_then_returns_the_exit_code():
     proc = _FakeProc([b"first\n", b"second\n", b"third\n"], returncode=3)
 
-    rc = await abcde_rip._read_until_exit(proc, tracks)  # type: ignore[arg-type]
+    rc = await abcde_rip._read_until_exit(proc)  # type: ignore[arg-type]
 
-    assert seen == ["first", "second", "third"]
     assert rc == 3
+    assert proc.stdout._lines == []
 
 
 def _stop_abcde_setup(monkeypatch, tmp_path, *, returncode: int | None):
@@ -726,3 +783,55 @@ def test_exit_failure_falls_back_to_the_exit_code_when_stderr_is_blank(stderr_li
 
 def test_exit_failure_reports_a_missing_wav_on_a_zero_exit():
     assert abcde_rip._exit_failure(0, ["ignored"]) == "abcde did not produce the expected wav file"
+
+
+def test_output_line_keeps_the_last_state_of_a_redrawn_line():
+    assert abcde_rip._output_line(b"(== 10% ==)\r(== 55% ==)\r(== 100% ==)\n") == "(== 100% ==)"
+
+
+def test_output_line_of_a_plain_line_is_the_line():
+    assert abcde_rip._output_line(b"Grabbing track 01: Overture...\n") == "Grabbing track 01: Overture..."
+
+
+def test_log_output_skips_a_blank_line(caplog):
+    caplog.set_level("DEBUG", logger="arm_ripper.rip.abcde")
+    abcde_rip._log_output("")
+    assert caplog.records == []
+
+
+def test_log_output_logs_an_ordinary_line_at_debug(caplog):
+    caplog.set_level("DEBUG", logger="arm_ripper.rip.abcde")
+    abcde_rip._log_output("Grabbing track 01: Overture...")
+    assert [(r.levelname, r.getMessage()) for r in caplog.records] == [
+        ("DEBUG", "abcde: Grabbing track 01: Overture...")
+    ]
+
+
+@pytest.mark.parametrize("line", ["[ERROR] abcde: CDROM has not been defined", "[WARNING] abcde: no CD found"])
+def test_log_output_logs_abcdes_own_error_and_warning_lines_at_warning(caplog, line):
+    caplog.set_level("DEBUG", logger="arm_ripper.rip.abcde")
+    abcde_rip._log_output(line)
+    assert [(r.levelname, r.getMessage()) for r in caplog.records] == [("WARNING", f"abcde: {line}")]
+
+
+async def test_cd_tracks_finalize_measures_the_track_length_from_the_wav(tmp_path):
+    """The ripped length comes from the WAV itself, so the job log and the track row carry it like a MakeMKV title."""
+    (tmp_path / "track01.wav").write_bytes(b"\0" * (3 * 176_400 + 44))
+    tracks, _ = _recording_tracks(tmp_path, [1])
+
+    await tracks.finalize(1)
+
+    assert tracks.results[1].duration_seconds == 3
+
+
+@pytest.mark.asyncio
+async def test_rip_cd_logs_its_start_at_debug_only(monkeypatch, tmp_path, caplog):
+    """rip.started already announces the rip at info; the device and work dir line is detail."""
+    _write_track_wav(tmp_path, 1)
+    _stub_subprocess(monkeypatch, lines=[])
+    caplog.set_level("DEBUG", logger="arm_ripper.rip.abcde")
+
+    await rip_cd("/dev/sr0", tmp_path, [1])
+
+    start = [r for r in caplog.records if r.getMessage().startswith("abcde rip device=")]
+    assert [r.levelname for r in start] == ["DEBUG"]

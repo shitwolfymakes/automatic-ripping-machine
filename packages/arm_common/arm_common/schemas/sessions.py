@@ -1,4 +1,4 @@
-"""Phase 6 wire schemas: session/preset CRUD + apply + collision detection.
+"""Wire schemas: session/preset CRUD + apply + collision detection.
 
 Read views (`SessionView`, `RipPresetView`, `TranscodePresetView`) project the
 SQLModel rows for the UI; create/update requests are deliberately split so
@@ -11,10 +11,14 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from arm_common.schemas.handbrake import HandbrakeSettings, SettingIssue
 from arm_common.enums import (
     ContainerFormat,
     IdentificationMode,
     MediaType,
+    MusicCoverMaxSize,
+    MusicCoverSize,
+    MusicTagField,
     OutputMode,
     SessionApplicationStatus,
     TrackSelection,
@@ -84,7 +88,9 @@ class TranscodePresetView(BaseModel):
     is_builtin: bool
     tool: TranscodeTool
     preset_ref: str | None
-    preset_json: dict[str, Any] | None
+    handbrake_settings: HandbrakeSettings | None
+    issues: list[SettingIssue] = Field(default_factory=list)
+    host_notes: list[Literal["encodes_on_cpu_here"]] = Field(default_factory=list)
     container: ContainerFormat
     encoder: str
     extra_args: str | None
@@ -98,7 +104,7 @@ class TranscodePresetCreateRequest(BaseModel):
     media_type: MediaType
     tool: TranscodeTool
     preset_ref: str | None = None
-    preset_json: dict[str, Any] | None = None
+    handbrake_settings: HandbrakeSettings | None = None
     container: ContainerFormat
     encoder: str = Field(default="preset", min_length=1)
     extra_args: str | None = None
@@ -108,7 +114,7 @@ class TranscodePresetUpdateRequest(BaseModel):
     name: str | None = Field(default=None, min_length=1)
     tool: TranscodeTool | None = None
     preset_ref: str | None = None
-    preset_json: dict[str, Any] | None = None
+    handbrake_settings: HandbrakeSettings | None = None
     container: ContainerFormat | None = None
     encoder: str | None = Field(default=None, min_length=1)
     extra_args: str | None = None
@@ -128,6 +134,12 @@ class SessionView(BaseModel):
     transcode_preset_id: str | None
     output_path_template: str
     overrides_json: dict[str, Any] | None
+    # Music sessions: the tags, and whether the cover, written into each encoded track.
+    music_tag_fields: list[MusicTagField]
+    # Music sessions: the Cover Art Archive size embedded as the cover.
+    music_cover_size: MusicCoverSize
+    # Music sessions: the largest cover file embedded.
+    music_cover_max_size: MusicCoverMaxSize
     created_by_user_id: str | None
     created_at: datetime | None
     updated_at: datetime | None
@@ -140,6 +152,12 @@ class SessionCreateRequest(BaseModel):
     transcode_preset_id: str | None = None
     output_path_template: str = Field(min_length=1)
     overrides_json: dict[str, Any] | None = None
+    # Music sessions only; every choice when left out.
+    music_tag_fields: list[MusicTagField] | None = None
+    # Music sessions only; 500 px when left out.
+    music_cover_size: MusicCoverSize | None = None
+    # Music sessions only; 2 MB when left out.
+    music_cover_max_size: MusicCoverMaxSize | None = None
 
 
 class SessionUpdateRequest(BaseModel):
@@ -148,6 +166,10 @@ class SessionUpdateRequest(BaseModel):
     transcode_preset_id: str | None = None
     output_path_template: str | None = Field(default=None, min_length=1)
     overrides_json: dict[str, Any] | None = None
+    # Music sessions only.
+    music_tag_fields: list[MusicTagField] | None = None
+    music_cover_size: MusicCoverSize | None = None
+    music_cover_max_size: MusicCoverMaxSize | None = None
 
 
 class SessionCloneRequest(BaseModel):

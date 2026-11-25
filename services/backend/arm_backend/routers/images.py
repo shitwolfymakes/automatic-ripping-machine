@@ -23,7 +23,7 @@ _NEGATIVE_TTL_SECONDS = 3600
 # The proxy is unauthenticated, so the negative cache must stay bounded: one
 # entry per distinct failing URL would otherwise grow for the process lifetime.
 _NEGATIVE_CACHE_MAX_ENTRIES = 1024
-_MAX_FETCH_BYTES = 2 * 1024 * 1024  # 2 MB — matches the cache cap; rejects oversized at fetch time
+_MAX_FETCH_BYTES = 2 * 1024 * 1024  # 2 MB — matches the cache cap; the default cap, and always the proxy's
 
 router = APIRouter(prefix="/api", tags=["images"])
 
@@ -116,8 +116,19 @@ def _split_fallback_group(url: str) -> tuple[str, str | None]:
     return clean_url, (fallback_group or None)
 
 
-class _ImageTooLarge(Exception):
-    """Raised by _read_capped_body when the body exceeds the size cap."""
+class ImageUnavailable(Exception):
+    """An image the guarded fetch could not provide; `detail` says why."""
+
+    def __init__(self, detail: str) -> None:
+        super().__init__(detail)
+        self.detail = detail
+
+
+class ImageTooLarge(ImageUnavailable):
+    """An image over the fetch's size cap; a smaller variant of it may still fit."""
+
+    def __init__(self) -> None:
+        super().__init__("Image too large")
 
 
 def _next_hop(fetch_url: str, resp: httpx.Response) -> str | None:
@@ -134,26 +145,31 @@ def _next_hop(fetch_url: str, resp: httpx.Response) -> str | None:
     return next_url
 
 
-async def _read_capped_body(resp: httpx.Response) -> bytes:
-    """Read the response body, raising _ImageTooLarge once it exceeds the size cap."""
+def _check_size(size: int, max_bytes: int | None) -> None:
+    """Raise ImageTooLarge when `size` bytes exceed `max_bytes`; None is no cap."""
+    if max_bytes is not None and size > max_bytes:
+        raise ImageTooLarge
+
+
+async def _read_capped_body(resp: httpx.Response, max_bytes: int | None) -> bytes:
+    """Read the response body, raising ImageTooLarge once it exceeds `max_bytes`."""
     chunks: list[bytes] = []
     total = 0
     async for chunk in resp.aiter_bytes():
         total += len(chunk)
-        if total > _MAX_FETCH_BYTES:
-            raise _ImageTooLarge
+        _check_size(total, max_bytes)
         chunks.append(chunk)
     return b"".join(chunks)
 
 
-async def _fetch_image(client: httpx.AsyncClient, start_url: str) -> tuple[bytes, str] | None:
+async def _fetch_image(client: httpx.AsyncClient, start_url: str, max_bytes: int | None) -> tuple[bytes, str] | None:
     """Fetch one image, following CAA redirects manually with a per-hop SSRF guard.
 
     Returns (content, safe_content_type) on success, or None when the chain
     terminates in a 404 (CAA returns 404 for entities with no art) or exhausts
     the redirect budget — both let the caller try a fallback. Raises
-    httpx.HTTPError for transport/other-status failures and _ImageTooLarge when
-    the body exceeds the cap; the caller maps those to a 404 response."""
+    httpx.HTTPError for transport/other-status failures and ImageTooLarge when
+    the body exceeds `max_bytes`."""
     fetch_url = start_url
     for _ in range(_MAX_REDIRECTS + 1):
         async with client.stream("GET", fetch_url) as resp:
@@ -170,7 +186,7 @@ async def _fetch_image(client: httpx.AsyncClient, start_url: str) -> tuple[bytes
             resp.raise_for_status()
             content_type = resp.headers.get("content-type", "image/jpeg")
             safe_type = content_type if content_type in _SAFE_CONTENT_TYPES else "image/jpeg"
-            return await _read_capped_body(resp), safe_type
+            return await _read_capped_body(resp, max_bytes), safe_type
     # Exhausted the hop budget without reaching a terminal response.
     return None
 
@@ -180,8 +196,8 @@ def _image_response(content: bytes, media_type: str) -> Response:
     return Response(content=content, media_type=media_type, headers={"Cache-Control": "public, max-age=604800"})
 
 
-def _cached_response(safe_url: str) -> Response | None:
-    """The response for a cache hit, or None on a miss or an unreadable cache."""
+def _cached_image(safe_url: str) -> tuple[bytes, str] | None:
+    """The cached (content, content type) for a hit, or None on a miss or an unreadable cache."""
     # The cache is an optimization, never a hard dependency: a broken or
     # unwritable cache dir must degrade to a live fetch, not fail the request.
     try:
@@ -193,21 +209,32 @@ def _cached_response(safe_url: str) -> Response | None:
         return None
     content, content_type = cached
     safe_type = content_type if content_type in _SAFE_CONTENT_TYPES else "application/octet-stream"
-    return _image_response(content, safe_type)
+    return content, safe_type
+
+
+def _group_cover_url(release_url: str, fallback_group: str) -> str:
+    """The release-group cover in the same size variant as `release_url`: a
+    `front-N` thumbnail, or `front` for the original; `front-250` when it names
+    neither."""
+    group_url = COVERART_GROUP_FRONT_URL_TEMPLATE.format(mbid=fallback_group)
+    size = urlparse(release_url).path.rsplit("/", 1)[-1]
+    if size == "front" or size.startswith("front-"):
+        group_url = f"{group_url.rsplit('/', 1)[0]}/{size}"
+    return group_url
 
 
 async def _fetch_with_fallback(
-    client: httpx.AsyncClient, safe_url: str, fallback_group: str | None
+    client: httpx.AsyncClient, safe_url: str, fallback_group: str | None, max_bytes: int | None
 ) -> tuple[bytes, str] | None:
     """Fetch the image, falling back to the release-group cover when the release has none."""
-    fetched = await _fetch_image(client, safe_url)
+    fetched = await _fetch_image(client, safe_url, max_bytes)
     # On a release-level 404, fall back to the album's release-group
     # cover (Picard model) — re-validating the constructed host.
     if fetched is None and fallback_group:
-        group_url = COVERART_GROUP_FRONT_URL_TEMPLATE.format(mbid=fallback_group)
+        group_url = _group_cover_url(safe_url, fallback_group)
         gp = urlparse(group_url)
         if gp.scheme in ("http", "https") and _host_allowed(gp.hostname):
-            fetched = await _fetch_image(client, group_url)
+            fetched = await _fetch_image(client, group_url, max_bytes)
     return fetched
 
 
@@ -219,48 +246,81 @@ def _store_quietly(safe_url: str, content: bytes, safe_type: str) -> None:
         logger.warning("image cache write failed; serving uncached", exc_info=True)
 
 
-# Intentionally unauthenticated: hit via <img src> (no bearer header possible).
-# The host allowlist + size cap + scheme guard are the security boundary.
-@router.get("/images/proxy")
-async def proxy_image(url: str = Query(..., description="Image URL to proxy")) -> Response:
-    """Proxy and cache external images to avoid browser ORB/CORS issues."""
+def _too_large_key(safe_url: str, max_bytes: int | None) -> str:
+    """The negative-cache key for `safe_url` found over `max_bytes`. Each cap
+    has its own, so a fetch allowed more is not refused by a smaller cap's
+    failure; it can't collide with a plain key, which starts with the scheme."""
+    return f"{max_bytes}>{safe_url}"
+
+
+def _raise_if_negatively_cached(safe_url: str, max_bytes: int | None, now: float) -> None:
+    """Raise what a recent failed fetch of `safe_url` raised: `ImageTooLarge`
+    when it was too large for this same cap, so a caller can still try a
+    smaller variant; `ImageUnavailable` for any other failure."""
+    if _NEGATIVE_CACHE.get(_too_large_key(safe_url, max_bytes), 0.0) > now:
+        raise ImageTooLarge
+    if _NEGATIVE_CACHE.get(safe_url, 0.0) > now:
+        raise ImageUnavailable("Image unavailable")
+
+
+async def fetch_allowed_image(url: str, max_bytes: int | None = _MAX_FETCH_BYTES) -> tuple[bytes, str]:
+    """Fetch an external image through the allowlist, size cap, cache and
+    negative cache, with the Cover Art Archive release-group fallback.
+
+    `max_bytes` is the size cap (None for none): an image over it, fetched or
+    cached, raises `ImageTooLarge`. Returns (content, content type); raises
+    `ImageUnavailable` with the reason when the URL is refused or the image
+    cannot be had. The one fetch path for both the UI proxy and the
+    transcoder's cover art.
+    """
     safe_url, fallback_group = _split_fallback_group(url)
     parsed = urlparse(safe_url)
     if parsed.scheme not in ("http", "https"):
-        return _not_found("Only HTTP(S) URLs are allowed")
+        raise ImageUnavailable("Only HTTP(S) URLs are allowed")
     if not _host_allowed(parsed.hostname):
-        return _not_found("Image host not allowed")
+        raise ImageUnavailable("Image host not allowed")
 
-    cached = _cached_response(safe_url)
+    cached = _cached_image(safe_url)
     if cached is not None:
+        _check_size(len(cached[0]), max_bytes)
         return cached
 
     now = time.time()
-    neg_expiry = _NEGATIVE_CACHE.get(safe_url)
-    if neg_expiry is not None and neg_expiry > now:
-        return _not_found("Image unavailable")
+    _raise_if_negatively_cached(safe_url, max_bytes, now)
 
     try:
         # Redirects are followed MANUALLY so every hop's host is re-validated
         # against the allowlist (no SSRF via redirect) — Cover Art Archive 307s
         # to archive.org then 302s to a per-request data-node subdomain.
         async with httpx.AsyncClient(timeout=10.0, follow_redirects=False) as client:
-            fetched = await _fetch_with_fallback(client, safe_url, fallback_group)
-    except _ImageTooLarge:
-        _negative_cache_put(safe_url, now)
-        return _not_found("Image too large")
+            fetched = await _fetch_with_fallback(client, safe_url, fallback_group, max_bytes)
+    except ImageTooLarge:
+        _negative_cache_put(_too_large_key(safe_url, max_bytes), now)
+        raise
     except httpx.HTTPError:
         _negative_cache_put(safe_url, now)
-        return _not_found("Failed to fetch image")
+        raise ImageUnavailable("Failed to fetch image") from None
 
     if fetched is None:
         _negative_cache_put(safe_url, now)
-        return _not_found("Image unavailable")
+        raise ImageUnavailable("Image unavailable")
 
     content, safe_type = fetched
     _store_quietly(safe_url, content, safe_type)
     _NEGATIVE_CACHE.pop(safe_url, None)
-    return _image_response(content, safe_type)
+    return content, safe_type
+
+
+# Intentionally unauthenticated: hit via <img src> (no bearer header possible).
+# The host allowlist + size cap + scheme guard are the security boundary.
+@router.get("/images/proxy")
+async def proxy_image(url: str = Query(..., description="Image URL to proxy")) -> Response:
+    """Proxy and cache external images to avoid browser ORB/CORS issues."""
+    try:
+        content, media_type = await fetch_allowed_image(url)
+    except ImageUnavailable as e:
+        return _not_found(e.detail)
+    return _image_response(content, media_type)
 
 
 @router.get("/images/cache")

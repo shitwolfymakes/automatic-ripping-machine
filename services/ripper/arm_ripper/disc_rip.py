@@ -9,6 +9,7 @@ from arm_common import DiscType, TrackKind, TrackStatus, with_log_context
 from arm_common.schemas import RipStartResponse, TrackView
 from arm_ripper.backend_retry import BackendRetry
 from arm_ripper.drive_handle import DriveHandle
+from arm_ripper.makemkv_minlength import rip_min_length_seconds
 from arm_ripper.drive_poll import DriveErrorKind, DriveState, classify_drive_error, read_drive_status
 from arm_ripper.eject import Ejector
 from arm_ripper.rip import RipResult, rip_all
@@ -44,7 +45,7 @@ def _resumable(disc_type: DiscType, device_path: str, tracks: list[TrackView]) -
     from a real drive, unless every track is a full-disc backup or dump."""
     # A DVD/BD rip whose drive drops off the bus mid-rip stops makemkvcon
     # and resumes on the drive's new node instead of failing every
-    # remaining title (D-133). ISO and folder sources have no bus to drop.
+    # remaining title. ISO and folder sources have no bus to drop.
     return (
         disc_type in (DiscType.DVD, DiscType.BLURAY)
         and not is_file_source(device_path)
@@ -121,9 +122,14 @@ class DiscRip:
         self._kept: set[Path] = set()
         # IN_PROGRESS is sent once per track across every pass.
         self._started: set[str] = set()
-        self._min_length_seconds = (
-            rip_start.min_length_seconds if rip_start.min_length_seconds is not None else default_min_length_seconds
+        # The scan's minimum comes back on rip-start; an older backend sends
+        # none, and the host minimum stands in for it.
+        floor = (
+            rip_start.min_title_length_seconds
+            if rip_start.min_title_length_seconds is not None
+            else default_min_length_seconds
         )
+        self._min_length_seconds = rip_min_length_seconds(rip_start.min_length_seconds, floor)
         self._rip_path = device_path
         self._rip_dir = self._output_dir
         self._skip: set[str] = set()
@@ -157,7 +163,7 @@ class DiscRip:
         if result.output_path is not None:
             self._kept.add(Path(result.output_path))
         await self._backend.patch_track(track.id, **_done_fields(result))
-        logger.info(
+        logger.debug(
             "track %s done size=%s duration=%s",
             track.id,
             result.size_bytes,
@@ -311,7 +317,7 @@ class DiscRip:
     async def _finish(self) -> None:
         """Report rip-complete, then eject the drive at the node it is on now and give it a moment to settle."""
         completed = await self._backend.rip_complete(self._job_id)
-        logger.info("rip-complete job_id=%s status=%s", self._job_id, completed.status.value)
+        logger.debug("rip-complete job_id=%s status=%s", self._job_id, completed.status.value)
 
         # Eject the node the drive is at NOW — it may have renumbered during
         # the rip (USB replug); the path captured at rip start is a hint only.

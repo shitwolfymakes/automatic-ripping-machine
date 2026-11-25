@@ -16,7 +16,7 @@ from arm_ripper.rip.makemkv_rip import (
 )
 from arm_ripper.rip.result import RipResult
 from arm_ripper.rip.title_hasher import OnHashed, TitleHasher
-from arm_ripper.rip.track_callbacks import OnTrackDone, OnTrackProgress, OnTrackStart, TransferStats
+from arm_ripper.rip.track_callbacks import OnTrackDone, OnTrackProgress, OnTrackStart, TransferStats, active_index
 
 # Log under the dispatcher's name: these lines have always come from that logger.
 logger = logging.getLogger("arm_ripper.rip.dispatcher")
@@ -42,22 +42,33 @@ def _index_tracks(
     return track_by_index, invalid
 
 
+def _scan_duration(track: TrackView) -> int | None:
+    """The length MakeMKV's `--minlength` filter sees: the scan-time estimate, else the measured length, else None.
+
+    Before a rip `duration_seconds` (the post-rip actual) is still None, so filtering on it alone would count every
+    title as eligible and shift the positional file pairing."""
+    if track.expected_duration_seconds is not None:
+        return track.expected_duration_seconds
+    return track.duration_seconds
+
+
 def _eligible_source_indexes(track_by_index: dict[int, TrackView], min_length_seconds: int) -> list[int]:
     """The source indexes MakeMKV will rip, ascending: each track at least `min_length_seconds` long, or of unknown
     length."""
-    # Eligible source indexes — those whose duration meets `--minlength`,
+    # Eligible source indexes — those whose scan duration meets `--minlength`,
     # sorted ascending. MakeMKV's `mkv all` output files carry an
     # output-position suffix (`_t00`, `_t01`, ...) rather than the
     # source title index, so we pair this list positionally with the
-    # files post-rip to get attribution back. Tracks with no
-    # `duration_seconds` (rare — scan didn't find one) are treated as
+    # files post-rip to get attribution back. Tracks with no known
+    # duration (rare — scan didn't find one) are treated as
     # eligible to avoid dropping them silently; if MakeMKV skips them,
     # they fall through to "produced no .mkv" downstream.
-    return sorted(
-        idx
-        for idx, t in track_by_index.items()
-        if t.duration_seconds is None or t.duration_seconds >= min_length_seconds
-    )
+    return sorted(idx for idx, t in track_by_index.items() if _meets_min_length(_scan_duration(t), min_length_seconds))
+
+
+def _meets_min_length(duration: int | None, min_length_seconds: int) -> bool:
+    """Whether MakeMKV keeps a title of this length; an unknown length counts as kept."""
+    return duration is None or duration >= min_length_seconds
 
 
 def _first_eligible_track(track_by_index: dict[int, TrackView], eligible: list[int]) -> TrackView | None:
@@ -67,8 +78,8 @@ def _first_eligible_track(track_by_index: dict[int, TrackView], eligible: list[i
 
 def _no_output_error(title_idx: int, track: TrackView, min_length_seconds: int, eligible: list[int]) -> str:
     """Why a selected title has no result: MakeMKV skipped it as too short, or it produced nothing for it."""
-    duration = track.duration_seconds
-    if duration is not None and duration < min_length_seconds:
+    duration = _scan_duration(track)
+    if not _meets_min_length(duration, min_length_seconds):
         return f"track duration {duration}s below minlength={min_length_seconds}s; makemkvcon skipped it"
     return f"makemkvcon produced no output for title {title_idx} (eligible={title_idx in eligible})"
 
@@ -138,7 +149,7 @@ class _OpticalRip:
         self._hasher = TitleHasher()
 
     def _drive_dropped(self) -> bool:
-        """The drive left the bus under this rip (D-133). The first time
+        """The drive left the bus under this rip. The first time
         `drive_lost` says so, set `stop`, which kills makemkvcon."""
         if self._stop is None:
             return False
@@ -158,35 +169,25 @@ class _OpticalRip:
         self._started.add(title_idx)
         await self._on_track_start(track)
 
-    async def _on_title_progress(self, title_idx: int, fraction: float) -> None:
-        if self._on_track_progress is None:
-            return
-        track = self._track_by_index.get(title_idx)
-        if track is None:
+    async def _on_disc_progress(self, fraction: float) -> None:
+        """Report MakeMKV's disc-overall PRGV fraction.
+
+        The figure is the disc-wide fraction, so the bar fills smoothly
+        0→100 % across the whole rip via the PRGV `total/max` channel.
+        It is reported as the progress of the title being ripped (see
+        `_active_track`), so the UI can show which file is active.
+        """
+        track = self._active_track()
+        if self._on_track_progress is None or track is None:
             return
         await self._on_track_progress(track, fraction)
 
-    async def _on_disc_progress(self, fraction: float) -> None:
-        """Disc-overall PRGV fallback for `mkv all`.
-
-        MakeMKV in `mkv all` mode emits no per-title PRGT, so the
-        streamer's `current_title` stays None and no `_on_title_progress`
-        ever fires. Without this fallback the dashboard bar would stay
-        at 0 % for the whole rip even though the file is being written.
-
-        We attribute disc-level progress to the first eligible track —
-        the WS payload requires a track_id, but the UI's rips store
-        keys live progress by `job_id` and only ever displays a single
-        bar per disc (see services/ui-neu/frontend/src/lib/stores/rips.svelte.ts),
-        so the choice of track_id is purely a wire-format detail. The
-        bar fills smoothly 0→100 % across the whole rip via the PRGV
-        `total/max` channel. Per-title attribution still happens
-        post-rip in the attribution loop below.
-        """
-        first_track = _first_eligible_track(self._track_by_index, self._eligible)
-        if self._on_track_progress is None or first_track is None:
-            return
-        await self._on_track_progress(first_track, fraction)
+    def _active_track(self) -> TrackView | None:
+        """The track for the eligible title MakeMKV is ripping: the first whose file it has not finished, or the last
+        once all are; None when nothing is eligible."""
+        if not self._eligible:
+            return None
+        return self._track_by_index[active_index(self._eligible, self._done_emitted)]
 
     def _finalise_after_hash(self, track: TrackView, result: RipResult) -> OnHashed:
         async def then(digest: str | None) -> None:
@@ -272,7 +273,6 @@ class _OpticalRip:
                 minlength_seconds=self._min_length_seconds,
                 eligible_source_indexes=self._eligible,
                 on_title_start=self._on_title_start,
-                on_title_progress=self._on_title_progress,
                 on_disc_progress=self._on_disc_progress,
                 on_title_done=self._on_title_done,
                 hash_outputs=False,
@@ -312,7 +312,9 @@ class _OpticalRip:
         #   the hasher like a live one.
         # - Otherwise: the track was below `min_length_seconds`, so MakeMKV
         #   never attempted it. FAILED with a clear reason so the operator
-        #   can lower minlength and retry.
+        #   can lower the session minimum or the minimum title length
+        #   setting and rip the disc again; the rip never goes below the
+        #   minimum the scan used (`rip_min_length_seconds`).
         for title_idx, track in self._track_by_index.items():
             if title_idx in self._done_emitted:
                 continue
@@ -378,8 +380,11 @@ async def rip_optical(
     """Single-invocation DVD/BD rip with per-title attribution.
 
     The makemkvcon invocation rips every title ≥ minlength to
-    `output_dir`. We map title_index → TrackView via `source_ref` and
-    fan the lifecycle callbacks out as MakeMKV's stream announces each
+    `output_dir`. The caller settles minlength never below the minimum
+    the scan listed titles with (`rip_min_length_seconds`), so every file
+    belongs to a listed title.
+    We map title_index → TrackView via `source_ref` and fan the
+    lifecycle callbacks out as MakeMKV's stream announces each
     title. Tracks whose `source_ref` doesn't parse as an int are
     failed up front — same shape as the per-title implementation.
 

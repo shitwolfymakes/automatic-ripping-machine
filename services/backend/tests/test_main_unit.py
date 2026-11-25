@@ -5,14 +5,19 @@ booting the app (the lifespan itself is exercised by the e2e harness).
 
 from __future__ import annotations
 
+import logging
 import subprocess
+from pathlib import Path
+from typing import Any
 
 
 import pytest
+import uvicorn
 
 from arm_backend import docker_factory, gpu_inventory
 from arm_backend import main as main_mod
 from arm_backend import thediscdb_schedule
+from arm_common import configure_service_logging
 
 
 def test_run_migrations_invokes_alembic(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -82,7 +87,7 @@ def test_build_docker_client_default_purpose_is_transcode_dispatcher(
 def test_build_docker_client_purpose_is_used_in_the_warning(
     monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
 ) -> None:
-    """C2: the warning names whichever docker-backed feature failed to
+    """The warning names whichever docker-backed feature failed to
     build a client, not always "transcode dispatcher"."""
 
     def _raise() -> object:
@@ -107,6 +112,27 @@ def test_main_invokes_uvicorn(monkeypatch: pytest.MonkeyPatch) -> None:
     main_mod.main()
     assert captured["app"] == "arm_backend.main:app"
     assert "host" in captured and "port" in captured
+
+
+def test_uvicorn_uses_the_root_handlers(monkeypatch: pytest.MonkeyPatch) -> None:
+    captured: dict[str, object] = {}
+    monkeypatch.setattr(main_mod.uvicorn, "run", lambda app, **kw: captured.update(kw))
+    main_mod.main()
+    assert captured["log_config"] is None
+    assert "log_level" not in captured
+
+
+def test_uvicorn_keeps_the_quiet_access_and_connection_loggers(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Request lines (uvicorn.access) and WebSocket open/close lines (uvicorn.error) stay below info."""
+    configure_service_logging("arm-backend", log_dir=str(tmp_path), level="info")
+
+    def _build_config(app: str, **kw: Any) -> None:
+        uvicorn.Config(app, **kw).configure_logging()
+
+    monkeypatch.setattr(main_mod.uvicorn, "run", _build_config)
+    main_mod.main()
+    assert logging.getLogger("uvicorn.access").level == logging.WARNING
+    assert logging.getLogger("uvicorn.error").level == logging.WARNING
 
 
 # --- refresh_gpu_inventory (both populated + empty branches) ----------------
@@ -190,7 +216,7 @@ async def test_refresh_gpu_inventory_respects_existing_rows(monkeypatch: pytest.
 
 
 async def test_refresh_gpu_inventory_releases_orphaned_claims(monkeypatch: pytest.MonkeyPatch) -> None:
-    """D-057: with seed-once inventory a BUSY row whose claim was nulled by a
+    """With seed-once inventory a BUSY row whose claim was nulled by a
     task delete, or whose task finished, is freed at boot. A QUEUED or
     IN_PROGRESS claimant may still be running and keeps its GPU."""
     from arm_common import Gpu, GpuStatus, TranscodeTask, TranscodeTaskStatus
@@ -367,7 +393,6 @@ async def test_thediscdb_refresh_loop_skips_a_fresh_index(monkeypatch: pytest.Mo
     import asyncio
     import types
     from datetime import UTC, datetime, timedelta
-    from pathlib import Path
 
     from fastapi import FastAPI
 

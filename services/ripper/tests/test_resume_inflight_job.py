@@ -1,7 +1,7 @@
-"""Direct coverage of JobController.resume_inflight_job's single-flight gate
-(followups: parked from Plan 1, where only the poll-loop path exercised it)."""
+"""Direct coverage of JobController.resume_inflight_job's single-flight gate."""
 
 import asyncio
+import logging
 import os
 
 os.environ.setdefault("ARM_DRIVE_DEV", "/dev/sr0")
@@ -69,7 +69,8 @@ async def test_resume_holds_the_single_flight_gate_while_ripping(monkeypatch) ->
     client = _Client()
     c = JobController(client, "drv_test", device_path="/dev/sr0")  # type: ignore[arg-type]
     assert c.is_idle()
-    task = asyncio.create_task(c.resume_inflight_job(_job(), "/dev/sr0"))
+    task = await c.resume_inflight_job(_job(), "/dev/sr0")
+    assert task is not None
     await started.wait()
     seen_idle.append(c.is_idle())
     release.set()
@@ -87,8 +88,24 @@ async def test_resume_releases_the_gate_when_the_rip_raises(monkeypatch) -> None
 
     monkeypatch.setattr(JobController, "_execute_rip", _boom)
     c = JobController(_Client(), "drv_test", device_path="/dev/sr0")  # type: ignore[arg-type]
-    try:
-        await c.resume_inflight_job(_job(), "/dev/sr0")
-    except RuntimeError:
-        pass
+    task = await c.resume_inflight_job(_job(), "/dev/sr0")
+    assert task is not None
+    await task  # the error is logged in the rip's own task
     assert c.is_idle()
+
+
+async def test_resume_logs_rip_started_with_resumed_true(monkeypatch, caplog) -> None:
+    _quiet(monkeypatch)
+
+    async def _noop(self, **kw) -> None:
+        return None
+
+    monkeypatch.setattr(JobController, "_execute_rip", _noop)
+    c = JobController(_Client(), "drv_test", device_path="/dev/sr0")  # type: ignore[arg-type]
+    with caplog.at_level(logging.INFO, logger="arm_ripper.job_controller"):
+        task = await c.resume_inflight_job(_job(), "/dev/sr0")
+        assert task is not None
+        await task  # the rip runs in its own task
+    (record,) = [r for r in caplog.records if getattr(r, "event", None) == "rip.started"]
+    assert record.fields["resumed"] is True
+    assert record.fields["disc_type"] == "dvd"

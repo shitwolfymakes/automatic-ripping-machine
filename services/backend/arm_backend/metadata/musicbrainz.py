@@ -9,7 +9,7 @@ from urllib.parse import quote
 import httpx
 
 from arm_backend.config import settings
-from arm_backend.metadata.base import LookupError, LookupTimeout, MetadataResult
+from arm_backend.metadata.base import LookupError, LookupTimeout, MetadataResult, json_object
 from arm_backend.metadata.years import year_from
 
 logger = logging.getLogger("arm_backend.metadata.musicbrainz")
@@ -110,7 +110,7 @@ class MusicBrainzClient:
         if r.status_code != 200:
             raise LookupError(f"musicbrainz status={r.status_code}")
 
-        return r.json()  # type: ignore[no-any-return]
+        return json_object(r, "musicbrainz")
 
     async def lookup_disc_id(self, disc_id: str, toc: str | None = None) -> MetadataResult:
         """Exact disc-ID lookup. When that disc isn't listed (404 or no
@@ -120,8 +120,8 @@ class MusicBrainzClient:
         try:
             body = await self._get(
                 f"/discid/{disc_id}",
-                # release-groups: so extract_poster_url can prefer the (more often
-                # populated) release-group cover over the specific release's.
+                # release-groups: so extract_poster_url can carry the album's
+                # release-group cover as the fallback when this release has none.
                 params={"inc": inc, "fmt": "json"},
                 not_found_detail=_DISC_NOT_FOUND,
             )
@@ -208,8 +208,8 @@ class MusicBrainzClient:
         """
         body = await self._get(
             f"/release/{quote(release_id, safe='')}",
-            # release-groups: so extract_poster_url can prefer the (more often
-            # populated) release-group cover over the specific release's.
+            # release-groups: so extract_poster_url can carry the album's
+            # release-group cover as the fallback when this release has none.
             params={"inc": "artists+recordings+labels+release-groups", "fmt": "json"},
             not_found_detail="musicbrainz release not found",
         )

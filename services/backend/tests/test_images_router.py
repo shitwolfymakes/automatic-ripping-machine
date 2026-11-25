@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 
 import httpx
 import pytest
@@ -141,7 +142,63 @@ def test_oversized_negative_cached(client, monkeypatch):
     url = "https://m.media-amazon.com/big2.jpg"
     r = client.get("/api/images/proxy", params={"url": url})
     assert r.status_code == 404
-    assert url in images_router._NEGATIVE_CACHE
+    # Under the cap it was too large for, not the bare URL: a larger cap may still fetch it.
+    assert list(images_router._NEGATIVE_CACHE) == [f"{2 * 1024 * 1024}>{url}"]
+    _patch_fetch(monkeypatch, raise_error=True)
+    r2 = client.get("/api/images/proxy", params={"url": url})
+    assert r2.status_code == 404
+    assert r2.json()["detail"] == "Image too large"
+
+
+# --- fetch_allowed_image's size cap ---
+
+_BIG_URL = "https://coverartarchive.org/release/rel-1/front"
+_THREE_MB = b"x" * (3 * 1024 * 1024)
+
+
+def _fetch(url: str = _BIG_URL, **kw: object) -> tuple[bytes, str]:
+    return asyncio.run(images_router.fetch_allowed_image(url, **kw))  # type: ignore[arg-type]
+
+
+def test_the_default_cap_is_the_proxy_cap(client, monkeypatch):
+    _patch_fetch(monkeypatch, content=_THREE_MB, content_type="image/jpeg")
+    with pytest.raises(images_router.ImageTooLarge) as exc:
+        _fetch()
+    assert exc.value.detail == "Image too large"
+    assert isinstance(exc.value, images_router.ImageUnavailable)
+
+
+def test_a_larger_cap_fetches_what_the_default_refuses(client, monkeypatch):
+    _patch_fetch(monkeypatch, content=_THREE_MB, content_type="image/jpeg")
+    with pytest.raises(images_router.ImageTooLarge):
+        _fetch()
+    # The smaller cap's failure is cached for that cap alone.
+    assert _fetch(max_bytes=5 * 1024 * 1024) == (_THREE_MB, "image/jpeg")
+
+
+def test_no_cap_fetches_any_size(client, monkeypatch):
+    _patch_fetch(monkeypatch, content=_THREE_MB, content_type="image/png")
+    assert _fetch(max_bytes=None) == (_THREE_MB, "image/png")
+
+
+def test_a_too_large_fetch_stays_too_large_when_asked_again(client, monkeypatch):
+    _patch_fetch(monkeypatch, content=_THREE_MB, content_type="image/jpeg")
+    with pytest.raises(images_router.ImageTooLarge):
+        _fetch(max_bytes=1024 * 1024)
+    _patch_fetch(monkeypatch, raise_error=True)
+    # From the negative cache, as too large, so a caller still steps down to a smaller size.
+    with pytest.raises(images_router.ImageTooLarge):
+        _fetch(max_bytes=1024 * 1024)
+
+
+def test_a_cached_image_over_the_cap_is_too_large(client, monkeypatch):
+    monkeypatch.setattr(image_cache.settings, "ARM_IMAGE_CACHE_MAX_BYTES", 10 * 1024 * 1024)
+    _patch_fetch(monkeypatch, content=_THREE_MB, content_type="image/jpeg")
+    assert _fetch(max_bytes=None) == (_THREE_MB, "image/jpeg")
+    _patch_fetch(monkeypatch, raise_error=True)
+    with pytest.raises(images_router.ImageTooLarge):
+        _fetch(max_bytes=2 * 1024 * 1024)
+    assert _fetch(max_bytes=5 * 1024 * 1024) == (_THREE_MB, "image/jpeg")
 
 
 def test_endpoint_requires_no_auth(client, monkeypatch):
@@ -391,6 +448,41 @@ def test_release_404_falls_back_to_group(client, monkeypatch):
     assert r.status_code == 200
     assert r.content == b"GROUPCOVER"
     assert any("/release-group/grp-1/" in u for u in requested)
+    assert "https://coverartarchive.org/release-group/grp-1/front-250" in requested
+
+
+def test_group_fallback_keeps_the_requested_size(client, monkeypatch):
+    # The transcoder's cover asks for front-500; the album-wide fallback must not drop to the thumbnail.
+    requested = _patch_fetch_recording(
+        monkeypatch,
+        {"/release/rel-1/": "404", "/release-group/grp-1/": ("image", b"GROUPCOVER", "image/jpeg")},
+    )
+    url = "https://coverartarchive.org/release/rel-1/front-500?fallback_group=grp-1"
+    r = client.get("/api/images/proxy", params={"url": url})
+    assert r.status_code == 200
+    assert requested[-1] == "https://coverartarchive.org/release-group/grp-1/front-500"
+
+
+def test_group_fallback_keeps_the_original_size(client, monkeypatch):
+    # A session embedding the image as uploaded asks for `front`; the album-wide
+    # fallback must not drop to the thumbnail either.
+    requested = _patch_fetch_recording(
+        monkeypatch,
+        {"/release/rel-1/": "404", "/release-group/grp-1/": ("image", b"GROUPCOVER", "image/jpeg")},
+    )
+    url = "https://coverartarchive.org/release/rel-1/front?fallback_group=grp-1"
+    assert client.get("/api/images/proxy", params={"url": url}).status_code == 200
+    assert requested[-1] == "https://coverartarchive.org/release-group/grp-1/front"
+
+
+def test_group_fallback_without_a_size_in_the_url_uses_the_thumbnail(client, monkeypatch):
+    requested = _patch_fetch_recording(
+        monkeypatch,
+        {"/release/rel-1/": "404", "/release-group/grp-1/": ("image", b"GROUPCOVER", "image/jpeg")},
+    )
+    url = "https://coverartarchive.org/release/rel-1/12345.jpg?fallback_group=grp-1"
+    assert client.get("/api/images/proxy", params={"url": url}).status_code == 200
+    assert requested[-1] == "https://coverartarchive.org/release-group/grp-1/front-250"
 
 
 def test_release_200_does_not_use_fallback(client, monkeypatch):
@@ -463,7 +555,7 @@ def test_redirect_without_location_is_unavailable(client, monkeypatch):
 
 
 def test_negative_cache_drops_expired_entries_on_write() -> None:
-    """D-160: expired negative entries are pruned instead of kept forever."""
+    """Expired negative entries are pruned instead of kept forever."""
     images_router._NEGATIVE_CACHE.clear()
     images_router._negative_cache_put("https://image.tmdb.org/a.jpg", 0.0)
     images_router._negative_cache_put("https://image.tmdb.org/b.jpg", 10.0)
@@ -474,7 +566,7 @@ def test_negative_cache_drops_expired_entries_on_write() -> None:
 
 
 def test_negative_cache_is_capped_and_evicts_oldest(monkeypatch) -> None:
-    """D-160: distinct failing URLs cannot grow the dict past the cap."""
+    """Distinct failing URLs cannot grow the dict past the cap."""
     images_router._NEGATIVE_CACHE.clear()
     monkeypatch.setattr(images_router, "_NEGATIVE_CACHE_MAX_ENTRIES", 3)
     for i in range(5):

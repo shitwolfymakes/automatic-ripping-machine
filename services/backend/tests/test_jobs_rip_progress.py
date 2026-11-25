@@ -159,6 +159,32 @@ def test_ripping_job_counts_failed_tracks(signing_key: bytes) -> None:
     assert rp["current_track_index"] == 3
 
 
+def test_ripping_job_summary_counts_every_title_the_drive_reads(signing_key: bytes) -> None:
+    """Progress covers every title MakeMKV reads, excluded ones included, so
+    "title N of M" stays truthful while the extras rip before the feature."""
+    db = FakeSession()
+    _seed_admin(db)
+    job_id = "job_01JZXR7K3M5Q8N4VWA00000002"
+    db.rows["jobs"] = [_make_job(job_id, status=JobStatus.RIPPING)]
+    dropped_done = _make_track("trk_1", job_id=job_id, index=1, status=TrackStatus.DONE)
+    dropped_done.excluded = True
+    dropped_ripping = _make_track("trk_2", job_id=job_id, index=2, status=TrackStatus.IN_PROGRESS)
+    dropped_ripping.excluded = True
+    main = _make_track("trk_3", job_id=job_id, index=3, status=TrackStatus.QUEUED)
+    db.rows["tracks"] = [dropped_done, dropped_ripping, main]
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as client:
+        r = client.get("/api/jobs", headers=_auth(token))
+    assert r.status_code == 200
+    assert r.json()[0]["rip_progress"] == {
+        "tracks_total": 3,
+        "tracks_done": 1,
+        "tracks_failed": 0,
+        "current_track_id": "trk_2",
+        "current_track_index": 2,
+    }
+
+
 @pytest.mark.parametrize(
     "status",
     [

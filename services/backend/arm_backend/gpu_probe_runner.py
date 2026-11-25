@@ -13,7 +13,10 @@ A failed probe is recorded with the worker's stderr tail, never as a silent
 "verified nothing": exit 3 means the test clip could not be generated, exit 2
 means the probe environment was rejected, and any other non-zero exit or
 output without that JSON line (most often a transcode image that predates
-`--probe-device`) tells the operator to rebuild or pull the image. Every
+`--probe-device`) tells the operator to rebuild or pull the image. The probe
+container mounts the task's folders, so the entrypoint checks them under the
+transcoder's identity first; a folder it cannot use is reported in plain terms
+(`transcode_access_message`) and leaves the row's encoders as they were. Every
 probe writes `probed_at`, so a failed row shows its error instead of looking
 unprobed.
 
@@ -24,7 +27,8 @@ but not yet committed (`dispatcher.claimed_gpu_ids`), is never probed.
 
 Triggers: the boot pass (`start_boot_pass` -> `probe_unprobed`: removes
 probe containers orphaned by a previous process, then probes, one at a time,
-every enabled row that was never probed or has no verified encoder) and
+every enabled row that was never probed, has no verified encoder or last
+reported a folder problem) and
 `start_probe` (the re-probe endpoints and enabling a never-probed row).
 Neither runs without a docker client.
 
@@ -47,7 +51,8 @@ from sqlalchemy.orm.exc import StaleDataError
 from sqlmodel import col, select
 
 from arm_backend.config import Settings, effective_transcode_capable
-from arm_backend.transcode_container_spec import container_identity_env, gpu_run_kwargs
+from arm_backend.transcode_access_message import ACCESS_ERROR_PREFIX, access_failure_message, parse_access_failure
+from arm_backend.transcode_container_spec import container_identity_env, gpu_run_kwargs, task_volumes
 from arm_backend.transcode_dispatcher import TranscodeDispatcher
 from arm_backend.transcode_images import image_for
 from arm_backend.ws import WSHub
@@ -73,16 +78,24 @@ _STDERR_TAIL_LINES = 5
 _KNOWN_CODECS = frozenset(c.value for c in VideoCodec)
 
 # (verified encoders, error). Verified is None when the probe never got to
-# test the device (no container, a docker error, a timeout): that says
-# nothing about its encoders, so the row keeps the ones it had.
+# test the device (no container, a docker error, a timeout, or the entrypoint
+# refusing a folder it cannot use): that says nothing about its encoders, so
+# the row keeps the ones it had.
 ProbeOutcome = tuple[list[str] | None, str | None]
+
+
+def _needs_boot_probe(gpu: Gpu) -> bool:
+    """An enabled row that was never probed, has no verified encoder, or last
+    reported a folder problem (so a restart after fixing it clears the warning)."""
+    folder_problem = (gpu.probe_error or "").startswith(ACCESS_ERROR_PREFIX)
+    return gpu.enabled and (gpu.probed_at is None or not gpu.encoder_kinds or folder_problem)
 
 
 def _truncate(text: str) -> str:
     return text[:MAX_ERROR_CHARS]
 
 
-def _is_timeout(exc: BaseException) -> bool:
+def is_timeout(exc: BaseException) -> bool:
     """docker-py surfaces a `wait(timeout=...)` expiry as a requests
     ReadTimeout or a ConnectionError wrapping urllib3's read timeout,
     depending on the transport; match on the shape rather than one class."""
@@ -91,12 +104,12 @@ def _is_timeout(exc: BaseException) -> bool:
     return "timeout" in type(exc).__name__.lower() or "timed out" in str(exc).lower()
 
 
-def _decode(raw: bytes | str) -> str:
+def decode_output(raw: bytes | str) -> str:
     return raw.decode("utf-8", errors="replace") if isinstance(raw, bytes) else raw
 
 
 def _stderr_tail(stderr: bytes | str) -> str:
-    lines = [line.strip() for line in _decode(stderr).splitlines() if line.strip()]
+    lines = [line.strip() for line in decode_output(stderr).splitlines() if line.strip()]
     return " | ".join(lines[-_STDERR_TAIL_LINES:])
 
 
@@ -107,7 +120,7 @@ def parse_probe_payload(status_code: int, stdout: bytes | str) -> dict[str, Any]
     before the worker runs). Anything other than exit 0 with a JSON object
     carrying a `verified` list is a failed probe.
     """
-    lines = [line.strip() for line in _decode(stdout).splitlines() if line.strip()]
+    lines = [line.strip() for line in decode_output(stdout).splitlines() if line.strip()]
     if status_code != 0 or not lines:
         return None
     try:
@@ -128,7 +141,9 @@ def probe_failure_error(status_code: int, stderr: bytes | str) -> str:
         message = "probe misconfigured" + (f": {tail}" if tail else "")
     else:
         # An image that predates --probe-device exits 1: it starts as a
-        # normal transcode worker and fails its config validation.
+        # normal transcode worker and fails its config validation. (The
+        # entrypoint's folder check also exits 1; the caller recognises that
+        # case first.)
         message = STALE_IMAGE_ERROR.format(code=status_code) + (f"; stderr: {tail}" if tail else "")
     return _truncate(message)
 
@@ -301,7 +316,7 @@ class GpuProbeRunner:
                 async with self._db_factory() as db:
                     stmt = select(Gpu).order_by(col(Gpu.vendor), col(Gpu.device_path))
                     rows = (await db.execute(stmt)).scalars().all()
-                    gpu_ids = [g.id for g in rows if g.enabled and (g.probed_at is None or not g.encoder_kinds)]
+                    gpu_ids = [g.id for g in rows if _needs_boot_probe(g)]
             except Exception as exc:  # noqa: BLE001 - a boot-time background pass must never crash
                 logger.exception("gpu probe: boot pass could not list GPUs: %s", exc)
                 return
@@ -372,14 +387,19 @@ class GpuProbeRunner:
             "command": list(PROBE_COMMAND),
             "labels": {PROBE_LABEL_KEY: gpu.id},
             "environment": env,
-            # No /raw, /media or backend access: the probe encodes a generated
-            # clip in its own scratch space and reports on stdout.
             "network": None,
             "detach": True,
             # Kept until `logs` is read after `wait`; removed in `finally`.
             "auto_remove": False,
         }
         kwargs.update(gpu_run_kwargs(gpu))
+        # The task's own folders, so the entrypoint checks they are usable under
+        # the transcoder's identity before the probe runs. The probe itself
+        # still encodes a generated clip in its own scratch space, writes
+        # nothing into them and has no backend access. Without every host path
+        # there are no real folders to check, so the probe runs without mounts.
+        if self._dispatcher.host_paths_set():
+            kwargs["volumes"] = task_volumes(self._settings)
         return kwargs
 
     async def _run_container(self, docker: Any, gpu: Gpu) -> ProbeOutcome:
@@ -404,7 +424,7 @@ class GpuProbeRunner:
             try:
                 result = await asyncio.to_thread(container.wait, timeout=PROBE_TIMEOUT_S)
             except Exception as exc:  # noqa: BLE001 - reported on the row
-                if _is_timeout(exc):
+                if is_timeout(exc):
                     return None, f"probe timed out after {PROBE_TIMEOUT_S} s; the probe container was removed"
                 return None, _truncate(f"probe failed while waiting for the container: {exc}")
             raw_code = result.get("StatusCode")
@@ -414,12 +434,21 @@ class GpuProbeRunner:
             if payload is not None:
                 return probe_outcome(payload)
             stderr = await asyncio.to_thread(container.logs, stdout=False, stderr=True)
-            return [], probe_failure_error(status_code, stderr)
+            return self._no_result_outcome(status_code, stderr)
         finally:
             try:
                 await asyncio.to_thread(container.remove, force=True)
             except Exception as exc:  # noqa: BLE001 - best-effort cleanup
                 logger.warning("gpu probe: could not remove the probe container for %s: %s", gpu.id, exc)
+
+    def _no_result_outcome(self, status_code: int, stderr: bytes | str) -> ProbeOutcome:
+        """A probe that printed no result: a folder the transcoder cannot use
+        verifies nothing either way (the row keeps its encoders); anything
+        else is a failed probe that verified nothing."""
+        failure = parse_access_failure(stderr)
+        if failure is not None:
+            return None, _truncate(access_failure_message(failure, self._settings))
+        return [], probe_failure_error(status_code, stderr)
 
     async def _remove_probe_containers(self, docker: Any, gpu_id: str) -> None:
         """Remove every container labelled as this row's probe. Only called

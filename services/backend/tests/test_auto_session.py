@@ -1,4 +1,4 @@
-"""Phase 8: direct tests for `apply_session_internal` covering both source values."""
+"""Direct tests for `apply_session_internal` covering both source values."""
 
 from __future__ import annotations
 
@@ -42,6 +42,7 @@ from arm_common import (
 )
 
 from tests._fakes import FakeSession
+from tests._logs import LineCapture
 
 
 class CapturingHub:
@@ -326,7 +327,7 @@ async def test_unknown_session_raises(tmp_path: Path) -> None:
 
 @pytest.mark.asyncio
 async def test_fan_out_skips_on_media_mismatch(tmp_path: Path) -> None:
-    """G-04: a session routed/applied against a job whose identified
+    """A session routed/applied against a job whose identified
     media_type disagrees (e.g. a movie session on a music CD job) must not
     fan out any tasks — it's a first-class skip, not an empty-fan-out that
     later gets orphan-swept as a fake crash."""
@@ -358,7 +359,7 @@ async def test_fan_out_skips_on_media_mismatch(tmp_path: Path) -> None:
 
 @pytest.mark.asyncio
 async def test_fan_out_proceeds_for_tv_session_on_movie_job(tmp_path: Path) -> None:
-    """C1: movie and tv are the same track kind (VIDEO_TITLE) — compatible,
+    """Movie and tv are the same track kind (VIDEO_TITLE) — compatible,
     not a mismatch."""
     _set_media_root(tmp_path)
     db = FakeSession()
@@ -383,7 +384,7 @@ async def test_fan_out_proceeds_for_tv_session_on_movie_job(tmp_path: Path) -> N
 
 @pytest.mark.asyncio
 async def test_fan_out_proceeds_for_iso_session_on_movie_job(tmp_path: Path) -> None:
-    """C1: an iso/data session consumes a dump of any video disc — no
+    """An iso/data session consumes a dump of any video disc — no
     identified job is ever `iso`, so this must not dead-end as a mismatch."""
     _set_media_root(tmp_path)
     db = FakeSession()
@@ -566,8 +567,38 @@ async def test_backup_session_applied_before_the_rip_still_parks(tmp_path: Path)
     assert outcome.tasks == []
 
 
+@pytest.mark.asyncio
+async def test_parked_backup_session_on_a_job_ripped_as_titles_is_a_media_mismatch_at_drain(
+    tmp_path: Path,
+) -> None:
+    """Applied before the rip, the backup session parks; the rip then runs as
+    titles. The drain (resolve fan-out, rip-complete, redrain) must refuse it
+    like the post-rip apply does, not file title_t01.mkv as an extension-less
+    "Iron Man (2008)" file."""
+    _set_media_root(tmp_path)
+    db = FakeSession()
+    job = _seed(db)  # ripped, one VIDEO_TITLE track
+    _add_backup_session(db)
+    parked = SessionApplication(
+        id="sap_backup",
+        session_id="ses_builtin_bd_backup",
+        job_id=job.id,
+        status=SessionApplicationStatus.WAITING_IDENTIFY,
+        overwrite=False,
+    )
+    db.rows["session_applications"] = [parked]
+    hub = CapturingHub()
+
+    outcomes = await fan_out_waiting_identify_applications(db, job=job, hub=hub)  # type: ignore[arg-type]
+
+    assert [(o.skipped_reason, o.tasks) for o in outcomes] == [("media_mismatch", [])]
+    assert outcomes[0].error_detail is not None and "no backup track" in outcomes[0].error_detail
+    assert parked.status == SessionApplicationStatus.WAITING_IDENTIFY
+    assert db.rows["transcode_tasks"] == []
+
+
 def test_media_mismatch_detail_survives_raw_string_media_type() -> None:
-    """M2: a forward-compat row can load `media_type` as a raw `str` instead
+    """A forward-compat row can load `media_type` as a raw `str` instead
     of a `MediaType` member. `media_mismatch_detail` must render it via
     `enum_value_str`, not `.value`, or a stray string yields an
     AttributeError 500 instead of the intended 422."""
@@ -637,7 +668,7 @@ async def _manual_apply(db: FakeSession, job: Job) -> Any:
 async def test_repeat_manual_park_returns_the_parked_row(
     tmp_path: Path, job_status: JobStatus, skipped_reason: str | None
 ) -> None:
-    """D-141: a second manual apply of the same session before the rip (or
+    """A second manual apply of the same session before the rip (or
     before identify) returns the already-parked row instead of parking a
     duplicate that the drain would later leave stuck on `collisions`."""
     _set_media_root(tmp_path)
@@ -657,7 +688,7 @@ async def test_repeat_manual_park_returns_the_parked_row(
 
 @pytest.mark.asyncio
 async def test_auto_lookup_tolerates_duplicate_rows(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """D-141: rows parked as duplicates before the fix must not make the auto
+    """Duplicate parked rows must not make the auto
     idempotency lookup raise MultipleResultsFound; it takes the first."""
     from sqlalchemy.exc import MultipleResultsFound
 
@@ -965,3 +996,105 @@ async def test_fan_out_transcode_disabled_wins_over_encoder_unavailable(tmp_path
     assert len(outcomes) == 1
     assert outcomes[0].skipped_reason == "transcode_disabled"
     assert outcomes[0].application.status == SessionApplicationStatus.WAITING_IDENTIFY
+
+
+async def test_apply_logs_session_applied(tmp_path: Path, job_log: LineCapture) -> None:
+    _set_media_root(tmp_path)
+    db = FakeSession()
+    job = _seed(db)
+
+    outcome = await apply_session_internal(
+        db,
+        job=job,
+        session_id="ses_x",
+        overwrite=False,
+        created_by_user_id=None,
+        source="manual",
+        hub=CapturingHub(),  # type: ignore[arg-type]
+    )
+
+    assert outcome.application is not None
+    (line,) = job_log.lines(event="session.applied")
+    assert line["msg"] == "My Plex applied (manual): 1 transcode queued"
+    assert line["fields"] == {"session": "My Plex", "source": "manual", "task_count": 1}
+    assert line["job_id"] == job.id and line["session_application_id"] == outcome.application.id
+    assert not [entry for entry in job_log.lines() if "apply session_id=" in entry["msg"]]
+
+
+async def test_draining_a_parked_application_logs_session_applied_once(tmp_path: Path, job_log: LineCapture) -> None:
+    from arm_backend.session_drain import drain_parked_applications_after_rip
+
+    _set_media_root(tmp_path)
+    db = FakeSession()
+    job = _seed(db)
+    db.rows["session_applications"] = [
+        SessionApplication(
+            id="sap_parked",
+            session_id="ses_x",
+            job_id=job.id,
+            status=SessionApplicationStatus.WAITING_IDENTIFY,
+            overwrite=False,
+        )
+    ]
+
+    outcomes = await drain_parked_applications_after_rip(db, job, CapturingHub())  # type: ignore[arg-type]
+
+    assert [o.skipped_reason for o in outcomes] == [None]
+    (line,) = job_log.lines(event="session.applied")
+    assert line["msg"] == "My Plex applied (manual): 1 transcode queued"
+    assert line["session_application_id"] == "sap_parked" and line["job_id"] == job.id
+    assert not [entry for entry in job_log.lines() if "fanned out parked" in entry["msg"]]
+
+
+async def test_a_drained_application_that_stays_parked_logs_no_session_applied(
+    tmp_path: Path, job_log: LineCapture
+) -> None:
+    from arm_backend.session_drain import drain_parked_applications_after_rip
+
+    _set_media_root(tmp_path)
+    db = FakeSession()
+    job = _seed(db)
+    db.rows["session_applications"] = [
+        SessionApplication(
+            id="sap_parked",
+            session_id="ses_gone",
+            job_id=job.id,
+            status=SessionApplicationStatus.WAITING_IDENTIFY,
+            overwrite=False,
+        )
+    ]
+
+    outcomes = await drain_parked_applications_after_rip(db, job, CapturingHub())  # type: ignore[arg-type]
+
+    assert [o.skipped_reason for o in outcomes] == ["session_missing"]
+    assert job_log.lines(event="session.applied") == []
+    assert job_log.lines(level="warning")[0]["msg"].startswith("after-rip: parked session_application=sap_parked")
+
+
+async def test_draining_survives_a_failing_session_applied_log(
+    tmp_path: Path, job_log: LineCapture, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from arm_backend import job_events
+    from arm_backend.session_drain import drain_parked_applications_after_rip
+
+    def _boom(*_a: Any, **_k: Any) -> None:
+        raise RuntimeError("log bug")
+
+    monkeypatch.setattr(job_events, "log_session_applied", _boom)
+    _set_media_root(tmp_path)
+    db = FakeSession()
+    job = _seed(db)
+    db.rows["session_applications"] = [
+        SessionApplication(
+            id="sap_parked",
+            session_id="ses_x",
+            job_id=job.id,
+            status=SessionApplicationStatus.WAITING_IDENTIFY,
+            overwrite=False,
+        )
+    ]
+
+    outcomes = await drain_parked_applications_after_rip(db, job, CapturingHub())  # type: ignore[arg-type]
+
+    assert [o.skipped_reason for o in outcomes] == [None]
+    assert job_log.lines(level="error")[-1]["msg"] == "could not log the session.applied milestone"

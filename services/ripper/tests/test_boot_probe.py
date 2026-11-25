@@ -1,4 +1,4 @@
-"""Phase 9 — `boot_probe` orchestration with a fake BackendClient and
+"""`boot_probe` orchestration with a fake BackendClient and
 stubbed ioctl. We don't exercise the rip-loop itself; only that the
 probe makes the right control-flow decisions before handing off.
 """

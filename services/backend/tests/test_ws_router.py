@@ -146,7 +146,7 @@ def test_origin_not_allowed_closes(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_same_origin_accepted_without_allowlist(monkeypatch: pytest.MonkeyPatch) -> None:
-    """G-28: an Origin matching the host the socket was opened against passes
+    """An Origin matching the host the socket was opened against passes
     the gate with an empty allowlist (TestClient connects as ws://testserver)."""
     settings.ARM_ALLOWED_ORIGINS = []
     db = FakeSession()
@@ -157,6 +157,44 @@ def test_same_origin_accepted_without_allowlist(monkeypatch: pytest.MonkeyPatch)
             ws.send_json({"op": "auth", "token": ""})
             ack = ws.receive_json()
             assert ack["op"] == "ack"
+
+
+def test_service_subprotocol_does_not_waive_the_origin_check(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Any page can ask for the `arm-service-token` subprotocol; a foreign
+    origin that does is still refused before auth, instead of being accepted
+    and let in as the guest."""
+    settings.ARM_ALLOWED_ORIGINS = []
+    db = FakeSession()
+    db.rows["users"] = [_guest_user()]
+    app = _make_app(db, _Hub(), monkeypatch)
+    with TestClient(app) as client:
+        with pytest.raises(WebSocketDisconnect) as closed:
+            with client.websocket_connect(
+                "/ws",
+                subprotocols=[ws_router.SERVICE_TOKEN_SUBPROTOCOL],
+                headers={"origin": "https://evil.example"},
+            ) as ws:
+                ws.send_json({"op": "auth", "token": ""})
+                ws.receive_json()
+    assert closed.value.code == 1008
+
+
+def test_service_client_without_origin_still_connects(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Rippers and transcoders send the subprotocol and no Origin header, so
+    the no-Origin rule admits them and the subprotocol is still echoed."""
+    settings.ARM_ALLOWED_ORIGINS = []
+    db = FakeSession()
+    db.rows["drives"] = [_ripper_drive()]
+    app = _make_app(db, _Hub(), monkeypatch)
+    with TestClient(app) as client:
+        with client.websocket_connect(
+            "/ws",
+            subprotocols=[ws_router.SERVICE_TOKEN_SUBPROTOCOL],
+            headers={"x-arm-hostname": "ripper-host"},
+        ) as ws:
+            assert ws.accepted_subprotocol == ws_router.SERVICE_TOKEN_SUBPROTOCOL
+            ws.send_json({"op": "auth", "token": "tok-service"})
+            assert ws.receive_json()["op"] == "ack"
 
 
 # --- auth handshake failures -------------------------------------------------
@@ -411,7 +449,7 @@ def test_ui_jwt_principal_subscribe(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_ui_jwt_account_checks_reject(
     monkeypatch: pytest.MonkeyPatch, user: User | None, code: int, reason: str
 ) -> None:
-    # D-163: a validly signed JWT for a missing, disabled, or must-change
+    # A validly signed JWT for a missing, disabled, or must-change
     # account is refused at the handshake, matching REST require_jwt.
     db = FakeSession()
     db.rows["users"] = [user] if user is not None else []
@@ -426,7 +464,7 @@ def test_ui_jwt_account_checks_reject(
 
 
 def test_non_json_frames_after_auth_get_error_not_crash(monkeypatch: pytest.MonkeyPatch) -> None:
-    # D-167: bad text and binary frames after auth answer with an error frame
+    # Bad text and binary frames after auth answer with an error frame
     # and the connection keeps serving.
     db = FakeSession()
     db.rows["users"] = [_guest_user()]
@@ -516,3 +554,16 @@ def test_ws_anonymous_subscribe_ui_topic_ok(monkeypatch: pytest.MonkeyPatch) -> 
             ws.send_json({"op": "subscribe", "topic": "ripper.events"})
             assert ws.receive_json() == {"op": "ack", "topic": "ripper.events"}
     assert "ripper.events" in hub.subscribed
+
+
+def test_ws_auth_ok_logs_at_debug(monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture) -> None:
+    db = FakeSession()
+    db.rows["users"] = [_guest_user()]
+    app = _make_app(db, _Hub(), monkeypatch)
+    with caplog.at_level("DEBUG", logger="arm_backend.ws.router"):
+        with TestClient(app) as client:
+            with client.websocket_connect("/ws") as ws:
+                ws.send_json({"op": "auth", "token": ""})
+                assert ws.receive_json()["op"] == "ack"
+    (record,) = [r for r in caplog.records if r.getMessage().startswith("ws auth ok")]
+    assert record.levelname == "DEBUG"

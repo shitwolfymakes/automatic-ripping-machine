@@ -1,4 +1,4 @@
-"""0030_drive_lifecycle: columns for spec §1/§2, rendered offline like test_migration_chain."""
+"""0030_drive_lifecycle: columns for the drive lifecycle, rendered offline like test_migration_chain."""
 
 from __future__ import annotations
 
@@ -36,7 +36,7 @@ def test_0030_downgrade_drops_every_column() -> None:
 
 
 def test_0030_matches_the_models() -> None:
-    """Model↔migration parity: NOT NULL + server_default must agree, or the
+    """Model↔migration agreement: NOT NULL + server_default must agree, or the
     app queries a shape the schema doesn't have — a boot failure, not a test one."""
     for name in ("lifecycle", "present"):
         col = Drive.__table__.columns[name]

@@ -1,4 +1,4 @@
-"""Phase 12 — `LogTailer.tick` behaviour with a fake WSHub.
+"""`LogTailer.tick` behaviour with a fake WSHub.
 
 The tailer scans a log dir, parses JSONL, gates on subscriber count via
 the hub, and re-emits to `logs.{job_id}` for any line whose job_id has
@@ -84,11 +84,14 @@ def _record(
         "ts": "2026-04-30T00:00:00+00:00",
         "level": "info",
         "service": service,
+        "logger": logger_name,
         "job_id": job_id,
         "track_id": track_id,
         "session_application_id": None,
+        "event": None,
         "msg": msg,
-        "extra": {"logger": logger_name},
+        "fields": {},
+        "exc": None,
     }
 
 
@@ -174,7 +177,7 @@ async def test_loop_guard_skips_hub_self_logs(tmp_path: Path) -> None:
 
     # Only the third (non-hub) line is emitted.
     assert len(hub.emits) == 1
-    assert hub.emits[0].payload["extra"]["logger"] == "arm_backend.routers.ripper"
+    assert hub.emits[0].payload["logger"] == "arm_backend.routers.ripper"
 
 
 @pytest.mark.asyncio
@@ -310,6 +313,23 @@ async def test_per_job_log_records_hub_self_lines(tmp_path: Path) -> None:
     per_job = tmp_path / "jobs" / "job_01JZXR7K3M5Q8N4VWA00000001.log"
     assert per_job.is_file()
     assert "hub self log" in per_job.read_text()
+
+
+@pytest.mark.asyncio
+async def test_loop_guard_reads_top_level_logger(tmp_path: Path) -> None:
+    log_path = tmp_path / "arm-backend.log"
+    log_path.touch()
+    hub = _FakeHub(subscriptions={"logs.job_01JZXR7K3M5Q8N4VWA00000001": 1})
+    tailer = LogTailer(hub, log_dir=str(tmp_path))  # type: ignore[arg-type]
+
+    await tailer.tick()
+    _append(log_path, _record(logger_name="arm_backend.ws.hub.x", msg="guarded"))
+    _append(log_path, _record(logger_name="arm_ripper", msg="emitted"))
+    await tailer.tick()
+
+    per_job = tmp_path / "jobs" / "job_01JZXR7K3M5Q8N4VWA00000001.log"
+    assert "guarded" in per_job.read_text()
+    assert [e.payload["msg"] for e in hub.emits] == ["emitted"]
 
 
 @pytest.mark.asyncio

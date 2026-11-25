@@ -65,20 +65,20 @@ CLOSE_AUTH_TIMEOUT = 4408
 
 def _origin_allowed(
     origin: str | None,
-    subprotocols: list[str],
     *,
     request_host: str | None = None,
     request_scheme: str = "https",
     forwarded_host: str | None = None,
     forwarded_proto: str | None = None,
 ) -> bool:
-    if SERVICE_TOKEN_SUBPROTOCOL in subprotocols:
-        return True
+    # No Origin: not a browser. Rippers and transcoders connect this way (they
+    # request the service-token subprotocol, but any page can request that
+    # too, so it waives nothing); their token is checked at auth.
     if not origin:
         return True
     if origin in settings.ARM_ALLOWED_ORIGINS:
         return True
-    # Same-origin default (G-28): a browser cannot forge Origin or Host, and
+    # Same-origin default: a browser cannot forge Origin or Host, and
     # X-Forwarded-Host/-Proto are set by our own proxies (ui-neu nginx, vite
     # dev) from the URL the browser actually used. An Origin that matches the
     # host this socket was opened against is this deployment's own UI, whatever
@@ -108,7 +108,6 @@ async def ws_endpoint(
     request_scheme = "https" if websocket.url.scheme in ("wss", "https") else "http"
     if not _origin_allowed(
         origin,
-        subprotocols,
         request_host=host,
         request_scheme=request_scheme,
         forwarded_host=x_forwarded_host,
@@ -136,7 +135,7 @@ async def ws_endpoint(
         return
 
     await websocket.send_json(WSAck().model_dump())
-    logger.info("ws auth ok principal=%s", principal)
+    logger.debug("ws auth ok principal=%s", principal)
 
     try:
         await _serve_loop(websocket, hub, principal)
@@ -198,7 +197,7 @@ async def _do_auth(
         await _check_guest_enabled(websocket)
     elif isinstance(principal, UIPrincipal):
         # A verified JWT signature is not enough: apply the same account
-        # checks REST `require_jwt` runs on every UI request (D-163).
+        # checks REST `require_jwt` runs on every UI request.
         await _check_ui_user(principal.user_id)
 
     return principal
@@ -230,7 +229,7 @@ async def _serve_loop(websocket: WebSocket, hub: WSHub, principal: Principal) ->
             raise
         except Exception:
             # Non-JSON text or a binary frame: a client protocol error, answered
-            # like the same frame before auth instead of a 1011 + traceback (D-167).
+            # like the same frame before auth instead of a 1011 + traceback.
             await _send_error(websocket, CLOSE_BAD_MESSAGE, "message must be JSON")
             continue
         try:

@@ -71,7 +71,7 @@ def _check_status(r: httpx.Response) -> None:
 
 
 class TVDBClient:
-    """TVDB v4 client. Key validation plus TV title search (PR 2b);
+    """TVDB v4 client. Key validation plus TV title search;
     episode listing lives in identity/episodes/providers/tvdb.py.
 
     TVDB v4 authenticates via a login handshake: POST /v4/login with the

@@ -127,14 +127,15 @@ async def test_run_script_timeout(tmp_path: Path) -> None:
 def _alive(pid: int) -> bool:
     try:
         state = Path(f"/proc/{pid}/stat").read_text().rsplit(")", 1)[1].split()[0]
-    except FileNotFoundError:
+    except FileNotFoundError, ProcessLookupError:
+        # ProcessLookupError: the process was reaped between opening its stat file and reading it.
         return False
     return state != "Z"
 
 
 @pytest.mark.asyncio
 async def test_run_script_timeout_kills_the_scripts_children(tmp_path: Path) -> None:
-    """D-040: the timeout kills the whole process group, not just bash."""
+    """The timeout kills the whole process group, not just bash."""
     pidfile = tmp_path / "child.pid"
     p = _script(tmp_path, "tree.sh", f"sleep 30 & echo $! > {pidfile}; wait\n")
     started = time.monotonic()
@@ -153,7 +154,7 @@ async def test_run_script_timeout_kills_the_scripts_children(tmp_path: Path) -> 
 
 @pytest.mark.asyncio
 async def test_run_script_background_child_does_not_hold_the_result(tmp_path: Path) -> None:
-    """D-041: bash exiting 0 is success, even with a backgrounded child still
+    """Bash exiting 0 is success, even with a backgrounded child still
     holding stdout/stderr; the output that arrived before the exit is kept."""
     pidfile = tmp_path / "child.pid"
     p = _script(tmp_path, "bg.sh", f"echo started; sleep 8 & echo $! > {pidfile}; exit 0\n")
@@ -168,7 +169,7 @@ async def test_run_script_background_child_does_not_hold_the_result(tmp_path: Pa
 
 @pytest.mark.asyncio
 async def test_run_script_spawn_failure_is_a_failed_run(tmp_path: Path) -> None:
-    """D-042: an OSError from exec (here E2BIG) comes back as a result, not an exception."""
+    """An OSError from exec (here E2BIG) comes back as a result, not an exception."""
     p = _script(tmp_path, "ok.sh", "exit 0\n")
     res = await run_script(p, title="T", body="B", env={"BIG": "x" * 300_000}, timeout_seconds=5)
     assert not res.ok and res.exit_code is None

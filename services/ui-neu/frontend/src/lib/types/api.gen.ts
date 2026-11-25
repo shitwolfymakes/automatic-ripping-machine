@@ -320,8 +320,8 @@ export type BulkDeleteJobsRequest = {
  *
  * DELETE /api/jobs response. `deleted_ids` lists the jobs whose DB
  * rows were removed; `skipped_non_terminal` lists job IDs that were
- * refused because they were still in flight (caller should abandon
- * them first if they really want them gone).
+ * refused because they were still in flight: ripping (abandon them
+ * first) or transcoding (cancel their transcodes first).
  */
 export type BulkDeleteJobsResponse = {
     /**
@@ -384,6 +384,10 @@ export type CatalogService = {
      * Docs Url
      */
     docs_url: string;
+    /**
+     * Setup Url
+     */
+    setup_url: string;
     /**
      * Url Scheme
      */
@@ -634,6 +638,10 @@ export type ConfigUpdateRequest = {
      */
     max_parallel_iso_rips?: number | null;
     /**
+     * Min Title Length Seconds
+     */
+    min_title_length_seconds?: number | null;
+    /**
      * Transcode Enabled
      */
     transcode_enabled?: boolean | null;
@@ -678,6 +686,8 @@ export type ConfigUpdateRequest = {
      */
     manual_wait_seconds?: number | null;
     on_previously_ripped?: PreviouslyRippedAction | null;
+    miss_media_type?: MissMediaType | null;
+    miss_titles_kept?: MissTitlesKept | null;
     /**
      * Notifications Enabled
      */
@@ -775,6 +785,10 @@ export type ConfigView = {
      */
     max_parallel_iso_rips: number;
     /**
+     * Min Title Length Seconds
+     */
+    min_title_length_seconds: number;
+    /**
      * Transcode Enabled
      */
     transcode_enabled: boolean;
@@ -823,6 +837,8 @@ export type ConfigView = {
      */
     manual_wait_seconds: number;
     on_previously_ripped: PreviouslyRippedAction;
+    miss_media_type: MissMediaType;
+    miss_titles_kept: MissTitlesKept;
     default_retention_policy: RetentionPolicy;
     /**
      * Notification Apprise Urls
@@ -1854,10 +1870,130 @@ export type HttpValidationError = {
 };
 
 /**
+ * HandbrakeSchemaRefreshResult
+ */
+export type HandbrakeSchemaRefreshResult = {
+    /**
+     * Ok
+     */
+    ok: boolean;
+    /**
+     * Error
+     */
+    error?: string | null;
+};
+
+/**
+ * HandbrakeSchemaSlimView
+ *
+ * What the UI needs to render the settings sidebar; no built-in preset values.
+ */
+export type HandbrakeSchemaSlimView = {
+    /**
+     * Handbrake Tag
+     */
+    handbrake_tag: string;
+    /**
+     * Preset Version
+     */
+    preset_version: string;
+    /**
+     * Content Hash
+     */
+    content_hash: string;
+    /**
+     * Keys
+     */
+    keys: Array<SlimKey>;
+    /**
+     * Audio Item Keys
+     */
+    audio_item_keys: Array<SlimKey>;
+    /**
+     * Families
+     */
+    families: Array<SlimFamily>;
+    /**
+     * Lists
+     */
+    lists: {
+        [key: string]: Array<unknown>;
+    };
+    /**
+     * Audio Mixdowns By Encoder
+     */
+    audio_mixdowns_by_encoder: {
+        [key: string]: Array<string>;
+    };
+    /**
+     * Filters
+     */
+    filters: {
+        [key: string]: SlimFilter;
+    };
+    /**
+     * Builtin Names
+     */
+    builtin_names: Array<string>;
+    /**
+     * Static Enums
+     */
+    static_enums: {
+        [key: string]: Array<unknown>;
+    };
+    /**
+     * Source Extras
+     */
+    source_extras: {
+        [key: string]: Array<unknown>;
+    };
+    /**
+     * Selector Filter Aliases
+     */
+    selector_filter_aliases: {
+        [key: string]: string;
+    };
+    /**
+     * Arm Owned Keys
+     */
+    arm_owned_keys: Array<string>;
+    /**
+     * Encoder Specific Keys
+     */
+    encoder_specific_keys: Array<string>;
+    /**
+     * Hidden Keys
+     */
+    hidden_keys: Array<string>;
+};
+
+/**
+ * HandbrakeSettings
+ *
+ * Settings every encoder shares (``common``) plus one block per encoder family (``encoders``).
+ */
+export type HandbrakeSettings = {
+    /**
+     * Common
+     */
+    common?: {
+        [key: string]: unknown;
+    };
+    /**
+     * Encoders
+     */
+    encoders?: {
+        [key: string]: {
+            [key: string]: unknown;
+        };
+    };
+};
+
+/**
  * HardwareCaps
  *
- * Self-reported transcoder capabilities. Phase 7 (CPU-only) ignores these;
- * Phase 7b consumes them for GPU dispatch + `gpus` row writes.
+ * Self-reported transcoder capabilities. The Backend does not dispatch on
+ * these; GPU eligibility comes from the probed `gpus` rows.
  */
 export type HardwareCaps = {
     /**
@@ -1920,9 +2056,9 @@ export type HeartbeatRequest = {
  * Boot-probe payload for a disc held in AWAITING_REVIEW (timed review gate).
  *
  * `paused` is true when the held disc should survive a ripper reboot as a hold
- * (global `ripping_paused` on — or, once it lands, a per-job pause). The ripper
- * uses it to choose re-park (paused) vs. abandon-and-self-heal (counting down)
- * on restart. See the timed-review-gate spec §6.3.
+ * (global `ripping_paused`, or the per-job `manual_pause` set by review-pause).
+ * The ripper uses it to choose re-park (paused) vs. abandon-and-self-heal
+ * (counting down) on restart.
  */
 export type HeldJobView = {
     job: JobView;
@@ -2028,8 +2164,7 @@ export type IdentityFacts = {
  * IdentitySuggestion
  *
  * A confident online match identify did not apply because the media
- * type's "Apply confident matches" switch is off (identification-sources
- * spec D-10). The job keeps its miss title and the `unidentified` flag and
+ * type's "Apply confident matches" switch is off. The job keeps its miss title and the `unidentified` flag and
  * waits in AWAITING_REVIEW with no countdown until the operator accepts
  * it (POST /api/jobs/{id}/identity/accept) or identifies the disc another
  * way (any resolve clears this section).
@@ -2095,6 +2230,93 @@ export type IdentityView = {
      * Tracks
      */
     tracks?: Array<TrackIdentityView>;
+};
+
+/**
+ * ImportParseResponse
+ */
+export type ImportParseResponse = {
+    /**
+     * Handbrake Version
+     */
+    handbrake_version: {
+        [key: string]: string;
+    };
+    /**
+     * Presets
+     */
+    presets: Array<ImportedPresetView>;
+};
+
+/**
+ * ImportProposal
+ *
+ * The preset an import would create from one HandBrake export entry.
+ */
+export type ImportProposal = {
+    /**
+     * Name
+     */
+    name: string;
+    container: ContainerFormat;
+    /**
+     * Encoder
+     */
+    encoder: string;
+    handbrake_settings: HandbrakeSettings;
+};
+
+/**
+ * ImportedPresetView
+ *
+ * One export entry as the review step shows it: the proposal plus everything the import changed.
+ */
+export type ImportedPresetView = {
+    /**
+     * Path
+     */
+    path: Array<string>;
+    /**
+     * Name
+     */
+    name: string;
+    proposal: ImportProposal | null;
+    /**
+     * Source Encoder
+     */
+    source_encoder: string;
+    /**
+     * Dropped Keys
+     */
+    dropped_keys: Array<string>;
+    /**
+     * Not Imported
+     */
+    not_imported: Array<string>;
+    /**
+     * Copied Depth To
+     */
+    copied_depth_to: Array<string>;
+    /**
+     * Eight Bit Only
+     */
+    eight_bit_only: Array<string>;
+    /**
+     * Warnings
+     */
+    warnings: Array<string>;
+    /**
+     * Issues
+     */
+    issues: Array<SettingIssue>;
+    /**
+     * Importable
+     */
+    importable: boolean;
+    /**
+     * Reason
+     */
+    reason?: string | null;
 };
 
 /**
@@ -2468,6 +2690,10 @@ export type JobFlags = {
      * Rerip Allowed
      */
     rerip_allowed?: boolean;
+    /**
+     * Blocked Miss
+     */
+    blocked_miss?: boolean;
     [key: string]: unknown;
 };
 
@@ -2709,14 +2935,14 @@ export type JobView = {
      * Looks Episodic
      *
      * The stored scan looks like a TV disc (several same-length episode
-     * titles, no feature): the title search defaults to TV (spec 3.3).
+     * titles, no feature): the title search defaults to TV.
      */
     readonly looks_episodic: boolean;
     /**
      * Has Series
      *
      * A TV show is known: a TMDb id of kind tv, a TVDB or TVmaze id, or a
-     * show id some episode source resolved (spec 3.4). False means the
+     * show id some episode source resolved. False means the
      * Match Episodes tab asks for the series first.
      */
     readonly has_series: boolean;
@@ -3207,6 +3433,21 @@ export type MetadataSearchResponse = {
 };
 
 /**
+ * MissMediaType
+ *
+ * The media type a DVD or Blu-ray that misses identification starts with.
+ */
+export type MissMediaType = 'movie' | 'tv';
+
+/**
+ * MissTitlesKept
+ *
+ * Which titles an unidentified disc keeps: every title, or what the routed
+ * session's rip preset would keep.
+ */
+export type MissTitlesKept = 'all' | 'preset';
+
+/**
  * MkdirRequest
  */
 export type MkdirRequest = {
@@ -3247,6 +3488,23 @@ export type MoveRequest = {
 };
 
 /**
+ * MusicCoverMaxSize
+ *
+ * The largest cover file a music session embeds. A Cover Art Archive cover
+ * over it gives way to the next smaller size; UNLIMITED embeds any size.
+ */
+export type MusicCoverMaxSize = '500kb' | '1mb' | '2mb' | '5mb' | '10mb' | 'unlimited';
+
+/**
+ * MusicCoverSize
+ *
+ * The Cover Art Archive front cover a music session embeds: a thumbnail
+ * whose longest side is this many pixels, or the image as uploaded. The
+ * archive sends the original when it is smaller than the size asked for.
+ */
+export type MusicCoverSize = '250' | '500' | '1200' | 'source';
+
+/**
  * MusicMeta
  */
 export type MusicMeta = {
@@ -3254,6 +3512,10 @@ export type MusicMeta = {
      * Artist
      */
     artist?: string | null;
+    /**
+     * Album Artist
+     */
+    album_artist?: string | null;
     /**
      * Album
      */
@@ -3263,6 +3525,56 @@ export type MusicMeta = {
      */
     tracks?: Array<MusicTrackMeta>;
     [key: string]: unknown;
+};
+
+/**
+ * MusicTagField
+ *
+ * What a music session writes into each encoded track: one value per
+ * `MusicTags` field, then the embedded cover. Settings order.
+ */
+export type MusicTagField = 'artist' | 'album_artist' | 'album' | 'title' | 'track_number' | 'track_total' | 'disc_number' | 'year' | 'musicbrainz_release_id' | 'cover';
+
+/**
+ * MusicTags
+ *
+ * The tags a music track's encoded file carries, from the job's stored
+ * MusicBrainz identity. Every field is optional: an unknown one is left
+ * out of the file rather than written empty.
+ */
+export type MusicTags = {
+    /**
+     * Artist
+     */
+    artist?: string | null;
+    /**
+     * Album
+     */
+    album?: string | null;
+    /**
+     * Title
+     */
+    title?: string | null;
+    /**
+     * Year
+     */
+    year?: number | null;
+    /**
+     * Disc Number
+     */
+    disc_number?: number | null;
+    /**
+     * Track Number
+     */
+    track_number?: number | null;
+    /**
+     * Track Total
+     */
+    track_total?: number | null;
+    /**
+     * Musicbrainz Release Id
+     */
+    musicbrainz_release_id?: string | null;
 };
 
 /**
@@ -3869,6 +4181,10 @@ export type RegisterTranscoderRequest = {
      */
     hostname: string;
     hw_caps: HardwareCaps;
+    /**
+     * Schema Hash
+     */
+    schema_hash?: string | null;
 };
 
 /**
@@ -3879,7 +4195,8 @@ export type RegisterTranscoderRequest = {
  * `raw_input_path` is the absolute path the transcoder should read from
  * (`/raw/<job>/title_tNN.mkv` for video, `/raw/<job>/track_NN.wav` for
  * audio, `/raw/<job>/dump.iso` for data). `media_root` plus the task's
- * `output_path` is where the final file lands.
+ * `output_path` is where the final file lands. `music_tags` is set for a
+ * music job's track only.
  */
 export type RegisterTranscoderResponse = {
     task: TranscodeTaskView;
@@ -3894,6 +4211,7 @@ export type RegisterTranscoderResponse = {
      * Media Root
      */
     media_root: string;
+    music_tags?: MusicTags | null;
 };
 
 /**
@@ -3953,7 +4271,7 @@ export type ResolveFanOutOutcomeView = {
 /**
  * ResolveMatch
  *
- * A search result the operator picked (match picker spec 3.6). Its
+ * A search result the operator picked (from the match picker). Its
  * presence makes `external_ids` replace the stored show ids wholesale.
  */
 export type ResolveMatch = {
@@ -4200,6 +4518,10 @@ export type RipStartResponse = {
      * Min Length Seconds
      */
     min_length_seconds?: number | null;
+    /**
+     * Min Title Length Seconds
+     */
+    min_title_length_seconds?: number | null;
 };
 
 /**
@@ -4235,6 +4557,10 @@ export type RipperConfigView = {
      * Manual Wait Seconds
      */
     manual_wait_seconds?: number;
+    /**
+     * Min Title Length Seconds
+     */
+    min_title_length_seconds?: number;
 };
 
 /**
@@ -4282,6 +4608,10 @@ export type ScanResult = {
      */
     fingerprints?: Array<DiscFingerprintInput>;
     bd_meta?: BdDiscMeta | null;
+    /**
+     * Min Title Length Seconds
+     */
+    min_title_length_seconds?: number | null;
     /**
      * Raw
      */
@@ -4478,6 +4808,12 @@ export type SessionCreateRequest = {
     overrides_json?: {
         [key: string]: unknown;
     } | null;
+    /**
+     * Music Tag Fields
+     */
+    music_tag_fields?: Array<MusicTagField> | null;
+    music_cover_size?: MusicCoverSize | null;
+    music_cover_max_size?: MusicCoverMaxSize | null;
 };
 
 /**
@@ -4542,6 +4878,12 @@ export type SessionUpdateRequest = {
     overrides_json?: {
         [key: string]: unknown;
     } | null;
+    /**
+     * Music Tag Fields
+     */
+    music_tag_fields?: Array<MusicTagField> | null;
+    music_cover_size?: MusicCoverSize | null;
+    music_cover_max_size?: MusicCoverMaxSize | null;
 };
 
 /**
@@ -4580,6 +4922,12 @@ export type SessionView = {
         [key: string]: unknown;
     } | null;
     /**
+     * Music Tag Fields
+     */
+    music_tag_fields: Array<MusicTagField>;
+    music_cover_size: MusicCoverSize;
+    music_cover_max_size: MusicCoverMaxSize;
+    /**
      * Created By User Id
      */
     created_by_user_id: string | null;
@@ -4591,6 +4939,30 @@ export type SessionView = {
      * Updated At
      */
     updated_at: string | null;
+};
+
+/**
+ * SettingIssue
+ *
+ * One reason a setting is rejected. ``encoder`` names the block it sits in; None for ``common``.
+ */
+export type SettingIssue = {
+    /**
+     * Key
+     */
+    key: string;
+    /**
+     * Encoder
+     */
+    encoder?: string | null;
+    /**
+     * Code
+     */
+    code: 'unknown_key' | 'not_allowed_here' | 'wrong_type' | 'not_in_list' | 'out_of_range' | 'encoder_not_reachable' | 'engine_ignores_settings' | 'not_supported_by_encoder';
+    /**
+     * Message
+     */
+    message: string;
 };
 
 /**
@@ -4638,7 +5010,7 @@ export type SetupStatusPublic = {
 /**
  * SetupStep
  *
- * First-run setup walkthrough steps, in walkthrough order (setup spec 2026-10-01).
+ * First-run setup walkthrough steps, in walkthrough order.
  *
  * Stored as VARCHAR keys inside Config.setup_progress JSON, validated in the app.
  */
@@ -4694,6 +5066,165 @@ export type SetupView = {
      * Deferred
      */
     deferred?: boolean;
+};
+
+/**
+ * SlimFamily
+ */
+export type SlimFamily = {
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Codec Id
+     */
+    codec_id: number;
+    /**
+     * Multipass
+     */
+    multipass: boolean;
+    /**
+     * Turbo
+     */
+    turbo: boolean;
+    /**
+     * Rate Controls
+     */
+    rate_controls: Array<number>;
+    /**
+     * Variants
+     */
+    variants: Array<SlimVariant>;
+};
+
+/**
+ * SlimFilter
+ */
+export type SlimFilter = {
+    /**
+     * Presets
+     */
+    presets: Array<string>;
+    /**
+     * Tunes
+     */
+    tunes: Array<string>;
+};
+
+/**
+ * SlimKey
+ */
+export type SlimKey = {
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Type
+     */
+    type: string;
+    /**
+     * Default
+     */
+    default: unknown;
+    /**
+     * Tab
+     */
+    tab: string;
+    /**
+     * Group
+     */
+    group: string;
+    /**
+     * Label
+     */
+    label: string;
+    source: SlimSource | null;
+    /**
+     * Limits
+     */
+    limits: [
+        number,
+        number
+    ] | null;
+    /**
+     * Known
+     */
+    known: boolean;
+    /**
+     * Option Labels
+     */
+    option_labels?: {
+        [key: string]: string;
+    } | null;
+};
+
+/**
+ * SlimQuality
+ */
+export type SlimQuality = {
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Low
+     */
+    low: number;
+    /**
+     * High
+     */
+    high: number;
+    /**
+     * Step
+     */
+    step: number;
+};
+
+/**
+ * SlimSource
+ */
+export type SlimSource = {
+    /**
+     * Kind
+     */
+    kind: string;
+    /**
+     * Ref
+     */
+    ref: string;
+};
+
+/**
+ * SlimVariant
+ */
+export type SlimVariant = {
+    /**
+     * Encoder
+     */
+    encoder: string;
+    /**
+     * Depth
+     */
+    depth: number;
+    /**
+     * Presets
+     */
+    presets: Array<string>;
+    /**
+     * Tunes
+     */
+    tunes: Array<string>;
+    /**
+     * Profiles
+     */
+    profiles: Array<string>;
+    /**
+     * Levels
+     */
+    levels: Array<string>;
+    quality: SlimQuality;
 };
 
 /**
@@ -4914,6 +5445,22 @@ export type SystemVersionResponse = {
      * Version
      */
     version: string;
+    /**
+     * Latest Version
+     */
+    latest_version?: string | null;
+    /**
+     * Update Available
+     */
+    update_available?: boolean | null;
+    /**
+     * Release Url
+     */
+    release_url?: string | null;
+    /**
+     * Repo Url
+     */
+    repo_url?: string | null;
 };
 
 /**
@@ -4954,6 +5501,10 @@ export type TrackClaim = {
      * Title
      */
     title?: string | null;
+    /**
+     * Edition
+     */
+    edition?: string | null;
     /**
      * Season
      */
@@ -5007,6 +5558,10 @@ export type TrackEditRequest = {
      */
     year?: number | null;
     /**
+     * Edition
+     */
+    edition?: string | null;
+    /**
      * Imdb Id
      */
     imdb_id?: string | null;
@@ -5042,7 +5597,7 @@ export type TrackEditRequest = {
     /**
      * Revert Fields
      */
-    revert_fields?: Array<'role' | 'title' | 'season' | 'episode_number' | 'episode_number_end' | 'episode_name' | 'custom_filename' | 'excluded'>;
+    revert_fields?: Array<'role' | 'title' | 'edition' | 'season' | 'episode_number' | 'episode_number_end' | 'episode_name' | 'custom_filename' | 'excluded'>;
 };
 
 /**
@@ -5112,8 +5667,7 @@ export type TrackKind = 'video_title' | 'audio_track' | 'data_dump' | 'disc_back
  * TrackRole
  *
  * What one title on a disc is. Set by identity sources via the resolver
- * (arm_backend.identity) or by the operator; replaces the old free-text
- * role and the per-track video_type.
+ * (arm_backend.identity) or by the operator.
  */
 export type TrackRole = 'main' | 'episode' | 'extra' | 'trailer' | 'other';
 
@@ -5289,12 +5843,7 @@ export type TranscodePresetCreateRequest = {
      * Preset Ref
      */
     preset_ref?: string | null;
-    /**
-     * Preset Json
-     */
-    preset_json?: {
-        [key: string]: unknown;
-    } | null;
+    handbrake_settings?: HandbrakeSettings | null;
     container: ContainerFormat;
     /**
      * Encoder
@@ -5319,12 +5868,7 @@ export type TranscodePresetUpdateRequest = {
      * Preset Ref
      */
     preset_ref?: string | null;
-    /**
-     * Preset Json
-     */
-    preset_json?: {
-        [key: string]: unknown;
-    } | null;
+    handbrake_settings?: HandbrakeSettings | null;
     container?: ContainerFormat | null;
     /**
      * Encoder
@@ -5358,12 +5902,15 @@ export type TranscodePresetView = {
      * Preset Ref
      */
     preset_ref: string | null;
+    handbrake_settings: HandbrakeSettings | null;
     /**
-     * Preset Json
+     * Issues
      */
-    preset_json: {
-        [key: string]: unknown;
-    } | null;
+    issues?: Array<SettingIssue>;
+    /**
+     * Host Notes
+     */
+    host_notes?: Array<'encodes_on_cpu_here'>;
     container: ContainerFormat;
     /**
      * Encoder
@@ -5397,7 +5944,8 @@ export type TranscodePresetView = {
  * are terminal. `None` on `JobView` means no session was applied (the job
  * is `ripped`/awaiting action). Live per-task percent flows on the
  * `transcode.progress.{task_id}` WS topic; `percent` here is a poll-time
- * mean of the job's task `progress_pct`.
+ * mean of the job's task `progress_pct`. `tasks_active` counts the queued
+ * and in-progress tasks: while it is above 0 the job cannot be deleted.
  */
 export type TranscodeProgressSummary = {
     /**
@@ -5420,6 +5968,10 @@ export type TranscodeProgressSummary = {
      * Percent
      */
     percent: number;
+    /**
+     * Tasks Active
+     */
+    tasks_active?: number;
 };
 
 /**
@@ -5596,7 +6148,7 @@ export type UserPasswordSetRequest = {
 /**
  * UserRole
  *
- * Fixed two-account model (spec 2026-07-12-basic-user-management-design).
+ * Fixed two-account model.
  *
  * ADMIN — the single writer; the only account that can hold a session.
  * GUEST — read-everything/write-nothing; acquired by having no token at all
@@ -5664,9 +6216,9 @@ export type ValidationError = {
  * Boot-probe payload for a disc held in AWAITING_REVIEW (timed review gate).
  *
  * `paused` is true when the held disc should survive a ripper reboot as a hold
- * (global `ripping_paused` on — or, once it lands, a per-job pause). The ripper
- * uses it to choose re-park (paused) vs. abandon-and-self-heal (counting down)
- * on restart. See the timed-review-gate spec §6.3.
+ * (global `ripping_paused`, or the per-job `manual_pause` set by review-pause).
+ * The ripper uses it to choose re-park (paused) vs. abandon-and-self-heal
+ * (counting down) on restart.
  */
 export type HeldJobViewWritable = {
     job: JobViewWritable;
@@ -7865,6 +8417,22 @@ export type UpdateRipPresetApiRipPresetsPresetIdPatchResponses = {
 
 export type UpdateRipPresetApiRipPresetsPresetIdPatchResponse = UpdateRipPresetApiRipPresetsPresetIdPatchResponses[keyof UpdateRipPresetApiRipPresetsPresetIdPatchResponses];
 
+export type ParseHandbrakeExportApiTranscodePresetsImportParsePostData = {
+    body: unknown;
+    path?: never;
+    query?: never;
+    url: '/api/transcode-presets/import/parse';
+};
+
+export type ParseHandbrakeExportApiTranscodePresetsImportParsePostResponses = {
+    /**
+     * Successful Response
+     */
+    200: ImportParseResponse;
+};
+
+export type ParseHandbrakeExportApiTranscodePresetsImportParsePostResponse = ParseHandbrakeExportApiTranscodePresetsImportParsePostResponses[keyof ParseHandbrakeExportApiTranscodePresetsImportParsePostResponses];
+
 export type ListTranscodePresetsApiTranscodePresetsGetData = {
     body?: never;
     path?: never;
@@ -8036,6 +8604,34 @@ export type RegisterApiTranscoderRegisterPostResponses = {
 };
 
 export type RegisterApiTranscoderRegisterPostResponse = RegisterApiTranscoderRegisterPostResponses[keyof RegisterApiTranscoderRegisterPostResponses];
+
+export type CoverArtApiTranscoderTasksTaskIdCoverArtGetData = {
+    body?: never;
+    path: {
+        /**
+         * Task Id
+         */
+        task_id: string;
+    };
+    query?: never;
+    url: '/api/transcoder/tasks/{task_id}/cover-art';
+};
+
+export type CoverArtApiTranscoderTasksTaskIdCoverArtGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CoverArtApiTranscoderTasksTaskIdCoverArtGetError = CoverArtApiTranscoderTasksTaskIdCoverArtGetErrors[keyof CoverArtApiTranscoderTasksTaskIdCoverArtGetErrors];
+
+export type CoverArtApiTranscoderTasksTaskIdCoverArtGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: unknown;
+};
 
 export type ClaimApiTranscoderTasksTaskIdClaimPostData = {
     body?: never;
@@ -8513,6 +9109,87 @@ export type ListEncodersApiEncodersGetResponses = {
 };
 
 export type ListEncodersApiEncodersGetResponse = ListEncodersApiEncodersGetResponses[keyof ListEncodersApiEncodersGetResponses];
+
+export type GetSlimViewApiHandbrakeSchemaGetData = {
+    body?: never;
+    headers?: {
+        /**
+         * If-None-Match
+         */
+        'if-none-match'?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/handbrake-schema';
+};
+
+export type GetSlimViewApiHandbrakeSchemaGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetSlimViewApiHandbrakeSchemaGetError = GetSlimViewApiHandbrakeSchemaGetErrors[keyof GetSlimViewApiHandbrakeSchemaGetErrors];
+
+export type GetSlimViewApiHandbrakeSchemaGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: HandbrakeSchemaSlimView;
+};
+
+export type GetSlimViewApiHandbrakeSchemaGetResponse = GetSlimViewApiHandbrakeSchemaGetResponses[keyof GetSlimViewApiHandbrakeSchemaGetResponses];
+
+export type GetBuiltinApiHandbrakeSchemaBuiltinNameGetData = {
+    body?: never;
+    path: {
+        /**
+         * Name
+         */
+        name: string;
+    };
+    query?: never;
+    url: '/api/handbrake-schema/builtin/{name}';
+};
+
+export type GetBuiltinApiHandbrakeSchemaBuiltinNameGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetBuiltinApiHandbrakeSchemaBuiltinNameGetError = GetBuiltinApiHandbrakeSchemaBuiltinNameGetErrors[keyof GetBuiltinApiHandbrakeSchemaBuiltinNameGetErrors];
+
+export type GetBuiltinApiHandbrakeSchemaBuiltinNameGetResponses = {
+    /**
+     * Response Get Builtin Api Handbrake Schema Builtin  Name  Get
+     *
+     * Successful Response
+     */
+    200: {
+        [key: string]: unknown;
+    };
+};
+
+export type GetBuiltinApiHandbrakeSchemaBuiltinNameGetResponse = GetBuiltinApiHandbrakeSchemaBuiltinNameGetResponses[keyof GetBuiltinApiHandbrakeSchemaBuiltinNameGetResponses];
+
+export type RefreshApiHandbrakeSchemaRefreshPostData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/handbrake-schema/refresh';
+};
+
+export type RefreshApiHandbrakeSchemaRefreshPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: HandbrakeSchemaRefreshResult;
+};
+
+export type RefreshApiHandbrakeSchemaRefreshPostResponse = RefreshApiHandbrakeSchemaRefreshPostResponses[keyof RefreshApiHandbrakeSchemaRefreshPostResponses];
 
 export type GetConfigApiConfigGetData = {
     body?: never;

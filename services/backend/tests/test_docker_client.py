@@ -4,12 +4,15 @@ close of a replaced client."""
 
 from __future__ import annotations
 
+import errno
 import threading
 from typing import Any
 from unittest.mock import MagicMock
 
 import docker.errors  # type: ignore[import-untyped]
 import pytest
+import requests
+import urllib3
 from paramiko.ssh_exception import SSHException
 
 from arm_backend import docker_client as docker_client_mod
@@ -30,7 +33,7 @@ def _dead() -> SSHException:
 
 
 def test_is_transport_death_detects_direct_eof_error() -> None:
-    """Fix 76-9: paramiko commonly surfaces a dead transport as a raw
+    """Paramiko commonly surfaces a dead transport as a raw
     EOFError (not just SSHException/ConnectionResetError/BrokenPipeError)."""
     assert is_transport_death(EOFError("EOF"))
 
@@ -50,6 +53,38 @@ def test_is_transport_death_detects_eof_error_nested_in_cause_chain() -> None:
 
 def test_is_transport_death_rejects_unrelated_error() -> None:
     assert not is_transport_death(ValueError("not a transport error"))
+
+
+def _wrapped_like_docker_py(root: OSError) -> requests.exceptions.ConnectionError:
+    """`root` wrapped the way docker-py surfaces it over SSH: urllib3 raises
+    ProtocolError while handling it, requests raises ConnectionError while
+    handling that, so each link is the next one's `__context__`."""
+    try:
+        try:
+            try:
+                raise root
+            except OSError as e:
+                raise urllib3.exceptions.ProtocolError("Connection aborted.", e)  # noqa: B904
+        except urllib3.exceptions.ProtocolError as e:
+            raise requests.exceptions.ConnectionError(e)  # noqa: B904
+    except requests.exceptions.ConnectionError as wrapped:
+        return wrapped
+
+
+def test_is_transport_death_detects_the_closed_socket_of_a_dead_session() -> None:
+    """The first call after the remote end kills the SSH session fails with
+    paramiko's `OSError("Socket is closed")` under requests and urllib3
+    (captured against a real docker-over-SSH host); only later calls see
+    SSHException."""
+    assert is_transport_death(_wrapped_like_docker_py(OSError("Socket is closed")))
+
+
+def test_is_transport_death_rejects_other_os_errors() -> None:
+    """A real network failure is an unreachable host, not a dead transport to rebuild."""
+    unreachable = OSError(errno.ENETUNREACH, "Network is unreachable")
+
+    assert not is_transport_death(_wrapped_like_docker_py(unreachable))
+    assert not is_transport_death(OSError("Socket is closing"))
 
 
 # ---- forwarding and the rebuild ---------------------------------------------
@@ -126,6 +161,20 @@ def test_probe_docker_heals_a_transport_that_dies_after_the_ping() -> None:
 
     assert probe_docker(client, "img:test") == (True, None)
     fresh.images.get.assert_called_once_with("img:test")
+
+
+def test_probe_docker_heals_on_the_first_ping_after_the_session_is_killed() -> None:
+    """The probe's first ping after a remote reset rebuilds the client and
+    passes, instead of reporting the host unreachable for a probe window."""
+    dead = MagicMock()
+    dead.ping.side_effect = _wrapped_like_docker_py(OSError("Socket is closed"))
+    fresh = MagicMock()
+    factory = MagicMock(return_value=fresh)
+    client = HealingDockerClient(dead, factory)
+
+    assert probe_docker(client, "img:test") == (True, None)
+    factory.assert_called_once()
+    fresh.ping.assert_called_once()
 
 
 # ---- serialised rebuilds ------------------------------------------------------
