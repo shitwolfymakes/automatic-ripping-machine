@@ -89,6 +89,33 @@ ensure_selinux_overlay_file() {
     [[ -f "$1" ]] || printf '%s\n' "${SELINUX_OVERLAY_EMPTY}" > "$1"
 }
 
+# selinux_compose_files <COMPOSE_FILE> <separator> <overlay name> <override 0|1>:
+# print the COMPOSE_FILE list setup-dev.sh keeps in .env while it names the
+# overlay. Setting COMPOSE_FILE stops compose from loading
+# docker-compose.override.yml by itself, so the list stands in for that: the
+# override is added when the file exists (the last argument is 1) and dropped
+# when it does not. The list starts from compose's default when empty, keeps
+# every other entry in its order, and ends with the overlay, so its labels
+# cover the mounts of every file before it.
+selinux_compose_files() {
+    local current="$1" sep="$2" overlay="$3" override="$4" f out="" listed=0
+    local -a files=()
+    IFS="${sep}" read -r -a files <<<"${current}"
+    for f in "${files[@]}"; do
+        [[ -n "${f}" && "${f}" != "${overlay}" ]] || continue
+        if [[ "${f}" == docker-compose.override.yml ]]; then
+            [[ "${override}" -eq 1 ]] || continue
+            listed=1
+        fi
+        out+="${out:+${sep}}${f}"
+    done
+    [[ -n "${out}" ]] || out="docker-compose.yml"
+    if [[ "${override}" -eq 1 && "${listed}" -eq 0 ]]; then
+        out+="${sep}docker-compose.override.yml"
+    fi
+    printf '%s%s%s\n' "${out}" "${sep}" "${overlay}"
+}
+
 # The bind mounts of a `docker compose config` document on stdin, one per line:
 # service <TAB> target <TAB> read_only (0|1) <TAB> create_host_path (0|1) <TAB>
 # source. Compose prints every mount in the long form, fields at fixed indents;
