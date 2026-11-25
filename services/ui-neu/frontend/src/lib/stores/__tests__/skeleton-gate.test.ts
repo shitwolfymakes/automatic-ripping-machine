@@ -83,6 +83,42 @@ describe('SkeletonGate', () => {
 		expect(g.shown).toBe(false);
 	});
 
+	it('drops a skeleton nobody has seen as soon as the load finishes', () => {
+		const g = gate();
+		g.setVisible(false);
+		g.update(true);
+		vi.advanceTimersByTime(450);
+		expect(g.shown).toBe(true);
+		g.update(false);
+		expect(g.shown).toBe(false);
+	});
+
+	it('counts the minimum time from when the skeleton came into view', () => {
+		const g = gate();
+		g.setVisible(false);
+		g.update(true);
+		vi.advanceTimersByTime(1000);
+		g.setVisible(true);
+		vi.advanceTimersByTime(100);
+		g.update(false);
+		vi.advanceTimersByTime(199);
+		expect(g.shown).toBe(true);
+		vi.advanceTimersByTime(1);
+		expect(g.shown).toBe(false);
+	});
+
+	it('a skeleton that shows while in view holds as before', () => {
+		const g = gate();
+		g.setVisible(false);
+		g.setVisible(true);
+		g.update(true);
+		vi.advanceTimersByTime(350);
+		g.update(false);
+		expect(g.shown).toBe(true);
+		vi.advanceTimersByTime(250);
+		expect(g.shown).toBe(false);
+	});
+
 	it('uses performance.now by default', () => {
 		const g = new SkeletonGate(0, 300);
 		g.update(true);

@@ -4,7 +4,7 @@
 	import { fadeIn } from '$lib/ui/transitions';
 	import { isPending, loadPhase } from '$lib/utils/load-state';
 	import { SKELETON_DELAY_MS, SKELETON_MIN_SHOW_MS, SkeletonGate } from '$lib/stores/skeleton-gate.svelte';
-	import { trackPending } from '$lib/stores/page-reveal.svelte';
+	import { pageRevealed, trackPending } from '$lib/stores/page-reveal.svelte';
 
 	interface Props {
 		data: T | null | undefined;
@@ -36,6 +36,13 @@
 	// picker) wants the swap immediate both ways, so it gets no hold either.
 	const delay = untrack(() => minDelay);
 	const gate = new SkeletonGate(delay, delay === 0 ? 0 : SKELETON_MIN_SHOW_MS);
+	// While the page is still hidden, nobody sees the skeleton, so the gate
+	// drops it as soon as the data lands instead of holding it.
+	const revealed = pageRevealed();
+	$effect(() => {
+		const visible = revealed();
+		untrack(() => gate.setVisible(visible));
+	});
 	$effect(() => {
 		const pending = isPending({ data, loading, error });
 		untrack(() => gate.update(pending));
