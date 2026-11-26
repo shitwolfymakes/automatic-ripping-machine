@@ -1,4 +1,4 @@
-"""GET /api/ripper/drives/{id} and PATCH .../device-path — the two calls Plan 1's ripper already makes."""
+"""GET /api/ripper/drives/{id} and PATCH .../device-path — the two calls the ripper makes."""
 
 from __future__ import annotations
 
@@ -16,7 +16,7 @@ def test_get_drive_returns_the_table_model_shape() -> None:
         r = client.get("/api/ripper/drives/drv_x", headers=_service_auth())
     assert r.status_code == 200
     body = r.json()
-    # Plan 1's client does Drive.model_validate(body): every column must be present, nullable ones as null.
+    # The ripper's client does Drive.model_validate(body): every column must be present, nullable ones as null.
     for key in ("id", "hostname", "device_path", "status", "lifecycle", "present", "by_id_name", "last_seen_at"):
         assert key in body, key
 

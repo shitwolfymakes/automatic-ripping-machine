@@ -1,5 +1,5 @@
 """AMD (Mesa VAAPI) encode path. No preset settings model: container from the
-preset, fixed defaults below, and preset.extra_args for tuning (spec section 2).
+preset, fixed defaults below, and preset.extra_args for tuning.
 
 Defaults: only the first video stream is mapped
 (`-map 0:v:0`, HandBrake parity) so the single `-vf format=nv12,hwupload

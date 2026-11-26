@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { renderComponent, screen, fireEvent, cleanup, waitFor } from '$lib/test-utils';
+import { renderComponent, screen, fireEvent, cleanup, waitFor } from '$lib/testing/render';
 import TranscodingSettings from '../TranscodingSettings.svelte';
 import { saveArmConfig } from '$lib/api/settings';
 import { setTranscoderEnabled } from '$lib/stores/config';
@@ -92,5 +92,26 @@ describe('TranscodingSettings', () => {
 		await fireEvent.click(screen.getByRole('button', { name: 'Save' }));
 		await waitFor(() => expect(onsaved).toHaveBeenCalledWith({ auto_transcode_on_idle: true }));
 		expect(saveArmConfig).toHaveBeenCalledWith({ auto_transcode_on_idle: true });
+	});
+
+	it('labels the locked toggle and links it to the transcode settings help', () => {
+		setTranscoderEnabled(false);
+		render(GROUP);
+		expect(screen.getByRole('switch', { name: 'Enable transcoding' })).toHaveAttribute('id', 'transcode-enabled');
+		expect(screen.getByRole('link', { name: 'Docs for Enable transcoding (opens in a new tab)' })).toHaveAttribute(
+			'href',
+			'/help/guide/configuring-arm#rip--transcode-behaviour'
+		);
+	});
+
+	it('points its label at the locked switch, and clicking the label leaves the switch off', async () => {
+		setTranscoderEnabled(false);
+		render(GROUP);
+		const label = document.querySelector('label[for="transcode-enabled"]') as HTMLLabelElement;
+		const toggle = screen.getByRole('switch', { name: 'Enable transcoding' });
+		expect(label.control).toBe(toggle);
+		await fireEvent.click(label);
+		expect(toggle).toHaveAttribute('aria-checked', 'false');
+		expect(saveArmConfig).not.toHaveBeenCalled();
 	});
 });

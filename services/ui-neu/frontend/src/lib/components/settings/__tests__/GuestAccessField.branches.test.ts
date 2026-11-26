@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { renderComponent, screen, cleanup } from '$lib/test-utils';
+import { renderComponent, screen, cleanup } from '$lib/testing/render';
 import GuestAccessField from '../GuestAccessField.svelte';
 
 // Branch pins for GuestAccessField, beside GuestAccessField.test.ts. No

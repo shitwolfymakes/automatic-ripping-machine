@@ -146,7 +146,7 @@ def select_tracks_for_review(job_id: str, scan: ScanResult, rip_preset: RipPrese
 
     Differs from `select_tracks` (which returns only the preset's subset): here
     the preset computes *defaults*, not membership. The kept set is whatever
-    `select_tracks` would have produced, matched by `source_ref`. (spec §4.3)
+    `select_tracks` would have produced, matched by `source_ref`.
 
     A whole-disc track (a DATA disc, the ISO dump, the FOLDER backup) has no
     per-title list: review persistence is the single track `select_tracks` makes.

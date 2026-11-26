@@ -186,7 +186,7 @@ async def test_claim_mirrors_claim_router_side_effects(tmp_path: Path, monkeypat
 
 async def test_claim_on_already_running_application_skips_session_started(tmp_path: Path) -> None:
     """A sibling task already moved the application to RUNNING: only
-    task.started is emitted at claim time (router parity)."""
+    task.started is emitted at claim time (as the transcoder router does)."""
     raw = tmp_path / "raw" / "job1" / "t0.mkv"
     raw.parent.mkdir(parents=True)
     raw.write_bytes(b"data")
@@ -561,7 +561,7 @@ async def test_disc_backup_is_moved_as_a_folder(tmp_path: Path) -> None:
 
 
 async def test_a_same_filesystem_folder_move_does_not_size_the_tree_first(tmp_path: Path, monkeypatch: Any) -> None:
-    """D-127 follow-up: a same-filesystem move is a rename. Sizing the tree
+    """A same-filesystem move is a rename. Sizing the tree
     for progress is needed only once a copy starts copying bytes."""
     import arm_backend.passthrough_executor as mod
 
@@ -652,7 +652,7 @@ async def test_disc_backup_tree_chown_runs_off_the_event_loop(tmp_path: Path, mo
 
 
 async def test_cancel_stops_an_in_flight_copy_and_keeps_the_raw_source(tmp_path: Path, monkeypatch: Any) -> None:
-    """D-066: there is no container to stop, so cancel_running's
+    """There is no container to stop, so cancel_running's
     request_cancel must stop the copy itself: nothing lands in /media, the
     raw source stays, and the task fails as cancelled."""
     raw = tmp_path / "raw" / "job1" / "t0.mkv"
@@ -687,7 +687,7 @@ async def test_cancel_stops_an_in_flight_copy_and_keeps_the_raw_source(tmp_path:
 
 
 async def test_copy_publishes_progress_while_it_runs(tmp_path: Path, monkeypatch: Any) -> None:
-    """D-127: a long cross-mount copy heartbeats progress_pct onto the row and
+    """A long cross-mount copy heartbeats progress_pct onto the row and
     publishes transcode.progress, instead of sitting at 0 % until it ends."""
     import threading
 
@@ -726,7 +726,7 @@ async def test_copy_publishes_progress_while_it_runs(tmp_path: Path, monkeypatch
 
 
 async def test_a_failing_progress_publish_does_not_strand_the_task(tmp_path: Path, monkeypatch: Any) -> None:
-    """D-127 follow-up: a hub error while publishing progress is telemetry
+    """A hub error while publishing progress is telemetry
     only. The move's result still lands as the task's terminal status."""
     import threading
 

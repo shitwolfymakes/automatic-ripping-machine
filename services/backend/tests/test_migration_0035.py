@@ -1,7 +1,7 @@
 """0035_session_routes_seed_marker: the seed-marker UPDATE must be
 conditional on session_routes having rows, or an existing deployment that
 never shipped the seeder (empty table, never seeded) gets permanently
-flagged seeded=true and never receives the built-in routes (G-17 then only
+flagged seeded=true and never receives the built-in routes (session routing then only
 works on fresh databases). Rendered offline like test_migration_chain."""
 
 from __future__ import annotations

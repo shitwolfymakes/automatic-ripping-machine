@@ -1,7 +1,8 @@
 <script lang="ts">
-	import CopyBlock from '$lib/components/CopyBlock.svelte';
-	import Glyph from '$lib/components/Glyph.svelte';
-	import type { IsoStatus } from '$lib/utils/setup-drives';
+	import { plural } from '$lib/utils/plural';
+	import CopyBlock from '$lib/components/shared/CopyBlock.svelte';
+	import Glyph from '$lib/components/shared/Glyph.svelte';
+	import type { IsoStatus } from '$lib/drives/setup-drives';
 
 	// Shows whether the ISO library is on, or how to turn it on.
 	let { iso }: { iso: IsoStatus } = $props();
@@ -12,7 +13,7 @@
 		<span class="iso-library-card-title"><Glyph name="disc-3" /> Rip from image files</span>
 		<span class="chip chip-sm {iso.on ? 'chip-success' : ''}">
 			<Glyph name={iso.on ? 'check-circle' : 'minus-circle'} class="h-3 w-3" />
-			ISO library: {iso.on ? `on, ${iso.count} image${iso.count === 1 ? '' : 's'}` : 'off'}
+			ISO library: {iso.on ? `on, ${iso.count} ${plural(iso.count, 'image')}` : 'off'}
 		</span>
 	</div>
 	<p class="iso-library-card-help">ARM can rip ISO image files with no drive at all.</p>

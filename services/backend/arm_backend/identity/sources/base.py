@@ -1,4 +1,4 @@
-"""What an identity source is (design spec section 3.1)."""
+"""What an identity source is."""
 
 from __future__ import annotations
 

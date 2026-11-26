@@ -11,6 +11,7 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from arm_backend import release_check
 from arm_backend.db import get_session
 from arm_backend.jwt_utils import issue_access_token
 from arm_backend.routers import system as system_router
@@ -176,7 +177,7 @@ def test_diagnostics_no_drives_is_warning(signing_key: bytes, tmp_path) -> None:
 
 
 def _unserved_online_drives() -> list[Drive]:
-    # Every row here is status=online but has no ripper serving it (D-149).
+    # Every row here is status=online but has no ripper serving it.
     return [
         Drive(
             id="drv_det000000000000000000003",
@@ -516,7 +517,7 @@ def test_diagnostics_transcoder_ripper_only_ok_even_without_dispatcher(
 
 
 def test_diagnostics_ripper_only_warns_about_held_encode_tasks(signing_key: bytes, tmp_path, monkeypatch) -> None:
-    """D-067: encode tasks queued before the box went ripper-only are held
+    """Encode tasks queued before the box went ripper-only are held
     forever; diagnostics must say so instead of an unconditional ok."""
     from arm_backend.config import settings
 
@@ -607,7 +608,7 @@ def test_diagnostics_transcoder_warning_when_last_spawn_failed(signing_key: byte
 
 
 def test_diagnostics_transcoder_warns_about_a_backend_url_check_set_to_warn(signing_key: bytes, tmp_path) -> None:
-    """D-129 follow-up: with ARM_TRANSCODE_BACKEND_URL_CHECK=warn a failed URL
+    """With ARM_TRANSCODE_BACKEND_URL_CHECK=warn a failed URL
     check no longer holds spawns, but the operator still sees it."""
     db = FakeSession()
     _seed(db)
@@ -826,7 +827,7 @@ def test_thediscdb_refresh_now_409_when_the_lock_is_taken_after_the_check(
 
 
 def test_thediscdb_refresh_now_409_while_refresh_running(signing_key: bytes, tmp_path, monkeypatch) -> None:
-    """D-159: a manual refresh during the loop's (or another click's) build is refused."""
+    """A manual refresh during the loop's (or another click's) build is refused."""
     called: list[bool] = []
 
     async def _fake(http, path):  # noqa: ANN001, ANN202 — matches thediscdb_refresh signature
@@ -858,7 +859,7 @@ def test_thediscdb_refresh_now_denied_for_guest(signing_key: bytes, tmp_path) ->
     assert r.status_code == 403
 
 
-# --- Setup walkthrough detail (setup spec 2026-10-01 §6.3) ---
+# --- Setup walkthrough detail ---
 
 
 def _diag(app: FastAPI, token: str) -> dict:
@@ -969,3 +970,72 @@ def test_diagnostics_transcoder_location_none_when_ripper_only(signing_key: byte
     app, token = _make_app(signing_key, db, tmp=tmp_path)
     tc = _transcoder(_diag(app, token))
     assert tc["location"] == "none" and tc["details"] == []
+
+
+def _get_version(signing_key: bytes, tmp_path, monkeypatch, running: str) -> dict:
+    monkeypatch.setattr(system_router, "_app_version", lambda: running)
+    db = FakeSession()
+    _seed(db)
+    app, token = _make_app(signing_key, db, tmp=tmp_path)
+    with TestClient(app) as client:
+        r = client.get("/api/system/version", headers=_auth(token))
+    assert r.status_code == 200
+    return r.json()
+
+
+REPO_URL = "https://github.com/automatic-ripping-machine/automatic-ripping-machine"
+
+
+def test_system_version_without_a_known_release_has_null_fields(signing_key: bytes, tmp_path, monkeypatch) -> None:
+    release_check.cache.release = None
+    body = _get_version(signing_key, tmp_path, monkeypatch, "3.0.0")
+    assert body == {
+        "version": "3.0.0",
+        "latest_version": None,
+        "update_available": None,
+        "release_url": None,
+        "repo_url": REPO_URL,
+    }
+
+
+@pytest.mark.parametrize(
+    ("running", "tag", "available"),
+    [
+        ("3.0.0-rc3", "v3.0.0", True),
+        ("3.0.0-rc3", "2.24.4", False),
+        ("3.0.0", "v3.0.0", False),
+    ],
+)
+def test_system_version_reports_the_cached_release(
+    signing_key: bytes, tmp_path, monkeypatch, running: str, tag: str, available: bool
+) -> None:
+    monkeypatch.setattr(release_check.cache, "release", release_check.Release(tag=tag, url="https://x/rel"))
+    body = _get_version(signing_key, tmp_path, monkeypatch, running)
+    assert body == {
+        "version": running,
+        "latest_version": tag,
+        "update_available": available,
+        "release_url": "https://x/rel",
+        "repo_url": REPO_URL,
+    }
+
+
+def test_system_version_with_an_unparseable_version_shows_it_alone(signing_key: bytes, tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr(release_check.cache, "release", release_check.Release(tag="v3.0.0", url="https://x/rel"))
+    body = _get_version(signing_key, tmp_path, monkeypatch, "0.0.0+unknown")
+    assert body == {
+        "version": "0.0.0+unknown",
+        "latest_version": None,
+        "update_available": None,
+        "release_url": None,
+        "repo_url": REPO_URL,
+    }
+
+
+def test_system_version_never_calls_github(signing_key: bytes, tmp_path, monkeypatch) -> None:
+    def boom(*args, **kwargs):
+        raise AssertionError("the endpoint must not fetch")
+
+    monkeypatch.setattr("httpx.AsyncClient.send", boom)
+    monkeypatch.setattr("httpx.AsyncClient.get", boom)
+    _get_version(signing_key, tmp_path, monkeypatch, "3.0.0")

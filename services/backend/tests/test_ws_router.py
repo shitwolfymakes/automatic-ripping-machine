@@ -146,7 +146,7 @@ def test_origin_not_allowed_closes(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_same_origin_accepted_without_allowlist(monkeypatch: pytest.MonkeyPatch) -> None:
-    """G-28: an Origin matching the host the socket was opened against passes
+    """An Origin matching the host the socket was opened against passes
     the gate with an empty allowlist (TestClient connects as ws://testserver)."""
     settings.ARM_ALLOWED_ORIGINS = []
     db = FakeSession()
@@ -411,7 +411,7 @@ def test_ui_jwt_principal_subscribe(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_ui_jwt_account_checks_reject(
     monkeypatch: pytest.MonkeyPatch, user: User | None, code: int, reason: str
 ) -> None:
-    # D-163: a validly signed JWT for a missing, disabled, or must-change
+    # A validly signed JWT for a missing, disabled, or must-change
     # account is refused at the handshake, matching REST require_jwt.
     db = FakeSession()
     db.rows["users"] = [user] if user is not None else []
@@ -426,7 +426,7 @@ def test_ui_jwt_account_checks_reject(
 
 
 def test_non_json_frames_after_auth_get_error_not_crash(monkeypatch: pytest.MonkeyPatch) -> None:
-    # D-167: bad text and binary frames after auth answer with an error frame
+    # Bad text and binary frames after auth answer with an error frame
     # and the connection keeps serving.
     db = FakeSession()
     db.rows["users"] = [_guest_user()]

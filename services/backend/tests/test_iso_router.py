@@ -327,7 +327,7 @@ def test_manager_unavailable_503(lib: Path, signing_key: bytes) -> None:
 
 def test_manager_disabled_503_without_creating_a_drive(lib: Path, signing_key: bytes) -> None:
     """A manager kept on app.state with ARM_HOST_*_PATH unset answers 503 like
-    /api/drives does, before a virtual drive row is committed (D-150)."""
+    /api/drives does, before a virtual drive row is committed."""
     (lib / "x.iso").write_bytes(b"x")
     db = FakeSession()
     token = _admin_token(db, signing_key)
@@ -461,7 +461,7 @@ def test_create_409_when_cap_full(lib: Path, signing_key: bytes) -> None:
 
 
 def test_create_sweeps_a_finished_rip_before_the_cap_check(lib: Path, signing_key: bytes) -> None:
-    """M1: the last rip's container has exited but the 30 s watchdog has not
+    """The last rip's container has exited but the 30 s watchdog has not
     run yet. Create sweeps first, so the finished drive is retired and no
     longer fills the default cap of 1."""
     (lib / "Movies").mkdir()

@@ -1,5 +1,5 @@
 <script lang="ts">
-	import type { DocsSearchHit } from '$lib/docs/api';
+	import type { DocsSearchHit } from '$lib/help/api';
 
 	interface Props {
 		query: string;

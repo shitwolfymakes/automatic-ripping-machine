@@ -70,7 +70,7 @@ class _Hub:
 
 
 class _StageRunner:
-    """Recording fake `EpisodeStageRunner` (Task 8): records every job_id
+    """Recording fake `EpisodeStageRunner`: records every job_id
     `schedule` was called with, without running anything for real."""
 
     def __init__(self) -> None:
@@ -308,7 +308,7 @@ def test_abandon_terminal_409(signing_key: bytes) -> None:
 def test_status_409_survives_raw_string_status(
     signing_key: bytes, method: str, path: str, body: dict[str, str] | None
 ) -> None:
-    """D-147: a forward-incompatible status (raw str from _StrEnumString) must
+    """A forward-incompatible status (raw str from _StrEnumString) must
     yield the intended 409 on abandon / delete / resolve, not an
     AttributeError 500 from f-string `.value`."""
     db = FakeSession()
@@ -339,7 +339,7 @@ def test_abandon_success_emits_with_delete_raw(signing_key: bytes) -> None:
 
 
 def test_abandon_cancels_parked_applications(signing_key: bytes) -> None:
-    """D-082: an abandoned job never finishes its rip, so its parked
+    """An abandoned job never finishes its rip, so its parked
     applications are cancelled; other applications are untouched."""
     db = FakeSession()
     hub = _Hub()
@@ -795,7 +795,7 @@ def _ids_job() -> Any:
 
 
 def test_resolve_changed_imdb_clears_derived_ids_and_reschedules(signing_key: bytes) -> None:
-    """I4: a different imdb means a different show, so the show ids derived
+    """A different imdb means a different show, so the show ids derived
     from the old one (tvmaze, and tmdb / tvdb unless sent too) are cleared,
     and the ids change reschedules the episode stage."""
     db = FakeSession()
@@ -836,7 +836,7 @@ def test_resolve_changed_tmdb_alone_clears_the_old_imdb(signing_key: bytes) -> N
     assert stage_runner.scheduled == ["job_01JZXR7K3M5Q8N4VWA00000001"]
 
 
-def test_resolve_changed_imdb_forgets_stored_episode_show_ids_r2(signing_key: bytes) -> None:
+def test_resolve_changed_imdb_forgets_stored_episode_show_ids(signing_key: bytes) -> None:
     job = _ids_job()
     job.metadata_json = {
         **job.metadata_json,
@@ -864,8 +864,8 @@ def test_resolve_changed_imdb_forgets_stored_episode_show_ids_r2(signing_key: by
     assert sources["label"]["inputs"] == {"show_id": "keep"}  # not an episode source
 
 
-def test_resolve_filling_a_blank_imdb_keeps_tmdb_and_tvdb_r3(signing_key: bytes) -> None:
-    """R3: a TMDb-identified job with no imdb gets one; filling a blank id
+def test_resolve_filling_a_blank_imdb_keeps_tmdb_and_tvdb(signing_key: bytes) -> None:
+    """A TMDb-identified job with no imdb gets one; filling a blank id
     names no different show, so tmdb and tvdb are kept."""
     db = FakeSession()
     app, token = _make_app(signing_key, db)
@@ -926,7 +926,7 @@ def test_resolve_musicbrainz_id_leaves_show_ids_alone(signing_key: bytes) -> Non
 def test_resolve_without_a_stage_runner_configured_skips_scheduling(signing_key: bytes) -> None:
     """No `app.state.episode_stage` (every other resolve test in this
     module): the dependency returns None and resolve proceeds exactly as
-    before Task 8."""
+    when no stage runner is configured."""
     db = FakeSession()
     app, token = _make_app(signing_key, db)
     db.rows["jobs"] = [_job(status=JobStatus.AWAITING_USER_ID)]
@@ -993,7 +993,7 @@ def test_resolve_cd_writes_structured_metadata(signing_key: bytes) -> None:
 
 
 def test_resolve_rejects_unknown_keys(signing_key: bytes) -> None:
-    """The free-form metadata bag is gone (G-03/§3.4): an unrecognized top-
+    """The free-form metadata bag is gone: an unrecognized top-
     level key is a caller bug, not silently-dropped data."""
     db = FakeSession()
     app, token = _make_app(signing_key, db)
@@ -1054,7 +1054,7 @@ def test_resolve_title_only_keeps_existing_music_section(signing_key: bytes) -> 
 
 def test_resolve_accepts_ripped_awaiting_identify(signing_key: bytes) -> None:
     """Resolving a ripped placeholder promotes it to RIPPED — the rip is
-    already done, so IDENTIFIED (a pre-rip status) would be wrong (G-09)."""
+    already done, so IDENTIFIED (a pre-rip status) would be wrong."""
     db = FakeSession()
     app, token = _make_app(signing_key, db)
     db.rows["jobs"] = [_job(status=JobStatus.RIPPED_AWAITING_IDENTIFY, meta={})]
@@ -1093,7 +1093,7 @@ def test_resolve_success_without_preserved_scan(signing_key: bytes) -> None:
 
 @pytest.mark.parametrize("status_in", [JobStatus.IDENTIFIED, JobStatus.RIPPED, JobStatus.RIPPED_PARTIAL])
 def test_resolve_post_rip_correction_preserves_status(signing_key: bytes, status_in: JobStatus) -> None:
-    """The cutover-blocker case: a MakeMKV volume-label fallback (or stale TMDB hit) lands
+    """A post-rip title correction: a MakeMKV volume-label fallback (or stale TMDB hit) lands
     a wrong title on a job that auto-identify considers successful. The user fixes title +
     year via the same /resolve endpoint. Status must NOT flip back to IDENTIFIED — a RIPPED
     job stays RIPPED. Fan-out is a no-op because there are no WAITING_IDENTIFY apps."""
@@ -1132,11 +1132,11 @@ def test_resolve_post_rip_correction_preserves_status(signing_key: bytes, status
 
 
 def test_resolve_ripped_partial_placeholder_clears_unidentified_flag(signing_key: bytes) -> None:
-    """Fix 75-6 regression: resolving a RIPPED_PARTIAL placeholder must clear
+    """Resolving a RIPPED_PARTIAL placeholder must clear
     the spent `unidentified` flag too. RIPPED_PARTIAL stays in the PRESERVE
     bucket (partiality wins over the placeholder status -- see rip-complete),
-    so before the fix the pop only ran on the PROMOTE branch and a resolved
-    partial placeholder kept flags.unidentified=true forever."""
+    so the pop must run on both the PROMOTE and PRESERVE branches, or a resolved
+    partial placeholder keeps flags.unidentified=true forever."""
     db = FakeSession()
     app, token = _make_app(signing_key, db)
     db.rows["jobs"] = [
@@ -1166,8 +1166,8 @@ def test_resolve_ripped_partial_placeholder_clears_unidentified_flag(signing_key
 def test_resolve_external_ids_overlay_existing_identity(signing_key: bytes) -> None:
     """req.external_ids overlays the existing identity.external_ids section
     field-by-field, not a wholesale replace. Sending only a DIFFERENT tmdb
-    names a different title, so the old imdb is stale and cleared (I4);
-    same-show partial updates keep the other ids (see the R3 and restate
+    names a different title, so the old imdb is stale and cleared;
+    same-show partial updates keep the other ids (see the blank-id and restate
     tests). Non-overlapping sections (scan_result) are preserved."""
     db = FakeSession()
     app, token = _make_app(signing_key, db)
@@ -1195,7 +1195,7 @@ def test_resolve_external_ids_overlay_existing_identity(signing_key: bytes) -> N
 
 
 def test_resolve_explicit_null_external_id_clears_it(signing_key: bytes) -> None:
-    """Fix 75-5 regression: sending an external_ids member field as explicit
+    """Sending an external_ids member field as explicit
     null CLEARS the stored id -- distinct from omitting the field entirely
     (which keeps it, covered by test_resolve_external_ids_overlay_existing_identity).
     Before the fix, `is not None` treated "sent null" and "not sent" the
@@ -1620,10 +1620,10 @@ def test_patch_sibling_edit_keeps_migrated_legacy_exclusion(signing_key: bytes) 
 
 
 def test_patch_emits_track_updated_for_resolver_changed_sibling(signing_key: bytes) -> None:
-    """PR 3a Task 4: PATCHing track "1" (a plain identity edit) runs the
+    """PATCHing track "1" (a plain identity edit) runs the
     resolver over every track on the job; track "2" carries a thediscdb
     episode claim that was never applied and picks one up here. Both track
-    ids must get exactly one track.updated event (PR 1's parked finding)."""
+    ids must get exactly one track.updated event."""
     db = FakeSession()
     _seed_job_with_track(db)
     job = db.rows["jobs"][0]
@@ -1691,7 +1691,7 @@ def test_patch_disc_number_change_schedules_episode_stage(signing_key: bytes) ->
 
 
 def test_patch_locks_the_job_row_before_its_tracks(signing_key: bytes) -> None:
-    """M2: PATCH selects the job `FOR UPDATE` (lock order: job, then tracks)."""
+    """PATCH selects the job `FOR UPDATE` (lock order: job, then tracks)."""
     db = FakeSession()
     _seed_job_with_track(db)
     app, token = _make_app(signing_key, db)
@@ -1736,8 +1736,8 @@ def test_patch_filename_only_does_not_schedule_episode_stage(signing_key: bytes)
 
 def test_patch_without_a_stage_runner_configured_skips_scheduling(signing_key: bytes) -> None:
     """No `app.state.episode_stage` (every other PATCH test in this module):
-    the dependency returns None and the request proceeds exactly as before
-    Task 8."""
+    the dependency returns None and the request proceeds exactly as when no
+    stage runner is configured."""
     db = FakeSession()
     _seed_job_with_track(db)
     app, token = _make_app(signing_key, db)
@@ -1772,7 +1772,7 @@ def test_patch_rejects_video_type(signing_key: bytes) -> None:
     assert r.status_code == 422
 
 
-# --- resolve fills the identity columns (step 2 / G-03, G-14) ----------------
+# --- resolve fills the identity columns ----------------
 
 
 def test_resolve_sets_media_type_and_season_columns(signing_key: bytes) -> None:
@@ -1831,7 +1831,7 @@ def _job_with_label_disc_hint() -> Job:
 
 
 def test_resolve_without_disc_fields_keeps_hinted_disc(signing_key: bytes) -> None:
-    """Review Focus 5: picking a title in the identify dialog after hints
+    """Picking a title in the identify dialog after hints
     filled the disc number must not wipe it -- /resolve must not treat
     OMITTED disc_number/disc_total as an explicit manual null."""
     db = FakeSession()
@@ -1870,9 +1870,8 @@ def test_resolve_explicit_null_disc_forgets_the_operator_value_only(signing_key:
 
 
 def test_resolve_legacy_metadata_season_and_disc_now_rejected(signing_key: bytes) -> None:
-    """G-14's transitional lift (season/disc inside a free-form `metadata`
-    bag) is retired now that season/disc are first-class request fields
-    (G-03/§3.4): the old wire shape 422s instead of being silently lifted."""
+    """Season/disc inside a free-form `metadata` bag are not lifted;
+    season/disc are first-class request fields, so that wire shape 422s."""
     db = FakeSession()
     app, token = _make_app(signing_key, db)
     db.rows["jobs"] = [_job(status=JobStatus.AWAITING_USER_ID, meta={})]
@@ -1906,7 +1905,7 @@ def test_resolve_omitting_media_type_and_season_keeps_them(signing_key: bytes) -
 
 
 def test_resolve_explicit_null_media_type_and_season_clears_them(signing_key: bytes) -> None:
-    """Fix 75-5 regression: EXPLICIT null for media_type/season clears the
+    """EXPLICIT null for media_type/season clears the
     stored value -- distinct from omitting the field, which keeps it
     (test_resolve_omitting_media_type_and_season_keeps_them above). Before
     the fix, `req.media_type is not None` couldn't distinguish "sent null"

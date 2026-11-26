@@ -2,8 +2,8 @@
 	// The Match episodes tab's one alert for its state: the identity
 	// could not load, no episode source is set up, the match is a guess
 	// (with why, on request), or no source could place the tracks.
-	import type { PanelState } from './episodeModel';
-	import Glyph from '../Glyph.svelte';
+	import type { PanelState } from '../../episodes/episode-model';
+	import Glyph from '../shared/Glyph.svelte';
 
 	interface Props {
 		/** The first load is still running: no alert yet. */
@@ -31,7 +31,7 @@
 		<p class="alert-title">No episode source is set up</p>
 		<p class="alert-body">
 			ARM needs an episode list from TMDb, TVmaze or TVDB to place these tracks. Turn one on in
-			<a href="/settings#Identification/episode_sources">Settings › Identification › Identity</a>.
+			<a href="/settings#Identification/episode_sources">Settings > Identification > Identity</a>.
 		</p>
 	</div>
 {:else if view === 'unsure' && held}

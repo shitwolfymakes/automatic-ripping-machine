@@ -2,15 +2,14 @@
 
 `notification_apprise_urls` round-trips by value but never appears in log
 output — the validation helper redacts the URL in any 400 response, and
-the handler itself logs nothing about config bodies. Phase 11 added the
-`notifications_enabled` master toggle (default False) so the UI can enable
+the handler itself logs nothing about config bodies. The
+`notifications_enabled` master toggle (default False) lets the UI enable
 or disable outbound Apprise dispatch without dropping the saved URL list.
 
-As of the notification-channels feature, `notification_apprise_urls` is
-DEPRECATED as a delivery source — the dispatcher now reads
-`notification_channels` rows (migration 0015 imported the existing list).
-The field is still accepted/returned here for backward compatibility but
-is no longer used for dispatch; `notifications_enabled` remains the global
+`notification_apprise_urls` is DEPRECATED as a delivery source — the
+dispatcher reads `notification_channels` rows. The field is still
+accepted/returned here for backward compatibility but is not used for
+dispatch; `notifications_enabled` remains the global
 master toggle. New URLs should be added as channels via /api/notifications.
 """
 
@@ -61,7 +60,7 @@ logger = logging.getLogger("arm_backend.routers.config")
 
 # Secret-tier config fields, derived from the registry so a future secret field
 # auto-masks. The `& ConfigView.model_fields` guard keeps masking aligned to what's
-# actually exposed: e.g. when tvdb_api_key gains its registry+ConfigView entry (B29),
+# actually exposed: e.g. when tvdb_api_key gains its registry+ConfigView entry,
 # it masks automatically; a secret-tier field not yet on ConfigView is skipped.
 _SECRET_KEYS = frozenset(m.key for m in CONFIG_FIELD_META if m.tier == "secret") & set(ConfigView.model_fields)
 
@@ -167,7 +166,7 @@ def _is_unpausing(cfg: Config, fields: dict[str, Any]) -> bool:
     # Detect un-pause (ripping_paused ON -> OFF) before applying, so we can give
     # held review-gate discs a FRESH countdown rather than resuming an already-
     # expired one (which would auto-rip the instant ripping resumes — surprising
-    # to an operator who paused to deal with it later). timed-review-gate spec §6.3.
+    # to an operator who paused to deal with it later).
     return bool(cfg.ripping_paused) and fields.get("ripping_paused") is False
 
 
@@ -182,7 +181,7 @@ def _is_reenabling_transcode(cfg: Config, fields: dict[str, Any]) -> bool:
 def _identity_sources_changed(cfg: Config, fields: dict[str, Any]) -> bool:
     # Which sources may contribute to a job's identity changed: the resolver
     # only consults the setting when it runs, so re-run it for live jobs
-    # after the commit or a disabled source's fields stay on them (D-097).
+    # after the commit or a disabled source's fields stay on them.
     return any(key in fields and fields[key] != getattr(cfg, key) for key in _IDENTITY_SOURCE_KEYS)
 
 
