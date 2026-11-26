@@ -7,12 +7,12 @@ describe('features', () => {
 		expect(features.notifications).toBe(true);
 		expect(features.settings).toBe(true);
 		expect(features.logs).toBe(true); // job-scoped log browser
-		expect(features.files).toBe(true); // file browser — v3 backend landed
+		expect(features.files).toBe(true); // file browser
 	});
 
 	it('isScreenEnabled maps a nav href to its flag', () => {
 		expect(isScreenEnabled('/files')).toBe(true);
-		expect(isScreenEnabled('/setup')).toBe(true); // the first-run walkthrough has a v3 backend now
+		expect(isScreenEnabled('/setup')).toBe(true); // the first-run walkthrough
 		expect(isScreenEnabled('/logs')).toBe(true);
 		expect(isScreenEnabled('/')).toBe(true);
 	});

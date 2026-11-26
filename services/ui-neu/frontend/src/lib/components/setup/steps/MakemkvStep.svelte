@@ -1,10 +1,10 @@
 <script lang="ts">
 	import type { SetupView } from '$lib/types/api.gen';
 	import SetupConfigFields from '../SetupConfigFields.svelte';
-	import type { StepCommitResult } from '../steps';
+	import type { StepCommitResult } from '../../../setup/steps';
 
 	// Step 4: which MakeMKV key, and Blu-ray decryption data. Comes after
-	// Drives because only a running ripper can verify the key (setup spec §5.5).
+	// Drives because only a running ripper can verify the key.
 	let { view }: { view: SetupView; setBlocked?: (reason: string | null) => void } = $props();
 	void view;
 	let fields: SetupConfigFields | undefined = $state();

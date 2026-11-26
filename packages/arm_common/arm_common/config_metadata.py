@@ -21,7 +21,7 @@ class ConfigFieldMeta(BaseModel):
     # Ranked only: value -> the secret config key it needs before it can run.
     enum_requires: dict[str, str] | None = None
     # First-run walkthrough: which step renders this field, and in what order
-    # (setup spec 2026-10-01 §7.2). Settings and setup share this one registry.
+    # Settings and setup share this one registry.
     setup_step: str | None = None
     setup_order: int | None = None
     # "Get a free key" link for API key fields.
@@ -204,8 +204,7 @@ CONFIG_FIELD_META: list[ConfigFieldMeta] = [
         help="The service behind the job page's search box for movies.",
         type="enum",
         editable=True,
-        # The provider choice the wizard has always offered, in the slot the
-        # single `metadata_provider` field used to hold. Without it an operator
+        # The provider choice the wizard offers. Without it an operator
         # who saves only an OMDb key leaves the seeded `tmdb` default in place
         # and the Finish step reports a provider they were never shown.
         setup_step="metadata",
@@ -248,7 +247,7 @@ CONFIG_FIELD_META: list[ConfigFieldMeta] = [
     ),
     # NOTE: musicbrainz_user_agent is intentionally NOT registered — the column
     # + ConfigView/ConfigUpdateRequest wire fields persist (dropping them would be
-    # an OpenAPI change), but the value is no longer read: the backend hardcodes
+    # an OpenAPI change), but the value is not read: the backend hardcodes
     # MUSICBRAINZ_USER_AGENT next to its use (arm_backend.metadata.sources).
     # See tests/test_config_metadata.py::_DORMANT_EDITABLE_FIELDS.
     # --- Ripping ---
@@ -351,8 +350,7 @@ CONFIG_FIELD_META: list[ConfigFieldMeta] = [
     ),
     # NOTE: default_retention_policy is intentionally NOT registered — the column
     # + RetentionPolicy enum persist, but no consumer prunes raw rips yet, so the
-    # knob is hidden rather than shown-but-inert. Re-add when retention lands.
-    # See docs/superpowers/specs/2026-06-18-settings-audit-design.md §1.1.
+    # knob is hidden rather than shown-but-inert. Register it once a consumer exists.
     # --- Transcoding ---
     ConfigFieldMeta(
         key="transcode_enabled",
@@ -400,7 +398,7 @@ CONFIG_FIELD_META: list[ConfigFieldMeta] = [
     ),
     # NOTE: notification_apprise_urls (legacy flat list) is hidden — dispatch is
     # driven by NotificationChannel rows (/api/notifications), not this field. It
-    # still round-trips in ConfigView for back-compat. §1.2.
+    # still round-trips in ConfigView for back-compat.
     # --- System (read-only infra, values from env Settings) ---
     ConfigFieldMeta(
         key="MEDIA_ROOT",
@@ -449,7 +447,7 @@ CONFIG_FIELD_META: list[ConfigFieldMeta] = [
         setup_step="transcoding",
         setup_order=2,
     ),
-    # Drive-lifecycle scanner tunables (spec 2026-09-03 §2) — exposed while the
+    # Drive-lifecycle scanner tunables — exposed while the
     # cadence is being dialled in on real hardware.
     ConfigFieldMeta(
         key="drive_scan_interval_seconds",

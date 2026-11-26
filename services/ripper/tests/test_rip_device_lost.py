@@ -1,4 +1,4 @@
-"""A DVD/BD drive that drops off the USB bus mid-rip (D-133).
+"""A DVD/BD drive that drops off the USB bus mid-rip.
 
 The rip stops makemkvcon instead of failing every remaining title, waits for
 the drive to come back (often under a new srN), and rips what was left with

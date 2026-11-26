@@ -1,5 +1,4 @@
-"""Identity, match, pin and episode-browse endpoints (design spec 2026-09-28-
-identity-sources, section 7; plan Task 9): happy paths for all four routes,
+"""Identity, match, pin and episode-browse endpoints happy paths for all four routes,
 the preview/apply(+pin) split, 404/409/502, and the reader-write gate."""
 
 from __future__ import annotations
@@ -137,7 +136,7 @@ class _FakeStageRunner:
         self.invalidate_calls.append(job_id)
 
     def release(self, job_id: str, rerun: bool = True) -> None:
-        # D-093: every invalidate is released, after the router's commit.
+        # Every invalidate is released, after the router's commit.
         assert job_id in self.invalidate_calls
         self.release_calls.append(job_id)
         self.release_reruns.append(rerun)
@@ -283,11 +282,11 @@ def test_match_preview_writes_nothing(signing_key: bytes) -> None:
     assert len(outcome["matches"]) == len(DISC)
     assert outcome["score"] is not None
     # Nothing WRITTEN: no emit, metadata_json byte-identical, no stored
-    # claims. F6: a harmless commit (nothing dirty) ends the read
+    # claims. A harmless commit (nothing dirty) ends the read
     # transaction before the provider round-trip -- `committed` ticks up by
     # one, but that alone writes no data.
     assert db.committed == 1
-    assert db.expire_all_calls == 0  # F1 only matters on the apply path
+    assert db.expire_all_calls == 0  # only matters on the apply path
     assert hub.events == []
     assert job.metadata_json == before
     assert claims_of(job).sources == {}
@@ -347,11 +346,11 @@ def test_match_apply_without_source_stores_claims_no_pin(signing_key: bytes) -> 
     assert any(e["event_type"] == "job.identity_updated" for e in hub.events)
     assert any(e["event_type"] == "track.updated" for e in hub.events)
     assert runner.invalidate_calls == [JOB_ID]
-    assert runner.release_calls == [JOB_ID]  # D-093: released after the commit
+    assert runner.release_calls == [JOB_ID]  # released after the commit
     body = r.json()
     outcome = next(o for o in body["outcomes"] if o["source_id"] == "episodes_tmdb")
     assert outcome["status"] == "ok"
-    # F2: `found_ids_from_outcomes` + `merge_new_ids` persisted the show id
+    # `found_ids_from_outcomes` + `merge_new_ids` persisted the show id
     # this compute resolved onto the (fresh-reselected) job.
     assert job.metadata_json["identity"]["external_ids"]["tmdb"] == "100"
     assert job.metadata_json["identity"]["external_ids"]["imdb"] == "tt1"  # untouched
@@ -397,7 +396,7 @@ def test_match_apply_replaces_a_movie_kind_tmdb_with_the_show_id(signing_key: by
 
 
 def test_match_apply_expires_before_the_fresh_reselect(signing_key: bytes) -> None:
-    """F1: `db.expire_all()` runs before the `with_for_update` re-select, so
+    """`db.expire_all()` runs before the `with_for_update` re-select, so
     that re-select (and `resolve_job`'s own track re-select right after it)
     re-read current rows instead of diffing stale copies loaded before the
     provider round-trip."""
@@ -418,9 +417,9 @@ def test_match_apply_expires_before_the_fresh_reselect(signing_key: bytes) -> No
 
 
 def test_match_apply_with_source_pins_and_survives_forced_suggestion(signing_key: bytes) -> None:
-    """F4/F5: force every computed outcome to `suggestion=True`
+    """Force every computed outcome to `suggestion=True`
     (`episode_auto_apply` off) and prove pinning still applies it -- the
-    RESOLVER (Task 9 F4 round 2) lets a pinned "ok" source's suggestion
+    RESOLVER lets a pinned "ok" source's suggestion
     through. The stored claims AND the response both keep the computed
     `suggestion=True` unchanged; the proof that it was actually applied
     (not merely proposed) is the track's `episode_number`."""
@@ -490,12 +489,12 @@ def test_pin_then_unpin_keeps_the_guess_on_the_tracks(signing_key: bytes) -> Non
     assert [e for e in hub.events if e["event_type"] == "track.updated"] == []
 
 
-def test_match_apply_persists_season_disc_and_tolerance_i3(signing_key: bytes) -> None:
-    """I3: the operator's `/match` season and disc number become manual job
+def test_match_apply_persists_season_disc_and_tolerance(signing_key: bytes) -> None:
+    """The operator's `/match` season and disc number become manual job
     claims, and the tolerance is kept in the pinned source's stored inputs,
     so a later background run with default options reuses all three: it
     matches season 3 disc 2 without scanning, at the same tolerance, and its
-    inputs equal the stored ones (C7)."""
+    inputs equal the stored ones."""
     job = _job(season=None)
     tracks = [_track(job.id, i, s) for i, s in enumerate(DISC)]
     db = _db(job, tracks=tracks)
@@ -528,10 +527,10 @@ def test_match_apply_persists_season_disc_and_tolerance_i3(signing_key: bytes) -
     assert (outcome.claims.inputs["season"], outcome.claims.inputs["disc_number"]) == (3, 2)
 
 
-def test_match_apply_season_equal_to_a_scan_picked_season_is_still_manual_i3(signing_key: bytes) -> None:
+def test_match_apply_season_equal_to_a_scan_picked_season_is_still_manual(signing_key: bytes) -> None:
     """A season the operator restates over one an episode source picked by
     scanning is still recorded: otherwise the next background run would
-    scan again (F1 treats a stage-set season as unknown)."""
+    scan again (a stage-set season counts as unknown)."""
     job = _job(season=1)
     job.identity_provenance = {"season": "episodes_tmdb"}
     db = _db(job, tracks=[_track(job.id, i, s) for i, s in enumerate(DISC)])
@@ -572,8 +571,8 @@ def test_match_unknown_job_404(signing_key: bytes) -> None:
     assert r.status_code == 404
 
 
-def test_match_works_on_a_non_tv_job_m4(signing_key: bytes) -> None:
-    """M4 (spec 5): the manual match works on any job, TV or not; only the
+def test_match_works_on_a_non_tv_job(signing_key: bytes) -> None:
+    """The manual match works on any job, TV or not; only the
     background stage is gated on a TV candidate."""
     job = _job(media_type=MediaType.MOVIE)
     db = _db(job, tracks=[_track(job.id, i, s) for i, s in enumerate(DISC)])
@@ -587,7 +586,7 @@ def test_match_works_on_a_non_tv_job_m4(signing_key: bytes) -> None:
 
 
 @pytest.mark.parametrize("body", [{"season": -1}, {"disc_number": 0}, {"disc_number": -2}])
-def test_match_out_of_range_season_or_disc_422_m6(signing_key: bytes, body: dict[str, int]) -> None:
+def test_match_out_of_range_season_or_disc_422(signing_key: bytes, body: dict[str, int]) -> None:
     job = _job()
     db = _db(job, tracks=[_track(job.id, i, s) for i, s in enumerate(DISC)])
     runner = _FakeStageRunner([FakeProvider(seasons={1: _season(1, DISTINCT)})])
@@ -597,7 +596,7 @@ def test_match_out_of_range_season_or_disc_422_m6(signing_key: bytes, body: dict
     assert r.status_code == 422
 
 
-def test_match_season_zero_and_disc_one_are_valid_m6(signing_key: bytes) -> None:
+def test_match_season_zero_and_disc_one_are_valid(signing_key: bytes) -> None:
     job = _job()
     db = _db(job, tracks=[_track(job.id, i, s) for i, s in enumerate(DISC)])
     runner = _FakeStageRunner([FakeProvider(seasons={0: _season(0, DISTINCT)})])
@@ -652,11 +651,11 @@ def test_clear_pin_removes_existing_pin(signing_key: bytes) -> None:
     assert r.status_code == 200
     assert claims_of(job).pin == {}
     assert r.json()["pin"] == {}
-    assert db.locked == ["jobs"]  # M2: the job row is locked before resolving
+    assert db.locked == ["jobs"]  # the job row is locked before resolving
 
 
 def test_clear_pin_emits_identity_updated_and_track_updated(signing_key: bytes) -> None:
-    """F3: spec 7 requires `job.identity_updated` whenever the resolver
+    """`job.identity_updated` is required whenever the resolver
     changes anything, not only when `/identity/match` supplied fresh
     outcomes. Here the stored "ok" claims were never yet applied to the
     tracks -- clearing the pin still runs `resolve_job`, which applies them
@@ -859,7 +858,7 @@ def test_episodes_browse_no_stage_runner_503(signing_key: bytes) -> None:
 
 
 def test_episodes_browse_no_show_id_404(signing_key: bytes) -> None:
-    """F7: no id cached (the job's metadata only has `imdb`), so
+    """No id cached (the job's metadata only has `imdb`), so
     `resolve_show_id` is called directly; it returns `None` -> 404."""
     job = _job()
     db = _db(job)
@@ -877,7 +876,7 @@ def test_episodes_browse_no_show_id_404(signing_key: bytes) -> None:
 
 
 def test_episodes_browse_uses_cached_id_skips_resolve_show_id(signing_key: bytes) -> None:
-    """F7: when the id is already cached, `resolve_show_id` is never called."""
+    """When the id is already cached, `resolve_show_id` is never called."""
     job = _job(meta={"identity": {"external_ids": {"imdb": "tt1", "tmdb": "cached-100"}}})
     db = _db(job)
     provider = FakeProvider(seasons={1: _season(1, DISTINCT)})
@@ -895,7 +894,7 @@ def test_episodes_browse_uses_cached_id_skips_resolve_show_id(signing_key: bytes
 
 
 def test_episodes_browse_resolve_show_id_miss_404(signing_key: bytes) -> None:
-    """F7: `resolve_show_id` raising `SourceMiss` (not just returning `None`)
+    """`resolve_show_id` raising `SourceMiss` (not just returning `None`)
     is also a 404, not a 502 -- it's a definitive "no such show", not a
     transient failure."""
     job = _job()
@@ -913,7 +912,7 @@ def test_episodes_browse_resolve_show_id_miss_404(signing_key: bytes) -> None:
 
 
 def test_episodes_browse_resolve_show_id_source_error_502(signing_key: bytes) -> None:
-    """F7: a transient failure resolving the show id (not yet cached) is a
+    """A transient failure resolving the show id (not yet cached) is a
     502 naming the provider, not a misleading 404."""
     job = _job()
     db = _db(job)
@@ -996,7 +995,7 @@ def test_episodes_browse_source_error_502(signing_key: bytes) -> None:
 def test_episodes_browse_unexpected_exception_502(
     signing_key: bytes, where: str, caplog: pytest.LogCaptureFixture
 ) -> None:
-    """M1: any unexpected provider exception maps to 502, logged with its
+    """Any unexpected provider exception maps to 502, logged with its
     traceback, instead of a 500."""
     job = _job(meta={})  # no cached show id: resolve_show_id runs
     db = _db(job)

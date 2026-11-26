@@ -1,6 +1,6 @@
 <script lang="ts">
 	import type { SetupView } from '$lib/types/api.gen';
-	import type { StepCommitResult } from '$lib/components/setup/steps';
+	import type { StepCommitResult } from '$lib/setup/steps';
 	import { stubState } from './setup-step-stub';
 
 	// Stand-in for the page's nine step components: the page only passes these

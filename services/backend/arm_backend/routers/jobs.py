@@ -85,7 +85,7 @@ router = APIRouter(prefix="/api/jobs", tags=["jobs"])
 # heartbeats delayed by transient network blips while still catching
 # tray-open/no-disc clicks made seconds after the ripper noticed. A reading
 # older than this means the ripper stopped beating, and the trigger is
-# refused rather than sent to nobody (D-241).
+# refused rather than sent to nobody.
 _MEDIA_STATUS_FRESHNESS = timedelta(seconds=90)
 _MEDIA_STATUS_READY: frozenset[DriveMediaStatus] = frozenset({DriveMediaStatus.LOADED, DriveMediaStatus.UNKNOWN})
 _MEDIA_STATUS_DETAIL: dict[DriveMediaStatus, str] = {
@@ -205,8 +205,7 @@ async def abandon_job(
         subprocess so file handles release on `/raw/<id>/`.
 
     `delete_raw` is plumbed in the WS payload because only the ripper has
-    `/raw` mounted; doing the rmtree here would silently no-op (and used to,
-    pre-fix). Even when there's no active task, the ripper still runs the
+    `/raw` mounted; doing the rmtree here would silently no-op. Even when there's no active task, the ripper still runs the
     rmtree against any orphaned partial-rip directory.
     """
     job = (await db.execute(select(Job).where(col(Job.id) == job_id))).scalar_one_or_none()
@@ -234,7 +233,7 @@ async def rip_start_review(
     db: AsyncSession = Depends(get_session),
     hub: WSHub = Depends(get_hub),
 ) -> Job:
-    """Operator Start for a disc held in the timed review gate (spec §5.2).
+    """Operator Start for a disc held in the timed review gate.
 
     Transitions AWAITING_REVIEW -> RIPPING here (the backend owns the transition;
     rip-start then tolerates already-RIPPING) and emits the `rip.start` WS command
@@ -359,7 +358,7 @@ async def review_pause(
     db: AsyncSession = Depends(get_session),
     hub: WSHub = Depends(get_hub),
 ) -> Job:
-    """Pause/resume ONE held disc's review countdown (per-job pause, spec §11).
+    """Pause/resume ONE held disc's review countdown (per-job pause).
 
     `?paused=true` freezes this disc's auto-start countdown (waits indefinitely
     for Start) while other discs keep counting; `?paused=false` resumes with a
@@ -607,7 +606,7 @@ async def manual_trigger(
 
     # The ripper drops a trigger while it owns any job, and no ripper acts on
     # one for a detached drive or after it stopped beating. Refuse those here,
-    # in the DriveCard's order and wording (D-208), so the click gets a reason
+    # in the DriveCard's order and wording, so the click gets a reason
     # it can show instead of a 202 nothing follows. The card gates the first
     # two itself; heartbeat age it cannot judge against the browser clock.
     live = (
@@ -680,7 +679,7 @@ async def update_job(
     """Edit user-controlled fields on a Job + optional per-track operator edits.
     Job title/year stay behind identify/resolve; track `status` stays ripper-owned
     (not in TrackEditRequest)."""
-    # M2: lock the job row (then its tracks) so a concurrent identity write
+    # Lock the job row (then its tracks) so a concurrent identity write
     # (the episode stage's apply, /identity/match) serializes with this one.
     job = (await db.execute(select(Job).where(col(Job.id) == job_id).with_for_update())).scalar_one_or_none()
     if job is None:
@@ -698,7 +697,7 @@ async def resolve(
     hub: WSHub = Depends(get_hub),
     stage_runner: EpisodeStageRunner | None = Depends(get_stage_runner),
 ) -> ResolveResponse:
-    # M2: lock the job row before the identity write (lock order: job, then tracks).
+    # Lock the job row before the identity write (lock order: job, then tracks).
     job = (await session.execute(select(Job).where(col(Job.id) == job_id).with_for_update())).scalar_one_or_none()
     if job is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown job_id: {job_id}")
@@ -719,7 +718,7 @@ async def accept_identity_suggestion(
     stage_runner: EpisodeStageRunner | None = Depends(get_stage_runner),
 ) -> ResolveResponse:
     """Confirm the confident match identify held because the media type's
-    auto-apply switch was off (identification-sources spec D-10).
+    auto-apply switch was off.
 
     Applies the stored hit exactly as identify would have, then hands the
     job to the resolve path (provenance, fan-out, `identify.resolved`, the

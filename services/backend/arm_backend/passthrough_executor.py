@@ -1,7 +1,7 @@
 """In-process passthrough execution (TranscodeTool.NONE / no-preset tasks).
 
 Passthrough is a file move, not an encode, so the backend performs it
-itself instead of spawning a transcoder container (no-transcode-mode spec).
+itself instead of spawning a transcoder container.
 The task lifecycle mirrors the container path exactly, so the transcodes UI
 and session rollups cannot tell the difference. The blocking move runs in a
 thread; a large cross-mount copy must not stall the event loop.

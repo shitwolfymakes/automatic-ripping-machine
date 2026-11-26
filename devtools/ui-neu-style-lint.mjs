@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Styling lint for ui-neu: markup carries block classes, state attributes,
-// and layout-only utilities; everything else lives in CSS (spec 6.4, 10).
+// and layout-only utilities; everything else lives in CSS.
 import { readFileSync, globSync } from 'node:fs';
 import { resolve, dirname, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -32,11 +32,10 @@ const RESPONSIVE = /^(sm|md|lg|xl):/;
 const BANNED_FAMILIES = /^(bg|text|border|ring|fill|stroke|from|to|via|divide|outline|shadow|rounded|font|tracking|leading|uppercase|lowercase|capitalize|italic|underline|transition|duration|ease|animate|opacity|cursor|z|dark|hover|focus|focus-visible|group-hover|disabled|active|placeholder)(-|:|$)/;
 // table/table-row/table-cell are also Tailwind's own auto-generated
 // display-* utility class names (display: table/table-row/table-cell are
-// valid CSS keyword values) - Task 11 fix round 1 found these silently
-// beat the table block's own @layer components rules regardless of
-// selector specificity, since Tailwind's utilities land in a
-// higher-priority cascade layer (fix round 2 moved the affected rules
-// into that same layer rather than fighting it). The block's own bare
+// valid CSS keyword values). A responsive-prefixed one silently beats the
+// table block's own @layer components rules regardless of selector
+// specificity, since Tailwind's utilities land in a higher-priority
+// cascade layer. The block's own bare
 // `table`/`table-row`/`table-cell` classes are legitimate (that IS the
 // vocabulary), but a RESPONSIVE-prefixed one (`sm:table-cell`,
 // `md:table-row`, ...) is always the bare Tailwind display utility -
@@ -128,7 +127,7 @@ export function lintSource(src, filename) {
 		});
 	}
 	// 6. raw-colour-in-style: literal colours as CSS values inside <style>
-	// blocks are banned (spec's strict token set - only var(--color-*) and
+	// blocks are banned (strict token set - only var(--color-*) and
 	// color-mix(...) against a token, plus the keywords transparent/
 	// currentColor, are allowed). Strip comments first so a measurement note
 	// like "baseline rgb(1,2,3)" is never flagged, then scan each

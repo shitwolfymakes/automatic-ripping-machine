@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { renderComponent, screen, fireEvent, cleanup } from '$lib/test-utils';
+import { renderComponent, screen, fireEvent, cleanup } from '$lib/testing/render';
 import SetupFooter from '../SetupFooter.svelte';
-import { STEPS } from '../steps';
+import { STEPS } from '../../../setup/steps';
 
 const handlers = () => ({ onback: vi.fn(), onskip: vi.fn(), oncontinue: vi.fn() });
 

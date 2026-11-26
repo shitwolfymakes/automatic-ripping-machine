@@ -51,8 +51,7 @@
 		transform: translateX(0.75rem);
 	}
 	/* toggle-lg: the settings page's Dark Mode and Resource-stats switches
-	   (h-6 w-11 track, h-5 w-5 thumb, both original bespoke markup - a
-	   second genuine consumer, so this earns a block modifier rather than
+	   (h-6 w-11 track, h-5 w-5 thumb; two consumers, so this earns a block modifier rather than
 	   a scoped copy per Settings component). */
 	.toggle-lg {
 		width: 2.75rem;

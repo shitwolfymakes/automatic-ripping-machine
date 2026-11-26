@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
-import { renderComponent, screen, cleanup, waitFor } from '$lib/test-utils';
+import { renderComponent, screen, cleanup, waitFor } from '$lib/testing/render';
 import LogDetailPage from '../[job_id]/+page.svelte';
 
 const fetchJobLog = vi.fn();

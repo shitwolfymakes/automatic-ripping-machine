@@ -1,11 +1,12 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import ChoiceCard from '$lib/components/ChoiceCard.svelte';
+	import ChoiceCard from '$lib/components/settings/ChoiceCard.svelte';
 	import { fetchDrives } from '$lib/api/drives';
+	import FieldDocsLink from '$lib/components/shared/FieldDocsLink.svelte';
 
 	// "When you insert a disc": one three-way choice over two config keys
 	// (auto_rip_on_insert + hold_for_review). The global default each drive
-	// follows unless it has its own mode (setup spec D1). Rendered by
+	// follows unless it has its own mode. Rendered by
 	// SchemaConfigForm for the `disc_handling` widget, in Settings > Ripping and
 	// in the setup walkthrough. `values` is the live form state it writes into.
 	let { values, context = {} }: { values: Record<string, unknown>; context?: Record<string, unknown> } = $props();
@@ -46,7 +47,10 @@
 
 <div class="disc-handling-field stack">
 	<div>
-		<div class="field-label disc-handling-field-title">When you insert a disc</div>
+		<div class="disc-handling-field-head">
+			<div class="field-label disc-handling-field-title">When you insert a disc</div>
+			<FieldDocsLink id="config.auto_rip_on_insert" label="When you insert a disc" />
+		</div>
 		<p class="field-help">Applies to every drive. You can change it per drive later.</p>
 	</div>
 	<ChoiceCard name="disc-handling" value={current} {options} onchange={choose} legend="When you insert a disc" />
@@ -60,6 +64,11 @@
 <style>
 	.disc-handling-field {
 		gap: 0.75rem;
+	}
+	.disc-handling-field-head {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
 	}
 	.disc-handling-field-title {
 		color: var(--color-text);

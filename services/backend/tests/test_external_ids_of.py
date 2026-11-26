@@ -1,5 +1,5 @@
 """Every id a provider hit carries lands in the identity, with the TMDb id's
-kind, so episode sources can find the show (spec 3.4)."""
+kind, so episode sources can find the show."""
 
 from __future__ import annotations
 

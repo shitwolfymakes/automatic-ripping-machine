@@ -1,5 +1,5 @@
-/* Self-hosted Rajdhani (woff2 in /fonts) — replaces the external Google Fonts
- * @import so the CSP can stay strict (style-src/font-src 'self', no external
+/* Self-hosted Rajdhani (woff2 in /fonts) — used instead of an external Google Fonts @import, so the
+ * CSP can stay strict (style-src/font-src 'self', no external
  * font hosts). Latin + latin-ext, weights 500/700. */
 @font-face {
 	font-family: 'Rajdhani';
@@ -62,9 +62,8 @@
 		text-rendering: optimizeLegibility;
 		/* --font-family: optional theme token; falls back to the Tailwind sans stack */
 		font-family: var(--font-family, var(--font-sans));
-		/* --color-page and --color-text both flip in .dark, so the old
-		   bg-page/dark:bg-page-dark utility pair collapses to the tokens.
-		   text-gray-900/dark:text-gray-100 is exactly --color-text's pair. */
+		/* --color-page and --color-text both flip in .dark, so the body needs no separate dark-mode
+		   colours. */
 		background-color: var(--color-page);
 		color: var(--color-text);
 	}

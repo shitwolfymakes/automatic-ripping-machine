@@ -9,9 +9,9 @@
 	import AddChannelFooter from './AddChannelFooter.svelte';
 	import ServiceDropdown from './ServiceDropdown.svelte';
 	import BashTestPanel from './BashTestPanel.svelte';
-	import { missingRequirements } from './channelHelpers';
-	import type { AddChannelBody } from './channelActions';
-	import Glyph from '$lib/components/Glyph.svelte';
+	import { missingRequirements } from '../../notifications/channel-helpers';
+	import type { AddChannelBody } from '../../notifications/channel-actions';
+	import Glyph from '$lib/components/shared/Glyph.svelte';
 
 	// `compact` (setup walkthrough): a service channel only, no header, no
 	// Save/Cancel (the parent saves on Continue through getBody()/isReady()),
@@ -138,7 +138,7 @@
 
 <style>
 	/* Same border/radius/shadow as .panel (an elevated surface), but the
-	   original's header/body/footer each carry their own independent padding
+	   header/body/footer each carry their own independent padding
 	   rather than one uniform pad, so this stays a local shell instead of .panel. */
 	.add-channel-form {
 		border: 1px solid var(--color-border-strong);

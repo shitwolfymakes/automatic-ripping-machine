@@ -78,7 +78,7 @@ def _origin_allowed(
         return True
     if origin in settings.ARM_ALLOWED_ORIGINS:
         return True
-    # Same-origin default (G-28): a browser cannot forge Origin or Host, and
+    # Same-origin default: a browser cannot forge Origin or Host, and
     # X-Forwarded-Host/-Proto are set by our own proxies (ui-neu nginx, vite
     # dev) from the URL the browser actually used. An Origin that matches the
     # host this socket was opened against is this deployment's own UI, whatever
@@ -198,7 +198,7 @@ async def _do_auth(
         await _check_guest_enabled(websocket)
     elif isinstance(principal, UIPrincipal):
         # A verified JWT signature is not enough: apply the same account
-        # checks REST `require_jwt` runs on every UI request (D-163).
+        # checks REST `require_jwt` runs on every UI request.
         await _check_ui_user(principal.user_id)
 
     return principal
@@ -230,7 +230,7 @@ async def _serve_loop(websocket: WebSocket, hub: WSHub, principal: Principal) ->
             raise
         except Exception:
             # Non-JSON text or a binary frame: a client protocol error, answered
-            # like the same frame before auth instead of a 1011 + traceback (D-167).
+            # like the same frame before auth instead of a 1011 + traceback.
             await _send_error(websocket, CLOSE_BAD_MESSAGE, "message must be JSON")
             continue
         try:

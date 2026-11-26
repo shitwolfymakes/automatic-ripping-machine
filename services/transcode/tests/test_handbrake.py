@@ -57,7 +57,7 @@ def test_eta_with_hours() -> None:
 
 
 def test_fps_pair_is_extracted() -> None:
-    """The live and average frame rates ride on the heartbeat (D-248)."""
+    """The live and average frame rates ride on the heartbeat."""
     m = _match("Encoding: task 1 of 1, 47.30 % (45.67 fps, avg 23.45 fps, ETA 00h12m34s)")
     assert m is not None
     assert _parse_fps(m) == (45.67, 23.45)
@@ -373,3 +373,63 @@ def test_build_handbrake_command_extra_args_split_and_last() -> None:
 @pytest.mark.parametrize("extra_args", [None, ""])
 def test_build_handbrake_command_empty_extra_args_add_nothing(extra_args: str | None) -> None:
     assert _build(extra_args=extra_args) == _BASE_ARGV
+
+
+def test_build_handbrake_command_without_settings_is_todays_argv() -> None:
+    """A settings-less preset builds the plain `--preset` argv byte for byte."""
+    assert build_handbrake_command(
+        input_path=Path("/raw/title_t00.mkv"),
+        output_path=Path("/out/Movie.mkv.arm-inprogress"),
+        preset_ref="H.265 MKV 1080p30",
+        extra_args="--quality 20 --all-audio",
+        encoder_args=["--encoder", "x265"],
+    ) == [
+        "HandBrakeCLI",
+        "-i",
+        "/raw/title_t00.mkv",
+        "-o",
+        "/out/Movie.mkv.arm-inprogress",
+        "--preset",
+        "H.265 MKV 1080p30",
+        "--encoder",
+        "x265",
+        "--quality",
+        "20",
+        "--all-audio",
+    ]
+
+
+def test_build_handbrake_command_with_preset_file_imports_arm_preset() -> None:
+    assert build_handbrake_command(
+        input_path=Path("/in/a.mkv"),
+        output_path=Path("/out/a.mkv"),
+        preset_ref=None,
+        extra_args="--foo 1",
+        encoder_args=["--encoder", "x264"],
+        preset_file=Path("/tmp/arm-hb-1/arm-preset.json"),
+    ) == [
+        "HandBrakeCLI",
+        "-i",
+        "/in/a.mkv",
+        "-o",
+        "/out/a.mkv",
+        "--preset-import-file",
+        "/tmp/arm-hb-1/arm-preset.json",
+        "--preset",
+        "arm",
+        "--encoder",
+        "x264",
+        "--foo",
+        "1",
+    ]
+
+
+def test_build_handbrake_command_without_preset_file_or_ref_raises() -> None:
+    with pytest.raises(RuntimeError, match="needs a preset_ref"):
+        build_handbrake_command(
+            input_path=Path("/in/a.mkv"),
+            output_path=Path("/out/a.mkv"),
+            preset_ref=None,
+            extra_args=None,
+            encoder_args=[],
+        )

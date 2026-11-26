@@ -215,7 +215,7 @@ def test_create_session_rejects_media_type_mismatch(signing_key: bytes) -> None:
 
 def test_patch_builtin_name_409(signing_key: bytes) -> None:
     # The seeder re-syncs a built-in's name on every boot, so a rename would
-    # silently revert; the router refuses it instead (D-146).
+    # silently revert; the router refuses it instead.
     db = FakeSession()
     _seed(db)
     app, token = _make_app(signing_key, db)
@@ -435,7 +435,8 @@ def test_create_rejects_unknown_transcode_preset(signing_key: bytes) -> None:
     assert "unknown transcode_preset_id" in r.json()["detail"]
 
 
-def test_create_rejects_transcode_media_mismatch(signing_key: bytes) -> None:
+def test_create_accepts_a_tv_transcode_preset_on_a_movie_session(signing_key: bytes) -> None:
+    """Encoding settings do not depend on movie vs TV: a preset of either fits a session of either."""
     db = FakeSession()
     _seed(db)
     db.rows["transcode_presets"].append(_tv_transcode_preset())
@@ -449,8 +450,58 @@ def test_create_rejects_transcode_media_mismatch(signing_key: bytes) -> None:
     }
     with TestClient(app) as client:
         r = client.post("/api/sessions", json=body, headers=_auth(token))
+    assert r.status_code == 201, r.text
+    assert r.json()["transcode_preset_id"] == "tpr_tv"
+
+
+def test_create_rejects_a_music_transcode_preset_on_a_movie_session(signing_key: bytes) -> None:
+    db = FakeSession()
+    _seed(db)
+    db.rows["transcode_presets"].append(
+        TranscodePreset(
+            id="tpr_flac",
+            name="FLAC",
+            media_type=MediaType.MUSIC,
+            is_builtin=True,
+            tool=TranscodeTool.ABCDE,
+            container=ContainerFormat.FLAC,
+            encoder="preset",
+        )
+    )
+    app, token = _make_app(signing_key, db)
+    body = {
+        "name": "Movie session w/ FLAC",
+        "media_type": "movie",
+        "rip_preset_id": "rpr_movie",
+        "transcode_preset_id": "tpr_flac",
+        "output_path_template": "{title} ({year}).{ext}",
+    }
+    with TestClient(app) as client:
+        r = client.post("/api/sessions", json=body, headers=_auth(token))
     assert r.status_code == 400
-    assert "transcode_preset.media_type=tv" in r.json()["detail"]
+    assert "transcode_preset.media_type=music" in r.json()["detail"]
+
+
+def test_patch_accepts_a_tv_transcode_preset_on_a_movie_session(signing_key: bytes) -> None:
+    db = FakeSession()
+    _seed(db)
+    db.rows["transcode_presets"].append(_tv_transcode_preset())
+    db.rows["sessions"].append(
+        Session(
+            id="ses_movie_user",
+            name="Mine",
+            media_type=MediaType.MOVIE,
+            is_builtin=False,
+            rip_preset_id="rpr_movie",
+            transcode_preset_id=None,
+            output_path_template="{title} ({year}).mkv",
+        )
+    )
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as client:
+        r = client.patch("/api/sessions/ses_movie_user", json={"transcode_preset_id": "tpr_tv"}, headers=_auth(token))
+    assert r.status_code == 200, r.text
+    assert r.json()["transcode_preset_id"] == "tpr_tv"
 
 
 def test_create_without_transcode_preset(signing_key: bytes) -> None:

@@ -707,7 +707,7 @@ class _HangingProc(_FakeProc):
 
 
 async def test_rip_disc_stop_kills_makemkvcon_and_reports_the_lost_drive(monkeypatch, tmp_path):
-    """D-133: once the caller sets `stop` (the drive dropped off the bus),
+    """Once the caller sets `stop` (the drive dropped off the bus),
     makemkvcon is killed at once instead of failing title after title."""
     proc = _HangingProc()
 

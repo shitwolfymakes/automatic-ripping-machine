@@ -1,4 +1,4 @@
-"""TVDB v4 title-search methods (PR 2b). respx-mocked; no network."""
+"""TVDB v4 title-search methods. respx-mocked; no network."""
 
 import os
 

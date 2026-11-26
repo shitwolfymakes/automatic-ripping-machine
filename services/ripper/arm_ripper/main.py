@@ -92,7 +92,7 @@ def _build_controller(
 async def _recover_crashed_rip(
     client: BackendClient, drive_id: str, handle: DriveHandle, controller: JobController
 ) -> None:
-    """Recover a rip that crashed in flight on this drive, if any (Phase 9); logs and swallows every error so a
+    """Recover a rip that crashed in flight on this drive, if any; logs and swallows every error so a
     misbehaving probe never blocks boot.
     """
     try:

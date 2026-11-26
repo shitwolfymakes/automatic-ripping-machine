@@ -44,7 +44,7 @@ def _resumable(disc_type: DiscType, device_path: str, tracks: list[TrackView]) -
     from a real drive, unless every track is a full-disc backup or dump."""
     # A DVD/BD rip whose drive drops off the bus mid-rip stops makemkvcon
     # and resumes on the drive's new node instead of failing every
-    # remaining title (D-133). ISO and folder sources have no bus to drop.
+    # remaining title. ISO and folder sources have no bus to drop.
     return (
         disc_type in (DiscType.DVD, DiscType.BLURAY)
         and not is_file_source(device_path)

@@ -74,6 +74,15 @@ def _service_id(plugin_cls: Any) -> str | None:
     return str(scheme)
 
 
+# Apprise's wiki page for a service, for a plugin that names no setup page.
+_APPRISE_WIKI_PAGE = "https://github.com/caronc/apprise/wiki/Notify_{service_id}"
+
+
+def _setup_url(plugin_cls: Any, service_id: str) -> str:
+    """Apprise's own setup page for the service (``setup_url``), else its wiki page."""
+    return str(getattr(plugin_cls, "setup_url", None) or _APPRISE_WIKI_PAGE.format(service_id=service_id))
+
+
 def _build_service_entry(plugin_cls: Any) -> dict[str, Any] | None:
     service_id = _service_id(plugin_cls)
     if not service_id:
@@ -90,6 +99,7 @@ def _build_service_entry(plugin_cls: Any) -> dict[str, Any] | None:
         "id": service_id,
         "name": str(plugin_cls.service_name),
         "docs_url": plugin_cls.service_url or "",
+        "setup_url": _setup_url(plugin_cls, service_id),
         "url_scheme": service_id,
         "required_fields": required_fields,
         "advanced_fields": advanced_fields,

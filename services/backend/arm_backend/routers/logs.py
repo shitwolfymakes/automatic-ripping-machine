@@ -1,4 +1,4 @@
-"""Phase 12 — per-job log query + bug-report zip endpoints.
+"""Per-job log query + bug-report zip endpoints.
 
 Two read-only endpoints scoped to a single `job_id`:
 
