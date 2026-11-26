@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderComponent, screen, fireEvent, cleanup, waitFor, within } from '$lib/testing/render';
 import ActiveJobRow from '../ActiveJobRow.svelte';
 import { createJob } from '../../../__fixtures__/job';
+import { createIsoDrive } from '$lib/__fixtures__/drive';
 
 // Branch pins for ActiveJobRow, beside ActiveJobRow.test.ts and the other
 // tests that render it. Every branch of the row's own code is covered. The
@@ -64,7 +65,7 @@ describe('ActiveJobRow branches', () => {
 			const { cancelIsoRip } = await import('$lib/api/iso');
 			vi.mocked(cancelIsoRip).mockClear();
 			renderComponent(ActiveJobRow, {
-				props: { job: createJob({ drive_id: null }), isoSource: 'a.iso' }
+				props: { job: createJob({ drive_id: null }), drive: createIsoDrive('a.iso') }
 			});
 			await fireEvent.click(screen.getByText('Cancel'));
 			expect(cancelIsoRip).not.toHaveBeenCalled();
@@ -77,7 +78,7 @@ describe('ActiveJobRow branches', () => {
 			vi.mocked(addToast).mockClear();
 			vi.mocked(cancelIsoRip).mockRejectedValueOnce('nope');
 			renderComponent(ActiveJobRow, {
-				props: { job: createJob({ drive_id: 'drv_iso_1' }), isoSource: 'a.iso' }
+				props: { job: createJob({ drive_id: 'drv_iso_1' }), drive: createIsoDrive('a.iso') }
 			});
 			await fireEvent.click(screen.getByText('Cancel'));
 			await waitFor(() =>
@@ -90,7 +91,7 @@ describe('ActiveJobRow branches', () => {
 			let release: () => void = () => {};
 			vi.mocked(cancelIsoRip).mockReturnValueOnce(new Promise<void>((r) => (release = r)) as never);
 			renderComponent(ActiveJobRow, {
-				props: { job: createJob({ drive_id: 'drv_iso_1' }), isoSource: 'a.iso' }
+				props: { job: createJob({ drive_id: 'drv_iso_1' }), drive: createIsoDrive('a.iso') }
 			});
 			await fireEvent.click(screen.getByText('Cancel'));
 			await waitFor(() => expect(screen.getByText('Cancelling...')).toBeDisabled());
@@ -162,7 +163,7 @@ describe('ActiveJobRow branches', () => {
 	describe('collapsed row', () => {
 		it('shows the ISO source chip for an ISO rip', () => {
 			renderComponent(ActiveJobRow, {
-				props: { job: createJob(), isoSource: 'disc.iso', isoKind: 'folder' }
+				props: { job: createJob(), drive: createIsoDrive('disc.iso', 'folder') }
 			});
 			expect(screen.getByText('Folder')).toBeInTheDocument();
 		});
@@ -259,7 +260,7 @@ describe('ActiveJobRow branches', () => {
 
 		it('does not expand when the Cancel button is clicked', async () => {
 			renderComponent(ActiveJobRow, {
-				props: { job: createJob({ drive_id: null }), isoSource: 'a.iso' }
+				props: { job: createJob({ drive_id: null }), drive: createIsoDrive('a.iso') }
 			});
 			await fireEvent.click(screen.getByText('Cancel'));
 			expect(screen.queryByText('Job ID')).not.toBeInTheDocument();

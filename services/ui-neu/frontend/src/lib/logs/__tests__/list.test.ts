@@ -10,6 +10,7 @@ import {
 	filterLogJobs,
 	logCountText
 } from '../list';
+import { createDriveSummary, createIsoDrive } from '$lib/__fixtures__/drive';
 
 const base = { metadata_json: {}, disc_type: 'dvd', media_type: null } as const;
 
@@ -35,12 +36,18 @@ describe('discKindLabel', () => {
 		expect(discKindLabel({ ...base, disc_type: 'bluray', drive_id: 'drv_1' }, {})).toBe('Blu-ray');
 	});
 	it('names ISO and folder sources from the drive, retired drives included', () => {
-		const kinds = { drv_iso: 'iso', drv_dir_retired: 'folder' } as const;
-		expect(discKindLabel({ ...base, drive_id: 'drv_iso' }, kinds)).toBe('ISO');
-		expect(discKindLabel({ ...base, drive_id: 'drv_dir_retired' }, kinds)).toBe('Folder');
+		const drives = {
+			drv_iso: createIsoDrive('a.iso'),
+			drv_dir_retired: createIsoDrive('Disc One', 'folder', { retired: true })
+		};
+		expect(discKindLabel({ ...base, drive_id: 'drv_iso' }, drives)).toBe('ISO');
+		expect(discKindLabel({ ...base, drive_id: 'drv_dir_retired' }, drives)).toBe('Folder');
+	});
+	it('uses the disc type for an optical drive', () => {
+		expect(discKindLabel({ ...base, drive_id: 'drv_1' }, { drv_1: createDriveSummary() })).toBe('DVD');
 	});
 	it('falls back to the disc type with no drive or no map', () => {
-		expect(discKindLabel({ ...base, drive_id: null }, { drv_iso: 'iso' })).toBe('DVD');
+		expect(discKindLabel({ ...base, drive_id: null }, { drv_iso: createIsoDrive('a.iso') })).toBe('DVD');
 		expect(discKindLabel({ ...base, drive_id: 'drv_iso' })).toBe('DVD');
 	});
 });

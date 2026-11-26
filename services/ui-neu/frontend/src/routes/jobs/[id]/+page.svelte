@@ -76,7 +76,7 @@
 	}
 
 	let sessionNames = $state(new Map<string, string>());
-	let metadataFields = $derived(detail ? buildMetadataFields(detail.job, $dashboard.drive_names, sessionNames) : []);
+	let metadataFields = $derived(detail ? buildMetadataFields(detail.job, $dashboard.drives, sessionNames) : []);
 
 	function handleTitleApply() {
 		panels.active = null;
@@ -303,7 +303,7 @@
 		{#if showIdentify}
 			<IdentifyDialog
 				{job}
-				driveNames={$dashboard.drive_names}
+				drives={$dashboard.drives}
 				onclose={() => (showIdentify = false)}
 				onidentified={handleIdentified}
 			/>
