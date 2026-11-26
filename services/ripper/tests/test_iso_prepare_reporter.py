@@ -187,7 +187,7 @@ async def test_scan_reports_scanning_then_the_extraction_then_scanning_again(
     async def _report(phase: IsoPreparePhase, *_a: object) -> None:
         phases.append(phase)
 
-    async def _makemkv(_p: str, _min_title_length_seconds: int) -> ScanResult:
+    async def _makemkv(_p: str, _min_title_length_seconds: int, **_options: object) -> ScanResult:
         if extraction_routes.extracted_dir(str(iso)) is None:
             raise ScanError("makemkvcon exited -11")
         return ScanResult(disc_type=DiscType.BLURAY, titles=[{"index": 0, "duration_seconds": 5400}])

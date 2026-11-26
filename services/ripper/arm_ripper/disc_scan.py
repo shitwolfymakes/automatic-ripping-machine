@@ -6,6 +6,7 @@ import logging
 from arm_common.schemas import ScanResult
 from arm_ripper.drive_poll import DriveErrorKind, DriveState, classify_drive_error, read_drive_status
 from arm_ripper.scan import ScanError, scan as scan_disc
+from arm_ripper.scan.makemkv import SCAN_TIMEOUT_SECONDS
 from arm_ripper.source import is_file_source
 
 # The moved code keeps the job controller's logger name so existing log filters and log text stay the same.
@@ -22,11 +23,13 @@ SCAN_NOT_READY_MAX_ATTEMPTS = 5
 SCAN_NOT_READY_BACKOFFS = (2.0, 4.0, 8.0, 12.0)  # between attempts 1→2, 2→3, 3→4, 4→5
 
 
-async def scan_or_none(device_path: str, min_title_length_seconds: int) -> ScanResult | None:
+async def scan_or_none(
+    device_path: str, min_title_length_seconds: int, *, timeout_seconds: float = SCAN_TIMEOUT_SECONDS
+) -> ScanResult | None:
     """Scan the disc, listing titles down to `min_title_length_seconds`, or None after a log line when the scan fails or the drive goes absent mid-scan (which ends
     the pipeline). Any other OSError propagates."""
     try:
-        return await _scan_with_ready_retry(device_path, min_title_length_seconds)
+        return await _scan_with_ready_retry(device_path, min_title_length_seconds, timeout_seconds)
     except ScanError as e:
         logger.error("scan failed device=%s err=%s", device_path, e)
         return None
@@ -37,7 +40,9 @@ async def scan_or_none(device_path: str, min_title_length_seconds: int) -> ScanR
         return None
 
 
-async def _scan_with_ready_retry(device_path: str, min_title_length_seconds: int) -> ScanResult:
+async def _scan_with_ready_retry(
+    device_path: str, min_title_length_seconds: int, timeout_seconds: float = SCAN_TIMEOUT_SECONDS
+) -> ScanResult:
     """Scan the disc, retrying when a DISC_OK drive yields zero titles.
 
     A `DISC_OK` drive that scans to zero titles is almost certainly not
@@ -53,7 +58,7 @@ async def _scan_with_ready_retry(device_path: str, min_title_length_seconds: int
     """
     last: ScanResult | None = None
     for attempt in range(1, SCAN_NOT_READY_MAX_ATTEMPTS + 1):
-        result = await scan_disc(device_path, min_title_length_seconds)
+        result = await scan_disc(device_path, min_title_length_seconds, timeout_seconds=timeout_seconds)
         last = result
         if result.titles:
             return result

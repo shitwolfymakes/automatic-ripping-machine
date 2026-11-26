@@ -113,12 +113,12 @@ async def test_binary_missing_raises_scan_error_chained(monkeypatch: pytest.Monk
 
 
 async def test_timeout_kills_reaps_and_suppresses_cause(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The scan is killed after the given timeout: the drive's own (#325), else the default."""
     proc = _Proc(_HangingStream())
     _spawn(monkeypatch, proc)
-    monkeypatch.setattr(makemkv_mod, "SCAN_TIMEOUT_SECONDS", 0.05)
 
     with pytest.raises(ScanError) as excinfo:
-        await scan_disc("/dev/sr0", 120)
+        await scan_disc("/dev/sr0", 120, timeout_seconds=0.05)
 
     assert str(excinfo.value) == "makemkvcon timed out after 0.05s"
     assert excinfo.value.__cause__ is None
@@ -307,7 +307,7 @@ async def test_info_run_lists_titles_down_to_the_scan_minimum(monkeypatch: pytes
 
     monkeypatch.setattr(makemkv_mod.asyncio, "create_subprocess_exec", _factory)
 
-    await makemkv_mod._run_info("/dev/sr0", 120)
+    await makemkv_mod._run_info("/dev/sr0", 120, 300.0)
 
     assert "--minlength=120" in captured[0]
 
@@ -321,7 +321,7 @@ async def test_info_run_lists_titles_down_to_the_configured_minimum(monkeypatch:
 
     monkeypatch.setattr(makemkv_mod.asyncio, "create_subprocess_exec", _factory)
 
-    await makemkv_mod._run_info("/dev/sr0", 60)
+    await makemkv_mod._run_info("/dev/sr0", 60, 300.0)
 
     assert "--minlength=60" in captured[0]
 

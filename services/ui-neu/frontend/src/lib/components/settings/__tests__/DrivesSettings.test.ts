@@ -55,7 +55,7 @@ vi.mock('$lib/api/drives', () => ({
 
 function settingsData(over: Partial<SettingsData> = {}): SettingsData {
 	return {
-		config: { auto_rip_on_insert: true },
+		config: { auto_rip_on_insert: true, default_scan_timeout_seconds: 300 },
 		arm_config: {},
 		...over
 	} as unknown as SettingsData;
@@ -163,7 +163,6 @@ describe('DrivesSettings', () => {
 			settings: settingsData({
 				arm_config: {
 					PRESCAN_CACHE_MB: '64',
-					PRESCAN_TIMEOUT: '600',
 					PRESCAN_RETRIES: '5',
 					DISC_ENUM_TIMEOUT: '120'
 				}
@@ -171,7 +170,7 @@ describe('DrivesSettings', () => {
 		});
 		await fireEvent.click(screen.getByTitle('Drive settings'));
 		expect(screen.getByLabelText(/Pre-scan Cache/)).toHaveAttribute('placeholder', '64');
-		expect(screen.getByLabelText(/Pre-scan Timeout/)).toHaveAttribute('placeholder', '600');
+		expect(screen.getByLabelText(/Pre-scan Timeout/)).toHaveAttribute('placeholder', '300');
 		expect(screen.getByLabelText(/Pre-scan Retries/)).toHaveAttribute('placeholder', '5');
 		expect(screen.getByLabelText(/Enum Timeout/)).toHaveAttribute('placeholder', '120');
 	});
@@ -183,6 +182,21 @@ describe('DrivesSettings', () => {
 		expect(screen.getByLabelText(/Pre-scan Timeout/)).toHaveAttribute('placeholder', '300');
 		expect(screen.getByLabelText(/Pre-scan Retries/)).toHaveAttribute('placeholder', '3');
 		expect(screen.getByLabelText(/Enum Timeout/)).toHaveAttribute('placeholder', '60');
+	});
+
+	it("takes the scan timeout placeholder from the backend's published default", async () => {
+		render({
+			drives: [mainDrive()],
+			settings: settingsData({ config: { auto_rip_on_insert: true, default_scan_timeout_seconds: 450 } as never })
+		});
+		await fireEvent.click(screen.getByTitle('Drive settings'));
+		expect(screen.getByLabelText(/Pre-scan Timeout/)).toHaveAttribute('placeholder', '450');
+	});
+
+	it('shows no scan timeout placeholder before the config has loaded', async () => {
+		render({ drives: [mainDrive()], settings: undefined as never });
+		await fireEvent.click(screen.getByTitle('Drive settings'));
+		expect(screen.getByLabelText(/Pre-scan Timeout/)).toHaveAttribute('placeholder', '');
 	});
 
 	it('falls back to the built-in defaults when settings carry no config at all', async () => {
