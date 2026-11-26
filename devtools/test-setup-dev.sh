@@ -111,13 +111,13 @@ present "up restarts arm-ui after a re-issued certificate"  '^    restart_ui_for
 # stubbed compose/docker: prints RIPPERS_REMOVED and whether the backend was
 # restarted. The backend respawns rippers only at startup, so a deploy that
 # leaves it running must restart it.
-spawn_defs="$(awk '/^RIPPERS_REMOVED=0$/,/^}$/' "${LIB}/lifecycle.sh"; awk '/^backend_started_at\(\) \{$/,/^}$/' "${LIB}/lifecycle.sh"; awk '/^respawn_rippers_if_needed\(\) \{/,/^}$/' "${LIB}/lifecycle.sh")"
+spawn_defs="$(awk '/^RIPPERS_REMOVED=0$/,/^}$/' "${LIB}/lifecycle.sh"; awk '/^optical_rippers\(\) \{/,/^}$/' "${LIB}/lifecycle.sh"; awk '/^remove_spawned_containers\(\) \{/,/^}$/' "${LIB}/lifecycle.sh"; awk '/^backend_started_at\(\) \{$/,/^}$/' "${LIB}/lifecycle.sh"; awk '/^respawn_rippers_if_needed\(\) \{/,/^}$/' "${LIB}/lifecycle.sh")"
 respawn() {  # respawn <ripper ids> <transcoder ids> <StartedAt before> <StartedAt after>
     # shellcheck disable=SC2034,SC2317,SC2329
     (
         # shellcheck source=/dev/null
         source "${LIB}/common.sh"
-        stub_rippers="$1" stub_tasks="$2" before="$3" stub_after="$4"
+        stub_rippers="$1" stub_tasks="$2" before="$3" stub_after="$4" stub_virtual="${5:-}"
         BACKEND_SERVICE=arm-backend
         compose() {
             case "$1" in
@@ -130,8 +130,9 @@ respawn() {  # respawn <ripper ids> <transcoder ids> <StartedAt before> <Started
                 ps) case "$4" in
                         label=arm.drive_id) [[ -n "${stub_rippers}" ]] && printf '%s\n' "${stub_rippers}" ;;
                         label=arm.task_id) [[ -n "${stub_tasks}" ]] && printf '%s\n' "${stub_tasks}" ;;
+                        label=arm.virtual) [[ -n "${stub_virtual}" ]] && printf '%s\n' "${stub_virtual}" ;;
                     esac ;;
-                rm) ;;
+                rm) [[ -n "${rm_log:-}" ]] && echo "${*:3}" >> "${rm_log}" ;;
                 inspect) echo "${stub_after}" ;;
             esac
             return 0
@@ -150,6 +151,19 @@ check "only a transcoder removed: no restart" \
     "removed=0 no-restart" "$(respawn '' t1 T1 T1)"
 check "nothing removed: no restart" \
     "removed=0 no-restart" "$(respawn '' '' T1 T1)"
+# removed_ids <ripper ids> <virtual ids>: the container ids remove_spawned_containers
+# hands to `docker rm`, space-separated.
+removed_ids() {
+    local log
+    log="$(mktemp)"
+    rm_log="${log}" respawn "$1" '' T1 T1 "$2" >/dev/null
+    tr '\n' ' ' < "${log}" | sed 's/ *$//'
+    rm -f "${log}"
+}
+check "optical rippers are removed" "r1 r2" "$(removed_ids $'r1\nr2' '')"
+check "an ISO ripper (arm.virtual) is kept, the optical one removed" "r1" "$(removed_ids $'r1\nv1' 'v1')"
+check "only an ISO ripper: nothing removed, no restart" \
+    "removed=0 no-restart" "$(respawn 'v1' '' T1 T1 'v1')"
 check "backend was not running before up: no restart" \
     "removed=1 no-restart" "$(respawn r1 '' '' T2)"
 present "up restarts a kept backend after removing rippers" '^    respawn_rippers_if_needed "\$\{BACKEND_STARTED_BEFORE\}"$' "${SETUP}"
