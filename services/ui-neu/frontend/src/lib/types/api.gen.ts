@@ -3513,10 +3513,6 @@ export type MusicMeta = {
      */
     artist?: string | null;
     /**
-     * Album Artist
-     */
-    album_artist?: string | null;
-    /**
      * Album
      */
     album?: string | null;
@@ -3547,6 +3543,10 @@ export type MusicTags = {
      * Artist
      */
     artist?: string | null;
+    /**
+     * Album Artist
+     */
+    album_artist?: string | null;
     /**
      * Album
      */

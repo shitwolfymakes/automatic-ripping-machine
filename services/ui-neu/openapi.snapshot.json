@@ -14478,17 +14478,6 @@
             ],
             "title": "Artist"
           },
-          "album_artist": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Album Artist"
-          },
           "album": {
             "anyOf": [
               {
@@ -14541,6 +14530,17 @@
               }
             ],
             "title": "Artist"
+          },
+          "album_artist": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Album Artist"
           },
           "album": {
             "anyOf": [
