@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { renderComponent, screen, fireEvent, cleanup, waitFor } from '$lib/test-utils';
+import { renderComponent, screen, fireEvent, cleanup, waitFor } from '$lib/testing/render';
 import GuestAccessField from '../GuestAccessField.svelte';
 import type { UserView } from '$lib/types/api.gen';
 
@@ -31,5 +31,13 @@ describe('GuestAccessField', () => {
 		renderComponent(GuestAccessField, { props: { guest, onerror } });
 		await fireEvent.click(screen.getByRole('switch', { name: /guest/i }));
 		await waitFor(() => expect(onerror).toHaveBeenCalledWith('nope'));
+	});
+
+	it('links guest access to the setup walkthrough', () => {
+		renderComponent(GuestAccessField, { props: { guest } });
+		expect(screen.getByRole('link', { name: 'Docs for Guest access (opens in a new tab)' })).toHaveAttribute(
+			'href',
+			'/help/guide/setup-walkthrough#1-secure-your-account'
+		);
 	});
 });

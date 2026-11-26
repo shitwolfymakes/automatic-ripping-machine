@@ -51,7 +51,7 @@ def test_poster_omdb_na_rejected() -> None:
 
 
 def test_poster_musicbrainz_release_only() -> None:
-    # No release-group → per-release front-250, no fallback param. Matches neu's
+    # No release-group → per-release front-250, no fallback param. Uses the
     # per-release URL shape (distinct covers across pressings).
     r = MetadataResult(title="T", year=1, kind="music", payload={"id": "rel-1"})
     assert extract_poster_url(r) == "https://coverartarchive.org/release/rel-1/front-250"

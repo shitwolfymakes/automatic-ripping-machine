@@ -1,4 +1,4 @@
-"""Identification settings on the Config singleton (spec 2026-10-14 PR 1)."""
+"""Identification settings on the Config singleton."""
 
 from __future__ import annotations
 

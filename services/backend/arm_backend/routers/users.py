@@ -1,6 +1,6 @@
 """Fixed-account user management: list the two accounts, toggle/set-password
 for the guest. Deliberately no create/delete/role-change — the admin+guest
-model is fixed (spec 2026-07-12-basic-user-management-design)."""
+model is fixed."""
 
 import logging
 

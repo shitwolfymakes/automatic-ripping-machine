@@ -1,18 +1,18 @@
 <script lang="ts">
+	import CloseButton from '$lib/components/shared/CloseButton.svelte';
 	import { onMount } from 'svelte';
-	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
-	import LoadState from '$lib/components/LoadState.svelte';
-	import InboxEmptyState from '$lib/components/inbox/InboxEmptyState.svelte';
-	import InboxHeader from '$lib/components/inbox/InboxHeader.svelte';
-	import NotificationCard from '$lib/components/inbox/NotificationCard.svelte';
-	import SkeletonCard from '$lib/components/SkeletonCard.svelte';
-	import { NotificationInbox } from '$lib/stores/notificationInbox.svelte';
+	import ConfirmDialog from '$lib/components/shared/ConfirmDialog.svelte';
+	import LoadState from '$lib/components/shared/LoadState.svelte';
+	import InboxEmptyState from '$lib/components/notifications/inbox/InboxEmptyState.svelte';
+	import InboxHeader from '$lib/components/notifications/inbox/InboxHeader.svelte';
+	import NotificationCard from '$lib/components/notifications/inbox/NotificationCard.svelte';
+	import SkeletonCard from '$lib/components/shared/SkeletonCard.svelte';
+	import { NotificationInbox } from '$lib/stores/notification-inbox.svelte';
 
 	const inbox = new NotificationInbox();
-	let showCleared = $state(false);
 	let purgeConfirmOpen = $state(false);
 
-	let filtered = $derived(showCleared ? inbox.rows : inbox.rows.filter((n) => !n.seen));
+	let filtered = $derived(inbox.includeCleared ? inbox.rows : inbox.rows.filter((n) => !n.seen));
 
 	function handlePurge() {
 		purgeConfirmOpen = false;
@@ -34,7 +34,7 @@
 			class="alert notifications-page-feedback {inbox.feedback.type === 'success' ? 'alert-success' : 'alert-danger'}"
 		>
 			{inbox.feedback.message}
-			<button onclick={inbox.clearFeedback} class="notifications-page-feedback-close">&times;</button>
+			<CloseButton onclick={inbox.clearFeedback} label="Dismiss message" class="notifications-page-feedback-close" />
 		</div>
 	{/if}
 
@@ -42,7 +42,7 @@
 		unseenCount={inbox.unseenCount}
 		clearedCount={inbox.clearedCount}
 		purging={inbox.purging}
-		bind:showCleared
+		bind:showCleared={() => inbox.includeCleared, inbox.setIncludeCleared}
 		onpurge={() => (purgeConfirmOpen = true)}
 		ondismissall={inbox.dismissAll}
 	/>
@@ -57,7 +57,7 @@
 		{/snippet}
 		{#snippet ready(_items)}
 			{#if filtered.length === 0}
-				<InboxEmptyState {showCleared} />
+				<InboxEmptyState showCleared={inbox.includeCleared} />
 			{:else}
 				<div class="stack stack-sm notifications-page-list">
 					{#each filtered as notif (notif.id)}
@@ -84,7 +84,7 @@
 	.notifications-page {
 		gap: 1.5rem;
 	}
-	/* alert's own border isn't in the original (a plain tinted strip, no
+	/* alert's own border isn't wanted here (a plain tinted strip, no
 	   border), and its padding (0.5rem 0.75rem) is a hair short of this
 	   banner's own px-4 py-2.5. */
 	.notifications-page-feedback {
@@ -92,14 +92,16 @@
 		border-radius: var(--radius-lg);
 		padding: 0.625rem 1rem;
 	}
-	.notifications-page-feedback-close {
+	/* :global: forwarded through CloseButton's class prop */
+	:global(.notifications-page-feedback-close) {
 		margin-left: 0.5rem;
 		opacity: 0.6;
 	}
-	.notifications-page-feedback-close:hover {
+	/* :global: set on CloseButton through its class prop */
+	:global(.notifications-page-feedback-close:hover) {
 		opacity: 1;
 	}
-	/* space-y-3 (0.75rem), the original's per-card gap. */
+	/* 0.75rem per-card gap. */
 	.notifications-page-list {
 		gap: 0.75rem;
 	}

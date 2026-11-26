@@ -17,3 +17,6 @@ src/lib/types/api.gen.ts
 # Lockfile and docs
 package-lock.json
 *.md
+
+# Copied by devtools/regen-field-docs.sh; must match the source byte for byte
+src/lib/docs/field-docs.json

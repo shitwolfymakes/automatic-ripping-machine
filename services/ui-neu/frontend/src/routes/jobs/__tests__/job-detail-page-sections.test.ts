@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { renderComponent, screen, cleanup, waitFor, fireEvent, within } from '$lib/test-utils';
+import { renderComponent, screen, cleanup, waitFor, fireEvent, within } from '$lib/testing/render';
 import Page from '../[id]/+page.svelte';
-import { createJob, createTrack } from '$lib/components/__fixtures__/job';
+import { createJob, createTrack } from '$lib/__fixtures__/job';
 import type {
 	ApplySessionResponse,
 	JobDetailView,
@@ -66,8 +66,8 @@ vi.mock('$lib/api/identity', () => ({
 }));
 
 vi.mock('$lib/api/sessions', () => ({ fetchSessions: vi.fn() }));
-vi.mock('$lib/api/ripPresets', () => ({ fetchRipPresets: vi.fn(() => Promise.resolve([])) }));
-vi.mock('$lib/api/transcodePresets', () => ({ fetchTranscodePresets: vi.fn(() => Promise.resolve([])) }));
+vi.mock('$lib/api/rip-presets', () => ({ fetchRipPresets: vi.fn(() => Promise.resolve([])) }));
+vi.mock('$lib/api/transcode-presets', () => ({ fetchTranscodePresets: vi.fn(() => Promise.resolve([])) }));
 
 vi.mock('$lib/api/logs', () => ({
 	fetchStructuredLogContent: vi.fn(() => Promise.resolve({ entries: [] })),
@@ -87,7 +87,7 @@ vi.mock('$lib/api/settings', () => ({
 }));
 
 type RipperListener = (jobIds: Set<string>, eventTypes: Map<string, Set<string>>) => void;
-vi.mock('$lib/stores/ripperEvents.svelte', () => ({
+vi.mock('$lib/stores/ripper-events.svelte', () => ({
 	startRipperEvents: vi.fn(),
 	onRipperEvent: (fn: RipperListener) => {
 		void fn;
@@ -114,9 +114,10 @@ import { fetchSessions } from '$lib/api/sessions';
 import { fetchIdentity, clearEpisodeMatch } from '$lib/api/identity';
 import { wsClient } from '$lib/api/ws';
 import { ApiError } from '$lib/api/client';
-import { ripProgress, type RipLiveProgress } from '$lib/stores/rips.svelte';
 import * as authStore from '$lib/stores/auth';
 import * as storesModule from '$app/stores';
+import { jobProgress } from '$lib/jobs/progress';
+import { EMPTY_LIVE } from '$lib/stores/job-live.svelte';
 
 const mockFetchJob = vi.mocked(fetchJob);
 const mockPreview = vi.mocked(fetchNamingPreview);
@@ -169,6 +170,7 @@ function trackRows(): HTMLElement[] {
 function cellOf(row: HTMLElement, label: string): HTMLElement {
 	return row.querySelector(`[data-label="${label}"]`) as HTMLElement;
 }
+const titleButtonOf = (row: HTMLElement) => within(cellOf(row, 'Title')).getByRole('button');
 
 const text = (el: HTMLElement) => (el.textContent ?? '').replace(/\s+/g, ' ').trim();
 
@@ -210,7 +212,6 @@ afterEach(() => {
 	vi.useRealTimers();
 	setRole('admin');
 	setPageId(JOB);
-	ripProgress.value = {};
 });
 
 describe('loading', () => {
@@ -254,10 +255,17 @@ describe('loading', () => {
 		expect(await screen.findByText('Failed to load: Failed to load job')).toBeInTheDocument();
 	});
 
-	it('redirects home for any Error whose message mentions 404', async () => {
-		mockFetchJob.mockRejectedValue(new Error('Request for job failed (404)'));
+	it('redirects home when the Backend answers 404 for the job', async () => {
+		mockFetchJob.mockRejectedValue(new ApiError(404, 'unknown job_id: job_1', null));
 		renderComponent(Page);
 		await waitFor(() => expect(mockGoto).toHaveBeenCalledWith('/'));
+	});
+
+	it('shows a plain Error whose message mentions 404 instead of redirecting', async () => {
+		mockFetchJob.mockRejectedValue(new Error('Request for job failed (404)'));
+		renderComponent(Page);
+		expect(await screen.findByText('Failed to load: Request for job failed (404)')).toBeInTheDocument();
+		expect(mockGoto).not.toHaveBeenCalled();
 	});
 
 	it('does not redirect for a 404 that is not an Error object', async () => {
@@ -443,10 +451,10 @@ describe('header', () => {
 
 describe('job actions', () => {
 	it('Delete sends the user home', async () => {
-		vi.spyOn(window, 'confirm').mockReturnValue(true);
 		vi.mocked(deleteJob).mockResolvedValue(undefined as never);
 		loadJobPage();
 		await fireEvent.click(await screen.findByRole('button', { name: 'Delete' }));
+		await fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Delete' }));
 		await waitFor(() => expect(mockGoto).toHaveBeenCalledWith('/'));
 		expect(deleteJob).toHaveBeenCalledWith(JOB);
 	});
@@ -948,62 +956,35 @@ describe('action note', () => {
 });
 
 describe('rip progress', () => {
-	const live = (over: Partial<RipLiveProgress> = {}): RipLiveProgress => ({
-		track_id: 'trk_1',
-		progress_pct: 42,
-		eta_seconds: null,
-		bytes_done: null,
-		bytes_total: null,
-		rate_bps: null,
-		phase: null,
-		...over
-	});
 	const ripping = () => detailOf({ status: 'ripping' });
 	const subscribedTopics = () => vi.mocked(wsClient.subscribe).mock.calls.map(([topic]) => topic);
+	// Deliver a ripper.progress message through the handler the job-live store registered.
+	function emitRip(payload: Record<string, unknown>) {
+		const call = vi.mocked(wsClient.subscribe).mock.calls.find(([topic]) => topic === `ripper.progress.${JOB}`);
+		(call?.[1] as (env: { payload: Record<string, unknown> }) => void)({ payload });
+	}
 
 	it('waits for the first progress report while ripping, and subscribes to this job', async () => {
 		loadJobPage(ripping());
 		const section = await screen.findByTestId('job-rip-progress');
 		expect(within(section).getByRole('heading', { name: 'Ripping' })).toBeInTheDocument();
-		expect(within(section).getByText('Waiting for the first progress report from the ripper.')).toBeInTheDocument();
+		expect(within(section).getByText('Waiting for the first progress report')).toBeInTheDocument();
 		expect(subscribedTopics()).toContain(`ripper.progress.${JOB}`);
 	});
 
-	it('shows the progress without an ETA or a transfer line when neither was reported', async () => {
+	it('the rip progress card shows the live sample', async () => {
 		loadJobPage(ripping());
 		const section = await screen.findByTestId('job-rip-progress');
-		ripProgress.value = { [JOB]: live() };
-		expect(await within(section).findByText('42%')).toBeInTheDocument();
-		expect(within(section).queryByText(/left$/)).not.toBeInTheDocument();
-		expect(section.querySelector('.mono')).toBeNull();
-		expect(
-			within(section).queryByText('Waiting for the first progress report from the ripper.')
-		).not.toBeInTheDocument();
-	});
-
-	it('shows the ETA and the byte transfer with its rate', async () => {
-		loadJobPage(ripping());
-		const section = await screen.findByTestId('job-rip-progress');
-		ripProgress.value = {
-			[JOB]: live({ eta_seconds: 600, bytes_done: 1_000_000_000, bytes_total: 2_000_000_000, rate_bps: 50_000_000 })
-		};
+		emitRip({ progress_pct: 42, eta_seconds: 600, bytes_done: 1_000_000_000, bytes_total: 2_000_000_000 });
 		expect(await within(section).findByText('10m left')).toBeInTheDocument();
-		const transfer = section.querySelector('.mono') as HTMLElement;
-		expect(text(transfer)).toMatch(/ of .* · .*\/s$/);
-	});
-
-	it('shows the byte transfer without a rate when none was reported', async () => {
-		loadJobPage(ripping());
-		const section = await screen.findByTestId('job-rip-progress');
-		ripProgress.value = { [JOB]: live({ bytes_done: 1_000_000_000 }) };
-		await waitFor(() => expect(section.querySelector('.mono')).not.toBeNull());
-		expect(text(section.querySelector('.mono') as HTMLElement)).not.toContain('/s');
+		expect(within(section).getByTestId('live-progress-line')).toBeInTheDocument();
+		expect(section.querySelector('.mono')).not.toBeNull();
 	});
 
 	it('says the files are being verified once the rip is done copying', async () => {
 		loadJobPage(ripping());
 		const section = await screen.findByTestId('job-rip-progress');
-		ripProgress.value = { [JOB]: live({ phase: 'verifying' }) };
+		emitRip({ progress_pct: 100, phase: 'verifying' });
 		expect(await within(section).findByRole('heading', { name: 'Verifying ripped files' })).toBeInTheDocument();
 	});
 
@@ -1025,6 +1006,35 @@ describe('rip progress', () => {
 		await vi.advanceTimersByTimeAsync(5000);
 		await waitFor(() => expect(screen.queryByTestId('job-rip-progress')).not.toBeInTheDocument());
 		expect(unsubscribe).toHaveBeenCalled();
+	});
+});
+
+describe('stage rail', () => {
+	it('the job page rail shows the same stage and title count as the dashboard for a ripping job', async () => {
+		loadJobPage(
+			detailOf({ status: 'ripping', rip_progress: null }, [
+				createTrack({ id: 'trk_1', index: 1, status: 'done' }),
+				createTrack({ id: 'trk_2', index: 2, status: 'in_progress' }),
+				createTrack({ id: 'trk_3', index: 3, status: 'queued' })
+			])
+		);
+		await screen.findByTestId('job-rip-progress');
+		expect(await screen.findByText('title 2 of 3')).toBeInTheDocument();
+	});
+
+	it('a failed job with started tracks shows the same readout as the dashboard card', async () => {
+		// The backend sends no rip_progress outside ripping, so the page must not
+		// rebuild one from the tracks: both screens read the same JobView.
+		const detail = detailOf({ status: 'failed', rip_progress: null }, [
+			createTrack({ id: 'trk_1', index: 1, status: 'done' }),
+			createTrack({ id: 'trk_2', index: 2, status: 'failed' })
+		]);
+		const card = jobProgress(detail.job, EMPTY_LIVE, { now: 0, reviewWaitSeconds: 60, rippingPaused: false });
+		const { container } = loadJobPage(detail);
+		await waitFor(() => expect(container.querySelector('.stage-rail-readout-label')).not.toBeNull());
+		expect(container.querySelector('.stage-rail-readout-label')).toHaveTextContent(card.readout.label);
+		expect(card.readout.label).toBe('Failed');
+		expect(screen.queryByText('Failed during rip')).not.toBeInTheDocument();
 	});
 });
 
@@ -1101,12 +1111,13 @@ describe('tracks table', () => {
 		expect(within(cell).getByText('episode')).toBeInTheDocument();
 	});
 
-	it('swaps a broken track poster for the placeholder', async () => {
+	it('swaps a broken track poster for the poster fallback', async () => {
 		loadJobPage(tvDetail({}, series()));
 		await screen.findByText('Tracks (3)');
-		const img = cellOf(trackRows()[0], 'Title').querySelector('img[data-poster]') as HTMLImageElement;
-		await fireEvent.error(img);
-		expect(img.src).toContain('poster-placeholder.svg');
+		const cell = cellOf(trackRows()[0], 'Title');
+		await fireEvent.error(cell.querySelector('img[data-poster]') as HTMLImageElement);
+		expect(cell.querySelector('img[data-poster]')).toBeNull();
+		expect(cell.querySelector('.poster-image-fallback')).not.toBeNull();
 	});
 
 	it('shows an untitled track under the job title and year', async () => {
@@ -1250,10 +1261,9 @@ describe('tracks table', () => {
 			await waitFor(() => expect(mockUpdateTrack).toHaveBeenCalledWith(JOB, 'trk_2', { excluded: false }));
 		});
 
-		// Pins today's behaviour: the failure escapes as an unhandled rejection
-		// (#543). The test swaps in its own listener so vitest does not fail the
-		// run on it, and puts vitest's back afterwards.
-		it('reloads the job even when the update fails, and leaves the failure unhandled', async () => {
+		// The test swaps in its own listener so a rejection that escaped would
+		// be counted instead of failing the run, and puts vitest's back afterwards.
+		it('reloads the job when the update fails and shows the failure on the row, handled', async () => {
 			const rejections: unknown[] = [];
 			const previous = process.listeners('unhandledRejection');
 			process.removeAllListeners('unhandledRejection');
@@ -1262,10 +1272,14 @@ describe('tracks table', () => {
 				mockUpdateTrack.mockRejectedValue(new Error('update failed'));
 				loadJobPage();
 				await screen.findByText('Tracks (1)');
-				await fireEvent.click(screen.getByRole('checkbox'));
+				const box = screen.getByRole('checkbox') as HTMLInputElement;
+				expect(box.checked).toBe(true);
+				await fireEvent.click(box);
 				await waitFor(() => expect(mockFetchJob).toHaveBeenCalledTimes(2));
-				await waitFor(() => expect(rejections).toHaveLength(1));
-				expect((rejections[0] as Error).message).toBe('update failed');
+				expect(await screen.findByRole('alert')).toHaveTextContent('update failed');
+				// the reloaded track is still included, and the box shows it again
+				await waitFor(() => expect(box.checked).toBe(true));
+				expect(rejections).toEqual([]);
 			} finally {
 				process.removeAllListeners('unhandledRejection');
 				previous.forEach((l) => process.on('unhandledRejection', l));
@@ -1289,7 +1303,7 @@ describe('tracks table', () => {
 		it('opens under the row when an admin clicks the title cell and closes on the next click', async () => {
 			loadJobPage();
 			await screen.findByText('Tracks (1)');
-			const cell = cellOf(trackRows()[0], 'Title');
+			const cell = titleButtonOf(trackRows()[0]);
 			await fireEvent.click(cell);
 			expect(screen.getByRole('button', { name: 'Search' })).toBeInTheDocument();
 			await fireEvent.click(cell);
@@ -1300,15 +1314,15 @@ describe('tracks table', () => {
 			loadJobPage(detailOf({}, [createTrack({ id: 'trk_1', status: 'done' }), createTrack({ id: 'trk_2', index: 1 })]));
 			await screen.findByText('Tracks (2)');
 			const rows = trackRows();
-			await fireEvent.click(cellOf(rows[0], 'Title'));
-			await fireEvent.click(cellOf(rows[1], 'Title'));
+			await fireEvent.click(titleButtonOf(rows[0]));
+			await fireEvent.click(titleButtonOf(rows[1]));
 			expect(screen.getAllByRole('button', { name: 'Search' })).toHaveLength(1);
 		});
 
 		it('closes from its close button', async () => {
 			loadJobPage();
 			await screen.findByText('Tracks (1)');
-			await fireEvent.click(cellOf(trackRows()[0], 'Title'));
+			await fireEvent.click(titleButtonOf(trackRows()[0]));
 			await fireEvent.click(screen.getByTitle('Close'));
 			expect(screen.queryByRole('button', { name: 'Search' })).not.toBeInTheDocument();
 		});
@@ -1318,7 +1332,7 @@ describe('tracks table', () => {
 			mockUpdateTrack.mockResolvedValue(undefined as never);
 			loadJobPage();
 			await screen.findByText('Tracks (1)');
-			await fireEvent.click(cellOf(trackRows()[0], 'Title'));
+			await fireEvent.click(titleButtonOf(trackRows()[0]));
 			await fireEvent.click(screen.getByRole('button', { name: 'Search' }));
 			await fireEvent.click(await screen.findByText('Picked'));
 			await fireEvent.click(await screen.findByRole('button', { name: 'Apply' }));
@@ -1442,5 +1456,14 @@ describe('navigation between jobs', () => {
 		await screen.findByText('Tracks (1)');
 		await fireEvent.click(screen.getByRole('checkbox'));
 		await waitFor(() => expect(mockUpdateTrack).toHaveBeenCalledWith('', 'trk_1', { excluded: true }));
+	});
+});
+
+describe('session names', () => {
+	it('still loads the page when the session list cannot be read', async () => {
+		vi.mocked(fetchSessions).mockRejectedValueOnce(new Error('sessions down'));
+		loadJobPage();
+		expect(await screen.findByText('Tracks (1)')).toBeInTheDocument();
+		expect(fetchSessions).toHaveBeenCalledTimes(1);
 	});
 });

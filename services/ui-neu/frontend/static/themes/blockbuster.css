@@ -14,7 +14,7 @@
 }
 
 /* The .nav block is a flex column, where adjacent margins do NOT
-   collapse (the original block-level <nav> let them). This scheme's
+   collapse (a block-level <nav> would let them). This scheme's
    inter-link spacing therefore rides the nav's own gap instead of a
    margin on each link, which would otherwise double. */
 [data-scheme="blockbuster"] aside:where([data-sidebar]) .nav {
@@ -67,9 +67,7 @@
 }
 
 /* Record surfaces get the yellow rental-sticker border and a hard offset
-   shadow. (The sheet's original selector list also carried a
-   [data-surface] hook that was never present in any markup, added
-   aspirationally when the built-in sheets moved into static/ - dropped.) */
+   shadow. */
 [data-scheme="blockbuster"] .card,
 [data-scheme="blockbuster"] .panel,
 [data-scheme="blockbuster"] .stat {

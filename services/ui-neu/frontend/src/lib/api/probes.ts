@@ -1,7 +1,7 @@
 // Anonymous probes, made with raw fetch so the API client's 401 handler
 // never fires for them.
 
-export type GuestProbe = 'open' | 'closed' | 'unknown';
+type GuestProbe = 'open' | 'closed' | 'unknown';
 
 // One cheap guest-readable GET: ok = guest access is open, 401 = closed,
 // any other status or an unreachable backend = unknown.

@@ -1,4 +1,4 @@
-"""G-01 (gap analysis §5.1): session ROUTING is separate from auto-apply
+"""Session ROUTING is separate from auto-apply
 PERMISSION.
 
 `resolve_routed_session_id` answers "which session is routed to this job"
@@ -119,7 +119,7 @@ async def test_auto_apply_pending_choice_bypasses_flag() -> None:
     assert await auto_apply_allowed(db, _job(pending="ses_chosen")) is True  # type: ignore[arg-type]
 
 
-# --- G-02/G-17: session_routes table, resolution order 3-4 --------------------
+# --- session_routes table, resolution order 3-4 --------------------
 
 
 @pytest.mark.asyncio
@@ -141,7 +141,7 @@ async def test_route_resolves_by_media_and_disc_type() -> None:
 
 @pytest.mark.asyncio
 async def test_drive_default_overrides_route_when_compatible() -> None:
-    """The per-drive override (step 2) still wins over any route (step 3-4)
+    """The per-drive override still wins over any route
     when the drive default's media_type is compatible with the job's."""
     db = FakeSession()
     _seed(
@@ -169,7 +169,7 @@ async def test_drive_default_overrides_route_when_compatible() -> None:
 
 @pytest.mark.asyncio
 async def test_incompatible_drive_default_falls_through_to_route() -> None:
-    """I4 (G-17 unclosed): a movie drive default must not swallow a music
+    """A movie drive default must not swallow a music
     CD — when the drive default's media_type is incompatible with the job's,
     routing falls through to `session_routes`."""
     db = FakeSession()
@@ -223,7 +223,7 @@ async def test_unknown_job_media_type_still_prefers_drive_default() -> None:
 
 @pytest.mark.asyncio
 async def test_unidentified_cd_routes_as_music_past_a_video_drive_default() -> None:
-    """D-033: a CD whose MusicBrainz lookup missed keeps media_type=None,
+    """A CD whose MusicBrainz lookup missed keeps media_type=None,
     but disc_type=cd already says music. The movie drive default must not
     swallow it; the seeded (music, cd) route wins."""
     db = FakeSession()

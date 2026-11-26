@@ -1,4 +1,4 @@
-"""Per-device encoder probe (spec section 4): a real 2-second test encode per
+"""Per-device encoder probe: a real 2-second test encode per
 catalog encoder of the vendor. Verified = exit 0 AND a non-empty output file."""
 
 from __future__ import annotations

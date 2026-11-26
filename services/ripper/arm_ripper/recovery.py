@@ -1,4 +1,4 @@
-"""Phase 9 — ripper-side crash recovery boot probe.
+"""Ripper-side crash recovery boot probe.
 
 If the ripper container is restarting after a crash AND the backend says
 there's still a RIPPING job assigned to this drive AND a disc is in the
@@ -51,9 +51,8 @@ async def boot_probe(
     if job is None:
         logger.debug("boot probe: no in-flight RIPPING job for drive_id=%s", drive_id)
         # No crashed rip — but a disc may have been HELD in the review gate when
-        # the ripper restarted (timed review gate §6.3). Recover it: a paused
-        # hold re-parks; a counting-down hold is abandoned so the seated disc
-        # re-fires the InsertDetector and re-enters review with a fresh countdown.
+        # the ripper restarted. Recover it: a paused hold re-parks;
+        # a counting-down hold is abandoned so the seated disc re-fires the InsertDetector and re-enters review with a fresh countdown.
         await _recover_held_job(client, drive_id, device_path, controller)
         return
 

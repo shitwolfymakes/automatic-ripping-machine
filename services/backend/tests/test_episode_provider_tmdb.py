@@ -1,4 +1,4 @@
-"""TmdbEpisodes provider: resolve_show_id, seasons, season (design spec 6.2)."""
+"""TmdbEpisodes provider: resolve_show_id, seasons, season."""
 
 import httpx
 import pytest
@@ -346,7 +346,7 @@ async def test_bearer_header_present_key_absent_from_url(provider):
 
 
 # ---------------------------------------------------------------------------
-# M1: bounded runtimes and names
+# Bounded runtimes and names
 # ---------------------------------------------------------------------------
 
 
@@ -376,7 +376,7 @@ async def test_season_non_str_name_maps_to_none(provider, name):
 
 @respx.mock
 async def test_show_id_is_escaped_in_tv_paths(provider):
-    """D-161: an operator-pasted id cannot add path segments or query params."""
+    """An operator-pasted id cannot add path segments or query params."""
     tv = respx.get(url__startswith=f"{BASE}/tv/").mock(
         side_effect=[
             httpx.Response(200, json={"seasons": []}),

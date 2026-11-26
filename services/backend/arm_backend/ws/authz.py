@@ -63,7 +63,7 @@ async def _transcoder_may_subscribe(
     # The transcoder subscribes before it POSTs /claim (so a cancel issued
     # right after the claim is not missed), so a QUEUED task is allowed
     # pre-claim. Once claimed, only the claiming host may subscribe,
-    # mirroring can_publish (D-231).
+    # mirroring can_publish.
     if task.status == TranscodeTaskStatus.QUEUED:
         return True
     return task.status == TranscodeTaskStatus.IN_PROGRESS and task.claimed_by == principal.hostname
