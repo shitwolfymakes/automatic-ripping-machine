@@ -126,7 +126,7 @@ Controls encoding: which tool, which preset, which container. Built-ins wrap Han
 - `is_builtin` (bool)
 - `tool` (enum: `handbrake` | `abcde` | `none`) — `none` for ISO / data-copy passthrough sessions; no transcode runs.
 - `preset_ref` (text, nullable — HandBrake built-in preset name (e.g. `"H.265 MKV 1080p30"`, `"Apple 2160p60 4K HEVC Surround"`) or an abcde config profile key. Null for `tool=none`.)
-- `preset_json` (jsonb, nullable — inline custom HandBrake preset when the user's configuration isn't in the built-in catalog)
+- `handbrake_settings` (jsonb, nullable — `{common, encoders}` HandBrake settings for this preset; replaces the former `preset_json`)
 - `container` (enum: mkv | mp4 | webm | flac | mp3 | ogg | iso | none)
 - `encoder` (text, not null, default `"preset"`: a catalog id from `arm_common.encoders`, validated in the app layer, not a Postgres enum. Replaces the old `codec` + `hw_preference` columns (migration `0038_encoder_first`). `preset` means "HandBrake's own preset encoder, as-is"; `cpu_<codec>` forces software encode; `any_<codec>` prefers a verified GPU, queues if all are busy, and falls back to CPU only if this host has no eligible device for that codec at all; `qsv_<codec>` / `nvenc_<codec>` / `vaapi_<codec>` pin to that vendor and are refused at apply, or fail the task, when no device of that vendor has verified the codec. `NONE` and `ABCDE` presets must carry `encoder = "preset"`. See [02-job-lifecycle.md § Encoder claim and apply-time refusal](02-job-lifecycle.md#encoder-claim-and-apply-time-refusal).)
 - `extra_args` (text, nullable — raw CLI args appended to the tool invocation; escape hatch)

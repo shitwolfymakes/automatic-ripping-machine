@@ -67,7 +67,7 @@ class Script:
         self.order: list[str] = []
         self.client = _Client(self.order)
         self.controller = _Controller()
-        # Ruling B: amain pre-resolves the handle before the loop starts, so
+        # amain pre-resolves the handle before the loop starts, so
         # present-at-start is the realistic initial state.
         self.handle = DriveHandle("/dev/sr0")
 
@@ -89,7 +89,6 @@ class Script:
 
         real_sleep = asyncio.sleep
 
-        # Ruling D: yield so create_task()'d pipelines actually run.
         async def tick_sleep(_s: float) -> None:
             self.i += 1
             await real_sleep(0)  # yield so create_task()'d pipelines actually run
@@ -137,7 +136,7 @@ async def test_reattach_resets_detector_and_reruns_boot_probe(monkeypatch, caplo
     assert s.controller.inserted == ["/dev/sr0", "/dev/sr0"]
     assert s.boot_probes == 1
     assert sum("drive present" in r.message for r in caplog.records) == 1
-    # The hint that found the drive is logged as such (spec §4), and the node
+    # The hint that found the drive is logged as such, and the node
     # is reported to the backend BEFORE the probe — _on_reattached can run a
     # whole resumed rip, and the UI must not sit on the stale node meanwhile.
     assert any("drive present at /dev/sr0 via by_id (reattached)" in r.message for r in caplog.records)
@@ -232,7 +231,7 @@ async def test_port_identity_refreshes_hint_from_backend_while_absent(monkeypatc
 
 
 async def test_port_identity_keeps_a_renumbered_node_once_it_resolves(monkeypatch, caplog) -> None:
-    """D-004: the backend's node resolves on the refresh tick; the following
+    """The backend's node resolves on the refresh tick; the following
     ticks must keep using it, not go back to ARM_DRIVE_DEV (gone) and flap
     absent/present every other poll."""
     caplog.set_level(logging.INFO, logger="arm_ripper")
@@ -261,7 +260,7 @@ async def test_port_identity_keeps_a_renumbered_node_once_it_resolves(monkeypatc
 
 
 async def test_absent_drive_back_on_its_configured_node_is_found_without_the_backend(monkeypatch, caplog) -> None:
-    """D-004 follow-up: a renumbered drive (sr0 -> sr2) is replugged and comes
+    """A renumbered drive (sr0 -> sr2) is replugged and comes
     back as sr0 while the backend is unreachable. The kept sr2 hint must not
     be the only node tried; ARM_DRIVE_DEV is tried too while absent."""
     caplog.set_level(logging.INFO, logger="arm_ripper")
@@ -295,7 +294,7 @@ async def test_absent_drive_back_on_its_configured_node_is_found_without_the_bac
 
 
 async def test_absent_drive_never_takes_its_configured_node_from_another_port(monkeypatch, caplog) -> None:
-    """D-004 follow-up: on a multi-drive host the configured node may now be
+    """On a multi-drive host the configured node may now be
     another drive's. While this drive is absent and the backend is down,
     sr0 on a different port must not be adopted (two rippers, one drive)."""
     caplog.set_level(logging.INFO, logger="arm_ripper")
@@ -345,7 +344,7 @@ async def test_hint_refresh_is_throttled_while_the_drive_stays_absent(monkeypatc
 
 
 async def test_a_node_that_answers_enxio_still_refreshes_the_hint(monkeypatch) -> None:
-    """Ruling C: the node resolves but open() says ENXIO. That is absence too,
+    """The node resolves but open() says ENXIO. That is absence too,
     and the handle stays populated — so gating on handle.absent would never
     refresh here. Gate on the previous tick's state instead."""
     monkeypatch.setattr(drive_poller.settings, "ARM_DRIVE_BY_ID", None)

@@ -40,9 +40,9 @@ def metadata_with_identity(
     *,
     identified_at: datetime,
 ) -> dict[str, Any]:
-    """Fold a provider hit into the job's metadata bag (gap analysis §3.4).
+    """Fold a provider hit into the job's metadata bag.
 
-    Replaces the old top-level `**result.payload` merge: the raw payload is
+    The raw payload is
     filed under `provider_raw[<provider>]`, the conclusions land in the
     typed `identity` section, and a music hit fills `music`. Nothing from a
     provider reaches the top level, so re-identifying with a different

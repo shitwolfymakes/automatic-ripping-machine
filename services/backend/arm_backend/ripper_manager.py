@@ -1,4 +1,4 @@
-"""Ripper manager: one durable container per *enrolled* drive (spec §3).
+"""Ripper manager: one durable container per *enrolled* drive.
 
 Mirrors transcode_dispatcher's docker-py usage (label-based tracking,
 boot-time reconcile) with two differences in kind: rippers are durable
@@ -209,7 +209,7 @@ class RipperManager:
         return result
 
     def reconcile(self, enrolled: Sequence[Drive], *, busy: frozenset[str] = frozenset()) -> ReconcileSummary:
-        """Boot-time: the Drive table is the source of truth (spec §3).
+        """Boot-time: the Drive table is the source of truth.
         Per-drive failures are recorded, not raised; only an un-listable
         daemon raises. A ripper whose container image no longer matches
         ARM_RIPPER_IMAGE, or whose spec no longer matches the current

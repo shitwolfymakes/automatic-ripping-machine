@@ -159,7 +159,7 @@ def _held_job(job_id: str) -> Job:
 
 def test_unpause_resets_held_review_countdowns(signing_key):
     """Flipping ripping_paused ON -> OFF gives held awaiting_review discs a FRESH
-    wait_start_time so they don't auto-rip instantly on un-pause (spec §6.3)."""
+    wait_start_time so they don't auto-rip instantly on un-pause."""
     db = FakeSession()
     _seed(db, ripping_paused=True, hold_for_review=True)
     held = _held_job("job_01JZXR7K3M5Q8N4VWA0000U01")

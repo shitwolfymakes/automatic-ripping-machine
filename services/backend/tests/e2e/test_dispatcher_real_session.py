@@ -82,7 +82,7 @@ def _restore_column_types(saved: list[tuple[object, object]]) -> None:
 
 
 async def test_persistently_failing_encode_spawn_does_not_abort_passthrough(tmp_path: Path) -> None:
-    """The scenario the reviewer's repro pinned: an encode task queued
+    """Scenario: an encode task queued
     ahead of a passthrough task, with `docker.containers.run` raising on
     every attempt (a missing image, an unreachable remote host, ...).
 

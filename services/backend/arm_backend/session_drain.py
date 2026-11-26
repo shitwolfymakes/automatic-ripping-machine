@@ -212,13 +212,13 @@ async def fan_out_waiting_identify_applications(
 
 async def after_rip(db: AsyncSession, job: Job, hub: WSHub) -> list[ResolveFanOutOutcome]:
     """Everything that happens once a job's rip is done and its identity is
-    known (gap analysis §5.4): drain parked applications, then the
+    known: drain parked applications, then the
     auto-apply hook. Two callers — `rip-complete` for jobs that ripped
     already identified, and `resolve` when a `ripped_awaiting_identify`
     placeholder gains its identity. Never raises; returns the drain's
     outcomes so resolve can report them.
 
-    Fix 75-4: if the drain promoted at least one parked application to
+    If the drain promoted at least one parked application to
     QUEUED-with-tasks, that IS the operator's explicit choice winning — skip
     the drive-default auto-apply entirely rather than also queueing it
     alongside. Without this, a disc with both a parked session (explicit,

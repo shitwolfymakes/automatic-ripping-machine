@@ -10,7 +10,6 @@ vi.mock('../client', () => ({
 }));
 
 import {
-	fetchSetupStatus,
 	fetchSetup,
 	putSetupStep,
 	completeSetup,
@@ -23,14 +22,9 @@ describe('setup api', () => {
 	beforeEach(() => vi.clearAllMocks());
 
 	it('hits each setup route', async () => {
-		await fetchSetupStatus();
 		await fetchSetup();
 		await fetchDiscRoutes();
-		expect(get.mock.calls.map((c) => (c as unknown[])[0])).toEqual([
-			'/api/setup/status',
-			'/api/setup',
-			'/api/setup/disc-routes'
-		]);
+		expect(get.mock.calls.map((c) => (c as unknown[])[0])).toEqual(['/api/setup', '/api/setup/disc-routes']);
 		await putSetupStep('drives', 'attention');
 		expect(put).toHaveBeenCalledWith('/api/setup/steps/drives', { state: 'attention' });
 		await completeSetup();

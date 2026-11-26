@@ -1,4 +1,4 @@
-"""Show-id resolution across episode-list providers (design spec 6.2)."""
+"""Show-id resolution across episode-list providers."""
 
 import pytest
 
@@ -138,7 +138,7 @@ async def test_provider_error_leaves_field_empty_others_still_resolve(caplog) ->
 
 
 async def test_raise_errors_propagates_source_error() -> None:
-    """M3: the episode stage passes `raise_errors=True` so a transient
+    """The episode stage passes `raise_errors=True` so a transient
     failure is an error for that provider, not a silent miss."""
     job = _job({"identity": {"external_ids": {}}})
     failing = FakeProvider("episodes_tvdb", "tvdb", error=SourceError("boom"))
@@ -241,7 +241,7 @@ async def test_persist_false_resolves_without_writing() -> None:
 
 
 # ---------------------------------------------------------------------------
-# merge_new_ids (Task 8 fix round 2)
+# merge_new_ids
 # ---------------------------------------------------------------------------
 
 

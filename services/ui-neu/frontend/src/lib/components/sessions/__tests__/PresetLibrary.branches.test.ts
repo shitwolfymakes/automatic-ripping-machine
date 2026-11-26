@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { renderComponent, screen, fireEvent, cleanup, within } from '$lib/test-utils';
+import { renderComponent, screen, fireEvent, cleanup, within } from '$lib/testing/render';
 import PresetLibrary from '../PresetLibrary.svelte';
 
 // Branch pins for PresetLibrary, beside PresetLibrary.svelte.test.ts. No
@@ -26,7 +26,7 @@ const transcode = (id: string, name: string, mt: string, builtin = false) => ({
 	is_builtin: builtin,
 	tool: 'handbrake' as const,
 	preset_ref: null,
-	preset_json: null,
+	handbrake_settings: null,
 	container: 'mkv' as const,
 	encoder: 'any_h265',
 	extra_args: null,
@@ -135,8 +135,9 @@ describe('PresetLibrary type chips', () => {
 	it('counts only the transcode presets on the transcode tab', () => {
 		renderComponent(PresetLibrary, defaultProps({ kind: 'transcode' }));
 		expect(screen.getByRole('button', { name: /^All 3$/ })).toBeInTheDocument();
-		expect(screen.getByRole('button', { name: /^Movie 1$/ })).toBeInTheDocument();
-		expect(screen.getByRole('button', { name: /^TV 1$/ })).toBeInTheDocument();
+		// Movie and TV transcode presets fit sessions of either, so they share one Video chip.
+		expect(screen.getByRole('button', { name: /^Video 2$/ })).toBeInTheDocument();
+		expect(screen.queryByRole('button', { name: /^TV/ })).not.toBeInTheDocument();
 		expect(screen.getByRole('button', { name: /^Music 1$/ })).toBeInTheDocument();
 	});
 
@@ -185,16 +186,13 @@ describe('PresetLibrary New button', () => {
 	});
 });
 
-// The row is the nearest ancestor of the preset's name that holds its buttons
-// and its usage chip.
-const rowOf = (name: string): HTMLElement => {
-	let el: HTMLElement | null = screen.getByText(name);
-	while (
-		el &&
-		(within(el).queryByRole('button', { name: 'Clone' }) === null || within(el).queryByText(/used by/i) === null)
-	)
-		el = el.parentElement;
-	return el as HTMLElement;
+// The table row holding the preset's name.
+const rowOf = (name: string): HTMLElement => screen.getByText(name).closest('tr') as HTMLElement;
+
+// A row's Used by cell is its last data cell, just before the actions.
+const usedByOf = (name: string): string | null | undefined => {
+	const cells = within(rowOf(name)).getAllByRole('cell');
+	return cells[cells.length - 2].textContent?.trim();
 };
 
 describe('PresetLibrary rip rows', () => {
@@ -207,8 +205,8 @@ describe('PresetLibrary rip rows', () => {
 	it('shows each rip preset its own usage from ripUsage', () => {
 		const ripUsage = vi.fn((id: string) => (id === 'r3' ? 4 : 0));
 		renderComponent(PresetLibrary, defaultProps({ kind: 'rip', ripUsage, transcodeUsage: () => 99 }));
-		expect(within(rowOf('Custom Movie Rip')).getByText(/used by 4/i)).toBeInTheDocument();
-		expect(within(rowOf('TV Rip')).getByText(/used by 0/i)).toBeInTheDocument();
+		expect(usedByOf('Custom Movie Rip')).toBe('4');
+		expect(usedByOf('TV Rip')).toBe('0');
 		expect(ripUsage).toHaveBeenCalledWith('r1');
 	});
 
@@ -247,8 +245,8 @@ describe('PresetLibrary transcode rows', () => {
 	it('shows each transcode preset its own usage from transcodeUsage', () => {
 		const transcodeUsage = vi.fn((id: string) => (id === 't1' ? 7 : 0));
 		renderComponent(PresetLibrary, defaultProps({ kind: 'transcode', transcodeUsage, ripUsage: () => 99 }));
-		expect(within(rowOf('H.265 MKV')).getByText(/used by 7/i)).toBeInTheDocument();
-		expect(within(rowOf('Music Transcode')).getByText(/used by 0/i)).toBeInTheDocument();
+		expect(usedByOf('H.265 MKV')).toBe('7');
+		expect(usedByOf('Music Transcode')).toBe('0');
 		expect(transcodeUsage).toHaveBeenCalledWith('t2');
 	});
 
@@ -274,5 +272,70 @@ describe('PresetLibrary transcode rows', () => {
 		expect(props.onview).toHaveBeenCalledWith(props.transcodePresets[1]);
 		expect(props.onclone).toHaveBeenCalledWith(props.transcodePresets[1]);
 		expect(props.onedit).not.toHaveBeenCalled();
+	});
+});
+
+describe('PresetLibrary table', () => {
+	it("is a table named for the kind, with that kind's columns", () => {
+		renderComponent(PresetLibrary, defaultProps({ kind: 'rip' }));
+		expect(screen.getByRole('table', { name: 'Rip presets' })).toBeInTheDocument();
+		expect(screen.getByRole('columnheader', { name: 'Track filters' })).toBeInTheDocument();
+		expect(screen.queryByRole('columnheader', { name: 'Container' })).not.toBeInTheDocument();
+	});
+
+	it('shows the transcode columns on the transcode tab', () => {
+		renderComponent(PresetLibrary, defaultProps({ kind: 'transcode' }));
+		expect(screen.getByRole('table', { name: 'Transcode presets' })).toBeInTheDocument();
+		expect(screen.getByRole('columnheader', { name: 'Base preset' })).toBeInTheDocument();
+	});
+
+	it('highlights the row of the preset whose editor is open', () => {
+		renderComponent(PresetLibrary, defaultProps({ kind: 'rip', activeKey: 'r2' }));
+		expect(rowOf('TV Rip')).toHaveAttribute('aria-current', 'true');
+		expect(rowOf('Movie Rip')).not.toHaveAttribute('aria-current');
+	});
+
+	it('highlights nothing by default', () => {
+		renderComponent(PresetLibrary, defaultProps({ kind: 'rip' }));
+		expect(rowOf('TV Rip')).not.toHaveAttribute('aria-current');
+	});
+
+	it('explains a built-in Delete that is off, and a used one', () => {
+		renderComponent(PresetLibrary, defaultProps({ kind: 'rip', ripUsage: (id: string) => (id === 'r3' ? 2 : 0) }));
+		const builtin = within(rowOf('Movie Rip')).getByRole('button', { name: 'Delete' });
+		expect(builtin).toBeDisabled();
+		expect(builtin).toHaveAttribute('title', 'Built-in preset: clone to edit or remove');
+		const used = within(rowOf('Custom Movie Rip')).getByRole('button', { name: 'Delete' });
+		expect(used).toBeDisabled();
+		expect(used).toHaveAttribute('title', 'Used by 2 session(s): repoint them first');
+		expect(within(rowOf('TV Rip')).getByRole('button', { name: 'Delete' })).toBeEnabled();
+	});
+
+	it('says no presets match when the filters leave none', async () => {
+		renderComponent(PresetLibrary, defaultProps({ kind: 'rip' }));
+		await fireEvent.input(screen.getByRole('searchbox', { name: /search rip presets/i }), {
+			target: { value: 'zzz-nothing' }
+		});
+		expect(screen.getByRole('cell', { name: 'No rip presets match the current filters.' })).toBeInTheDocument();
+	});
+
+	it('flags a transcode preset with issues as Needs review', () => {
+		const [first, second, third] = defaultProps().transcodePresets;
+		const flagged = { ...third, issues: [{ key: 'k', code: 'unknown_key' as const, message: 'm' }] };
+		const props = defaultProps({ kind: 'transcode', transcodePresets: [first, second, flagged] });
+		renderComponent(PresetLibrary, props);
+		expect(within(rowOf('Music Transcode')).getByText('Needs review')).toBeInTheDocument();
+		expect(within(rowOf('H.265 MKV')).queryByText('Needs review')).not.toBeInTheDocument();
+	});
+
+	it('gives truncatable, pill and badge cells their full text as a title', () => {
+		const [first, second, third] = defaultProps().transcodePresets;
+		const flagged = { ...third, issues: [{ key: 'k', code: 'unknown_key' as const, message: 'm' }] };
+		renderComponent(PresetLibrary, defaultProps({ kind: 'transcode', transcodePresets: [first, second, flagged] }));
+		const row = within(rowOf('Music Transcode'));
+		expect(row.getByText('Music Transcode')).toHaveAttribute('title', 'Music Transcode');
+		expect(row.getByText('Needs review')).toHaveAttribute('title', 'Needs review');
+		expect(row.getByText('Music')).toHaveAttribute('title', 'Music');
+		expect(row.getByText('Custom')).toHaveAttribute('title', 'Custom');
 	});
 });

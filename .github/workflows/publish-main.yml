@@ -1,6 +1,6 @@
 # Publish main — rolling `:latest` from the trunk.
 #
-# Mirrors the v2 cadence: every push to `main` republishes `:latest`, and a
+# Every push to `main` republishes `:latest`, and a
 # nightly cron rebuilds it from fresh base layers (CVE-patched bits without
 # hand-cutting a release). Per-service images publish to:
 #   docker.io/${{ secrets.DOCKERHUB_NAMESPACE }}/arm-<service>:latest

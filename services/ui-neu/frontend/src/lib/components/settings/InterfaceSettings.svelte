@@ -1,5 +1,7 @@
 <script lang="ts">
-	import { uiPrefs, setUiPref } from '$lib/stores/uiPrefs';
+	import { uiPrefs, setUiPref } from '$lib/stores/ui-prefs';
+	import FieldDocsLink from '$lib/components/shared/FieldDocsLink.svelte';
+	import { FIELD_IDS } from '$lib/settings/interface-form';
 </script>
 
 <div class="flex flex-col gap-6">
@@ -14,7 +16,10 @@
 		<div class="panel interface-settings-panel">
 			<div class="flex items-start justify-between gap-4">
 				<div>
-					<h3 class="interface-settings-card-title">Resource stats</h3>
+					<div class="interface-settings-card-head">
+						<h3 class="interface-settings-card-title">Resource stats</h3>
+						<FieldDocsLink id={FIELD_IDS.show_stats} label="Resource stats" />
+					</div>
 					<p class="interface-settings-description">
 						CPU, memory and storage in the sidebar on wide screens and in the bar along the bottom on smaller ones. The
 						Stats view in the mobile menu is always available.
@@ -42,7 +47,10 @@
 		<div class="panel interface-settings-panel">
 			<div class="flex items-start justify-between gap-4">
 				<div>
-					<h3 class="interface-settings-card-title">Default dashboard layout</h3>
+					<div class="interface-settings-card-head">
+						<h3 class="interface-settings-card-title">Default dashboard layout</h3>
+						<FieldDocsLink id={FIELD_IDS.dashboard_view} label="Default dashboard layout" />
+					</div>
 					<p class="interface-settings-description">
 						How the job list opens. The Cards / Table buttons on the dashboard change it for that visit only.
 					</p>
@@ -77,17 +85,23 @@
 		font-weight: 600;
 		color: var(--color-text);
 	}
-	/* the original cards were p-6 (1.5rem), not .panel's own p-4 (1rem) default. */
+	/* the cards are p-6 (1.5rem), not .panel's own p-4 (1rem) default. */
 	.interface-settings-panel {
 		padding: 1.5rem;
 	}
-	/* the original description paragraphs were text-sm (0.875rem/1.25rem),
+	/* the description paragraphs are text-sm (0.875rem/1.25rem),
 	   not panel-hint's 0.75rem - panel-hint is sized for a note under a
 	   form control, a visibly smaller role. */
 	.interface-settings-description {
 		font-size: 0.875rem;
 		line-height: 1.25rem;
 		color: var(--color-text-muted);
+	}
+	/* each card's title is its setting's name, with the docs link beside it */
+	.interface-settings-card-head {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
 	}
 	.interface-settings-card-title {
 		font-size: 1rem;
@@ -105,8 +119,8 @@
 	}
 	/* a segmented radiogroup, not a tab strip: no block covers this shape
 	   (tabs-pills' metrics - 0.875rem tabs-tab text, unselected = transparent -
-	   don't match this control's original text-xs px-3/py-1.5 pills on a
-	   tinted 0.10-alpha unselected background). */
+	   don't match this control's text-xs px-3/py-1.5 pills on a tinted 0.10-alpha unselected
+	   background). */
 	.interface-settings-segment {
 		display: flex;
 		flex-shrink: 0;

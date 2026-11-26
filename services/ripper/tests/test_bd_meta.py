@@ -81,7 +81,7 @@ _MALFORMED = b"""<?xml version="1.0" encoding="utf-8"?>
 
 
 def test_parse_bdmt_repairs_unquoted_href(caplog) -> None:
-    """D-135: an unquoted href= must not cost the disc its title hint."""
+    """An unquoted href= must not cost the disc its title hint."""
     import logging
 
     with caplog.at_level(logging.INFO, logger="arm_ripper.scan.bd_meta"):

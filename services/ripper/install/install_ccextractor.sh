@@ -24,8 +24,8 @@ tar -xf ccextractor.tar.gz -C ccextractor --strip-components=1
 
 # The upstream `build` script only ever inspects $1, and only to compare it
 # against "-without-rust"; BLD_FLAGS is otherwise hardcoded. Any other args
-# (e.g. the -DWITHOUT_HARDSUBX/-DNO_UPDATE_CHECK/-DWITHOUT_SHARING this used to
-# pass) are silently ignored, so don't bother. "-without-rust" must be $1.
+# (e.g. -DWITHOUT_HARDSUBX/-DNO_UPDATE_CHECK/-DWITHOUT_SHARING) are silently
+# ignored, so none are passed. "-without-rust" must be $1.
 cd ccextractor/linux
 ./build -without-rust
 

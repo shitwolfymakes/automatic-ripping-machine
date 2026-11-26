@@ -133,8 +133,6 @@ def parse_prgc_save_position(line: str) -> int | None:
     with the second field stepping 0, 1, 2, … through the eligible
     titles in rip order. That position matches the `_tNN.mkv` filename
     suffix and indexes into the dispatcher's `eligible_source_indexes`.
-    Reference v2's parser at arm/ui/jobs/json_api.py:116 which uses the
-    same field.
     """
     m = _PRGC_SAVE_TITLE_RE.match(line.strip())
     if not m:

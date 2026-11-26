@@ -314,7 +314,7 @@ for d in /logs /raw /media /data; do
     require_writable "$d" || exit 1
 done
 
-# Ripper-only (see own_makemkv_home). The key itself is no longer scraped at
+# Ripper-only (see own_makemkv_home). The key itself is not scraped at
 # boot; the JobController runs update_key.sh before every rip. Gated on the
 # ripper image's update_key.sh + makemkvcon so backend / transcode no-op past it.
 if [[ -x /usr/local/bin/update_key.sh ]] && command -v makemkvcon >/dev/null 2>&1; then
