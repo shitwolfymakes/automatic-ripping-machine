@@ -1,4 +1,4 @@
-"""Auth and UI-side response schemas (Phase 5).
+"""Auth and UI-side response schemas.
 
 Login / logout / change-password live here. Read-side `JobDetailView` and
 `ConfigView` / `ConfigUpdateRequest` are also UI-shaped projections — kept
@@ -53,12 +53,11 @@ class ConfigView(BaseModel):
     auto_rip_on_insert: bool
     block_on_miss: bool
     community_keydb_enabled: bool
-    # Drive scanner tunables (spec §2) — operator-editable, read every tick.
+    # Drive scanner tunables — operator-editable, read every tick.
     drive_scan_interval_seconds: int
     drive_detected_prune_days: int
     # Transcode dispatcher parallelism cap — operator-editable, read every
-    # tick (moved from the MAX_PARALLEL_TRANSCODES env var, which now only
-    # seeds this on first boot).
+    # tick (the MAX_PARALLEL_TRANSCODES env var only seeds it on first boot).
     max_parallel_transcodes: int
     # ISO-source ripping: concurrent ISO rips, 1 to 8 (default 1).
     max_parallel_iso_rips: int
@@ -92,7 +91,7 @@ class ConfigView(BaseModel):
     makemkv_key_valid: bool | None = None
     makemkv_key_state: str | None = None
     makemkv_key_checked_at: datetime | None = None
-    # Drive whose ripper last reported the key status (setup step 4 "checked by").
+    # Drive whose ripper last reported the key status (the setup walkthrough's "checked by").
     makemkv_key_checked_by_drive_id: str | None = None
     updated_by_user_id: str | None
     updated_at: datetime | None

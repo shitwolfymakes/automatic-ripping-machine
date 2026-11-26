@@ -6,16 +6,16 @@
 	// either fits sessions of either. `encoder` is one arm_common.encoders catalog id.
 	import { onMount } from 'svelte';
 	import { encodersStore, PRESET_ENCODER_ID } from '$lib/stores/encoders.svelte';
-	import { encoderGroups } from '$lib/utils/encoder-groups';
-	import { transcodeMediaGroup } from '$lib/utils/sessions';
-	import { VIDEO_GROUP_LABEL } from '$lib/utils/preset-labels';
-	import { PRESET_NAME_ID, presetBlockView } from '$lib/handbrake/panelView';
-	import { CLEARED_NOTE, isVaapiEncoder, type Draft, type PresetField } from '$lib/handbrake/sidebarModel';
-	import { presetBlockMessages } from '$lib/handbrake/issuePlacement';
-	import { errorId, invalidAttrs, type FieldErrors } from '$lib/utils/formValidation';
+	import { encoderGroups } from '$lib/transcode/encoder-groups';
+	import { transcodeMediaGroup } from '$lib/sessions/sessions';
+	import { VIDEO_GROUP_LABEL } from '$lib/sessions/preset-labels';
+	import { FIELD_IDS, PRESET_NAME_ID, presetBlockView } from '$lib/handbrake/panel-view';
+	import { CLEARED_NOTE } from '$lib/handbrake/display';
+	import { isVaapiEncoder, type Draft, type PresetField } from '$lib/handbrake/draft';
+	import { presetBlockMessages } from '$lib/handbrake/issue-placement';
+	import { errorId, invalidAttrs, type FieldErrors } from '$lib/ui/form-validation';
 	import type { SettingIssue } from '$lib/types/api.gen';
-	import Glyph from '$lib/components/Glyph.svelte';
-	import { OFFICIAL_PRESETS_URL } from '$lib/handbrake/docLinks';
+	import FieldLabel from '$lib/components/shared/FieldLabel.svelte';
 
 	interface Props {
 		draft: Draft;
@@ -77,7 +77,7 @@
 
 <div class="preset-block">
 	<div class="field preset-block-wide">
-		<label class="field-label" for={PRESET_NAME_ID}>Name</label>
+		<FieldLabel for={PRESET_NAME_ID} label="Name" docsId={FIELD_IDS.name} />
 		<input
 			id={PRESET_NAME_ID}
 			data-testid="tp-name"
@@ -91,7 +91,7 @@
 	</div>
 
 	<div class="field">
-		<label class="field-label" for="tp-media-type">Media type</label>
+		<FieldLabel for="tp-media-type" label="Media type" docsId={FIELD_IDS.media_type} />
 		<select
 			id="tp-media-type"
 			data-testid="tp-media-type"
@@ -110,7 +110,7 @@
 	</div>
 
 	<div class="field">
-		<label class="field-label" for="tp-tool">Tool</label>
+		<FieldLabel for="tp-tool" label="Tool" docsId={FIELD_IDS.tool} />
 		<select
 			id="tp-tool"
 			data-testid="tp-tool"
@@ -127,7 +127,7 @@
 	</div>
 
 	<div class="field">
-		<label class="field-label" for="tp-container">Container</label>
+		<FieldLabel for="tp-container" label="Container" docsId={FIELD_IDS.container} />
 		<select
 			id="tp-container"
 			data-testid="tp-container"
@@ -152,7 +152,7 @@
 	</div>
 
 	<div class="field">
-		<label class="field-label" for="tp-encoder">Encoder</label>
+		<FieldLabel for="tp-encoder" label="Encoder" docsId={FIELD_IDS.encoder} />
 		<select
 			id="tp-encoder"
 			data-testid="tp-encoder"
@@ -222,7 +222,11 @@
 	{/if}
 
 	<div class="field">
-		<label class="field-label" for="tp-extra-args">{view.extraArgsLabel}</label>
+		<FieldLabel
+			for="tp-extra-args"
+			label={view.extraArgsLabel}
+			docsId={view.showCliDocLink ? FIELD_IDS.extra_args : undefined}
+		/>
 		<input
 			id="tp-extra-args"
 			data-testid="tp-extra-args"
@@ -243,23 +247,9 @@
 	{/if}
 </div>
 
+<!-- HandBrake's official presets explain the base preset; other tools have no such list. -->
 {#snippet refLabel(text: string)}
-	<span class="preset-block-label">
-		<label class="field-label" for={REF_ID}>{text}</label>
-		{#if view.showPresetsDocLink}
-			<a
-				class="preset-block-info"
-				href={OFFICIAL_PRESETS_URL}
-				target="_blank"
-				rel="noopener noreferrer"
-				title="HandBrake's official presets"
-				aria-label="HandBrake docs: official presets"
-				data-testid="tp-preset-ref-docs"
-			>
-				<Glyph name="info" class="h-3 w-3" />
-			</a>
-		{/if}
-	</span>
+	<FieldLabel for={REF_ID} label={text} docsId={view.showPresetsDocLink ? FIELD_IDS.preset_ref : undefined} />
 {/snippet}
 
 {#snippet refNotes()}
@@ -281,17 +271,5 @@
 	}
 	.preset-block-wide {
 		grid-column: 1 / -1;
-	}
-	.preset-block-label {
-		display: inline-flex;
-		align-items: center;
-		gap: 0.375rem;
-	}
-	.preset-block-info {
-		display: inline-flex;
-		color: var(--color-text-faint);
-	}
-	.preset-block-info:hover {
-		color: var(--color-text);
 	}
 </style>

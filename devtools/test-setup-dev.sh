@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # devtools/test-setup-dev.sh — zero-infra assertions that the dev installer
-# and the compose template no longer enumerate drives (drive lifecycle §5).
+# and the compose template do not enumerate drives.
 # Uses `docker compose config` when docker is present, grep otherwise.
 set -euo pipefail
 
@@ -157,8 +157,8 @@ absent  "setup-dev never runs --remove-orphans" '^[^#]*--remove-orphans' "${SETU
 
 # --- shared library: dev output is unchanged ---------------------------------
 # dev_out <snippet>: run a snippet with the library loaded the way setup-dev.sh
-# loads it. The golden strings below are what setup-dev.sh printed before the
-# functions moved into deploy/lib/.
+# loads it. The golden strings below are the exact text setup-dev.sh prints
+# through the functions in deploy/lib/.
 dev_out() {
     # shellcheck disable=SC2034,SC1090
     (

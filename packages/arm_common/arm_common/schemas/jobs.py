@@ -24,7 +24,7 @@ from arm_common.schemas.job_metadata import ExternalIds, IdentityFacts, JobMetad
 
 
 class ResolveMatch(BaseModel):
-    """A search result the operator picked (match picker spec 3.6). Its
+    """A search result the operator picked (from the match picker). Its
     presence makes `external_ids` replace the stored show ids wholesale."""
 
     model_config = ConfigDict(extra="forbid")
@@ -62,7 +62,7 @@ class ResolveRequest(BaseModel):
     collapse to the same `None` once parsed.
     """
 
-    # Unknown keys are a caller bug: the free-form metadata bag is gone (G-03/§3.4).
+    # Unknown keys are a caller bug: there is no free-form metadata bag.
     model_config = ConfigDict(extra="forbid")
 
     title: str
@@ -229,7 +229,7 @@ class JobView(BaseModel):
     status: JobStatus
     title: str | None
     year: int | None
-    # Identity columns (step 2): the identified kind, the user-supplied TV
+    # Identity columns: the identified kind, the user-supplied TV
     # season, and the explicit per-rip session choice.
     media_type: MediaType | None = None
     season: int | None = None
@@ -269,7 +269,7 @@ class JobView(BaseModel):
     @property
     def looks_episodic(self) -> bool:
         """The stored scan looks like a TV disc (several same-length episode
-        titles, no feature): the title search defaults to TV (spec 3.3)."""
+        titles, no feature): the title search defaults to TV."""
         scan = self.metadata_json.scan_result
         return bool(scan and _looks_episodic(scan.titles))
 
@@ -277,7 +277,7 @@ class JobView(BaseModel):
     @property
     def has_series(self) -> bool:
         """A TV show is known: a TMDb id of kind tv, a TVDB or TVmaze id, or a
-        show id some episode source resolved (spec 3.4). False means the
+        show id some episode source resolved. False means the
         Match Episodes tab asks for the series first."""
         identity = self.metadata_json.identity
         ids = identity.external_ids if identity else None
@@ -303,9 +303,9 @@ class HeldJobView(BaseModel):
     """Boot-probe payload for a disc held in AWAITING_REVIEW (timed review gate).
 
     `paused` is true when the held disc should survive a ripper reboot as a hold
-    (global `ripping_paused` on — or, once it lands, a per-job pause). The ripper
-    uses it to choose re-park (paused) vs. abandon-and-self-heal (counting down)
-    on restart. See the timed-review-gate spec §6.3.
+    (global `ripping_paused`, or the per-job `manual_pause` set by review-pause).
+    The ripper uses it to choose re-park (paused) vs. abandon-and-self-heal
+    (counting down) on restart.
     """
 
     job: JobView
@@ -426,7 +426,7 @@ class RipStartResponse(BaseModel):
 # wire schema and the engine can never drift.
 #
 # "no_tracks" — no Track rows exist yet (pre-rip-start apply); fans out once
-# rip-complete/resolve drains it. "no_outputs" (Fix 75-7) — Track rows DO
+# rip-complete/resolve drains it. "no_outputs" — Track rows DO
 # exist but none qualify for this session's media_type/exclusion, so
 # compute_outputs legitimately resolves zero paths; re-applying after the
 # rip won't change that outcome the way "no_tracks" implies it will.

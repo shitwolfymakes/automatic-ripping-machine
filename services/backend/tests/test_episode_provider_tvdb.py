@@ -1,5 +1,4 @@
-"""TvdbEpisodes provider: login/token caching, resolve_show_id, seasons, season
-(design spec 6.2)."""
+"""TvdbEpisodes provider: login/token caching, resolve_show_id, seasons, season."""
 
 import asyncio
 
@@ -743,7 +742,7 @@ async def test_season_huge_float_runtime_does_not_raise_overflow(provider):
 @pytest.mark.parametrize("name", [123, ["a"], {"x": 1}, True])
 @respx.mock
 async def test_season_non_str_name_maps_to_none(provider, name):
-    """M1: a non-str episode name degrades to None."""
+    """A non-str episode name degrades to None."""
     _login_route()
     respx.get(f"{BASE}/series/1/episodes/dvd").mock(
         return_value=httpx.Response(200, json={"data": {"episodes": [{"number": 1, "name": name, "runtime": 30}]}})
@@ -754,7 +753,7 @@ async def test_season_non_str_name_maps_to_none(provider, name):
 
 @respx.mock
 async def test_show_id_is_escaped_in_series_paths(provider):
-    """D-161: an operator-pasted id cannot add path segments or query params."""
+    """An operator-pasted id cannot add path segments or query params."""
     _login_route()
     extended = respx.get(url__regex=r".*/series/[^/]+/extended.*").mock(
         return_value=httpx.Response(200, json={"data": {"seasons": []}})

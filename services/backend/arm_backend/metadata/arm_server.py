@@ -34,8 +34,7 @@ _USER_AGENT = "automatic-ripping-machine/v3"
 def _top_result(body: dict[str, Any]) -> dict[str, Any]:
     """Return the first (canonical) result of the envelope, or raise LookupError."""
     results = body.get("results") or {}
-    # 1337server keys results numerically as strings ("0", "1", …) — same
-    # shape v2 reads. Only the first entry is the canonical match.
+    # 1337server keys results numerically as strings ("0", "1", …). Only the first entry is the canonical match.
     top = results.get("0") if isinstance(results, dict) else None
     if not isinstance(top, dict):
         raise LookupError("arm_server response missing results.0")
@@ -68,7 +67,7 @@ class ArmServerClient:
 
     async def lookup_by_crc64(self, crc64: str) -> MetadataResult:
         # 1337server is keyed on the plain 16-hex CRC64 (`format(crc, "016x")`,
-        # the form ARM v2's original `pydvdid` produced). pydvdid-m stringifies
+        # the form `pydvdid` produces). pydvdid-m stringifies
         # as "<high8>|<low8>"; the ripper already strips the pipe at the source
         # (disc_probe), but normalise here too so a stray separator from any
         # caller can't silently miss every disc on format alone.

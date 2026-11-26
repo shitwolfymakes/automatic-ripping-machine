@@ -1,9 +1,9 @@
 """The disc's title structure as a movie-vs-TV signal (lives in arm_common so JobView can use it).
 
 Identify searches TMDb movies first unless something says TV. A season number
-in the label used to be the only such signal, so a series disc labelled just
-"Kolchak The Night Stalker Disc 1" matched a placeholder TMDb *movie* while the
-1974 series sat one search away. The scan already knows better: a movie disc is
+in the label is one such signal, but a series disc labelled just
+"Kolchak The Night Stalker Disc 1" would match a placeholder TMDb *movie* while the
+1974 series sat one search away. The scan knows better: a movie disc is
 one feature plus short extras, a TV disc is several episodes of about the same
 length.
 

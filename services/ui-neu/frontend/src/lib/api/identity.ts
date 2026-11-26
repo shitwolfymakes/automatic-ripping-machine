@@ -1,4 +1,4 @@
-// v3 episode matching (design spec 2026-10-02 section 4): the identity view,
+// Episode matching: the identity view,
 // match preview / apply, unpin, and a season's episode list for the picker.
 import type { EpisodeListView, IdentityView, MatchPreview, MatchRequest, SeasonListView } from '$lib/types/api.gen';
 import { del, get, post } from './client';

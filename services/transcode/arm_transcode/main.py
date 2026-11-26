@@ -152,7 +152,7 @@ async def _encode_handbrake_builtin(
     final_output: Path,
     progress_callback: ProgressCallback,
 ) -> int:
-    """Today's run for a preset without settings: `--preset <preset_ref> --encoder X` (M11)."""
+    """The run for a preset without settings: `--preset <preset_ref> --encoder X`."""
     with atomic_output(final_output) as tmp:
         return await transcode_handbrake(
             input_path=raw_input,
@@ -173,7 +173,7 @@ async def _encode_handbrake_settings(
     final_output: Path,
     progress_callback: ProgressCallback,
 ) -> int:
-    """Run HandBrakeCLI from the preset's materialised settings, validated before launch (M5)."""
+    """Run HandBrakeCLI from the preset's materialised settings, validated before launch."""
     materialised = materialise_for_encode(preset, settings, spec)
     # The transcoder has no per-task work directory; this one lives for the encode.
     with tempfile.TemporaryDirectory(prefix="arm-hb-") as work_dir:
@@ -416,7 +416,7 @@ async def _run_task(*, cfg: TranscoderConfig, api: BackendClient, ssl_ctx: ssl.S
         await ws.wait_until_connected(timeout=10.0)
 
         registered = await api.register(task_id=cfg.task_id, hw_caps=_detect_hw_caps())
-        # Phase 12 — once register lands we have job_id / track_id /
+        # Once registered we have job_id / track_id /
         # session_application_id; everything below logs with full context.
         # `job_id` lives on `source_track`, not on the task row.
         with with_log_context(
@@ -454,10 +454,9 @@ def main() -> int:
     if "--dump-schema" in sys.argv[1:]:
         return dump_schema()
     if "--probe-encoders" in sys.argv[1:]:
-        # Deprecated compatibility mode. The install-time HandBrakeCLI --help
-        # scrape this used to run is gone; an installer or drill script that
+        # Deprecated compatibility mode: an installer or drill script that
         # still invokes this flag gets an empty result rather than a crash.
-        # The backend now treats install-time encoder lists as hints only and
+        # The backend treats install-time encoder lists as hints only and
         # probes each GPU device for real via --probe-device, so an empty
         # {} here is a truthful "nothing probed", not an over-claim.
         print("--probe-encoders is deprecated; the backend probes each GPU with --probe-device", file=sys.stderr)

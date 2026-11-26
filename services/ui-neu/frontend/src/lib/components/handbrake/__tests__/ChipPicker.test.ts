@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { renderComponent, screen, cleanup } from '$lib/test-utils';
+import { renderComponent, screen, cleanup } from '$lib/testing/render';
 import { fireEvent } from '@testing-library/svelte';
 import ChipPicker from '../ChipPicker.svelte';
 

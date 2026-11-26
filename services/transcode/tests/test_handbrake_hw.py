@@ -1,6 +1,6 @@
 """`transcode_handbrake` command assembly: the caller-supplied `encoder_args`
 (from the engine seam, see `test_engines.py`) land after `--preset` and
-before `extra_args`, same order as the old `_hw_encoder_args()` inline call.
+before `extra_args`.
 """
 
 from __future__ import annotations

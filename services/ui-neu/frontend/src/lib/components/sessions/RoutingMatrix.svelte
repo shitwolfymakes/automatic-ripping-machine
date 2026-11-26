@@ -1,9 +1,10 @@
 <script lang="ts">
+	import { errorMessage } from '$lib/utils/errors';
 	// The Routing view: a media-type by disc-type matrix, each cell the session
 	// a disc of that kind routes to. Loads and saves its own routes.
-	import { onMount } from 'svelte';
+	import { onDestroy, onMount } from 'svelte';
 	import { isAdmin } from '$lib/stores/auth';
-	import { fetchSessionRoutes, upsertSessionRoute, deleteSessionRoute } from '$lib/api/sessionRoutes';
+	import { fetchSessionRoutes, upsertSessionRoute, deleteSessionRoute } from '$lib/api/session-routes';
 	import { fetchSessions } from '$lib/api/sessions';
 	import type { DiscType, MediaType, SessionRouteView, SessionView } from '$lib/types/api.gen';
 	import {
@@ -17,16 +18,17 @@
 		sessionOptionLabel,
 		sessionsFor,
 		withRoute
-	} from '$lib/utils/session-routes';
-	import { PendingKeys } from '$lib/components/settings/pendingKeys.svelte';
-	import { TimedFeedback } from '$lib/components/settings/timedFeedback.svelte';
-	import FeedbackAlert from '$lib/components/settings/FeedbackAlert.svelte';
-	import MediaPill from '../MediaPill.svelte';
+	} from '$lib/sessions/routes';
+	import { PendingKeys } from '$lib/stores/pending-keys.svelte';
+	import { TimedFeedback } from '$lib/stores/timed-feedback.svelte';
+	import FeedbackAlert from '$lib/components/shared/FeedbackAlert.svelte';
+	import MediaPill from '../shared/MediaPill.svelte';
 
 	let routes = $state<SessionRouteView[]>([]);
 	let sessions = $state<SessionView[]>([]);
 	let loading = $state(true);
 	const feedback = new TimedFeedback();
+	onDestroy(() => feedback.dispose());
 	// Cell keys in flight (upsert or delete), keyed by "media_type/disc_type".
 	const pending = new PendingKeys();
 
@@ -37,7 +39,7 @@
 		try {
 			[routes, sessions] = await Promise.all([fetchSessionRoutes(), fetchSessions()]);
 		} catch (e) {
-			feedback.hold('error', e instanceof Error ? e.message : 'Failed to load session routes');
+			feedback.hold('error', errorMessage(e, 'Failed to load session routes'));
 		} finally {
 			loading = false;
 		}
@@ -59,7 +61,7 @@
 				const saved = await upsertSessionRoute({ media_type: mediaType, disc_type: discType, session_id: sessionId });
 				routes = withRoute(routes, mediaType, discType, saved);
 			} catch (e) {
-				feedback.show('error', e instanceof Error ? e.message : 'Failed to save route');
+				feedback.show('error', errorMessage(e, 'Failed to save route'));
 				await load();
 			}
 		});
@@ -71,7 +73,7 @@
 				await deleteSessionRoute(route.id);
 				routes = routes.filter((r) => r.id !== route.id);
 			} catch (e) {
-				feedback.show('error', e instanceof Error ? e.message : 'Failed to clear route');
+				feedback.show('error', errorMessage(e, 'Failed to clear route'));
 				await load();
 			}
 		});

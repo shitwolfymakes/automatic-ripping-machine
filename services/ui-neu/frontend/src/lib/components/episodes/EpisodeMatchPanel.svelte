@@ -1,5 +1,6 @@
 <script lang="ts">
-	// The Match Episodes tab (design spec 2026-10-02 section 4): which source
+	import { errorMessage } from '$lib/utils/errors';
+	// The Match Episodes tab: which source
 	// placed this disc's tracks, how sure it was, and the per-track placement.
 	import { untrack } from 'svelte';
 	import { MediaQuery } from 'svelte/reactivity';
@@ -7,10 +8,10 @@
 	import { clearEpisodeMatch, type EpisodeSource } from '$lib/api/identity';
 	import { updateTrack } from '$lib/api/jobs';
 	import { isAdmin } from '$lib/stores/auth';
-	import { EpisodeIdentity } from '$lib/stores/episodeIdentity.svelte';
-	import { EpisodeLists } from '$lib/stores/episodeLists.svelte';
-	import { MatchRunner } from '$lib/stores/matchRunner.svelte';
-	import { SeasonList } from '$lib/stores/seasonList.svelte';
+	import { EpisodeIdentity } from '$lib/stores/episode-identity.svelte';
+	import { EpisodeLists } from '$lib/stores/episode-lists.svelte';
+	import { MatchRunner } from '$lib/stores/match-runner.svelte';
+	import { SeasonList } from '$lib/stores/season-list.svelte';
 	import {
 		panelState,
 		buildRows,
@@ -18,21 +19,22 @@
 		failedSources,
 		pickerOptions,
 		parseHandPick,
+		placementValue,
 		pickedEpisodeName,
 		usedEpisodeNumbers,
 		ROLE_OPTIONS,
 		type EpisodeRow
-	} from './episodeModel';
+	} from '../../episodes/episode-model';
 	import {
 		activeSource,
 		episodeSourceOptions,
 		pickerSourceFor,
 		shortSourceLabel,
 		SOURCE_LABEL
-	} from '$lib/utils/episode-sources';
-	import { heldSeason, holdHeadline, seasonAlternatives, type SeasonCandidate } from '$lib/utils/episode-hold';
-	import { fillRestForm, fixMatchForm, rerunRequest, type RerunForm } from '$lib/utils/rerun-form';
-	import Glyph from '../Glyph.svelte';
+	} from '$lib/episodes/sources';
+	import { heldSeason, holdHeadline, seasonAlternatives, type SeasonCandidate } from '$lib/episodes/hold';
+	import { fillRestForm, fixMatchForm, rerunRequest, type RerunForm } from '$lib/jobs/rerun-form';
+	import Glyph from '../shared/Glyph.svelte';
 	import EpisodeRows from './EpisodeRows.svelte';
 	import EpisodeStateAlert from './EpisodeStateAlert.svelte';
 	import EpisodeStatusBar from './EpisodeStatusBar.svelte';
@@ -169,8 +171,7 @@
 			rerunOpen = false;
 			onchanged?.();
 		} catch (e) {
-			if (job.id === jobId)
-				runner.error = `Could not clear the episodes (${e instanceof Error ? e.message : 'error'}).`;
+			if (job.id === jobId) runner.fail(`Could not clear the episodes (${errorMessage(e, 'error')}).`, clearEpisodes);
 		} finally {
 			clearing = false;
 		}
@@ -248,7 +249,7 @@
 		try {
 			await updateTrack(job.id, trackId, data);
 		} catch (e) {
-			handError = e instanceof Error ? e.message : 'Could not save';
+			handError = errorMessage(e, 'Could not save');
 			return false;
 		}
 		await reload();
@@ -256,9 +257,23 @@
 		return true;
 	}
 
+	// A seasonless placement picked back (its value is no list's): saved again
+	// as it is, still seasonless and with its name. Any other value saves nothing.
+	async function keepSeasonlessPlacement(trackId: string, value: string) {
+		const t = placed.get(trackId);
+		if (t?.episode_number == null || value !== placementValue(t.season, t.episode_number)) return;
+		const data = {
+			role: 'episode' as const,
+			season: null,
+			episode_number: t.episode_number,
+			episode_name: t.episode_name ?? null
+		};
+		if (await saveTrack(trackId, data)) clearRowSeason(trackId);
+	}
+
 	async function setByHand(trackId: string, value: string) {
 		const pick = parseHandPick(value);
-		if (!pick) return;
+		if (!pick) return keepSeasonlessPlacement(trackId, value);
 		if ('role' in pick) return saveTrack(trackId, { role: pick.role });
 		const row = rows.find((r) => r.trackId === trackId);
 		const listSeason = row ? seasonOf(row) : null;
@@ -295,12 +310,7 @@
 	{#if runner.error}
 		<div class="alert alert-danger episode-panel-error" role="alert">
 			<p class="alert-body">{runner.error}</p>
-			<button
-				type="button"
-				class="btn btn-sm"
-				disabled={runner.busy}
-				onclick={() => runner.lastRequest && runner.run(runner.lastRequest)}>Try again</button
-			>
+			<button type="button" class="btn btn-sm" disabled={runner.busy} onclick={runner.retry}>Try again</button>
 		</div>
 	{/if}
 {/snippet}

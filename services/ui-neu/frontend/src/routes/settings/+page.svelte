@@ -1,13 +1,13 @@
 <script lang="ts">
-	import { SetupRestart } from '$lib/stores/setupRestart.svelte';
+	import { SetupRestart } from '$lib/stores/setup-restart.svelte';
 	import { onMount, setContext } from 'svelte';
-	import { reveal } from '$lib/transitions';
-	import LoadState from '$lib/components/LoadState.svelte';
-	import SkeletonCard from '$lib/components/SkeletonCard.svelte';
-	import { LoadedSettings } from '$lib/stores/loadedSettings.svelte';
+	import { reveal } from '$lib/ui/transitions';
+	import LoadState from '$lib/components/shared/LoadState.svelte';
+	import SkeletonCard from '$lib/components/shared/SkeletonCard.svelte';
+	import { LoadedSettings } from '$lib/stores/loaded-settings.svelte';
 	import type { DriveView as Drive, SettingsGroup } from '$lib/types/api.gen';
 	import SchemaConfigForm from '$lib/components/settings/SchemaConfigForm.svelte';
-	import { SETTINGS_SCHEMA_CONTEXT } from '$lib/utils/settings-sections';
+	import { SETTINGS_SCHEMA_CONTEXT } from '$lib/settings/sections';
 	import {
 		SCREEN_TABS,
 		fieldFromHash,
@@ -15,22 +15,22 @@
 		orderedConfigGroups,
 		settingsTabLabel,
 		tabFromHash
-	} from '$lib/utils/settings-tabs';
-	import { UserThemes } from '$lib/stores/userThemes.svelte';
+	} from '$lib/settings/tabs';
+	import { UserThemes } from '$lib/stores/user-themes.svelte';
 	import { createPollingStore } from '$lib/stores/polling';
 	import { fetchDrives, rescanDrives } from '$lib/api/drives';
-	import { DriveDiagnostics } from '$lib/stores/driveDiagnostics.svelte';
-	import { DriveSessionOptions } from '$lib/stores/driveSessionOptions.svelte';
+	import { DriveDiagnostics } from '$lib/stores/drive-diagnostics.svelte';
+	import { DriveSessionOptions } from '$lib/stores/drive-session-options.svelte';
 	import InterfaceSettings from '$lib/components/settings/InterfaceSettings.svelte';
-	import { ImageCache } from '$lib/stores/imageCache.svelte';
+	import { ImageCache } from '$lib/stores/image-cache.svelte';
 	import ImageCacheCard from '$lib/components/settings/ImageCacheCard.svelte';
 	import DrivesSettings from '$lib/components/settings/DrivesSettings.svelte';
-	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
+	import ConfirmDialog from '$lib/components/shared/ConfirmDialog.svelte';
 	import SystemSettings from '$lib/components/settings/SystemSettings.svelte';
 	import { setTranscodeRuntimeEnabled } from '$lib/stores/config';
 	import NotificationsSettings from '$lib/components/settings/NotificationsSettings.svelte';
 	import TranscodingSettings from '$lib/components/settings/TranscodingSettings.svelte';
-	import ToastHost from '$lib/components/ToastHost.svelte';
+	import ToastHost from '$lib/components/layout/ToastHost.svelte';
 	import SessionsArea from '$lib/components/sessions/SessionsArea.svelte';
 	import UsersCard from '$lib/components/settings/UsersCard.svelte';
 	import ThemesSettings from '$lib/components/settings/ThemesSettings.svelte';
@@ -88,8 +88,35 @@
 	});
 
 	// --- Drives polling store ---
+	// Only the Drives tab shows drives, so it polls only while that tab is
+	// open. The first visit rescans first, to pick up hardware info (model,
+	// serial) that may not have been available at container startup.
 	const drives = createPollingStore(fetchDrives, [] as Drive[], 10000);
 	const driveError = drives.error;
+	let drivesRescanned = false;
+
+	// `isOpen` says whether the tab visit that asked is still open: the first
+	// visit starts polling only after its rescan, and must not start it once
+	// the tab has closed or Settings has gone.
+	function startDrivesTab(isOpen: () => boolean) {
+		if (drivesRescanned) return drives.start();
+		drivesRescanned = true;
+		rescanDrives()
+			.catch(() => {})
+			.then(() => {
+				if (isOpen()) drives.start();
+			});
+	}
+
+	$effect(() => {
+		if (activeTab !== 'drives') return;
+		let open = true;
+		startDrivesTab(() => open);
+		return () => {
+			open = false;
+			drives.stop();
+		};
+	});
 
 	const driveSessionOptions = new DriveSessionOptions();
 
@@ -125,11 +152,6 @@
 	const setupRestart = new SetupRestart();
 
 	onMount(() => {
-		// Rescan drives to pick up hardware info (model, serial) that
-		// may not have been available at container startup.
-		rescanDrives()
-			.catch(() => {})
-			.then(() => drives.start());
 		loaded.load();
 		// Handle initial hash tab (trigger side effects)
 		loadTabData(activeTab);
@@ -147,7 +169,6 @@
 		}
 		window.addEventListener('hashchange', onHashChange);
 		return () => {
-			drives.stop();
 			window.removeEventListener('hashchange', onHashChange);
 		};
 	});
@@ -191,9 +212,8 @@
 			 interactive tablist role (svelte a11y
 			 a11y_no_noninteractive_element_to_interactive_role). This is the
 			 same shape SessionsArea.svelte uses. The <nav aria-label="Settings
-			 tabs"> wrapper is kept because the parity harness selects the strip
-			 with nav[aria-label="Settings tabs"]; it is an unstyled block box,
-			 so the inner div reproduces the previous nav's own box exactly.
+			 tabs"> wrapper keeps the strip selectable with nav[aria-label="Settings tabs"]; it is an
+			 unstyled block box.
 			 data-settings-tabs is the published hook schemes style it by. -->
 			<nav aria-label="Settings tabs" data-settings-tabs>
 				<div class="tabs settings-page-tabs" role="tablist">

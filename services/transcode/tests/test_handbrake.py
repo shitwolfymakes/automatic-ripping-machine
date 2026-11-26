@@ -57,7 +57,7 @@ def test_eta_with_hours() -> None:
 
 
 def test_fps_pair_is_extracted() -> None:
-    """The live and average frame rates ride on the heartbeat (D-248)."""
+    """The live and average frame rates ride on the heartbeat."""
     m = _match("Encoding: task 1 of 1, 47.30 % (45.67 fps, avg 23.45 fps, ETA 00h12m34s)")
     assert m is not None
     assert _parse_fps(m) == (45.67, 23.45)
@@ -350,7 +350,7 @@ def test_build_handbrake_command_empty_extra_args_add_nothing(extra_args: str | 
 
 
 def test_build_handbrake_command_without_settings_is_todays_argv() -> None:
-    """M11: a settings-less preset keeps today's argv byte for byte."""
+    """A settings-less preset builds the plain `--preset` argv byte for byte."""
     assert build_handbrake_command(
         input_path=Path("/raw/title_t00.mkv"),
         output_path=Path("/out/Movie.mkv.arm-inprogress"),

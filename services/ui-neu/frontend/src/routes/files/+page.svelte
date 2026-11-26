@@ -1,33 +1,39 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
+	import Glyph from '$lib/components/shared/Glyph.svelte';
+	import { plural } from '$lib/utils/plural';
+	import { errorMessage } from '$lib/utils/errors';
+	import { onDestroy, onMount } from 'svelte';
 	import { page } from '$app/stores';
 	import { renameFile, moveFile, deleteFile, createDirectory, fixPermissions } from '$lib/api/files';
-	import { FilesBrowser } from '$lib/stores/filesBrowser.svelte';
-	import { MovePicker } from '$lib/stores/movePicker.svelte';
-	import { OrphanFolders } from '$lib/stores/orphanFolders.svelte';
-	import type { BulkFeedback } from '$lib/utils/bulk-delete-feedback';
+	import { FilesBrowser } from '$lib/stores/files-browser.svelte';
+	import { MovePicker } from '$lib/stores/move-picker.svelte';
+	import { OrphanFolders } from '$lib/stores/orphan-folders.svelte';
+	import { TimedFeedback } from '$lib/stores/timed-feedback.svelte';
+	import type { BulkFeedback } from '$lib/dashboard/bulk-delete-feedback';
 	import {
 		parseSelectionKey,
 		orderForDelete,
 		bulkResultFeedback,
 		cleanupFeedback,
 		fixedPermissionsMessage
-	} from '$lib/utils/files';
+	} from '$lib/files/files';
 	import { cleanupTranscoder } from '$lib/api/maintenance';
-	import BreadcrumbNav from '$lib/components/BreadcrumbNav.svelte';
-	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
-	import FileRow from '$lib/components/FileRow.svelte';
-	import FilesTable from '$lib/components/FilesTable.svelte';
-	import FilesToolbar from '$lib/components/FilesToolbar.svelte';
-	import FileMoveDialog from '$lib/components/FileMoveDialog.svelte';
-	import LoadState from '$lib/components/LoadState.svelte';
-	import OrphanFoldersModal from '$lib/components/OrphanFoldersModal.svelte';
+	import BreadcrumbNav from '$lib/components/files/BreadcrumbNav.svelte';
+	import ConfirmDialog from '$lib/components/shared/ConfirmDialog.svelte';
+	import FileRow from '$lib/components/files/FileRow.svelte';
+	import FilesTable from '$lib/components/files/FilesTable.svelte';
+	import FilesToolbar from '$lib/components/files/FilesToolbar.svelte';
+	import FileMoveDialog from '$lib/components/files/FileMoveDialog.svelte';
+	import LoadState from '$lib/components/shared/LoadState.svelte';
+	import OrphanFoldersModal from '$lib/components/files/OrphanFoldersModal.svelte';
 	import { features } from '$lib/features';
-	import NewFolderRow from '$lib/components/NewFolderRow.svelte';
+	import NewFolderRow from '$lib/components/files/NewFolderRow.svelte';
+	import HoldUntil from '$lib/components/shared/HoldUntil.svelte';
 
 	const browser = new FilesBrowser();
 	const movePicker = new MovePicker(browser);
-	let feedback = $state<{ type: 'success' | 'error'; message: string } | null>(null);
+	const feedback = new TimedFeedback(3000);
+	onDestroy(() => feedback.dispose());
 
 	// Delete confirmation (single item)
 	let deleteDialog = $state({ open: false, root: '', subpath: '', name: '' });
@@ -45,20 +51,15 @@
 	// Transcoder cleanup
 	let transcoderCleanupOpen = $state(false);
 
-	function clearFeedback() {
-		setTimeout(() => (feedback = null), 3000);
-	}
-
 	function showFeedback(next: BulkFeedback) {
-		feedback = next;
-		clearFeedback();
+		feedback.show(next.type, next.message);
 	}
 
 	async function runWithFeedback(action: () => Promise<void>, fallback: string) {
 		try {
 			await action();
 		} catch (e) {
-			showFeedback({ type: 'error', message: e instanceof Error ? e.message : fallback });
+			showFeedback({ type: 'error', message: errorMessage(e, fallback) });
 		}
 	}
 
@@ -182,6 +183,11 @@
 		}
 	});
 
+	// The root tabs and breadcrumb row sit above the listing and only exist
+	// once the roots load. Hold the listing until then so its skeleton does not
+	// draw first and get pushed down when they arrive.
+	const rootsSettled = $derived(browser.roots.length > 0 || browser.error !== null || !browser.loading);
+
 	onMount(async () => {
 		await browser.loadRoots();
 		const paramRoot = $page.url.searchParams.get('root');
@@ -212,9 +218,9 @@
 	</div>
 
 	<!-- Feedback toast -->
-	{#if feedback}
-		<div class="alert files-page-feedback {feedback.type === 'success' ? 'alert-success' : 'alert-danger'}">
-			{feedback.message}
+	{#if feedback.current}
+		<div class="alert files-page-feedback {feedback.current.type === 'success' ? 'alert-success' : 'alert-danger'}">
+			{feedback.current.message}
 		</div>
 	{/if}
 
@@ -245,19 +251,7 @@
 	<!-- Read-only mount banner -->
 	{#if browser.isReadonly}
 		<div class="alert alert-warning cluster files-page-readonly-banner">
-			<svg
-				class="h-4 w-4 shrink-0 files-page-readonly-icon"
-				fill="none"
-				stroke="currentColor"
-				viewBox="0 0 24 24"
-				stroke-width="2"
-			>
-				<path
-					stroke-linecap="round"
-					stroke-linejoin="round"
-					d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"
-				/>
-			</svg>
+			<Glyph name="lock" class="h-4 w-4 shrink-0 files-page-readonly-icon" />
 			<p>This directory is on a read-only mount. File operations are disabled.</p>
 		</div>
 	{/if}
@@ -282,70 +276,77 @@
 		</div>
 	{/if}
 
-	<!-- File listing -->
-	<LoadState
-		data={browser.listing}
-		loading={browser.loading && !browser.listing}
-		error={browser.filesError}
-		isEmpty={() => false}
-	>
-		{#snippet loadingSlot()}
-			<div class="files-page-listing">
-				<table class="table">
-					<thead>
-						<tr>
-							<th class="table-header w-10"></th>
-							<th class="table-header">Name</th>
-							<th class="table-header files-page-cell-lg">Permissions</th>
-							<th class="table-header table-right">Size</th>
-							<th class="table-header files-page-cell-md">Modified</th>
-							<th class="table-header table-right">Actions</th>
-						</tr>
-					</thead>
-					<tbody>
-						{#each Array(8) as _, i (i)}
-							<FileRow />
-						{/each}
-					</tbody>
-				</table>
+	<!-- File listing; with no root configured the empty-roots message stands in for it. -->
+	<HoldUntil ready={rootsSettled}>
+		{#if browser.noRootsConfigured}
+			<div class="panel files-page-empty-panel">
+				<p class="files-page-empty-panel-text">No media directories configured</p>
 			</div>
-		{/snippet}
-		{#snippet ready(lst)}
-			<div class="files-page-listing">
-				{#if lst.parent_subpath != null}
-					<button
-						type="button"
-						onclick={() => browser.navigate(browser.current.root, lst.parent_subpath!)}
-						class="flex w-full items-center gap-2 files-page-nav-row"
-					>
-						<span class="w-10"></span>
-						<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 17l-5-5m0 0l5-5m-5 5h12" />
-						</svg>
-						..
-					</button>
-				{/if}
+		{:else}
+			<LoadState
+				data={browser.listing}
+				loading={browser.loading && !browser.listing}
+				error={browser.filesError}
+				isEmpty={() => false}
+			>
+				{#snippet loadingSlot()}
+					<div class="files-page-listing">
+						<table class="table">
+							<thead>
+								<tr>
+									<th class="table-header w-10"></th>
+									<th class="table-header">Name</th>
+									<th class="table-header files-page-cell-lg">Permissions</th>
+									<th class="table-header table-right">Size</th>
+									<th class="table-header files-page-cell-md">Modified</th>
+									<th class="table-header table-right">Actions</th>
+								</tr>
+							</thead>
+							<tbody>
+								{#each Array(8) as _, i (i)}
+									<FileRow />
+								{/each}
+							</tbody>
+						</table>
+					</div>
+				{/snippet}
+				{#snippet ready(lst)}
+					<div class="files-page-listing">
+						{#if lst.parent_subpath != null}
+							{@const parent = lst.parent_subpath}
+							<button
+								type="button"
+								onclick={() => browser.navigate(browser.current.root, parent)}
+								class="flex w-full items-center gap-2 files-page-nav-row"
+							>
+								<span class="w-10"></span>
+								<Glyph name="arrow-left-short" class="h-4 w-4" />
+								..
+							</button>
+						{/if}
 
-				<!-- Inline new folder row -->
-				{#if creatingFolder}
-					<NewFolderRow bind:name={newFolderName} onconfirm={confirmNewFolder} oncancel={cancelNewFolder} />
-				{/if}
+						<!-- Inline new folder row -->
+						{#if creatingFolder}
+							<NewFolderRow bind:name={newFolderName} onconfirm={confirmNewFolder} oncancel={cancelNewFolder} />
+						{/if}
 
-				{#if browser.listing?.unavailable}
-					<div class="files-page-empty">This root is not mounted on the server.</div>
-				{:else if browser.sortedEntries.length === 0 && !creatingFolder}
-					<div class="files-page-empty">This directory is empty</div>
-				{:else if browser.sortedEntries.length > 0}
-					<FilesTable
-						{browser}
-						onrename={handleRename}
-						ondelete={handleDeleteRequest}
-						onfixpermissions={handleFixPermissions}
-					/>
-				{/if}
-			</div>
-		{/snippet}
-	</LoadState>
+						{#if browser.listing?.unavailable}
+							<div class="files-page-empty">This root is not mounted on the server.</div>
+						{:else if browser.sortedEntries.length === 0 && !creatingFolder}
+							<div class="files-page-empty">This directory is empty</div>
+						{:else if browser.sortedEntries.length > 0}
+							<FilesTable
+								{browser}
+								onrename={handleRename}
+								ondelete={handleDeleteRequest}
+								onfixpermissions={handleFixPermissions}
+							/>
+						{/if}
+					</div>
+				{/snippet}
+			</LoadState>
+		{/if}
+	</HoldUntil>
 </div>
 
 <!-- Delete confirmation -->
@@ -362,7 +363,7 @@
 <!-- Bulk delete confirmation -->
 <ConfirmDialog
 	open={bulkDeleteOpen}
-	title="Delete {browser.selectedKeys.size} item{browser.selectedKeys.size !== 1 ? 's' : ''}"
+	title="Delete {browser.selectedKeys.size} {plural(browser.selectedKeys.size, 'item')}"
 	message="This will permanently delete {browser.selectedKeys.size} selected item{browser.selectedKeys.size !== 1
 		? 's'
 		: ''}, including all contents of any folders. This cannot be undone."
@@ -390,33 +391,31 @@
 <FileMoveDialog picker={movePicker} count={browser.selectedKeys.size} onconfirm={confirmBulkMove} />
 
 <style>
-	/* the original was bg-primary-light-bg/text-primary-dark (blue-100 /
-	   blue-800, dark: 20% blue-900 / blue-400). Those legacy alias tokens are
-	   gone (Task 13), so the banner sits on the nearest live roles: tint-2 is
+	/* the banner sits on the nearest live roles to a light-blue fill with dark-blue text: tint-2 is
 	   a hair lighter than blue-100 and primary-text (blue-700 light /
 	   blue-400 dark) a step lighter than blue-800; both mode-flip on their
-	   own, which also retires the global dark-mode override. Named collapse. */
-	/* original was px-4 py-3 (1rem/0.75rem), not .alert's own 0.5rem/0.75rem default */
+	   own, so no dark-mode override is needed. Named collapse. */
+	/* padding is 1rem/0.75rem, not .alert's own 0.5rem/0.75rem default */
 	.files-page-warning-banner {
 		padding: 0.75rem 1rem;
 		background: var(--color-primary-tint-2);
 		color: var(--color-primary-text);
 	}
-	/* original was px-4 py-2.5 (1rem/0.625rem), not .alert's own 0.5rem/0.75rem default */
+	/* padding is 1rem/0.625rem, not .alert's own 0.5rem/0.75rem default */
 	.files-page-readonly-banner {
 		padding: 0.625rem 1rem;
 	}
-	/* original was px-4 py-2 (1rem/0.5rem) */
+	/* padding is 1rem/0.5rem */
 	.files-page-feedback {
 		padding: 0.5rem 1rem;
 	}
-	.files-page-readonly-icon {
+	/* :global: set on Glyph through its class prop */
+	:global(.files-page-readonly-icon) {
 		color: var(--color-warning);
 	}
 	/* replaces the banned inline `hidden lg:table-cell`/`hidden
 	   md:table-cell` (table/table-row/table-cell are Tailwind
-	   display-utility names, banned outright by the lint per Task 11 fix
-	   round 3 - only the table block's own classes may set that display
+	   display-utility names, banned outright by the lint - only the table block's own classes may set that display
 	   value) */
 	.files-page-cell-lg {
 		display: none;
@@ -449,6 +448,13 @@
 	}
 	.files-page-nav-row:hover {
 		background: var(--color-primary-tint-1);
+	}
+	.files-page-empty-panel {
+		padding: 2rem;
+		text-align: center;
+	}
+	.files-page-empty-panel-text {
+		color: var(--color-text-muted);
 	}
 	.files-page-empty {
 		padding: 2rem;

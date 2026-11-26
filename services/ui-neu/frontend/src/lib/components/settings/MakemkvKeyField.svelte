@@ -1,17 +1,19 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import type { ConfigFieldMeta, ConfigView, DriveView } from '$lib/types/api.gen';
-	import ChoiceCard from '$lib/components/ChoiceCard.svelte';
-	import StatusStrip from '$lib/components/StatusStrip.svelte';
+	import ChoiceCard from '$lib/components/settings/ChoiceCard.svelte';
+	import StatusStrip from '$lib/components/shared/StatusStrip.svelte';
+	import FieldDocsLink from '$lib/components/shared/FieldDocsLink.svelte';
+	import FieldLabel from '$lib/components/shared/FieldLabel.svelte';
 	import SecretInput from './SecretInput.svelte';
 	import { fetchConfigView, HIDDEN_SECRET } from '$lib/api/config';
 	import { fetchDrives } from '$lib/api/drives';
 	import { usePoll } from '$lib/utils/poll';
-	import { makemkvKeyStatus } from '$lib/utils/makemkv';
+	import { makemkvKeyStatus } from '$lib/drives/makemkv';
 
 	// MakeMKV key: the free monthly beta key (value null) or a purchased key.
 	// ARM can't test a key on demand; a drive's ripper verifies it and reports
-	// back, so the status line polls the reported state (setup spec §5.5).
+	// back, so the status line polls the reported state.
 	// Rendered for the `makemkv_key` widget in Settings > Metadata and setup.
 	let {
 		field,
@@ -46,7 +48,10 @@
 
 <div class="makemkv-key-field stack">
 	<div>
-		<div class="field-label makemkv-key-field-title">{field.label}</div>
+		<div class="makemkv-key-field-head">
+			<div class="field-label makemkv-key-field-title">{field.label}</div>
+			<FieldDocsLink id={`config.${field.key}`} label={field.label} />
+		</div>
 		<p class="field-help">MakeMKV reads and decrypts DVDs and Blu-rays. Both kinds of key work the same for ripping.</p>
 	</div>
 	<ChoiceCard
@@ -71,7 +76,8 @@
 	</p>
 	{#if mode === 'own'}
 		<div class="field">
-			<label class="field-label" for="makemkv-key-input">Registration key</label>
+			<!-- The field's docs link sits on the heading above. -->
+			<FieldLabel for="makemkv-key-input" label="Registration key" />
 			<div class="makemkv-key-field-row">
 				<SecretInput
 					id="makemkv-key-input"
@@ -102,6 +108,11 @@
 	}
 	.makemkv-key-field {
 		gap: 0.75rem;
+	}
+	.makemkv-key-field-head {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
 	}
 	.makemkv-key-field-title {
 		color: var(--color-text);

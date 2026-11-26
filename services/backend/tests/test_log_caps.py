@@ -1,4 +1,4 @@
-"""Tier-4: log query/zip caps are env-tunable, defaulting to current values."""
+"""Log query/zip caps are env-tunable, defaulting to current values."""
 
 from arm_backend.config import Settings
 
