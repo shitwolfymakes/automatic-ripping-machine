@@ -122,8 +122,8 @@ async def resolve_min_length_override(db: AsyncSession, job: Job) -> int | None:
     ROUTED session (explicit per-rip choice, else the compatibility-gated
     drive default, else a `session_routes` match - see
     `resolve_routed_session_id`), returning None when no override applies.
-    The ripper falls back to its host-side `ARM_MIN_LENGTH_SECONDS` baseline
-    when this is None.
+    The ripper never rips below the minimum title length the disc's scan used,
+    and uses that minimum when this is None.
 
     Single-caller convenience wrapper over `load_routed_session` +
     `min_length_override_from_session` — see `resolve_rip_preset_id_for_job`.

@@ -340,6 +340,16 @@ CONFIG_FIELD_META: list[ConfigFieldMeta] = [
         editable=True,
     ),
     ConfigFieldMeta(
+        key="min_title_length_seconds",
+        group="Ripping",
+        tier="operator",
+        label="Minimum title length (seconds)",
+        help="Titles shorter than this are not listed or ripped. The scan and the rip both use it, so a disc's "
+        "title list and its files always match. A session can raise it but not lower it. 0 to 3600 seconds.",
+        type="int",
+        editable=True,
+    ),
+    ConfigFieldMeta(
         key="max_parallel_iso_rips",
         group="Ripping",
         tier="operator",

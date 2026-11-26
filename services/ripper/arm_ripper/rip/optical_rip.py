@@ -42,22 +42,33 @@ def _index_tracks(
     return track_by_index, invalid
 
 
+def _scan_duration(track: TrackView) -> int | None:
+    """The length MakeMKV's `--minlength` filter sees: the scan-time estimate, else the measured length, else None.
+
+    Before a rip `duration_seconds` (the post-rip actual) is still None, so filtering on it alone would count every
+    title as eligible and shift the positional file pairing."""
+    if track.expected_duration_seconds is not None:
+        return track.expected_duration_seconds
+    return track.duration_seconds
+
+
 def _eligible_source_indexes(track_by_index: dict[int, TrackView], min_length_seconds: int) -> list[int]:
     """The source indexes MakeMKV will rip, ascending: each track at least `min_length_seconds` long, or of unknown
     length."""
-    # Eligible source indexes — those whose duration meets `--minlength`,
+    # Eligible source indexes — those whose scan duration meets `--minlength`,
     # sorted ascending. MakeMKV's `mkv all` output files carry an
     # output-position suffix (`_t00`, `_t01`, ...) rather than the
     # source title index, so we pair this list positionally with the
-    # files post-rip to get attribution back. Tracks with no
-    # `duration_seconds` (rare — scan didn't find one) are treated as
+    # files post-rip to get attribution back. Tracks with no known
+    # duration (rare — scan didn't find one) are treated as
     # eligible to avoid dropping them silently; if MakeMKV skips them,
     # they fall through to "produced no .mkv" downstream.
-    return sorted(
-        idx
-        for idx, t in track_by_index.items()
-        if t.duration_seconds is None or t.duration_seconds >= min_length_seconds
-    )
+    return sorted(idx for idx, t in track_by_index.items() if _meets_min_length(_scan_duration(t), min_length_seconds))
+
+
+def _meets_min_length(duration: int | None, min_length_seconds: int) -> bool:
+    """Whether MakeMKV keeps a title of this length; an unknown length counts as kept."""
+    return duration is None or duration >= min_length_seconds
 
 
 def _first_eligible_track(track_by_index: dict[int, TrackView], eligible: list[int]) -> TrackView | None:
@@ -67,8 +78,8 @@ def _first_eligible_track(track_by_index: dict[int, TrackView], eligible: list[i
 
 def _no_output_error(title_idx: int, track: TrackView, min_length_seconds: int, eligible: list[int]) -> str:
     """Why a selected title has no result: MakeMKV skipped it as too short, or it produced nothing for it."""
-    duration = track.duration_seconds
-    if duration is not None and duration < min_length_seconds:
+    duration = _scan_duration(track)
+    if not _meets_min_length(duration, min_length_seconds):
         return f"track duration {duration}s below minlength={min_length_seconds}s; makemkvcon skipped it"
     return f"makemkvcon produced no output for title {title_idx} (eligible={title_idx in eligible})"
 
@@ -301,7 +312,9 @@ class _OpticalRip:
         #   the hasher like a live one.
         # - Otherwise: the track was below `min_length_seconds`, so MakeMKV
         #   never attempted it. FAILED with a clear reason so the operator
-        #   can lower minlength and retry.
+        #   can lower the session minimum or the minimum title length
+        #   setting and rip the disc again; the rip never goes below the
+        #   minimum the scan used (`rip_min_length_seconds`).
         for title_idx, track in self._track_by_index.items():
             if title_idx in self._done_emitted:
                 continue
@@ -367,8 +380,11 @@ async def rip_optical(
     """Single-invocation DVD/BD rip with per-title attribution.
 
     The makemkvcon invocation rips every title ≥ minlength to
-    `output_dir`. We map title_index → TrackView via `source_ref` and
-    fan the lifecycle callbacks out as MakeMKV's stream announces each
+    `output_dir`. The caller settles minlength never below the minimum
+    the scan listed titles with (`rip_min_length_seconds`), so every file
+    belongs to a listed title.
+    We map title_index → TrackView via `source_ref` and fan the
+    lifecycle callbacks out as MakeMKV's stream announces each
     title. Tracks whose `source_ref` doesn't parse as an int are
     failed up front — same shape as the per-title implementation.
 

@@ -61,6 +61,8 @@ class ConfigView(BaseModel):
     max_parallel_transcodes: int
     # ISO-source ripping: concurrent ISO rips, 1 to 8 (default 1).
     max_parallel_iso_rips: int
+    # Shortest title the scan lists and the rip writes, in seconds.
+    min_title_length_seconds: int
     # transcode_enabled: the runtime switch (a Config DB column, editable).
     # transcode_capable: the deployment capability (read-only, derived from env
     # Settings, not a Config column). capable=False renders the toggle locked.
@@ -113,6 +115,7 @@ class ConfigUpdateRequest(BaseModel):
     drive_detected_prune_days: int | None = None
     max_parallel_transcodes: int | None = None
     max_parallel_iso_rips: int | None = None
+    min_title_length_seconds: int | None = None
     transcode_enabled: bool | None = None
     makemkv_sdf_enabled: bool | None = None
     thediscdb_enabled: bool | None = None

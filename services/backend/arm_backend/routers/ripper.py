@@ -30,7 +30,9 @@ from arm_backend.identity.pipeline import resolve_job
 from arm_backend.identity.proposals import record_preset
 from arm_backend.identity.stage_runner import EpisodeStageRunner
 from arm_backend.routers._deps import get_hub, get_stage_runner
-from arm_backend.track_selection import DiscBackupNeedsBluray, select_tracks
+from arm_backend.min_title_length import env_min_title_length_seconds, min_title_length_seconds
+from arm_backend.rip_outcome import kept_tracks, rip_outcome_counts
+from arm_backend.track_selection import DiscBackupNeedsBluray, select_rip_tracks
 from arm_backend.ws import WSHub
 from arm_common import (
     Config,
@@ -155,6 +157,7 @@ async def get_ripper_config(
         makemkv_sdf_enabled=bool(cfg.makemkv_sdf_enabled),
         ripping_paused=bool(cfg.ripping_paused),
         manual_wait_seconds=int(cfg.manual_wait_seconds) if cfg.manual_wait_seconds is not None else 60,
+        min_title_length_seconds=min_title_length_seconds(cfg),
     )
 
 
@@ -438,14 +441,25 @@ async def _job_tracks(session: AsyncSession, job_id: str) -> Sequence[Track]:
     )
 
 
-def _rip_start_response(
-    job: Job, preset_id: str, tracks: Sequence[Track], min_length_seconds: int | None
+async def _title_length_floor(session: AsyncSession, job: Job) -> int:
+    """The minimum title length the job's scan listed titles with, or the configured one for a scan that did not
+    record it."""
+    recorded = ((job.metadata_json or {}).get("scan_result") or {}).get("min_title_length_seconds")
+    if recorded is not None:
+        return int(recorded)
+    cfg = (await session.execute(select(Config).where(col(Config.id) == CONFIG_SINGLETON_ID))).scalar_one_or_none()
+    return env_min_title_length_seconds() if cfg is None else min_title_length_seconds(cfg)
+
+
+async def _rip_start_response(
+    session: AsyncSession, job: Job, preset_id: str, tracks: Sequence[Track], min_length_seconds: int | None
 ) -> RipStartResponse:
     return RipStartResponse(
         job_id=job.id,
         rip_preset_id=preset_id,
         tracks=[TrackView.model_validate(t) for t in tracks],
         min_length_seconds=min_length_seconds,
+        min_title_length_seconds=await _title_length_floor(session, job),
     )
 
 
@@ -501,7 +515,7 @@ async def _select_or_fail(
     # whatever the scan found, so it never lands in the no-titles handling
     # below; a FOLDER preset on anything but a Blu-ray is refused here.
     try:
-        new_tracks = select_tracks(job.id, scan, preset)
+        new_tracks = select_rip_tracks(job.id, scan, preset)
     except DiscBackupNeedsBluray as exc:
         # Fail the job with the reason on its event: the ripper gives up on a
         # 4xx, and the job would otherwise sit IDENTIFIED with nothing to say why.
@@ -517,7 +531,7 @@ async def _select_or_fail(
         reason = FOLDER_NO_TITLES if virtual.source_kind == DriveSourceKind.FOLDER else ISO_NO_TITLES
         await _fail_titleless_source(session, hub, job, reason)
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=reason)
-    if not new_tracks:
+    if not kept_tracks(new_tracks):
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="track selection produced zero tracks",
@@ -585,7 +599,7 @@ async def rip_start(
             await _ensure_ripping(session, job)
             if begins_rip:
                 await _announce_rip(session, hub, stage_runner, job, preset_id, existing)
-            return _rip_start_response(job, preset_id, existing, min_length_seconds)
+            return await _rip_start_response(session, job, preset_id, existing, min_length_seconds)
 
         _require_startable(job)
         scan = _scan_of(job)
@@ -597,14 +611,14 @@ async def rip_start(
         logger.debug(
             "rip-start preset=%s tracks=%d",
             preset_id,
-            len(refreshed),
+            len(kept_tracks(refreshed)),
         )
 
         # Without the review hold, identify creates no Track rows, so the stage
         # it scheduled saw nothing to match. The tracks appear here.
         await _announce_rip(session, hub, stage_runner, job, preset_id, refreshed)
 
-        return _rip_start_response(job, preset_id, refreshed, min_length_seconds)
+        return await _rip_start_response(session, job, preset_id, refreshed, min_length_seconds)
 
 
 @router.post("/jobs/{job_id}/resume", response_model=RipStartResponse)
@@ -648,7 +662,7 @@ async def resume(
         )
         await session.commit()
 
-        return _rip_start_response(job, preset_id, refreshed, min_length_seconds)
+        return await _rip_start_response(session, job, preset_id, refreshed, min_length_seconds)
 
 
 @router.get(

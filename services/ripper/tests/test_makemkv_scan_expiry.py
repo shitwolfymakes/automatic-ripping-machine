@@ -107,7 +107,7 @@ async def test_msg_5021_raises_binary_expired_error(monkeypatch: pytest.MonkeyPa
     )
 
     with pytest.raises(MakemkvBinaryExpiredError) as excinfo:
-        await scan_disc("iso:/fake/big.iso")
+        await scan_disc("iso:/fake/big.iso", 120)
 
     assert proc.killed is True
     # Distinct, operator-actionable message — includes MSG:5021 reference
@@ -128,7 +128,7 @@ async def test_msg_5021_is_a_scan_error_subtype(monkeypatch: pytest.MonkeyPatch)
     )
 
     with pytest.raises(ScanError):
-        await scan_disc("iso:/fake/big.iso")
+        await scan_disc("iso:/fake/big.iso", 120)
 
 
 @pytest.mark.asyncio
@@ -149,7 +149,7 @@ async def test_clean_scan_completes_without_expiry_path(monkeypatch: pytest.Monk
         ),
     )
 
-    result = await scan_disc("/dev/sr0")
+    result = await scan_disc("/dev/sr0", 120)
     assert result.volume_label == "TEST_VOLUME"
     assert len(result.titles) == 1
     assert result.titles[0].duration_seconds == 1 * 3600 + 23 * 60 + 45
@@ -176,5 +176,5 @@ async def test_msg_5021_check_is_anchored_to_line_start(monkeypatch: pytest.Monk
         ),
     )
 
-    result = await scan_disc("/dev/sr0")
+    result = await scan_disc("/dev/sr0", 120)
     assert result.volume_label == "OK_AFTER_REFERENCE"
