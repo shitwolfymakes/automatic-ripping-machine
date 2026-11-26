@@ -184,6 +184,19 @@ class TrackKind(StrEnum):
     DISC_BACKUP = "disc_backup"
 
 
+class ResumeMode(StrEnum):
+    """How a rip resumed after a restart or a lost drive reads the disc again.
+
+    `auto` picks per resume by data (see `ResumePolicy`); the other two force one path.
+    """
+
+    AUTO = "auto"
+    # One `makemkvcon mkv … all` over the whole disc; settled titles' new files are deleted.
+    MKV_ALL = "mkv_all"
+    # One `makemkvcon mkv … <title>` per unsettled title.
+    PER_TITLE = "per_title"
+
+
 class TrackRole(StrEnum):
     """What one title on a disc is. Set by identity sources via the resolver
     (arm_backend.identity) or by the operator."""

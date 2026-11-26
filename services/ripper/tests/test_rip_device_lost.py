@@ -613,3 +613,98 @@ async def test_await_drive_return_keeps_waiting_while_the_node_reads_a_state_oth
     controller = JobController(_Client(), "drv_x", device_path=DriveHandle("/dev/sr0"))  # type: ignore[arg-type]
     assert await _disc_rip(controller)._await_drive_return() is None
     assert reads == ["/dev/sr0"]
+
+
+def _settled(idx: int, raw: Path, *, expected: int) -> TrackView:
+    """A title the backend kept DONE across a restart: its file is in the job's raw folder."""
+    path = raw / f"Disc_t{idx:02d}.mkv"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(b"x" * 8)
+    return _track(idx).model_copy(
+        update={"status": TrackStatus.DONE, "output_path": str(path), "size_bytes": 8, "expected_size_bytes": expected}
+    )
+
+
+def _sized(idx: int, expected: int) -> TrackView:
+    return _track(idx).model_copy(update={"expected_size_bytes": expected})
+
+
+async def _rip_unsettled(**kw: Any) -> None:
+    for track in kw["tracks"]:
+        if track.id not in kw["skip_track_ids"]:
+            await _ok(kw, track, f"Disc_t{track.index:02d}.mkv")
+
+
+async def test_a_restart_resume_keeps_the_settled_title_and_rips_the_rest_per_title(monkeypatch, env) -> None:
+    raw: Path = env["raw"]
+    tracks = [_settled(0, raw, expected=100), _sized(1, 10), _sized(2, 10)]
+    (raw / "Disc_t01.mkv").write_bytes(b"partial")  # what the crashed pass left mid-write
+
+    calls = _script(monkeypatch, [_rip_unsettled])
+    await env["controller"]._execute_rip(
+        job_id=_JOB,
+        disc_type=DiscType.BLURAY,
+        device_path="/dev/sr0",
+        rip_start=RipStartResponse(job_id=_JOB, rip_preset_id="rpr", tracks=tracks),
+    )
+
+    client: _Client = env["client"]
+    # 20 of the 120 bytes `mkv all` would read are left: 16.7% <= 50%.
+    assert len(calls) == 1
+    assert calls[0]["skip_track_ids"] == {"trk_0"}
+    assert calls[0]["per_title"] is True
+    assert calls[0]["output_dir"] == raw / "resume-1"
+    assert client.statuses("trk_0") == []
+    assert (raw / "Disc_t00.mkv").exists()
+    assert not (raw / "Disc_t01.mkv").exists()
+    for tid in ("trk_1", "trk_2"):
+        assert client.statuses(tid) == [TrackStatus.IN_PROGRESS, TrackStatus.DONE]
+    assert client.completed == [_JOB]
+
+
+async def test_a_restart_resume_with_most_of_the_disc_left_uses_mkv_all(monkeypatch, env) -> None:
+    raw: Path = env["raw"]
+    tracks = [_settled(0, raw, expected=10), _sized(1, 100)]
+
+    calls = _script(monkeypatch, [_rip_unsettled])
+    await env["controller"]._execute_rip(
+        job_id=_JOB,
+        disc_type=DiscType.BLURAY,
+        device_path="/dev/sr0",
+        rip_start=RipStartResponse(job_id=_JOB, rip_preset_id="rpr", tracks=tracks),
+    )
+
+    assert calls[0]["skip_track_ids"] == {"trk_0"}
+    assert calls[0]["per_title"] is False
+
+
+async def test_a_restart_resume_rips_into_the_first_unused_resume_folder(monkeypatch, env) -> None:
+    raw: Path = env["raw"]
+    tracks = [_settled(0, raw, expected=100), _sized(1, 10)]
+    (raw / "resume-1").mkdir()
+
+    calls = _script(monkeypatch, [_rip_unsettled])
+    await env["controller"]._execute_rip(
+        job_id=_JOB,
+        disc_type=DiscType.BLURAY,
+        device_path="/dev/sr0",
+        rip_start=RipStartResponse(job_id=_JOB, rip_preset_id="rpr", tracks=tracks),
+    )
+
+    assert calls[0]["output_dir"] == raw / "resume-2"
+
+
+async def test_a_fresh_rip_reads_the_whole_disc_into_the_job_folder(monkeypatch, env) -> None:
+    tracks = [_sized(0, 100), _sized(1, 10)]
+
+    calls = _script(monkeypatch, [_rip_unsettled])
+    await env["controller"]._execute_rip(
+        job_id=_JOB,
+        disc_type=DiscType.BLURAY,
+        device_path="/dev/sr0",
+        rip_start=RipStartResponse(job_id=_JOB, rip_preset_id="rpr", tracks=tracks),
+    )
+
+    assert calls[0]["skip_track_ids"] == set()
+    assert calls[0]["per_title"] is False
+    assert calls[0]["output_dir"] == env["raw"]
