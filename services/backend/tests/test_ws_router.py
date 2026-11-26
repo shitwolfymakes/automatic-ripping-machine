@@ -516,3 +516,16 @@ def test_ws_anonymous_subscribe_ui_topic_ok(monkeypatch: pytest.MonkeyPatch) -> 
             ws.send_json({"op": "subscribe", "topic": "ripper.events"})
             assert ws.receive_json() == {"op": "ack", "topic": "ripper.events"}
     assert "ripper.events" in hub.subscribed
+
+
+def test_ws_auth_ok_logs_at_debug(monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture) -> None:
+    db = FakeSession()
+    db.rows["users"] = [_guest_user()]
+    app = _make_app(db, _Hub(), monkeypatch)
+    with caplog.at_level("DEBUG", logger="arm_backend.ws.router"):
+        with TestClient(app) as client:
+            with client.websocket_connect("/ws") as ws:
+                ws.send_json({"op": "auth", "token": ""})
+                assert ws.receive_json()["op"] == "ack"
+    (record,) = [r for r in caplog.records if r.getMessage().startswith("ws auth ok")]
+    assert record.levelname == "DEBUG"

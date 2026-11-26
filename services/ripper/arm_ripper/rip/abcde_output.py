@@ -47,3 +47,8 @@ def expected_wav_bytes(durations: list[int | None]) -> int | None:
     if any(seconds is None for seconds in durations):
         return None
     return sum(seconds or 0 for seconds in durations) * CD_WAV_BYTES_PER_SECOND
+
+
+def wav_duration_seconds(size_bytes: int) -> int:
+    """The length of a ripped CD track, from its WAV size at the CD audio rate (the header rounds away)."""
+    return round(size_bytes / CD_WAV_BYTES_PER_SECOND)

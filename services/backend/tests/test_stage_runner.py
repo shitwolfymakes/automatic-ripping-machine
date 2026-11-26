@@ -23,6 +23,7 @@ from arm_backend.identity.stage_runner import (
     build_providers,
 )
 from tests._fakes import FakeSession
+from tests._logs import LineCapture
 
 CFG = Config(id=1)
 
@@ -1099,3 +1100,30 @@ async def test_release_without_a_pending_rerun_runs_nothing() -> None:
     runner.invalidate(job.id)  # nothing pending: only the hold
     runner.release(job.id)
     assert runner._pending == {} and runner._held == {} and runner._rerun == set()
+
+
+async def test_a_background_run_logs_in_the_jobs_context(job_log: LineCapture) -> None:
+    job = _job()
+    db = _db(job, tracks=[_track(job.id, i, s) for i, s in enumerate(DISC)])
+    runner = _runner(db, _Hub(), [FakeProvider(seasons={1: _season(1, DISTINCT)})])
+
+    runner.schedule(job.id)
+    await runner.drain()
+
+    emitted = job_log.lines()
+    assert emitted
+    assert {line["job_id"] for line in emitted} == {job.id}
+    assert len(job_log.lines(event="episodes.matched")) == 1
+
+
+async def test_a_failed_background_run_logs_in_the_jobs_context(job_log: LineCapture) -> None:
+    job = _job()
+    db = _db(job, tracks=[_track(job.id, i, s) for i, s in enumerate(DISC)])
+    db.commit_raises = RuntimeError("connection reset")
+    runner = _runner(db, _Hub(), [FakeProvider(seasons={1: _season(1, DISTINCT)})])
+
+    runner.schedule(job.id)
+    await runner.drain()
+
+    [failure] = job_log.lines(level="error")
+    assert failure["job_id"] == job.id

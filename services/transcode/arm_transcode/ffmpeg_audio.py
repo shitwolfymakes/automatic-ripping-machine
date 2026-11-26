@@ -72,7 +72,7 @@ async def transcode_audio(
     Returns the final file size in bytes; raises `RuntimeError` on non-zero exit.
     """
     cmd = build_audio_command(input_path=input_path, output_path=output_path, preset_ref=preset_ref)
-    logger.info("ffmpeg launching: %s", " ".join(cmd))
+    logger.debug("ffmpeg launching: %s", " ".join(cmd))
 
     proc = await asyncio.create_subprocess_exec(
         *cmd,
