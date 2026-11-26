@@ -1,6 +1,7 @@
 <script lang="ts">
 	import JobTrackRow from '$lib/components/jobs/JobTrackRow.svelte';
 	import type { JobView, NamingPreviewItem, TrackView } from '$lib/types/api.gen';
+	import type { MusicTrackRow } from '$lib/music/tracks';
 
 	interface Props {
 		job: JobView;
@@ -11,6 +12,9 @@
 		/** The last include toggle that failed, shown on its track's row. */
 		excludeError?: { trackId: string; message: string } | null;
 		ontitleapplied: () => void;
+		musicTracks?: MusicTrackRow[];
+		canEditSongs?: boolean;
+		onsongsave?: (index: number, raw: string) => Promise<void>;
 	}
 
 	let {
@@ -20,7 +24,10 @@
 		previewByTrack,
 		onexcludedchange,
 		excludeError = null,
-		ontitleapplied
+		ontitleapplied,
+		musicTracks = [],
+		canEditSongs = false,
+		onsongsave
 	}: Props = $props();
 
 	let editingTrackId = $state<string | null>(null);
@@ -73,6 +80,9 @@
 						{onexcludedchange}
 						excludeError={excludeError?.trackId === track.id ? excludeError.message : null}
 						ontitleapplied={handleTrackTitleApply}
+						{musicTracks}
+						{canEditSongs}
+						{onsongsave}
 					/>
 				{/each}
 			</tbody>

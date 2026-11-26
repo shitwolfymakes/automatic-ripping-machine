@@ -33,7 +33,6 @@ function render(job: JobView, tracks: TrackView[] = []) {
 	const load = vi.spyOn(jobDetail, 'load').mockResolvedValue(undefined);
 	const handlers = {
 		onmediatypechanged: vi.fn(),
-		onidentify: vi.fn(),
 		onapply: vi.fn(),
 		ondelete: vi.fn()
 	};
@@ -59,26 +58,13 @@ describe('JobHeaderActions', () => {
 		expect(screen.queryByRole('radiogroup', { name: 'Media type' })).toBeNull();
 	});
 
-	it('labels the identify button Edit identity on a CD with an identity and reports a click', async () => {
-		const { onidentify } = render(createJob({ disc_type: 'cd', status: 'ripped' }));
-		await fireEvent.click(screen.getByTestId('identify-open'));
-		expect(screen.getByTestId('identify-open')).toHaveTextContent('Edit identity');
-		expect(onidentify).toHaveBeenCalledTimes(1);
-	});
-
-	it('labels the identify button Identify disc on a disc awaiting an identity', () => {
-		render(createJob({ disc_type: 'dvd', status: 'awaiting_user_id' }));
-		expect(screen.getByTestId('identify-open')).toHaveTextContent('Identify disc');
-	});
-
-	it('hides the identify button on an identified video job', () => {
-		render(createJob({ disc_type: 'dvd', status: 'identified' }));
+	it.each([
+		['a CD with an identity', { disc_type: 'cd', status: 'ripped' }],
+		['a disc awaiting an identity', { disc_type: 'dvd', status: 'awaiting_user_id' }]
+	] as const)('has no identify button on %s: identity is edited in place', (_label, job) => {
+		render(createJob(job));
 		expect(screen.queryByTestId('identify-open')).toBeNull();
-	});
-
-	it('hides the identify button when the job cannot be resolved', () => {
-		render(createJob({ disc_type: 'cd', status: 'ripping' }));
-		expect(screen.queryByTestId('identify-open')).toBeNull();
+		expect(screen.queryByRole('button', { name: /Identify disc|Edit identity/ })).toBeNull();
 	});
 
 	it('shows the apply button when the job can be applied and reports a click', async () => {

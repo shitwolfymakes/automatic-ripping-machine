@@ -6,9 +6,10 @@
 		fields: MetadataField[];
 		canEdit: boolean;
 		onsave: (field: EditableJobField, raw: string) => Promise<void>;
+		ontextsave: (field: 'artist' | 'album', raw: string) => Promise<void>;
 	}
 
-	let { fields, canEdit, onsave }: Props = $props();
+	let { fields, canEdit, onsave, ontextsave }: Props = $props();
 </script>
 
 <div class="job-detail-metadata-grid w-full sm:w-auto flex-1 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4">
@@ -34,6 +35,17 @@
 							type="number"
 							{canEdit}
 							onsave={(raw) => onsave(edit, raw)}
+						/>
+					</div>
+				{:else if field.textEdit}
+					{@const textEdit = field.textEdit}
+					<div class="mt-1 job-detail-metadata-value" data-testid="fact-{textEdit}">
+						<InlineField
+							label={field.label}
+							value={field.raw ?? ''}
+							type="text"
+							{canEdit}
+							onsave={(raw) => ontextsave(textEdit, raw)}
 						/>
 					</div>
 				{:else}

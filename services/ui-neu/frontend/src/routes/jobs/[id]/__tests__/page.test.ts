@@ -207,38 +207,19 @@ describe('Job detail page (v3)', () => {
 		});
 	});
 
-	// A disc still waiting for an identity: the dialog is the way to give it one.
+	// A disc still waiting for an identity: it is identified in place, not in a dialog.
 	const awaitingIdentity = () => ({
 		...createJobDetail({ tracks: [] }),
 		job: createJob({ id: 'job_42', status: 'awaiting_user_id', title: null })
 	});
 
-	it('shows the Identify button only while the disc is waiting for an identity', async () => {
-		renderComponent(Page);
-		await screen.findByRole('heading', { name: 'Test Movie' });
-		expect(screen.queryByTestId('identify-open')).not.toBeInTheDocument();
-		cleanup();
-		const jobImpl = mockFetchJob.getMockImplementation();
-		try {
-			mockFetchJob.mockResolvedValue(awaitingIdentity());
-			renderComponent(Page);
-			await waitFor(() => {
-				expect(screen.getByTestId('identify-open')).toHaveTextContent('Identify disc');
-			});
-		} finally {
-			mockFetchJob.mockImplementation(jobImpl!);
-		}
-	});
-
-	it('opens the IdentifyDialog when the Identify button is clicked', async () => {
+	it('has no Identify button on a disc waiting for an identity: its title and year are fields', async () => {
 		mockFetchJob.mockResolvedValueOnce(awaitingIdentity());
 		renderComponent(Page);
-		const btn = await screen.findByTestId('identify-open');
-		await fireEvent.click(btn);
-		await waitFor(() => {
-			expect(screen.getByRole('dialog')).toBeInTheDocument();
-			expect(screen.getByTestId('identify-submit')).toBeInTheDocument();
-		});
+		expect(await screen.findByRole('button', { name: 'Edit Title' })).toBeInTheDocument();
+		expect(screen.getByRole('button', { name: 'Edit Year' })).toBeInTheDocument();
+		expect(screen.queryByTestId('identify-open')).not.toBeInTheDocument();
+		expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
 	});
 
 	it('shows the Apply session button and opens the ApplySessionDialog', async () => {
@@ -675,18 +656,6 @@ describe('Job detail page (v3)', () => {
 			}
 		});
 
-		it('Search instead opens the identify dialog', async () => {
-			const original = mockFetchJob.getMockImplementation();
-			mockFetchJob.mockImplementation(() => Promise.resolve(held()));
-			try {
-				renderComponent(Page);
-				await fireEvent.click(await screen.findByRole('button', { name: 'Search instead' }));
-				await waitFor(() => expect(screen.getByRole('dialog')).toBeInTheDocument());
-			} finally {
-				mockFetchJob.mockImplementation(original!);
-			}
-		});
-
 		it('a guest sees the banner without its buttons', async () => {
 			const original = mockFetchJob.getMockImplementation();
 			mockFetchJob.mockImplementation(() => Promise.resolve(held()));
@@ -727,16 +696,16 @@ describe('Job detail page (v3)', () => {
 			expect(await screen.findByRole('button', { name: 'Match Episodes' })).toBeInTheDocument();
 		});
 
-		it('puts the Movie | TV switch, as one control, right before Identify disc', async () => {
+		it('puts the Movie | TV switch, as one control, right before Apply session', async () => {
 			mockFetchJob.mockResolvedValue(tvJob({ status: 'awaiting_user_id' }));
 			renderComponent(Page);
-			const editIdentity = await screen.findByTestId('identify-open');
+			const apply = await screen.findByTestId('apply-open');
 			const group = screen.getByRole('radiogroup', { name: 'Media type' });
 			expect(group).toContainElement(screen.getByRole('radio', { name: 'Movie' }));
 			expect(group).toContainElement(screen.getByRole('radio', { name: 'TV' }));
 			const switchRoot = group.parentElement!;
-			expect(switchRoot.parentElement).toBe(editIdentity.parentElement);
-			expect(switchRoot.nextElementSibling).toBe(editIdentity);
+			expect(switchRoot.parentElement).toBe(apply.parentElement);
+			expect(switchRoot.nextElementSibling).toBe(apply);
 		});
 
 		it('starts with the Match Episodes panel closed', async () => {
@@ -918,5 +887,51 @@ describe('Job detail page (v3)', () => {
 			expect(screen.getByTestId('media-type-text')).toHaveTextContent('TV');
 			expect(screen.getByTestId('media-type-text')).toHaveClass('badge');
 		});
+	});
+});
+
+describe('Job detail page: no show id note', () => {
+	const auth = authStore as unknown as { __setRole: (r: string | null) => void };
+
+	async function renderJob(job: Partial<Parameters<typeof createJob>[0]>, role = 'admin') {
+		auth.__setRole(role);
+		mockFetchJob.mockResolvedValue({
+			...createJobDetail({ tracks: [] }),
+			job: createJob({ id: 'job_42', status: 'ripped', title: 'Test Show', ...job })
+		});
+		renderComponent(Page);
+		await screen.findByRole('heading', { name: 'Test Show' });
+	}
+
+	afterEach(() => {
+		cleanup();
+		auth.__setRole('admin');
+		mockFetchJob.mockReset();
+	});
+
+	it('shows the note in an info alert on a TV disc with no show id', async () => {
+		await renderJob({ disc_type: 'dvd', media_type: 'tv', has_series: false });
+		const note = screen.getByTestId('no-show-id-note');
+		expect(note).toHaveClass('alert', 'alert-info');
+		expect(note).toHaveTextContent("Without a search result ARM has no show id, so episodes can't be matched");
+	});
+
+	it('shows the note on a movie job that looks episodic', async () => {
+		await renderJob({ disc_type: 'bluray', media_type: 'movie', looks_episodic: true, has_series: false });
+		expect(screen.getByTestId('no-show-id-note')).toBeInTheDocument();
+	});
+
+	it.each([
+		['a TV disc with a show id', { disc_type: 'dvd', media_type: 'tv', has_series: true }],
+		['a movie job', { disc_type: 'bluray', media_type: 'movie', looks_episodic: false }],
+		['a CD', { disc_type: 'cd', media_type: 'tv', has_series: false }]
+	] as const)('shows no note on %s', async (_label, job) => {
+		await renderJob(job);
+		expect(screen.queryByTestId('no-show-id-note')).not.toBeInTheDocument();
+	});
+
+	it('shows no note to a guest', async () => {
+		await renderJob({ disc_type: 'dvd', media_type: 'tv', has_series: false }, 'guest');
+		expect(screen.queryByTestId('no-show-id-note')).not.toBeInTheDocument();
 	});
 });
