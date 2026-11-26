@@ -1,4 +1,4 @@
-"""Typed core for `jobs.metadata_json` (gap analysis §3.4).
+"""Typed core for `jobs.metadata_json`.
 
 The bag holds four kinds of content, and this module gives each a home:
 
@@ -22,12 +22,10 @@ The bag holds four kinds of content, and this module gives each a home:
   Data for the raw viewer and future backfills, never read for behaviour.
   Rows migrated from the old top-level merge keep theirs under `"legacy"`.
 
-`extra="allow"` everywhere: the `pending_session_id` mirror that used to live
-in this bag is gone (removed in the job-identity-columns branch; the UIs now
-read the `pending_session_id` job column). `extra="allow"` is kept
-deliberately for one more release as a grace period for rows written before
-migration 0032, so a validate/dump round-trip on old data doesn't drop
-whatever was there; tighten to `forbid` once those rows are confirmed gone.
+`extra="allow"` everywhere, so a validate/dump round-trip on rows written
+before migration 0032 doesn't drop whatever was there; tighten to `forbid`
+once those rows are confirmed gone. The pending session lives in the
+`pending_session_id` job column, not in this bag.
 """
 
 from datetime import datetime
@@ -46,7 +44,7 @@ class ExternalIds(BaseModel):
     tmdb: str | None = None
     tvdb: str | None = None
     tvmaze: str | None = None
-    anidb: str | None = None  # reserved (design test, spec 10)
+    anidb: str | None = None  # reserved
     musicbrainz_release: str | None = None
     # Whether `tmdb` names a movie or a TV show: TMDb numbers the two
     # separately, so a movie's id must never be used as a show id (episode
@@ -83,8 +81,7 @@ class JobIdentity(BaseModel):
     external_ids: ExternalIds = Field(default_factory=ExternalIds)
     overview: str | None = None
     identified_at: datetime | None = None
-    # Snapshot of the picked match's facts (match picker spec 3.6). Not
-    # refreshed; a later identify or accept replaces the whole identity.
+    # Snapshot of the picked match's facts. Not refreshed; a later identify or accept replaces the whole identity.
     facts: IdentityFacts | None = None
     facts_fetched_at: datetime | None = None
 
@@ -114,6 +111,9 @@ class JobFlags(BaseModel):
     # On a ripped job: the operator chose "Rip again", so the next identify of
     # this disc skips the previously-ripped check once (and clears the flag).
     rerip_allowed: bool = False
+    # A missed video disc parked under block_on_miss: it has no review
+    # countdown and only the operator's Start releases it.
+    blocked_miss: bool = False
 
 
 class PreviouslyRipped(BaseModel):
@@ -127,8 +127,7 @@ class PreviouslyRipped(BaseModel):
 
 class IdentitySuggestion(BaseModel):
     """A confident online match identify did not apply because the media
-    type's "Apply confident matches" switch is off (identification-sources
-    spec D-10). The job keeps its miss title and the `unidentified` flag and
+    type's "Apply confident matches" switch is off. The job keeps its miss title and the `unidentified` flag and
     waits in AWAITING_REVIEW with no countdown until the operator accepts
     it (POST /api/jobs/{id}/identity/accept) or identifies the disc another
     way (any resolve clears this section)."""
@@ -155,7 +154,6 @@ class JobMetadata(BaseModel):
     identity: JobIdentity | None = None
     music: MusicMeta | None = None
     # What every identity source proposed (typed; see arm_common.schemas.identity).
-    # Replaces the old `thediscdb` map section (migration 0039 moved it here).
     # Left-to-right union: a valid section parses as IdentityClaims; a corrupt
     # or future-version one passes through raw, so one bad row never fails a
     # bulk read and a validate/dump round-trip (resolve) never wipes it. The
@@ -195,6 +193,17 @@ def with_flags(metadata_json: dict[str, Any] | None, **flags: bool) -> dict[str,
     return md
 
 
+def without_flags(metadata_json: dict[str, Any] | None, *names: str) -> dict[str, Any]:
+    """Return a copy of the bag with the named flags removed from the `flags`
+    section (when it has one) and from the legacy top-level keys."""
+    md = dict(metadata_json or {})
+    for name in names:
+        md.pop(name, None)
+    if isinstance(md.get("flags"), dict):
+        md["flags"] = {k: v for k, v in md["flags"].items() if k not in names}
+    return md
+
+
 def previously_ripped_job_id(metadata_json: dict[str, Any] | None) -> str | None:
     """The earlier rip a held job matched (see PreviouslyRipped), or None."""
     section = (metadata_json or {}).get("previously_ripped")
@@ -213,6 +222,18 @@ def identity_suggestion_of(metadata_json: dict[str, Any] | None) -> IdentitySugg
         return IdentitySuggestion.model_validate(section)
     except ValidationError:
         return None
+
+
+def no_countdown_reason(metadata_json: dict[str, Any] | None) -> str | None:
+    """Why a held job waits with no review countdown, or None when it has one:
+    a previously-ripped hold, a held suggestion, or a blocked miss."""
+    if previously_ripped_job_id(metadata_json) is not None:
+        return "this disc was ripped before"
+    if identity_suggestion_of(metadata_json) is not None:
+        return "this disc is waiting for you to confirm its identity"
+    if flag_is_set(metadata_json, "blocked_miss"):
+        return "this disc is waiting for you to start it"
+    return None
 
 
 def without_identity_suggestion(metadata_json: dict[str, Any] | None) -> dict[str, Any]:

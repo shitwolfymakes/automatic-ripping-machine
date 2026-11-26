@@ -1,0 +1,852 @@
+{
+  "version": 1,
+  "hosts": [
+    "handbrake.fr",
+    "developer.themoviedb.org",
+    "www.omdbapi.com",
+    "github.com",
+    "appriseit.com"
+  ],
+  "fields": {
+    "config.ARM_DOCKER_NETWORK": {
+      "none": "Compose network written by the installer; read-only here."
+    },
+    "config.ARM_GPUS": {
+      "type": "internal",
+      "page": "guide/hardware-transcoding",
+      "section": "Enabling GPU transcoding"
+    },
+    "config.BIND_PORT": {
+      "none": "Backend listen port set by the installer; read-only here."
+    },
+    "config.ISO_INGRESS_ROOT": {
+      "none": "Container path fixed by the installer's mounts; read-only here."
+    },
+    "config.MEDIA_ROOT": {
+      "none": "Container path fixed by the installer's mounts; read-only here."
+    },
+    "config.RAW_ROOT": {
+      "none": "Container path fixed by the installer's mounts; read-only here."
+    },
+    "config.auto_rip_on_insert": {
+      "type": "internal",
+      "page": "guide/configuring-arm",
+      "section": "Rip / transcode behaviour"
+    },
+    "config.auto_transcode_on_idle": {
+      "type": "internal",
+      "page": "guide/configuring-arm",
+      "section": "Rip / transcode behaviour"
+    },
+    "config.block_on_miss": {
+      "type": "internal",
+      "page": "guide/configuring-arm",
+      "section": "Rip / transcode behaviour"
+    },
+    "config.community_keydb_enabled": {
+      "type": "internal",
+      "page": "guide/setup-walkthrough",
+      "section": "4. MakeMKV"
+    },
+    "config.crc64service_enabled": {
+      "type": "internal",
+      "page": "guide/configuring-arm",
+      "section": "Identification"
+    },
+    "config.disc_hint_sources": {
+      "type": "internal",
+      "page": "guide/configuring-arm",
+      "section": "Identification"
+    },
+    "config.drive_detected_prune_days": {
+      "type": "internal",
+      "page": "guide/setup-walkthrough",
+      "section": "3. Drives"
+    },
+    "config.drive_scan_interval_seconds": {
+      "type": "internal",
+      "page": "guide/setup-walkthrough",
+      "section": "3. Drives"
+    },
+    "config.episode_auto_apply": {
+      "type": "internal",
+      "page": "guide/configuring-arm",
+      "section": "Identification"
+    },
+    "config.episode_match_tolerance_seconds": {
+      "type": "internal",
+      "page": "guide/configuring-arm",
+      "section": "Identification"
+    },
+    "config.episode_sources": {
+      "type": "internal",
+      "page": "guide/configuring-arm",
+      "section": "Identification"
+    },
+    "config.hold_for_review": {
+      "type": "internal",
+      "page": "guide/setup-walkthrough",
+      "section": "6. Disc handling"
+    },
+    "config.makemkv_key": {
+      "type": "internal",
+      "page": "guide/makemkv",
+      "section": "How the key works"
+    },
+    "config.makemkv_sdf_enabled": {
+      "type": "internal",
+      "page": "guide/setup-walkthrough",
+      "section": "4. MakeMKV"
+    },
+    "config.manual_wait_seconds": {
+      "type": "internal",
+      "page": "guide/setup-walkthrough",
+      "section": "6. Disc handling"
+    },
+    "config.max_parallel_iso_rips": {
+      "type": "internal",
+      "page": "guide/configuring-arm",
+      "section": "Rip / transcode behaviour"
+    },
+    "config.max_parallel_transcodes": {
+      "type": "internal",
+      "page": "guide/configuring-arm",
+      "section": "Rip / transcode behaviour"
+    },
+    "config.min_title_length_seconds": {
+      "type": "internal",
+      "page": "guide/configuring-arm",
+      "section": "Rip / transcode behaviour"
+    },
+    "config.miss_media_type": {
+      "type": "internal",
+      "page": "guide/configuring-arm",
+      "section": "Rip / transcode behaviour"
+    },
+    "config.miss_titles_kept": {
+      "type": "internal",
+      "page": "guide/configuring-arm",
+      "section": "Rip / transcode behaviour"
+    },
+    "config.movie_auto_apply": {
+      "type": "internal",
+      "page": "guide/configuring-arm",
+      "section": "Identification"
+    },
+    "config.movie_sources": {
+      "type": "internal",
+      "page": "guide/configuring-arm",
+      "section": "Identification"
+    },
+    "config.music_auto_apply": {
+      "type": "internal",
+      "page": "guide/configuring-arm",
+      "section": "Identification"
+    },
+    "config.music_sources": {
+      "type": "internal",
+      "page": "guide/configuring-arm",
+      "section": "Identification"
+    },
+    "config.notifications_enabled": {
+      "type": "internal",
+      "page": "guide/configuring-arm",
+      "section": "Notifications"
+    },
+    "config.omdb_api_key": {
+      "type": "external",
+      "url": "https://www.omdbapi.com/"
+    },
+    "config.on_previously_ripped": {
+      "type": "internal",
+      "page": "guide/configuring-arm",
+      "section": "Rip / transcode behaviour"
+    },
+    "config.ripping_paused": {
+      "type": "internal",
+      "page": "guide/configuring-arm",
+      "section": "Rip / transcode behaviour"
+    },
+    "config.search_provider_movie": {
+      "type": "internal",
+      "page": "guide/configuring-arm",
+      "section": "Identification"
+    },
+    "config.search_provider_music": {
+      "type": "internal",
+      "page": "guide/configuring-arm",
+      "section": "Identification"
+    },
+    "config.search_provider_tv": {
+      "type": "internal",
+      "page": "guide/configuring-arm",
+      "section": "Identification"
+    },
+    "config.thediscdb_enabled": {
+      "type": "internal",
+      "page": "guide/configuring-arm",
+      "section": "Identification"
+    },
+    "config.thediscdb_refresh_days": {
+      "type": "internal",
+      "page": "guide/configuring-arm",
+      "section": "Keys"
+    },
+    "config.tmdb_api_key": {
+      "type": "external",
+      "url": "https://developer.themoviedb.org/docs/getting-started"
+    },
+    "config.transcode_capable": {
+      "type": "internal",
+      "page": "guide/configuring-arm",
+      "section": "Ripper-only installs"
+    },
+    "config.transcode_enabled": {
+      "type": "internal",
+      "page": "guide/configuring-arm",
+      "section": "Rip / transcode behaviour"
+    },
+    "config.tvdb_api_key": {
+      "type": "external",
+      "url": "https://github.com/thetvdb/v4-api"
+    },
+    "form.change_password.confirm": {
+      "none": "Self-explanatory: the new password typed again."
+    },
+    "form.change_password.current": {
+      "none": "Self-explanatory: the password you sign in with now."
+    },
+    "form.change_password.new": {
+      "type": "internal",
+      "page": "guide/setup-walkthrough",
+      "section": "1. Secure your account"
+    },
+    "form.drive.default_session": {
+      "type": "internal",
+      "page": "guide/configuring-arm",
+      "section": "Rip presets, transcode presets, and sessions"
+    },
+    "form.drive.disc_enum_timeout": {
+      "none": "Explained by the help text under the field; no docs page covers pre-scan tuning."
+    },
+    "form.drive.name": {
+      "type": "internal",
+      "page": "guide/setup-walkthrough",
+      "section": "3. Drives"
+    },
+    "form.drive.prescan_cache_mb": {
+      "none": "Explained by the help text under the field; no docs page covers pre-scan tuning."
+    },
+    "form.drive.prescan_retries": {
+      "none": "Explained by the help text under the field; no docs page covers pre-scan tuning."
+    },
+    "form.drive.prescan_timeout": {
+      "none": "Explained by the help text under the field; no docs page covers pre-scan tuning."
+    },
+    "form.drive.rip_speed": {
+      "none": "Explained by the help text under the field; no docs page covers drive read speed."
+    },
+    "form.drive.uhd_capable": {
+      "type": "internal",
+      "page": "guide/setup-walkthrough",
+      "section": "3. Drives"
+    },
+    "form.interface.dashboard_view": {
+      "type": "internal",
+      "page": "guide/web-ui",
+      "section": "Dashboard"
+    },
+    "form.interface.show_stats": {
+      "none": "Explained by the card text; a display preference kept in this browser only."
+    },
+    "form.notify_channel.event_body": {
+      "type": "internal",
+      "page": "guide/notification-scripts",
+      "section": "Per-event overrides"
+    },
+    "form.notify_channel.event_input": {
+      "type": "internal",
+      "page": "guide/notification-scripts",
+      "section": "Per-event overrides"
+    },
+    "form.notify_channel.event_title": {
+      "type": "internal",
+      "page": "guide/notification-scripts",
+      "section": "Per-event overrides"
+    },
+    "form.notify_channel.label": {
+      "none": "Self-explanatory: the channel's display name."
+    },
+    "form.notify_channel.script": {
+      "type": "internal",
+      "page": "guide/notification-scripts",
+      "section": "Where scripts live"
+    },
+    "form.notify_channel.timeout": {
+      "type": "internal",
+      "page": "guide/notification-scripts",
+      "section": "Failures and timeouts"
+    },
+    "form.rip_preset.identification_mode": {
+      "type": "internal",
+      "page": "guide/configuring-arm",
+      "section": "Rip presets, transcode presets, and sessions"
+    },
+    "form.rip_preset.max_duration": {
+      "none": "Explained by the custom filters hint above the fields; no docs page covers track filters."
+    },
+    "form.rip_preset.media_type": {
+      "none": "Self-explanatory: the kind of disc the item applies to; it cannot change after create."
+    },
+    "form.rip_preset.min_duration": {
+      "none": "Explained by the custom filters hint above the fields; no docs page covers track filters."
+    },
+    "form.rip_preset.name": {
+      "none": "Self-explanatory: the preset's display name."
+    },
+    "form.rip_preset.output_mode": {
+      "type": "internal",
+      "page": "guide/configuring-arm",
+      "section": "Rip presets, transcode presets, and sessions"
+    },
+    "form.rip_preset.title_allowlist": {
+      "none": "Explained by the custom filters hint above the fields; no docs page covers track filters."
+    },
+    "form.rip_preset.title_blocklist": {
+      "none": "Explained by the custom filters hint above the fields; no docs page covers track filters."
+    },
+    "form.rip_preset.track_selection": {
+      "type": "internal",
+      "page": "guide/configuring-arm",
+      "section": "Rip presets, transcode presets, and sessions"
+    },
+    "form.session.media_type": {
+      "none": "Self-explanatory: the kind of disc the item applies to; it cannot change after create."
+    },
+    "form.session.name": {
+      "none": "Self-explanatory: the session's display name."
+    },
+    "form.session.output_path": {
+      "type": "internal",
+      "page": "guide/web-ui",
+      "section": "Output path tokens"
+    },
+    "form.session.overrides": {
+      "none": "Advanced field with no docs page yet; the placeholder shows the JSON shape it takes."
+    },
+    "form.session.rip_preset": {
+      "type": "internal",
+      "page": "guide/configuring-arm",
+      "section": "Rip presets, transcode presets, and sessions"
+    },
+    "form.session.transcode_preset": {
+      "type": "internal",
+      "page": "guide/configuring-arm",
+      "section": "Rip presets, transcode presets, and sessions"
+    },
+    "form.transcode_preset.container": {
+      "none": "Self-explanatory: the output file format, listed by its extension."
+    },
+    "form.transcode_preset.encoder": {
+      "type": "internal",
+      "page": "guide/hardware-transcoding",
+      "section": "The encoder catalog"
+    },
+    "form.transcode_preset.extra_args": {
+      "type": "external",
+      "url": "https://handbrake.fr/docs/en/latest/cli/command-line-reference.html"
+    },
+    "form.transcode_preset.media_type": {
+      "none": "Self-explanatory: the kind of disc the item applies to; it cannot change after create."
+    },
+    "form.transcode_preset.name": {
+      "none": "Self-explanatory: the preset's display name."
+    },
+    "form.transcode_preset.preset_ref": {
+      "type": "external",
+      "url": "https://handbrake.fr/docs/en/latest/technical/official-presets.html"
+    },
+    "form.transcode_preset.tool": {
+      "type": "internal",
+      "page": "guide/configuring-arm",
+      "section": "Rip presets, transcode presets, and sessions"
+    },
+    "form.users.guest_access": {
+      "type": "internal",
+      "page": "guide/setup-walkthrough",
+      "section": "1. Secure your account"
+    },
+    "handbrake.family.default": {
+      "type": "external",
+      "url": "https://handbrake.fr/docs/en/latest/technical/video-presets-tunes.html"
+    },
+    "handbrake.family.nvenc": {
+      "type": "external",
+      "url": "https://handbrake.fr/docs/en/latest/technical/video-nvenc.html"
+    },
+    "handbrake.family.qsv": {
+      "type": "external",
+      "url": "https://handbrake.fr/docs/en/latest/technical/video-qsv.html"
+    },
+    "handbrake.family.vcn": {
+      "type": "external",
+      "url": "https://handbrake.fr/docs/en/latest/technical/video-vcn.html"
+    },
+    "handbrake.group.audio.Names": {
+      "type": "external",
+      "url": "https://handbrake.fr/docs/en/latest/advanced/audio-subtitle-defaults.html"
+    },
+    "handbrake.group.audio.Passthru": {
+      "type": "external",
+      "url": "https://handbrake.fr/docs/en/latest/advanced/audio-subtitle-defaults.html"
+    },
+    "handbrake.group.audio.Track selection": {
+      "type": "external",
+      "url": "https://handbrake.fr/docs/en/latest/advanced/audio-subtitle-defaults.html"
+    },
+    "handbrake.group.audio.Track settings": {
+      "type": "external",
+      "url": "https://handbrake.fr/docs/en/latest/advanced/audio-subtitle-defaults.html"
+    },
+    "handbrake.group.audio.Tracks": {
+      "type": "external",
+      "url": "https://handbrake.fr/docs/en/latest/advanced/audio-subtitle-defaults.html"
+    },
+    "handbrake.group.chapters.Chapters": {
+      "type": "external",
+      "url": "https://handbrake.fr/docs/en/latest/advanced/chapter-markers.html"
+    },
+    "handbrake.group.dimensions.Cropping": {
+      "type": "external",
+      "url": "https://handbrake.fr/docs/en/latest/advanced/resizing-video.html"
+    },
+    "handbrake.group.dimensions.Orientation": {
+      "type": "external",
+      "url": "https://handbrake.fr/docs/en/latest/advanced/resizing-video.html"
+    },
+    "handbrake.group.dimensions.Padding": {
+      "type": "external",
+      "url": "https://handbrake.fr/docs/en/latest/advanced/resizing-video.html"
+    },
+    "handbrake.group.dimensions.Pixel aspect": {
+      "type": "external",
+      "url": "https://handbrake.fr/docs/en/latest/technical/anamorphic-guide.html"
+    },
+    "handbrake.group.dimensions.Size": {
+      "type": "external",
+      "url": "https://handbrake.fr/docs/en/latest/advanced/resizing-video.html"
+    },
+    "handbrake.group.filters.Chroma smooth": {
+      "type": "external",
+      "url": "https://handbrake.fr/docs/en/latest/technical/filters-summary.html"
+    },
+    "handbrake.group.filters.Colorspace": {
+      "type": "external",
+      "url": "https://handbrake.fr/docs/en/latest/technical/filters-summary.html"
+    },
+    "handbrake.group.filters.Deblock": {
+      "type": "external",
+      "url": "https://handbrake.fr/docs/en/latest/technical/filters-summary.html"
+    },
+    "handbrake.group.filters.Deinterlace": {
+      "type": "external",
+      "url": "https://handbrake.fr/docs/en/latest/technical/filters-summary.html"
+    },
+    "handbrake.group.filters.Denoise": {
+      "type": "external",
+      "url": "https://handbrake.fr/docs/en/latest/technical/filters-summary.html"
+    },
+    "handbrake.group.filters.Detelecine": {
+      "type": "external",
+      "url": "https://handbrake.fr/docs/en/latest/technical/filters-summary.html"
+    },
+    "handbrake.group.filters.General": {
+      "type": "external",
+      "url": "https://handbrake.fr/docs/en/latest/technical/filters-summary.html"
+    },
+    "handbrake.group.filters.Interlace detection": {
+      "type": "external",
+      "url": "https://handbrake.fr/docs/en/latest/technical/filters-summary.html"
+    },
+    "handbrake.group.filters.Sharpen": {
+      "type": "external",
+      "url": "https://handbrake.fr/docs/en/latest/technical/filters-summary.html"
+    },
+    "handbrake.group.subtitles.Burn in": {
+      "type": "external",
+      "url": "https://handbrake.fr/docs/en/latest/advanced/audio-subtitle-defaults.html"
+    },
+    "handbrake.group.subtitles.Track selection": {
+      "type": "external",
+      "url": "https://handbrake.fr/docs/en/latest/advanced/audio-subtitle-defaults.html"
+    },
+    "handbrake.group.summary.Container": {
+      "type": "external",
+      "url": "https://handbrake.fr/docs/en/latest/advanced/metadata-passthru.html"
+    },
+    "handbrake.group.video.Color": {
+      "type": "external",
+      "url": "https://handbrake.fr/docs/en/latest/technical/hdr.html"
+    },
+    "handbrake.group.video.Encoder": {
+      "type": "external",
+      "url": "https://handbrake.fr/docs/en/latest/technical/video-presets-tunes.html"
+    },
+    "handbrake.group.video.Framerate": {
+      "type": "external",
+      "url": "https://handbrake.fr/docs/en/latest/technical/frame-rates.html"
+    },
+    "handbrake.group.video.Rate control": {
+      "type": "external",
+      "url": "https://handbrake.fr/docs/en/latest/technical/video-cq-vs-abr.html"
+    },
+    "notify.discord.avatar": {
+      "type": "external",
+      "url": "https://appriseit.com/services/discord/#parameter-breakdown"
+    },
+    "notify.discord.avatar_url": {
+      "type": "external",
+      "url": "https://appriseit.com/services/discord/#parameter-breakdown"
+    },
+    "notify.discord.fields": {
+      "type": "external",
+      "url": "https://appriseit.com/services/discord/#parameter-breakdown"
+    },
+    "notify.discord.flags": {
+      "type": "external",
+      "url": "https://appriseit.com/services/discord/#parameter-breakdown"
+    },
+    "notify.discord.footer": {
+      "type": "external",
+      "url": "https://appriseit.com/services/discord/#parameter-breakdown"
+    },
+    "notify.discord.footer_logo": {
+      "type": "external",
+      "url": "https://appriseit.com/services/discord/#parameter-breakdown"
+    },
+    "notify.discord.format": {
+      "type": "external",
+      "url": "https://appriseit.com/services/discord/#parameter-breakdown"
+    },
+    "notify.discord.href": {
+      "type": "external",
+      "url": "https://appriseit.com/services/discord/#parameter-breakdown"
+    },
+    "notify.discord.image": {
+      "type": "external",
+      "url": "https://appriseit.com/services/discord/#parameter-breakdown"
+    },
+    "notify.discord.ping": {
+      "type": "external",
+      "url": "https://appriseit.com/services/discord/#parameter-breakdown"
+    },
+    "notify.discord.thread": {
+      "type": "external",
+      "url": "https://appriseit.com/services/discord/#parameter-breakdown"
+    },
+    "notify.discord.tts": {
+      "type": "external",
+      "url": "https://appriseit.com/services/discord/#parameter-breakdown"
+    },
+    "notify.discord.webhook_id": {
+      "type": "external",
+      "url": "https://appriseit.com/services/discord/#parameter-breakdown"
+    },
+    "notify.discord.webhook_token": {
+      "type": "external",
+      "url": "https://appriseit.com/services/discord/#parameter-breakdown"
+    },
+    "notify.gotifys.format": {
+      "type": "external",
+      "url": "https://appriseit.com/services/gotify/#parameter-breakdown"
+    },
+    "notify.gotifys.host": {
+      "type": "external",
+      "url": "https://appriseit.com/services/gotify/#parameter-breakdown"
+    },
+    "notify.gotifys.priority": {
+      "type": "external",
+      "url": "https://appriseit.com/services/gotify/#parameter-breakdown"
+    },
+    "notify.gotifys.token": {
+      "type": "external",
+      "url": "https://appriseit.com/services/gotify/#parameter-breakdown"
+    },
+    "notify.ifttt.events": {
+      "type": "external",
+      "url": "https://appriseit.com/services/ifttt/#parameter-breakdown"
+    },
+    "notify.ifttt.format": {
+      "type": "external",
+      "url": "https://appriseit.com/services/ifttt/#parameter-breakdown"
+    },
+    "notify.ifttt.webhook_id": {
+      "type": "external",
+      "url": "https://appriseit.com/services/ifttt/#parameter-breakdown"
+    },
+    "notify.mailtos.bcc": {
+      "type": "external",
+      "url": "https://appriseit.com/services/email/#parameter-breakdown"
+    },
+    "notify.mailtos.cc": {
+      "type": "external",
+      "url": "https://appriseit.com/services/email/#parameter-breakdown"
+    },
+    "notify.mailtos.format": {
+      "type": "external",
+      "url": "https://appriseit.com/services/email/#parameter-breakdown"
+    },
+    "notify.mailtos.from": {
+      "type": "external",
+      "url": "https://appriseit.com/services/email/#parameter-breakdown"
+    },
+    "notify.mailtos.host": {
+      "type": "external",
+      "url": "https://appriseit.com/services/email/#parameter-breakdown"
+    },
+    "notify.mailtos.mode": {
+      "type": "external",
+      "url": "https://appriseit.com/services/email/#parameter-breakdown"
+    },
+    "notify.mailtos.name": {
+      "type": "external",
+      "url": "https://appriseit.com/services/email/#parameter-breakdown"
+    },
+    "notify.mailtos.pgp": {
+      "type": "external",
+      "url": "https://appriseit.com/services/email/#parameter-breakdown"
+    },
+    "notify.mailtos.pgpkey": {
+      "type": "external",
+      "url": "https://appriseit.com/services/email/#parameter-breakdown"
+    },
+    "notify.mailtos.reply": {
+      "type": "external",
+      "url": "https://appriseit.com/services/email/#parameter-breakdown"
+    },
+    "notify.mailtos.smtp": {
+      "type": "external",
+      "url": "https://appriseit.com/services/email/#parameter-breakdown"
+    },
+    "notify.mailtos.to": {
+      "type": "external",
+      "url": "https://appriseit.com/services/email/#parameter-breakdown"
+    },
+    "notify.matrixs.discovery": {
+      "type": "external",
+      "url": "https://appriseit.com/services/matrix/#parameter-breakdown"
+    },
+    "notify.matrixs.e2ee": {
+      "type": "external",
+      "url": "https://appriseit.com/services/matrix/#parameter-breakdown"
+    },
+    "notify.matrixs.format": {
+      "type": "external",
+      "url": "https://appriseit.com/services/matrix/#parameter-breakdown"
+    },
+    "notify.matrixs.host": {
+      "type": "external",
+      "url": "https://appriseit.com/services/matrix/#parameter-breakdown"
+    },
+    "notify.matrixs.hsreq": {
+      "type": "external",
+      "url": "https://appriseit.com/services/matrix/#parameter-breakdown"
+    },
+    "notify.matrixs.image": {
+      "type": "external",
+      "url": "https://appriseit.com/services/matrix/#parameter-breakdown"
+    },
+    "notify.matrixs.mode": {
+      "type": "external",
+      "url": "https://appriseit.com/services/matrix/#parameter-breakdown"
+    },
+    "notify.matrixs.msgtype": {
+      "type": "external",
+      "url": "https://appriseit.com/services/matrix/#parameter-breakdown"
+    },
+    "notify.matrixs.path": {
+      "type": "external",
+      "url": "https://appriseit.com/services/matrix/#parameter-breakdown"
+    },
+    "notify.matrixs.token": {
+      "type": "external",
+      "url": "https://appriseit.com/services/matrix/#parameter-breakdown"
+    },
+    "notify.matrixs.version": {
+      "type": "external",
+      "url": "https://appriseit.com/services/matrix/#parameter-breakdown"
+    },
+    "notify.ntfys.actions": {
+      "type": "external",
+      "url": "https://appriseit.com/services/ntfy/#parameter-breakdown"
+    },
+    "notify.ntfys.attach": {
+      "type": "external",
+      "url": "https://appriseit.com/services/ntfy/#parameter-breakdown"
+    },
+    "notify.ntfys.auth": {
+      "type": "external",
+      "url": "https://appriseit.com/services/ntfy/#parameter-breakdown"
+    },
+    "notify.ntfys.avatar_url": {
+      "type": "external",
+      "url": "https://appriseit.com/services/ntfy/#parameter-breakdown"
+    },
+    "notify.ntfys.click": {
+      "type": "external",
+      "url": "https://appriseit.com/services/ntfy/#parameter-breakdown"
+    },
+    "notify.ntfys.delay": {
+      "type": "external",
+      "url": "https://appriseit.com/services/ntfy/#parameter-breakdown"
+    },
+    "notify.ntfys.email": {
+      "type": "external",
+      "url": "https://appriseit.com/services/ntfy/#parameter-breakdown"
+    },
+    "notify.ntfys.filename": {
+      "type": "external",
+      "url": "https://appriseit.com/services/ntfy/#parameter-breakdown"
+    },
+    "notify.ntfys.format": {
+      "type": "external",
+      "url": "https://appriseit.com/services/ntfy/#parameter-breakdown"
+    },
+    "notify.ntfys.image": {
+      "type": "external",
+      "url": "https://appriseit.com/services/ntfy/#parameter-breakdown"
+    },
+    "notify.ntfys.mode": {
+      "type": "external",
+      "url": "https://appriseit.com/services/ntfy/#parameter-breakdown"
+    },
+    "notify.ntfys.priority": {
+      "type": "external",
+      "url": "https://appriseit.com/services/ntfy/#parameter-breakdown"
+    },
+    "notify.ntfys.xtags": {
+      "type": "external",
+      "url": "https://appriseit.com/services/ntfy/#parameter-breakdown"
+    },
+    "notify.pbul.accesstoken": {
+      "type": "external",
+      "url": "https://appriseit.com/services/pushbullet/#parameter-breakdown"
+    },
+    "notify.pbul.format": {
+      "type": "external",
+      "url": "https://appriseit.com/services/pushbullet/#parameter-breakdown"
+    },
+    "notify.pover.expire": {
+      "type": "external",
+      "url": "https://appriseit.com/services/pushover/#parameter-breakdown"
+    },
+    "notify.pover.format": {
+      "type": "external",
+      "url": "https://appriseit.com/services/pushover/#parameter-breakdown"
+    },
+    "notify.pover.priority": {
+      "type": "external",
+      "url": "https://appriseit.com/services/pushover/#parameter-breakdown"
+    },
+    "notify.pover.retry": {
+      "type": "external",
+      "url": "https://appriseit.com/services/pushover/#parameter-breakdown"
+    },
+    "notify.pover.sound": {
+      "type": "external",
+      "url": "https://appriseit.com/services/pushover/#parameter-breakdown"
+    },
+    "notify.pover.token": {
+      "type": "external",
+      "url": "https://appriseit.com/services/pushover/#parameter-breakdown"
+    },
+    "notify.pover.url": {
+      "type": "external",
+      "url": "https://appriseit.com/services/pushover/#parameter-breakdown"
+    },
+    "notify.pover.url_title": {
+      "type": "external",
+      "url": "https://appriseit.com/services/pushover/#parameter-breakdown"
+    },
+    "notify.pover.user_key": {
+      "type": "external",
+      "url": "https://appriseit.com/services/pushover/#parameter-breakdown"
+    },
+    "notify.slack.access_token": {
+      "type": "external",
+      "url": "https://appriseit.com/services/slack/#parameter-breakdown"
+    },
+    "notify.slack.blocks": {
+      "type": "external",
+      "url": "https://appriseit.com/services/slack/#parameter-breakdown"
+    },
+    "notify.slack.footer": {
+      "type": "external",
+      "url": "https://appriseit.com/services/slack/#parameter-breakdown"
+    },
+    "notify.slack.format": {
+      "type": "external",
+      "url": "https://appriseit.com/services/slack/#parameter-breakdown"
+    },
+    "notify.slack.image": {
+      "type": "external",
+      "url": "https://appriseit.com/services/slack/#parameter-breakdown"
+    },
+    "notify.slack.mode": {
+      "type": "external",
+      "url": "https://appriseit.com/services/slack/#parameter-breakdown"
+    },
+    "notify.slack.timestamp": {
+      "type": "external",
+      "url": "https://appriseit.com/services/slack/#parameter-breakdown"
+    },
+    "notify.slack.token_a": {
+      "type": "external",
+      "url": "https://appriseit.com/services/slack/#parameter-breakdown"
+    },
+    "notify.slack.token_b": {
+      "type": "external",
+      "url": "https://appriseit.com/services/slack/#parameter-breakdown"
+    },
+    "notify.slack.token_c": {
+      "type": "external",
+      "url": "https://appriseit.com/services/slack/#parameter-breakdown"
+    },
+    "notify.tgram.bot_token": {
+      "type": "external",
+      "url": "https://appriseit.com/services/telegram/#parameter-breakdown"
+    },
+    "notify.tgram.content": {
+      "type": "external",
+      "url": "https://appriseit.com/services/telegram/#parameter-breakdown"
+    },
+    "notify.tgram.detect": {
+      "type": "external",
+      "url": "https://appriseit.com/services/telegram/#parameter-breakdown"
+    },
+    "notify.tgram.format": {
+      "type": "external",
+      "url": "https://appriseit.com/services/telegram/#parameter-breakdown"
+    },
+    "notify.tgram.image": {
+      "type": "external",
+      "url": "https://appriseit.com/services/telegram/#parameter-breakdown"
+    },
+    "notify.tgram.mdv": {
+      "type": "external",
+      "url": "https://appriseit.com/services/telegram/#parameter-breakdown"
+    },
+    "notify.tgram.preview": {
+      "type": "external",
+      "url": "https://appriseit.com/services/telegram/#parameter-breakdown"
+    },
+    "notify.tgram.silent": {
+      "type": "external",
+      "url": "https://appriseit.com/services/telegram/#parameter-breakdown"
+    },
+    "notify.tgram.topic": {
+      "type": "external",
+      "url": "https://appriseit.com/services/telegram/#parameter-breakdown"
+    }
+  }
+}

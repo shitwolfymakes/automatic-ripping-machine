@@ -66,7 +66,7 @@ def _probe_outcome(state: MakemkvKeyState, returncode: int | None) -> tuple[Make
 async def probe_makemkv_key(key: str | None) -> tuple[MakemkvKeyState, str | None]:
     """Disc-free makemkv key probe. Runs `makemkvcon -r --cache=1 info disc:9999`
     (no disc, no hardware) and classifies the startup MSG codes. NEVER raises —
-    every failure maps to a state. See the 2026-06-12 makemkv-key-validity spec."""
+    every failure maps to a state."""
     if _is_malformed_key(key):
         return MakemkvKeyState.FORMAT_INVALID, "configured key is not a MakeMKV serial (expected M-…/T-…)"
 

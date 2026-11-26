@@ -12,7 +12,7 @@ class MakemkvKeyStatusReport(BaseModel):
 
     state: MakemkvKeyState
     detail: str | None = None
-    # Reporting drive, for setup's "checked by" (setup spec §6.7). Optional so
+    # Reporting drive, for setup's "checked by". Optional so
     # rippers older than the backend still validate.
     drive_id: str | None = None
 
@@ -102,8 +102,8 @@ class ScanResult(BaseModel):
     musicbrainz_disc_id: str | None = None
     cd_toc: str | None = None
     # All disc fingerprints the scan was able to compute. Drives 1337server
-    # lookup (crc64), and reverse "have we seen this disc before?" lookup
-    # in future flows. Empty when nothing fingerprintable.
+    # lookup (crc64) and the reverse "have we seen this disc before?" lookup.
+    # Empty when nothing fingerprintable.
     fingerprints: list[DiscFingerprintInput] = Field(default_factory=list)
     # Studio disc title + set position from the Blu-ray BDMT file, when present.
     bd_meta: BdDiscMeta | None = None

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { renderComponent, screen, cleanup } from '$lib/test-utils';
+import { renderComponent, screen, cleanup } from '$lib/testing/render';
 import type { SetupView } from '$lib/types/api.gen';
 
 vi.mock('$lib/api/settings', () => ({ fetchSettings: () => Promise.reject(new Error('offline')) }));

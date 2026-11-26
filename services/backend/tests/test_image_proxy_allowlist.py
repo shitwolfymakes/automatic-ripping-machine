@@ -1,4 +1,4 @@
-"""Tier-3: ARM_EXTRA_IMAGE_HOSTS adds (never replaces) image-proxy allowed hosts."""
+"""ARM_EXTRA_IMAGE_HOSTS adds (never replaces) image-proxy allowed hosts."""
 
 from arm_backend.config import Settings
 

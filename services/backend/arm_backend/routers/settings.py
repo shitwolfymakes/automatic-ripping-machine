@@ -1,6 +1,6 @@
 """Settings page metadata + read-only infra values. The settings UI fetches
 the schema (how to render) here and the values from /api/config; infra values
-(read-only, non-secret env settings) come from /api/settings/infra (Task 4)."""
+(read-only, non-secret env settings) come from /api/settings/infra."""
 
 from collections import OrderedDict
 
@@ -15,7 +15,7 @@ from arm_common.schemas import SettingsGroup, SettingsSchemaResponse
 router = APIRouter(prefix="/api/settings", tags=["settings"])
 
 # Group display order for the settings page.
-_GROUP_ORDER = ["Identification", "Keys", "Ripping", "Transcoding", "Notifications", "System"]
+_GROUP_ORDER = ["Identification", "Keys", "Ripping", "Defaults", "Transcoding", "Notifications", "System"]
 
 
 # Explicit allowlist: only these env Settings are surfaced read-only. An

@@ -11,7 +11,7 @@
 //   the finish step never calls go() after completing.
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { tick } from 'svelte';
-import { renderComponent, screen, fireEvent, waitFor, within, cleanup } from '$lib/test-utils';
+import { renderComponent, screen, fireEvent, waitFor, within, cleanup } from '$lib/testing/render';
 import type { SetupStep, SetupView } from '$lib/types/api.gen';
 import { setupState } from '$lib/stores/setup.svelte';
 import { stubState } from './fixtures/setup-step-stub';

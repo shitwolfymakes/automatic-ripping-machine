@@ -1,4 +1,4 @@
-"""G-01 (gap analysis §5.1): session ROUTING is separate from auto-apply
+"""Session ROUTING is separate from auto-apply
 PERMISSION.
 
 `resolve_routed_session_id` answers "which session is routed to this job"
@@ -23,6 +23,8 @@ from arm_common import (
     JobStatus,
     MediaType,
     Session,
+    SessionApplication,
+    SessionApplicationStatus,
     SessionRoute,
 )
 
@@ -119,7 +121,53 @@ async def test_auto_apply_pending_choice_bypasses_flag() -> None:
     assert await auto_apply_allowed(db, _job(pending="ses_chosen")) is True  # type: ignore[arg-type]
 
 
-# --- G-02/G-17: session_routes table, resolution order 3-4 --------------------
+@pytest.mark.asyncio
+async def test_auto_apply_waits_for_an_unidentified_disc() -> None:
+    """An unidentified disc is never queued unattended under its volume
+    label, even with auto-apply on."""
+    db = FakeSession()
+    _seed(db, default_session_id="ses_default", flag=True)
+    job = _job()
+    job.metadata_json = {"flags": {"unidentified": True}}
+    assert await auto_apply_allowed(db, job) is False  # type: ignore[arg-type]
+
+
+@pytest.mark.asyncio
+async def test_auto_apply_pending_choice_applies_to_an_unidentified_disc() -> None:
+    """The operator's per-rip choice still applies to an unidentified disc."""
+    db = FakeSession()
+    _seed(db, default_session_id=None, flag=False)
+    job = _job(pending="ses_chosen")
+    job.metadata_json = {"flags": {"unidentified": True}}
+    assert await auto_apply_allowed(db, job) is True  # type: ignore[arg-type]
+
+
+def _application(status: SessionApplicationStatus) -> SessionApplication:
+    return SessionApplication(
+        id="sap_1", session_id="ses_hand", job_id="job_01JZXR7K3M5Q8N4VWA00000001", status=status, overwrite=False
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("pending", [None, "ses_chosen"])
+async def test_auto_apply_never_adds_to_a_job_with_an_application(pending: str | None) -> None:
+    """An application the job already has (a hand-applied session) is the
+    operator's choice; auto-apply adds nothing next to it."""
+    db = FakeSession()
+    _seed(db, default_session_id="ses_default", flag=True)
+    db.rows["session_applications"] = [_application(SessionApplicationStatus.QUEUED)]
+    assert await auto_apply_allowed(db, _job(pending=pending)) is False  # type: ignore[arg-type]
+
+
+@pytest.mark.asyncio
+async def test_auto_apply_ignores_cancelled_applications() -> None:
+    db = FakeSession()
+    _seed(db, default_session_id="ses_default", flag=True)
+    db.rows["session_applications"] = [_application(SessionApplicationStatus.CANCELLED)]
+    assert await auto_apply_allowed(db, _job()) is True  # type: ignore[arg-type]
+
+
+# --- session_routes table, resolution order 3-4 --------------------
 
 
 @pytest.mark.asyncio
@@ -141,7 +189,7 @@ async def test_route_resolves_by_media_and_disc_type() -> None:
 
 @pytest.mark.asyncio
 async def test_drive_default_overrides_route_when_compatible() -> None:
-    """The per-drive override (step 2) still wins over any route (step 3-4)
+    """The per-drive override still wins over any route
     when the drive default's media_type is compatible with the job's."""
     db = FakeSession()
     _seed(
@@ -169,7 +217,7 @@ async def test_drive_default_overrides_route_when_compatible() -> None:
 
 @pytest.mark.asyncio
 async def test_incompatible_drive_default_falls_through_to_route() -> None:
-    """I4 (G-17 unclosed): a movie drive default must not swallow a music
+    """A movie drive default must not swallow a music
     CD — when the drive default's media_type is incompatible with the job's,
     routing falls through to `session_routes`."""
     db = FakeSession()
@@ -223,7 +271,7 @@ async def test_unknown_job_media_type_still_prefers_drive_default() -> None:
 
 @pytest.mark.asyncio
 async def test_unidentified_cd_routes_as_music_past_a_video_drive_default() -> None:
-    """D-033: a CD whose MusicBrainz lookup missed keeps media_type=None,
+    """A CD whose MusicBrainz lookup missed keeps media_type=None,
     but disc_type=cd already says music. The movie drive default must not
     swallow it; the seeded (music, cd) route wins."""
     db = FakeSession()

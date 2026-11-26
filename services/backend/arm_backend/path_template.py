@@ -3,7 +3,7 @@
 Templates reference `{token}` (required) or `{token?}` (optional: dropped, with
 a wrapping ()/[] pair and one leading space, when its value is empty).
 
-The token whitelist per `MediaType` mirrors arch §02 (`docs/developers/architecture/02-job-lifecycle.md`).
+The token whitelist per `MediaType` mirrors the token table in `docs/developers/architecture/02-job-lifecycle.md`.
 Save-time validation expands the template against a synthetic context that
 populates every legal token; an empty expansion or an unknown token both
 raise `TemplateValidationError`.
@@ -23,9 +23,18 @@ class TemplateValidationError(ValueError):
     pass
 
 
-# Per-media-type allowed tokens (arch §02 token table).
+# Per-media-type allowed tokens.
 _ALLOWED_TOKENS_BY_MEDIA: dict[MediaType, set[str]] = {
-    MediaType.MOVIE: {"title", "year", "track", "duration_human", "transcode_slug", "ext"},
+    MediaType.MOVIE: {
+        "title",
+        "year",
+        "edition",
+        "track",
+        "track_label",
+        "duration_human",
+        "transcode_slug",
+        "ext",
+    },
     MediaType.TV: {
         "show",
         "year",
@@ -49,7 +58,9 @@ _SYNTHETIC_CONTEXTS: dict[MediaType, dict[str, str]] = {
     MediaType.MOVIE: {
         "title": "Iron Man",
         "year": "2008",
+        "edition": "Director's Cut",
         "track": "01",
+        "track_label": "Track 01",
         "duration_human": "02h05m",
         "transcode_slug": "plex-1080p-h265",
         "ext": "mkv",
@@ -195,7 +206,9 @@ _TOKEN_DESCRIPTIONS: dict[str, str] = {
     "episode": "Episode number, zero-padded (01, or 01-E02 for a two-episode title)",
     "episode_title": "Episode title",
     "disc": "Disc number within the set",
-    "track": "Track number, zero-padded",
+    "track": "Track number, zero-padded (video tracks count from 1)",
+    "track_label": "Track NN for a track with no title of its own, empty otherwise. Write ({track_label?}) to drop it",
+    "edition": "The track's edition, e.g. Director's Cut. Write [{edition?}] to drop it, with its brackets, when unset",
     "track_title": "Per-track title (music)",
     "artist": "Album artist (music)",
     "album": "Album name (music)",

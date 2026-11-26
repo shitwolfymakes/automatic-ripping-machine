@@ -2,15 +2,14 @@
 
 `notification_apprise_urls` round-trips by value but never appears in log
 output — the validation helper redacts the URL in any 400 response, and
-the handler itself logs nothing about config bodies. Phase 11 added the
-`notifications_enabled` master toggle (default False) so the UI can enable
+the handler itself logs nothing about config bodies. The
+`notifications_enabled` master toggle (default False) lets the UI enable
 or disable outbound Apprise dispatch without dropping the saved URL list.
 
-As of the notification-channels feature, `notification_apprise_urls` is
-DEPRECATED as a delivery source — the dispatcher now reads
-`notification_channels` rows (migration 0015 imported the existing list).
-The field is still accepted/returned here for backward compatibility but
-is no longer used for dispatch; `notifications_enabled` remains the global
+`notification_apprise_urls` is DEPRECATED as a delivery source — the
+dispatcher reads `notification_channels` rows. The field is still
+accepted/returned here for backward compatibility but is not used for
+dispatch; `notifications_enabled` remains the global
 master toggle. New URLs should be added as channels via /api/notifications.
 """
 
@@ -45,14 +44,13 @@ from arm_backend.min_title_length import min_title_length_seconds
 from arm_backend.constants import CONFIG_SINGLETON_ID
 from arm_common import Config, Job, JobStatus, User
 from arm_common.config_metadata import CONFIG_FIELD_META
-from arm_common.enums import PreviouslyRippedAction
+from arm_common.enums import MissMediaType, MissTitlesKept, PreviouslyRippedAction
 from arm_common.schemas import (
     ConfigUpdateRequest,
     ConfigView,
     KeyCheckRequest,
     KeyCheckResponse,
-    identity_suggestion_of,
-    previously_ripped_job_id,
+    no_countdown_reason,
 )
 from arm_common.secrets import HIDDEN_SECRET
 
@@ -62,7 +60,7 @@ logger = logging.getLogger("arm_backend.routers.config")
 
 # Secret-tier config fields, derived from the registry so a future secret field
 # auto-masks. The `& ConfigView.model_fields` guard keeps masking aligned to what's
-# actually exposed: e.g. when tvdb_api_key gains its registry+ConfigView entry (B29),
+# actually exposed: e.g. when tvdb_api_key gains its registry+ConfigView entry,
 # it masks automatically; a secret-tier field not yet on ConfigView is skipped.
 _SECRET_KEYS = frozenset(m.key for m in CONFIG_FIELD_META if m.tier == "secret") & set(ConfigView.model_fields)
 
@@ -95,6 +93,8 @@ def _to_view(cfg: Config) -> ConfigView:
         hold_for_review=bool(cfg.hold_for_review),
         manual_wait_seconds=int(cfg.manual_wait_seconds) if cfg.manual_wait_seconds is not None else 60,
         on_previously_ripped=cfg.on_previously_ripped or PreviouslyRippedAction.HOLD,
+        miss_media_type=cfg.miss_media_type or MissMediaType.MOVIE,
+        miss_titles_kept=cfg.miss_titles_kept or MissTitlesKept.ALL,
         drive_scan_interval_seconds=int(cfg.drive_scan_interval_seconds or 30),
         drive_detected_prune_days=int(cfg.drive_detected_prune_days or 7),
         # NULL falls back to the env value, exactly as the dispatcher does.
@@ -169,7 +169,7 @@ def _is_unpausing(cfg: Config, fields: dict[str, Any]) -> bool:
     # Detect un-pause (ripping_paused ON -> OFF) before applying, so we can give
     # held review-gate discs a FRESH countdown rather than resuming an already-
     # expired one (which would auto-rip the instant ripping resumes — surprising
-    # to an operator who paused to deal with it later). timed-review-gate spec §6.3.
+    # to an operator who paused to deal with it later).
     return bool(cfg.ripping_paused) and fields.get("ripping_paused") is False
 
 
@@ -184,7 +184,7 @@ def _is_reenabling_transcode(cfg: Config, fields: dict[str, Any]) -> bool:
 def _identity_sources_changed(cfg: Config, fields: dict[str, Any]) -> bool:
     # Which sources may contribute to a job's identity changed: the resolver
     # only consults the setting when it runs, so re-run it for live jobs
-    # after the commit or a disabled source's fields stay on them (D-097).
+    # after the commit or a disabled source's fields stay on them.
     return any(key in fields and fields[key] != getattr(cfg, key) for key in _IDENTITY_SOURCE_KEYS)
 
 
@@ -210,11 +210,7 @@ async def _restart_held_countdowns(session: AsyncSession) -> None:
     now = datetime.now(timezone.utc)
     held = (await session.execute(select(Job).where(col(Job.status) == JobStatus.AWAITING_REVIEW))).scalars().all()
     for job in held:
-        # A previously-ripped hold and a held suggestion have no countdown to restart.
-        if (
-            previously_ripped_job_id(job.metadata_json) is not None
-            or identity_suggestion_of(job.metadata_json) is not None
-        ):
+        if no_countdown_reason(job.metadata_json) is not None:
             continue
         job.wait_start_time = now
         session.add(job)

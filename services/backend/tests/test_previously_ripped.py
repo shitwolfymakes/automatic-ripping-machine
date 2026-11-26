@@ -1,4 +1,4 @@
-"""on_previously_ripped (D-132): a disc whose fingerprint matches an earlier rip
+"""on_previously_ripped: a disc whose fingerprint matches an earlier rip
 is held for the operator, rejected (ejected), or ripped again.
 
 Covers identify's three modes and the one-shot "Rip again" override, the held
@@ -217,7 +217,7 @@ def test_hold_overrides_the_timed_review_and_a_missed_identify() -> None:
     missed = _db(PreviouslyRippedAction.HOLD, block_on_miss=True)
     out = _identify(missed, _Hub(), miss=True).json()
     assert out["status"] == "awaiting_review"
-    assert out["title"] == "RESIDENT_EVIL_RETRIBUTION"
+    assert out["title"] == "RESIDENT EVIL RETRIBUTION"
 
 
 def test_hold_still_wins_over_a_held_suggestion() -> None:
@@ -560,6 +560,19 @@ def test_a_previously_ripped_hold_has_no_countdown_to_pause() -> None:
     assert db.rows["jobs"][1].wait_start_time is None
 
 
+def test_a_blocked_miss_has_no_countdown_to_pause() -> None:
+    db = _db(PreviouslyRippedAction.HOLD)
+    blocked = _held()
+    blocked.metadata_json = {"flags": {"unidentified": True, "blocked_miss": True}}
+    db.rows["jobs"].append(blocked)
+    client, auth = _jobs_app(db, _Hub())
+    with client:
+        r = client.post(f"/api/jobs/{blocked.id}/review-pause?paused=false", headers=auth)
+    assert r.status_code == 409
+    assert "start it" in r.json()["detail"]
+    assert blocked.wait_start_time is None
+
+
 # --- config ---------------------------------------------------------------------
 
 
@@ -616,3 +629,20 @@ def test_unpausing_does_not_start_a_countdown_on_a_suggestion_hold() -> None:
         assert client.patch("/api/config", json={"ripping_paused": False}, headers=auth).status_code == 200
     assert suggested.wait_start_time is None
     assert plain.wait_start_time is not None
+
+
+def test_unpausing_does_not_start_a_countdown_on_a_blocked_miss() -> None:
+    """A blocked miss waits for Start with no countdown; a miss parked on the
+    review countdown (unidentified too) gets a fresh one."""
+    db = _db(PreviouslyRippedAction.HOLD)
+    db.rows["config"][0].ripping_paused = True
+    blocked = _held("job_01M4R7CH6DK8PA8MPD79PATMPB")
+    blocked.metadata_json = {"flags": {"unidentified": True, "blocked_miss": True}}
+    counting = _held("job_01M4R7CH6DK8PA8MPD79PATMPC")
+    counting.metadata_json = {"flags": {"unidentified": True}}
+    db.rows["jobs"].extend([blocked, counting])
+    client, auth = _config_client(db)
+    with client:
+        assert client.patch("/api/config", json={"ripping_paused": False}, headers=auth).status_code == 200
+    assert blocked.wait_start_time is None
+    assert counting.wait_start_time is not None

@@ -1,4 +1,4 @@
-"""Provider payload -> IdentityFacts (match picker spec 3.2).
+"""Provider payload -> IdentityFacts.
 
 One pure function per provider: no I/O, never raises on odd shapes. Search
 results and the details endpoint both go through `facts_for`, so a row and
