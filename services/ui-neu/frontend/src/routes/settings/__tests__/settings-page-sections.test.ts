@@ -35,10 +35,7 @@ function drive(over: Partial<DriveView> = {}): DriveView {
 		rip_speed: null,
 		drive_mode: null,
 		uhd_capable: null,
-		prescan_cache_mb: null,
 		prescan_timeout: null,
-		prescan_retries: null,
-		disc_enum_timeout: null,
 		created_at: null,
 		updated_at: null,
 		lifecycle: 'enrolled',
@@ -948,36 +945,23 @@ describe('Settings page sections', () => {
 			expect(screen.queryByTestId('drive-lifecycle-panel')).toBeNull();
 		});
 
-		it('an enrolled card takes the prescan defaults from arm_config and the scan timeout from config', async () => {
+		it('an enrolled card takes the scan timeout placeholder from config', async () => {
 			vi.mocked(fetchDrives).mockResolvedValue([drive({ display_name: 'Main Drive' })]);
-			settingsOnce({
-				config: { ...mockConfig, default_scan_timeout_seconds: 600 },
-				arm_config: {
-					PRESCAN_CACHE_MB: '64',
-					PRESCAN_RETRIES: '5',
-					DISC_ENUM_TIMEOUT: '120'
-				}
-			});
+			settingsOnce({ config: { ...mockConfig, default_scan_timeout_seconds: 600 } });
 			await openTab('Drives');
 			await screen.findByText('Main Drive');
 			await fireEvent.click(screen.getByTitle('Drive settings'));
-			expect(screen.getByLabelText(/Pre-scan Cache/)).toHaveAttribute('placeholder', '64');
 			expect(screen.getByLabelText(/Pre-scan Timeout/)).toHaveAttribute('placeholder', '600');
-			expect(screen.getByLabelText(/Pre-scan Retries/)).toHaveAttribute('placeholder', '5');
-			expect(screen.getByLabelText(/Enum Timeout/)).toHaveAttribute('placeholder', '120');
 			expect(screen.getByRole('combobox', { name: 'Rip mode' })).toHaveTextContent('Default (Auto)');
 		});
 
-		it('an enrolled card falls back to the built-in prescan defaults and a manual global rip mode', async () => {
+		it('an enrolled card shows the default scan timeout and a manual global rip mode', async () => {
 			vi.mocked(fetchDrives).mockResolvedValue([drive({ display_name: 'Main Drive' })]);
 			settingsOnce({ config: { ...mockConfig, auto_rip_on_insert: false } });
 			await openTab('Drives');
 			await screen.findByText('Main Drive');
 			await fireEvent.click(screen.getByTitle('Drive settings'));
-			expect(screen.getByLabelText(/Pre-scan Cache/)).toHaveAttribute('placeholder', '1');
 			expect(screen.getByLabelText(/Pre-scan Timeout/)).toHaveAttribute('placeholder', '300');
-			expect(screen.getByLabelText(/Pre-scan Retries/)).toHaveAttribute('placeholder', '3');
-			expect(screen.getByLabelText(/Enum Timeout/)).toHaveAttribute('placeholder', '60');
 			expect(screen.getByRole('combobox', { name: 'Rip mode' })).toHaveTextContent('Default (Manual)');
 		});
 
