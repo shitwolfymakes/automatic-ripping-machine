@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 const deleteThemeMock = vi.fn();
 vi.mock('$lib/api/themes', () => ({
@@ -15,32 +15,15 @@ import { get } from 'svelte/store';
 import { colorScheme } from '$lib/stores/color-scheme';
 import { UserThemes } from '$lib/stores/user-themes.svelte';
 
-let confirmSpy: ReturnType<typeof vi.spyOn>;
-
 beforeEach(() => {
 	deleteThemeMock.mockReset().mockResolvedValue(undefined);
 	loadThemesMock.mockReset().mockResolvedValue(undefined);
 	colorScheme.set('blue');
-	confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
-});
-
-afterEach(() => {
-	confirmSpy.mockRestore();
 });
 
 describe('UserThemes', () => {
 	it('starts without feedback', () => {
 		expect(new UserThemes().feedback).toBeNull();
-	});
-
-	it('does nothing when the confirmation is declined', async () => {
-		confirmSpy.mockReturnValue(false);
-		const themes = new UserThemes();
-		themes.feedback = { type: 'error', message: 'old' };
-		await themes.deleteTheme('t1', 'Mine');
-		expect(confirmSpy).toHaveBeenCalledWith('Delete user theme "Mine"?');
-		expect(deleteThemeMock).not.toHaveBeenCalled();
-		expect(themes.feedback).toEqual({ type: 'error', message: 'old' });
 	});
 
 	it('resets the scheme to blue when the deleted theme was selected', async () => {

@@ -50,12 +50,13 @@ export function selectionKey(root: string, subpath: string): string {
 	return `${root}::${subpath}`;
 }
 
-// Splits a selection key back into its root and subpath. It splits on every
-// `::`, so a name that itself contains `::` loses everything after it; that
-// is bug #535 and is fixed there, not here.
+// Splits a selection key back into its root and subpath. Only the first `::`
+// separates them: root names never contain `::`, but file names may (it is
+// legal on Linux), and splitting on every `::` would cut such a name short and
+// make bulk delete or move act on the wrong path.
 export function parseSelectionKey(key: string): { root: string; subpath: string } {
-	const [root, subpath] = key.split('::');
-	return { root, subpath };
+	const sep = key.indexOf('::');
+	return { root: key.slice(0, sep), subpath: key.slice(sep + 2) };
 }
 
 // The folders the move picker offers: the directories among its entries. When

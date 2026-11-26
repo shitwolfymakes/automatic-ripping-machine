@@ -64,17 +64,22 @@ export class IsoLibraryBrowser {
 		}
 	};
 
-	loadFolders = async (): Promise<void> => {
+	/** Resolves true when this load's folders were applied, and false when it
+	 *  failed or a newer load superseded it. */
+	loadFolders = async (): Promise<boolean> => {
 		const seq = this.#begin('');
 		try {
 			const folders = await fetchIsoFolders();
-			if (seq !== this.#seq) return;
+			if (seq !== this.#seq) return false;
 			this.folderListing = folders;
 			this.hostPath = folders.host_path;
 			this.activeIndex = 0;
+			// Cleared before the caller's refocus wait, as in loadLibrary.
 			this.loading = false;
+			return true;
 		} catch (e) {
 			this.#fail(seq, e);
+			return false;
 		}
 	};
 

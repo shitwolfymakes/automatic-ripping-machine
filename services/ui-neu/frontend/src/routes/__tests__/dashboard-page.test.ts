@@ -3,7 +3,7 @@
 // #if on the error), and the counts in the ACTIVE RIPS and TRANSCODING section
 // labels (array lengths, always numbers).
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { renderComponent, screen, cleanup, waitFor, fireEvent } from '$lib/testing/render';
+import { renderComponent, screen, cleanup, waitFor, fireEvent, within } from '$lib/testing/render';
 import DashboardPage from '../+page.svelte';
 import { createJob } from '$lib/__fixtures__/job';
 
@@ -190,12 +190,12 @@ describe('Dashboard Page', () => {
 		});
 
 		it('Delete selected in the bar bulk-deletes the checked jobs', async () => {
-			vi.spyOn(window, 'confirm').mockReturnValue(true);
 			const { bulkDeleteJobs } = await import('$lib/api/jobs');
 			await renderDashboardTable();
 			const [, rowCheckbox] = screen.getAllByRole('checkbox');
 			await fireEvent.click(rowCheckbox);
 			await fireEvent.click(await screen.findByText('Delete selected'));
+			await fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Delete' }));
 			await waitFor(() => expect(bulkDeleteJobs).toHaveBeenCalledWith({ job_ids: ['job_2'] }));
 		});
 

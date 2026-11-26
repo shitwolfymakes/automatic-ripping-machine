@@ -18,7 +18,12 @@
 	let mobileName = $derived(middleTruncate(name, 26));
 </script>
 
-<span class="chip chip-info chip-sm" title={name} aria-label="{isFolder ? 'Disc folder' : 'ISO file'} {name}">
+<span
+	class="chip chip-info chip-sm"
+	role="img"
+	title={name}
+	aria-label={`${isFolder ? 'Disc folder' : 'ISO file'} ${name}`}
+>
 	<span class="inline-flex items-center gap-1 iso-source-chip-lead">
 		<Glyph name={isFolder ? 'folder' : 'disc-3'} class="h-3 w-3" />
 		{isFolder ? 'Folder' : 'ISO'}

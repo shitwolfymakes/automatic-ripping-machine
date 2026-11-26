@@ -287,71 +287,82 @@
 		</div>
 	{/if}
 
-	<!-- File listing -->
+	<!-- File listing; with no root configured the empty-roots message stands in for it. -->
 	<HoldUntil ready={rootsSettled}>
-		<LoadState
-			data={browser.listing}
-			loading={browser.loading && !browser.listing}
-			error={browser.filesError}
-			isEmpty={() => false}
-		>
-			{#snippet loadingSlot()}
-				<div class="files-page-listing">
-					<table class="table">
-						<thead>
-							<tr>
-								<th class="table-header w-10"></th>
-								<th class="table-header">Name</th>
-								<th class="table-header files-page-cell-lg">Permissions</th>
-								<th class="table-header table-right">Size</th>
-								<th class="table-header files-page-cell-md">Modified</th>
-								<th class="table-header table-right">Actions</th>
-							</tr>
-						</thead>
-						<tbody>
-							{#each Array(8) as _, i (i)}
-								<FileRow />
-							{/each}
-						</tbody>
-					</table>
-				</div>
-			{/snippet}
-			{#snippet ready(lst)}
-				<div class="files-page-listing">
-					{#if lst.parent_subpath != null}
-						<button
-							type="button"
-							onclick={() => browser.navigate(browser.current.root, lst.parent_subpath!)}
-							class="flex w-full items-center gap-2 files-page-nav-row"
-						>
-							<span class="w-10"></span>
-							<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 17l-5-5m0 0l5-5m-5 5h12" />
-							</svg>
-							..
-						</button>
-					{/if}
+		{#if browser.noRootsConfigured}
+			<div class="panel files-page-empty-panel">
+				<p class="files-page-empty-panel-text">No media directories configured</p>
+			</div>
+		{:else}
+			<LoadState
+				data={browser.listing}
+				loading={browser.loading && !browser.listing}
+				error={browser.filesError}
+				isEmpty={() => false}
+			>
+				{#snippet loadingSlot()}
+					<div class="files-page-listing">
+						<table class="table">
+							<thead>
+								<tr>
+									<th class="table-header w-10"></th>
+									<th class="table-header">Name</th>
+									<th class="table-header files-page-cell-lg">Permissions</th>
+									<th class="table-header table-right">Size</th>
+									<th class="table-header files-page-cell-md">Modified</th>
+									<th class="table-header table-right">Actions</th>
+								</tr>
+							</thead>
+							<tbody>
+								{#each Array(8) as _, i (i)}
+									<FileRow />
+								{/each}
+							</tbody>
+						</table>
+					</div>
+				{/snippet}
+				{#snippet ready(lst)}
+					<div class="files-page-listing">
+						{#if lst.parent_subpath != null}
+							<button
+								type="button"
+								onclick={() => browser.navigate(browser.current.root, lst.parent_subpath!)}
+								class="flex w-full items-center gap-2 files-page-nav-row"
+							>
+								<span class="w-10"></span>
+								<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+									<path
+										stroke-linecap="round"
+										stroke-linejoin="round"
+										stroke-width="2"
+										d="M11 17l-5-5m0 0l5-5m-5 5h12"
+									/>
+								</svg>
+								..
+							</button>
+						{/if}
 
-					<!-- Inline new folder row -->
-					{#if creatingFolder}
-						<NewFolderRow bind:name={newFolderName} onconfirm={confirmNewFolder} oncancel={cancelNewFolder} />
-					{/if}
+						<!-- Inline new folder row -->
+						{#if creatingFolder}
+							<NewFolderRow bind:name={newFolderName} onconfirm={confirmNewFolder} oncancel={cancelNewFolder} />
+						{/if}
 
-					{#if browser.listing?.unavailable}
-						<div class="files-page-empty">This root is not mounted on the server.</div>
-					{:else if browser.sortedEntries.length === 0 && !creatingFolder}
-						<div class="files-page-empty">This directory is empty</div>
-					{:else if browser.sortedEntries.length > 0}
-						<FilesTable
-							{browser}
-							onrename={handleRename}
-							ondelete={handleDeleteRequest}
-							onfixpermissions={handleFixPermissions}
-						/>
-					{/if}
-				</div>
-			{/snippet}
-		</LoadState>
+						{#if browser.listing?.unavailable}
+							<div class="files-page-empty">This root is not mounted on the server.</div>
+						{:else if browser.sortedEntries.length === 0 && !creatingFolder}
+							<div class="files-page-empty">This directory is empty</div>
+						{:else if browser.sortedEntries.length > 0}
+							<FilesTable
+								{browser}
+								onrename={handleRename}
+								ondelete={handleDeleteRequest}
+								onfixpermissions={handleFixPermissions}
+							/>
+						{/if}
+					</div>
+				{/snippet}
+			</LoadState>
+		{/if}
 	</HoldUntil>
 </div>
 
@@ -453,6 +464,13 @@
 	}
 	.files-page-nav-row:hover {
 		background: var(--color-primary-tint-1);
+	}
+	.files-page-empty-panel {
+		padding: 2rem;
+		text-align: center;
+	}
+	.files-page-empty-panel-text {
+		color: var(--color-text-muted);
 	}
 	.files-page-empty {
 		padding: 2rem;

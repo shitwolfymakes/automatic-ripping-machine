@@ -58,6 +58,15 @@ describe('IsoPicker in folder mode', () => {
 		expect(fetchIsoLibraryMock).not.toHaveBeenCalled();
 	});
 
+	it('leaves focus alone on the first load, then puts it on the first row after a refresh', async () => {
+		renderComponent(IsoPicker, { props: props() });
+		await screen.findByText('Disc 1');
+		expect(document.activeElement).not.toBe(screen.getByRole('option', { name: 'Half Baked' }));
+		await fireEvent.click(screen.getByRole('button', { name: 'Refresh' }));
+		await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('option', { name: 'Half Baked' })));
+		expect(fetchIsoFoldersMock).toHaveBeenCalledTimes(2);
+	});
+
 	it('marks a folder that is already ripping and does not select it', async () => {
 		renderComponent(IsoPicker, { props: props() });
 		await fireEvent.click(await screen.findByRole('option', { name: 'Half Baked' }));

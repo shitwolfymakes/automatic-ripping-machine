@@ -850,21 +850,21 @@ describe('Dashboard All Jobs list', () => {
 		}
 
 		it('does nothing when the confirmation is cancelled', async () => {
-			const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
 			await selectBoth();
 			await fireEvent.click(screen.getByText('Delete selected'));
-			expect(confirmSpy).toHaveBeenCalledWith('Are you sure you want to delete 2 selected job(s)?');
+			expect(screen.getByRole('dialog')).toHaveTextContent('Are you sure you want to delete 2 selected job(s)?');
+			await fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Cancel' }));
 			expect(bulkDeleteJobs).not.toHaveBeenCalled();
 			expect(screen.getByTestId('jobs-selection-bar')).toBeInTheDocument();
 			expect(screen.queryByText(/^Deleted/)).toBeNull();
 		});
 
 		it('deletes the selected jobs, reports the count, clears the selection and reloads', async () => {
-			vi.spyOn(window, 'confirm').mockReturnValue(true);
 			vi.mocked(bulkDeleteJobs).mockResolvedValue({ deleted_ids: ['l1', 'l2'], skipped_non_terminal: [] });
 			await selectBoth();
 			const before = vi.mocked(fetchJobsPage).mock.calls.length;
 			await fireEvent.click(screen.getByText('Delete selected'));
+			await fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Delete' }));
 			await waitFor(() => expect(bulkDeleteJobs).toHaveBeenCalledWith({ job_ids: ['l1', 'l2'] }));
 			const feedback = await screen.findByText('Deleted 2 job(s)');
 			expect(feedback.closest('[data-tone]')).toHaveAttribute('data-tone', 'success');
@@ -873,60 +873,60 @@ describe('Dashboard All Jobs list', () => {
 		});
 
 		it('names the in-flight jobs the backend skipped', async () => {
-			vi.spyOn(window, 'confirm').mockReturnValue(true);
 			vi.mocked(bulkDeleteJobs).mockResolvedValue({ deleted_ids: ['l1'], skipped_non_terminal: ['l2'] });
 			await selectBoth();
 			await fireEvent.click(screen.getByText('Delete selected'));
+			await fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Delete' }));
 			const feedback = await screen.findByText('Deleted 1, skipped 1 in-flight job(s)');
 			expect(feedback.closest('[data-tone]')).toHaveAttribute('data-tone', 'error');
 		});
 
 		it('shows the message of an API Error and keeps the selection', async () => {
-			vi.spyOn(window, 'confirm').mockReturnValue(true);
 			vi.mocked(bulkDeleteJobs).mockRejectedValue(new Error('forbidden'));
 			await selectBoth();
 			await fireEvent.click(screen.getByText('Delete selected'));
+			await fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Delete' }));
 			const feedback = await screen.findByText('forbidden');
 			expect(feedback.closest('[data-tone]')).toHaveAttribute('data-tone', 'error');
 			expect(screen.getByTestId('jobs-selection-bar')).toBeInTheDocument();
 		});
 
 		it('shows a generic message when the rejection is not an Error', async () => {
-			vi.spyOn(window, 'confirm').mockReturnValue(true);
 			vi.mocked(bulkDeleteJobs).mockRejectedValue('nope');
 			await selectBoth();
 			await fireEvent.click(screen.getByText('Delete selected'));
+			await fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Delete' }));
 			expect(await screen.findByText('Bulk action failed')).toBeInTheDocument();
 		});
 
 		it('disables Delete selected while the request is in flight', async () => {
-			vi.spyOn(window, 'confirm').mockReturnValue(true);
 			const pending = deferred<{ deleted_ids: string[]; skipped_non_terminal: string[] }>();
 			vi.mocked(bulkDeleteJobs).mockReturnValue(pending.promise);
 			await selectBoth();
 			await fireEvent.click(screen.getByText('Delete selected'));
+			await fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Delete' }));
 			await waitFor(() => expect(screen.getByText('Delete selected')).toBeDisabled());
 			pending.resolve({ deleted_ids: ['l1', 'l2'], skipped_non_terminal: [] });
 			await screen.findByText('Deleted 2 job(s)');
 		});
 
 		it('Dismiss removes the feedback', async () => {
-			vi.spyOn(window, 'confirm').mockReturnValue(true);
 			vi.mocked(bulkDeleteJobs).mockResolvedValue({ deleted_ids: ['l1', 'l2'], skipped_non_terminal: [] });
 			await selectBoth();
 			await fireEvent.click(screen.getByText('Delete selected'));
+			await fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Delete' }));
 			await screen.findByText('Deleted 2 job(s)');
 			await fireEvent.click(screen.getByRole('button', { name: 'Dismiss' }));
 			expect(screen.queryByText('Deleted 2 job(s)')).toBeNull();
 		});
 
 		it('runs the Actions menu bulk delete by status', async () => {
-			const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
 			vi.mocked(bulkDeleteJobs).mockResolvedValue({ deleted_ids: [], skipped_non_terminal: [] });
 			await renderPage();
 			await fireEvent.click(screen.getByText(/Actions/));
 			await fireEvent.click(await screen.findByText('Delete All Failed'));
-			expect(confirmSpy).toHaveBeenCalledWith('Are you sure you want to delete all failed jobs?');
+			expect(screen.getByRole('dialog')).toHaveTextContent('Are you sure you want to delete all failed jobs?');
+			await fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Delete' }));
 			await waitFor(() => expect(bulkDeleteJobs).toHaveBeenCalledWith({ status: 'failed' }));
 			expect(await screen.findByText('Deleted 0 job(s)')).toBeInTheDocument();
 		});

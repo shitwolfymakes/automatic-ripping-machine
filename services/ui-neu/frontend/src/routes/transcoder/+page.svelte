@@ -17,6 +17,7 @@
 	import TranscoderStatTiles from '$lib/components/transcode/TranscoderStatTiles.svelte';
 	import TranscodeJobList from '$lib/components/transcode/TranscodeJobList.svelte';
 	import TranscodeJobTabs from '$lib/components/transcode/TranscodeJobTabs.svelte';
+	import ConfirmDialog from '$lib/components/shared/ConfirmDialog.svelte';
 	import LoadState from '$lib/components/shared/LoadState.svelte';
 
 	// Singleton stores (see $lib/stores/transcoder) so stats/workers survive
@@ -33,6 +34,14 @@
 	const statsLoadError = $derived($statsError ? new Error($statsError) : null);
 
 	const taskActions = new TranscodeTaskActions(() => transcodeJobs.load());
+
+	// The task whose delete waits on its confirm dialog, if any.
+	let pendingDeleteId = $state<string | null>(null);
+
+	function confirmDelete(id: string) {
+		pendingDeleteId = null;
+		taskActions.remove(id);
+	}
 
 	// Auto-refresh jobs when any are queued or in progress; when the queue
 	// goes idle, load once more so the last finished task shows its final state.
@@ -149,10 +158,23 @@
 				error={transcodeJobs.error}
 				totalTasks={s.total_tasks}
 				onretry={taskActions.retry}
-				ondelete={taskActions.remove}
+				ondelete={(id) => (pendingDeleteId = id)}
 			/>
 		</section>
 	</div>
+{/if}
+
+{#if pendingDeleteId}
+	{@const id = pendingDeleteId}
+	<ConfirmDialog
+		open
+		title="Delete transcode task"
+		message="Delete this transcode task?"
+		confirmLabel="Delete"
+		variant="danger"
+		onconfirm={() => confirmDelete(id)}
+		oncancel={() => (pendingDeleteId = null)}
+	/>
 {/if}
 
 <style>

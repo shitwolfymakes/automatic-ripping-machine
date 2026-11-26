@@ -15,6 +15,9 @@ import IsoPicker from '../IsoPicker.svelte';
 //   something is selected, and a disabled button never calls the handler. Only
 //   the in-flight half of the guard is reachable (two clicks before the DOM
 //   disables the button).
+// Three more open arms are Svelte's: the folder filter text, the current
+// folder's label and a session option's name each compile to `(...) ?? ''`,
+// and all three are strings.
 
 const fetchIsoFoldersMock = vi.fn();
 const fetchIsoLibraryMock = vi.fn();

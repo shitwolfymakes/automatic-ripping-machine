@@ -106,7 +106,20 @@ describe('UsersCard', () => {
 		await fireEvent.click(screen.getByRole('button', { name: /change password/i }));
 		expect(await screen.findByLabelText(/current password/i)).toBeInTheDocument();
 
-		await fireEvent.click(screen.getByRole('button', { name: /close/i }));
+		await fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+
+		await waitFor(() => expect(screen.queryByLabelText(/current password/i)).not.toBeInTheDocument());
+	});
+
+	it('closes the change-password slide-over via its backdrop button', async () => {
+		fetchUsers.mockResolvedValue([admin, guest]);
+		renderComponent(UsersCard, { props: {} });
+
+		await screen.findAllByText('admin');
+		await fireEvent.click(screen.getByRole('button', { name: /change password/i }));
+		expect(await screen.findByLabelText(/current password/i)).toBeInTheDocument();
+
+		await fireEvent.click(screen.getByRole('button', { name: 'Close dialog' }));
 
 		await waitFor(() => expect(screen.queryByLabelText(/current password/i)).not.toBeInTheDocument());
 	});

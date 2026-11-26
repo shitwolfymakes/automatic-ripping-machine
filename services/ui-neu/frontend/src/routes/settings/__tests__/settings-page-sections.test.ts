@@ -820,7 +820,6 @@ describe('Settings page sections', () => {
 
 		beforeEach(() => {
 			writableOf<unknown[]>(allSchemes).set(schemes);
-			vi.spyOn(window, 'confirm').mockReturnValue(true);
 		});
 
 		it('lists the built-in swatches with their descriptions and selects one on click', async () => {
@@ -848,11 +847,11 @@ describe('Settings page sections', () => {
 			expect(screen.queryAllByTitle('Delete')).toHaveLength(0);
 		});
 
-		it('does nothing when the delete confirm is declined', async () => {
-			vi.mocked(window.confirm).mockReturnValue(false);
+		it('does nothing when the delete confirm is cancelled', async () => {
 			await openTab('Themes');
 			await fireEvent.click(deleteButtons()[0]);
-			expect(window.confirm).toHaveBeenCalledWith('Delete user theme "Mine"?');
+			expect(screen.getByRole('dialog')).toHaveTextContent('Delete user theme "Mine"?');
+			await fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Cancel' }));
 			expect(deleteTheme).not.toHaveBeenCalled();
 			expect(loadThemesFromApi).not.toHaveBeenCalled();
 			expect(screen.queryByText(/deleted/)).toBeNull();
@@ -863,6 +862,7 @@ describe('Settings page sections', () => {
 			writableOf<string>(colorScheme).set('red');
 			await openTab('Themes');
 			await fireEvent.click(deleteButtons()[0]);
+			await fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Delete' }));
 			await waitFor(() => expect(deleteTheme).toHaveBeenCalledWith('mine'));
 			expect(loadThemesFromApi).toHaveBeenCalledTimes(1);
 			const feedback = await screen.findAllByText('Theme "Mine" deleted');
@@ -875,6 +875,7 @@ describe('Settings page sections', () => {
 			writableOf<string>(colorScheme).set('solo');
 			await openTab('Themes');
 			await fireEvent.click(deleteButtons()[1]);
+			await fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Delete' }));
 			await waitFor(() => expect(deleteTheme).toHaveBeenCalledWith('solo'));
 			await screen.findAllByText('Theme "Solo" deleted');
 			expect(get(colorScheme)).toBe('blue');
@@ -884,6 +885,7 @@ describe('Settings page sections', () => {
 			vi.mocked(deleteTheme).mockRejectedValueOnce(new Error('in use'));
 			await openTab('Themes');
 			await fireEvent.click(deleteButtons()[0]);
+			await fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Delete' }));
 			const feedback = await screen.findAllByText('in use');
 			expect(feedback).toHaveLength(1);
 			expect(feedback[0]).toHaveClass('alert-danger');
@@ -894,6 +896,7 @@ describe('Settings page sections', () => {
 			vi.mocked(deleteTheme).mockRejectedValueOnce('nope');
 			await openTab('Themes');
 			await fireEvent.click(deleteButtons()[0]);
+			await fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Delete' }));
 			expect(await screen.findAllByText('Delete failed')).toHaveLength(1);
 		});
 

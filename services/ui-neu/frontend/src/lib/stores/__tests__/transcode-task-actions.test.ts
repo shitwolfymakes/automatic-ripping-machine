@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, afterEach, type Mock } from 'vitest';
+import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest';
 
 vi.mock('$lib/api/transcoder', () => ({
 	retryTranscoderJob: vi.fn(),
@@ -11,7 +11,6 @@ import { TranscodeTaskActions } from '../transcode-task-actions.svelte';
 describe('TranscodeTaskActions', () => {
 	let reload: Mock<() => void>;
 	let actions: TranscodeTaskActions;
-	let confirmSpy: ReturnType<typeof vi.spyOn>;
 
 	beforeEach(() => {
 		vi.mocked(retryTranscoderJob)
@@ -22,11 +21,6 @@ describe('TranscodeTaskActions', () => {
 			.mockResolvedValue(undefined as never);
 		reload = vi.fn();
 		actions = new TranscodeTaskActions(reload);
-		confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
-	});
-
-	afterEach(() => {
-		confirmSpy.mockRestore();
 	});
 
 	it('starts with no error', () => {
@@ -62,15 +56,7 @@ describe('TranscodeTaskActions', () => {
 		expect(actions.error).toBeNull();
 	});
 
-	it('remove with the confirm declined sends no request and does not reload', () => {
-		confirmSpy.mockReturnValue(false);
-		expect(actions.remove('t1')).toBeUndefined();
-		expect(confirmSpy).toHaveBeenCalledWith('Delete this transcode task?');
-		expect(deleteTranscoderJob).not.toHaveBeenCalled();
-		expect(reload).not.toHaveBeenCalled();
-	});
-
-	it('remove accepted and succeeding deletes and reloads once', async () => {
+	it('remove succeeding deletes and reloads once', async () => {
 		await actions.remove('t1');
 		expect(deleteTranscoderJob).toHaveBeenCalledWith('t1');
 		expect(actions.error).toBeNull();
