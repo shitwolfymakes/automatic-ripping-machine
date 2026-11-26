@@ -51,7 +51,7 @@ vi.mock('$lib/api/dashboard', () => ({
 			arm_online: true,
 			active_jobs: [ACTIVE_JOB],
 			drives_online: 1,
-			drive_names: { drv_1: 'Main Drive' },
+			drives: { drv_1: { name: 'Main Drive', kind: 'optical', source: null, retired: false } },
 			notification_count: 2,
 			ripping_enabled: true,
 			makemkv_key_valid: null,

@@ -5,6 +5,8 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import { renderComponent, screen, fireEvent, cleanup, waitFor } from '$lib/testing/render';
 import DiscReviewWidget from '../DiscReviewWidget.svelte';
 import { createJob, createJobDetail, createTrack } from '../../../__fixtures__/job';
+import { createIsoDrive } from '$lib/__fixtures__/drive';
+import type { DriveSummary } from '$lib/api/dashboard';
 
 vi.mock('$lib/stores/auth', async () => {
 	const { derived, writable } = await import('svelte/store');
@@ -49,13 +51,12 @@ vi.mock('$lib/api/iso', () => ({
 	cancelIsoRip: vi.fn(() => Promise.resolve())
 }));
 
-function renderWidget(overrides = {}, isoSources: Record<string, string> | null = null) {
+function renderWidget(overrides = {}, drive: DriveSummary | null = null) {
 	return renderComponent(DiscReviewWidget, {
 		props: {
 			job: createJob({ status: 'identified', ...overrides }),
-			driveNames: {},
 			paused: false,
-			isoSources
+			drive
 		}
 	});
 }
@@ -97,7 +98,7 @@ describe('DiscReviewWidget', () => {
 			vi.mocked(fetchJob).mockResolvedValue({ ...createJobDetail(), job: done });
 			try {
 				const ondismiss = vi.fn();
-				renderComponent(DiscReviewWidget, { props: { job: done, driveNames: {}, paused: false, ondismiss } });
+				renderComponent(DiscReviewWidget, { props: { job: done, paused: false, ondismiss } });
 				const deleteBtn = await screen.findByRole('button', { name: 'Delete' });
 				expect(screen.queryByRole('button', { name: 'Cancel' })).not.toBeInTheDocument();
 				await fireEvent.click(deleteBtn);
@@ -118,7 +119,7 @@ describe('DiscReviewWidget', () => {
 			vi.mocked(abandonJob).mockRejectedValueOnce(new Error('409 job cannot be abandoned'));
 			const ondismiss = vi.fn();
 			renderComponent(DiscReviewWidget, {
-				props: { job: createJob({ status: 'awaiting_review' }), driveNames: {}, paused: false, ondismiss }
+				props: { job: createJob({ status: 'awaiting_review' }), paused: false, ondismiss }
 			});
 			await fireEvent.click(await screen.findByRole('button', { name: 'Cancel' }));
 			expect(await screen.findByText('409 job cannot be abandoned')).toBeInTheDocument();
@@ -171,7 +172,7 @@ describe('DiscReviewWidget', () => {
 
 	describe('ISO rip', () => {
 		it('shows the ISO chip instead of the drive pill for an ISO rip', async () => {
-			renderWidget({ status: 'awaiting_review', drive_id: 'drv_iso_1' }, { drv_iso_1: 'Paddington_2.iso' });
+			renderWidget({ status: 'awaiting_review', drive_id: 'drv_iso_1' }, createIsoDrive('Paddington_2.iso'));
 			await waitFor(() => expect(screen.getByText('Start rip')).toBeInTheDocument());
 			expect(screen.getByText('ISO')).toBeInTheDocument();
 			expect(screen.getAllByText('Paddington_2.iso').length).toBeGreaterThan(0);
@@ -186,14 +187,14 @@ describe('DiscReviewWidget', () => {
 		});
 
 		it('marks the card root data-source="iso" for an ISO rip', async () => {
-			const { container } = renderWidget({ status: 'awaiting_review', drive_id: 'drv_iso_1' }, { drv_iso_1: 'a.iso' });
+			const { container } = renderWidget({ status: 'awaiting_review', drive_id: 'drv_iso_1' }, createIsoDrive('a.iso'));
 			await waitFor(() => expect(screen.getByText('Start rip')).toBeInTheDocument());
 			expect(container.querySelector('.disc-review-widget')).toHaveAttribute('data-source', 'iso');
 		});
 
 		it('titles Cancel for an ISO rip and cancels through cancelIsoRip', async () => {
 			const { cancelIsoRip } = await import('$lib/api/iso');
-			renderWidget({ status: 'awaiting_review', drive_id: 'drv_iso_1' }, { drv_iso_1: 'a.iso' });
+			renderWidget({ status: 'awaiting_review', drive_id: 'drv_iso_1' }, createIsoDrive('a.iso'));
 			await waitFor(() => expect(screen.getByText('Cancel')).toBeInTheDocument());
 			const cancelBtn = screen.getByText('Cancel');
 			expect(cancelBtn).toHaveAttribute('title', 'Cancel the rip and remove the virtual drive');
@@ -201,6 +202,22 @@ describe('DiscReviewWidget', () => {
 			await waitFor(() => expect(cancelIsoRip).toHaveBeenCalledWith('drv_iso_1'));
 			const { abandonJob } = await import('$lib/api/jobs');
 			expect(abandonJob).not.toHaveBeenCalled();
+		});
+
+		it('treats a retired virtual drive as a plain drive', async () => {
+			const { cancelIsoRip } = await import('$lib/api/iso');
+			const { abandonJob } = await import('$lib/api/jobs');
+			const { container } = renderWidget(
+				{ id: 'job_r', status: 'awaiting_review', drive_id: 'drv_iso_1' },
+				createIsoDrive('Done.iso', 'iso', { retired: true })
+			);
+			await waitFor(() => expect(screen.getByText('Cancel')).toBeInTheDocument());
+			expect(screen.queryByText('ISO')).not.toBeInTheDocument();
+			expect(screen.getByText('Done.iso')).toBeInTheDocument();
+			expect(container.querySelector('.disc-review-widget')).toHaveAttribute('data-source', 'disc');
+			await fireEvent.click(screen.getByText('Cancel'));
+			await waitFor(() => expect(abandonJob).toHaveBeenCalledWith('job_r'));
+			expect(cancelIsoRip).not.toHaveBeenCalled();
 		});
 	});
 
@@ -225,7 +242,7 @@ describe('DiscReviewWidget', () => {
 			const original = vi.mocked(fetchJob).getMockImplementation();
 			vi.mocked(fetchJob).mockResolvedValue({ ...createJobDetail(), job: held, previous_rip: previousRip });
 			const ondismiss = vi.fn();
-			renderComponent(DiscReviewWidget, { props: { job: held, driveNames: {}, paused: false, ondismiss } });
+			renderComponent(DiscReviewWidget, { props: { job: held, paused: false, ondismiss } });
 			return { ondismiss, restore: () => vi.mocked(fetchJob).mockImplementation(original!) };
 		}
 
@@ -299,7 +316,7 @@ describe('DiscReviewWidget', () => {
 			const original = vi.mocked(fetchJob).getMockImplementation();
 			vi.mocked(fetchJob).mockResolvedValue({ ...createJobDetail(), job: held });
 			const onrefresh = vi.fn();
-			renderComponent(DiscReviewWidget, { props: { job: held, driveNames: {}, paused: false, onrefresh } });
+			renderComponent(DiscReviewWidget, { props: { job: held, paused: false, onrefresh } });
 			return { onrefresh, restore: () => vi.mocked(fetchJob).mockImplementation(original!) };
 		}
 
@@ -402,7 +419,7 @@ describe('DiscReviewWidget', () => {
 			const { fetchJob } = await import('$lib/api/jobs');
 			const original = vi.mocked(fetchJob).getMockImplementation();
 			vi.mocked(fetchJob).mockResolvedValue({ ...createJobDetail(), job: missed });
-			renderComponent(DiscReviewWidget, { props: { job: missed, driveNames: {}, paused: false } });
+			renderComponent(DiscReviewWidget, { props: { job: missed, paused: false } });
 			return () => vi.mocked(fetchJob).mockImplementation(original!);
 		}
 

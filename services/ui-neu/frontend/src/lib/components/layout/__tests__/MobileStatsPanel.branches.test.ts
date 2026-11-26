@@ -55,7 +55,7 @@ const BASE = {
 	arm_online: true,
 	active_jobs: [],
 	drives_online: 2,
-	drive_names: {},
+	drives: {},
 	notification_count: 0,
 	ripping_enabled: true,
 	makemkv_key_valid: true,

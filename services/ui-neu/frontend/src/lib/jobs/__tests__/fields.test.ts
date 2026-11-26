@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { createJob } from '../../__fixtures__/job';
+import { createIsoDrive } from '../../__fixtures__/drive';
 import { buildMetadataFields, type MetadataField } from '../fields';
 
 function fieldLabels(fields: MetadataField[]): string[] {
@@ -139,6 +140,12 @@ describe('buildMetadataFields — drive + crash', () => {
 		const fields = buildMetadataFields(createJob({ drive_id: 'drv_ABC' }));
 		const drive = fields.find((f) => f.label === 'Drive');
 		expect(drive?.value).toBe('drv_ABC');
+	});
+
+	it('names the drive from its dashboard record, retired ones included', () => {
+		const drives = { drv_ABC: createIsoDrive('Done.iso', 'iso', { retired: true }) };
+		const fields = buildMetadataFields(createJob({ drive_id: 'drv_ABC' }), drives);
+		expect(findField(fields, 'Drive')?.value).toBe('Done.iso');
 	});
 
 	it('flags resumed_from_crash when true', () => {

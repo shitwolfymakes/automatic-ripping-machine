@@ -18,7 +18,7 @@
 	let { job, logAt }: Props = $props();
 
 	const type = $derived(jobTypeConfig(job));
-	const drive = $derived(driveLabel(job.drive_id, $dashboard.drive_names));
+	const drive = $derived(driveLabel(job.drive_id, $dashboard.drives));
 </script>
 
 <tr class="table-row">
@@ -41,7 +41,7 @@
 	<td class="table-cell" data-label="Type">
 		<span class="logs-panel-chips">
 			<span class="logs-panel-chip" style:--jt-bg={type.badgeBg} style:--jt-text={type.badgeText}>{type.label}</span>
-			<span class="logs-panel-chip logs-panel-chip-neutral">{discKindLabel(job, $dashboard.drive_source_kinds)}</span>
+			<span class="logs-panel-chip logs-panel-chip-neutral">{discKindLabel(job, $dashboard.drives)}</span>
 		</span>
 	</td>
 	<td class="table-cell logs-panel-nowrap" data-label="Disc">{discPosition(job)}</td>

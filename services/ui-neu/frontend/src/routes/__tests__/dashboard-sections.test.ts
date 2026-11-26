@@ -13,6 +13,7 @@ import type { ResettablePollingStore } from '$lib/testing/resettable-polling-sto
 import { fetchJobsPage, bulkDeleteJobs, abandonJob, deleteJob } from '$lib/api/jobs';
 import { setTranscoderEnabled } from '$lib/stores/config';
 import type { JobView } from '$lib/types/api.gen';
+import { createDriveSummary, createIsoDrive } from '$lib/__fixtures__/drive';
 
 // Hoisted so the module mocks below can share them with the tests.
 const h = vi.hoisted(() => ({
@@ -109,9 +110,7 @@ function dash(overrides: DashOverrides = {}) {
 		arm_online: true,
 		active_jobs: [] as JobView[],
 		drives_online: 1,
-		drive_names: { drv_1: 'Main Drive' },
-		iso_sources: {},
-		iso_source_kinds: {},
+		drives: { drv_1: createDriveSummary({ name: 'Main Drive' }) },
 		preparing: [],
 		notification_count: 0,
 		ripping_enabled: true,
@@ -134,7 +133,7 @@ function listed(id: string, title = `Listed ${id}`): JobView {
 }
 
 function prepare(driveId: string, isoName: string) {
-	return { drive_id: driveId, phase: 'scanning', updated_at: AT, iso_name: isoName, iso_kind: 'iso' };
+	return { drive_id: driveId, phase: 'scanning', updated_at: AT, drive: createIsoDrive(isoName) };
 }
 
 function transcode(id: string, name: string) {
@@ -456,8 +455,11 @@ describe('Dashboard sections', () => {
 
 	describe('ISO sources and live progress', () => {
 		const sources = {
-			iso_sources: { drv_iso: 'Movie.iso', drv_folder: 'Disc One' },
-			iso_source_kinds: { drv_folder: 'folder' }
+			drives: {
+				drv_1: createDriveSummary({ name: 'Main Drive' }),
+				drv_iso: createIsoDrive('Movie.iso'),
+				drv_folder: createIsoDrive('Disc One', 'folder')
+			}
 		};
 
 		it.each([
@@ -481,7 +483,7 @@ describe('Dashboard sections', () => {
 			expect(screen.getAllByLabelText(/^(ISO file|Disc folder) /)).toHaveLength(2);
 		});
 
-		it('hands the ISO sources and kinds to a waiting review card', async () => {
+		it('hands the drive record to a waiting review card', async () => {
 			setDashboard(
 				dash({
 					...sources,
@@ -497,23 +499,22 @@ describe('Dashboard sections', () => {
 			expect(screen.getByText('Folder')).toBeInTheDocument();
 		});
 
-		it('falls back to an ISO chip when the drive has a source but no kind', async () => {
+		it('shows no chip once the virtual drive has retired', async () => {
 			setDashboard(
 				dash({
-					iso_sources: { drv_iso: 'Movie.iso' },
-					iso_source_kinds: undefined,
+					drives: { drv_iso: createIsoDrive('Movie.iso', 'iso', { retired: true }) },
 					active_jobs: [job('a', 'ripping', { drive_id: 'drv_iso' })]
 				})
 			);
 			await renderPage();
-			await waitFor(() => expect(screen.getByLabelText('ISO file Movie.iso')).toBeInTheDocument());
+			await waitFor(() => expect(screen.getByText('ACTIVE RIPS - 1 IN PROGRESS')).toBeInTheDocument());
+			expect(screen.queryByLabelText(/^(ISO file|Disc folder) /)).toBeNull();
 		});
 
-		it('shows no chip when the dashboard has no ISO sources at all', async () => {
+		it('shows no chip when the dashboard has no drives at all', async () => {
 			setDashboard(
 				dash({
-					iso_sources: undefined,
-					iso_source_kinds: undefined,
+					drives: undefined,
 					active_jobs: [job('c', 'created', { drive_id: 'drv_1' }), job('a', 'ripping', { drive_id: 'drv_1' })]
 				})
 			);
