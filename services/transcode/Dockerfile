@@ -60,6 +60,33 @@ RUN ./configure --launch-jobs="$(nproc)" --launch --disable-gtk \
         --enable-qsv --enable-nvenc --enable-vce \
     && strip build/HandBrakeCLI
 
+# Dump the HandBrake preset schema (template keys and defaults, encoder preset/
+# tune/profile/level lists, quality limits, filters, built-in presets) from the
+# libhb just built, so the schema and the binary cannot disagree. The link line
+# is HandBrakeCLI's (`make -n HandBrakeCLI` in build/); a HANDBRAKE_VERSION bump
+# that changes the contrib libraries fails here loudly. The tag is passed in
+# because hb_get_version() reports a snapshot string in a shallow clone. The
+# count checks catch a dump that silently lost encoders or built-in presets;
+# update them deliberately when bumping HANDBRAKE_VERSION.
+COPY services/transcode/schema/hb_schema_dump.c /HandBrake/schema/hb_schema_dump.c
+RUN set -eux; \
+    cd build; \
+    gcc -O2 -Wall -Wextra -Werror -fstack-protector-strong -D_FORTIFY_SOURCE=2 \
+        -I./libhb/ -I./contrib/include -I./contrib/include/vpl \
+        -o hb_schema_dump ../schema/hb_schema_dump.c \
+        -Wl,--start-group ./libhb/libhandbrake.a -L./contrib/lib \
+        -lpthread -ldl -lm -lnuma -lass -lavformat -lbz2 -lavfilter -lzimg -lavcodec \
+        -lvpx -llzma -ldav1d -lspeex -lmp3lame -lopus -lz -lswresample -ldvdnav \
+        -ldvdread -lswscale -lavutil -lva-drm -ldrm -lvpl -lstdc++ -lva -latomic \
+        -ltheoraenc -ltheoradec -lvorbis -lvorbisenc -logg -lx264 -lbluray -pthread \
+        -ljansson -lturbojpeg -lSvtAv1Enc -lx265 -Wl,--end-group; \
+    mkdir -p /usr/share/arm; \
+    ./hb_schema_dump "${HANDBRAKE_VERSION}" > /usr/share/arm/handbrake-schema.json; \
+    python3 -c 'import json, sys; d = json.load(open(sys.argv[1])); \
+assert len(d["video_encoders"]) == 38, len(d["video_encoders"]); \
+assert len(d["builtin_presets"]) == 106, len(d["builtin_presets"])' \
+        /usr/share/arm/handbrake-schema.json
+
 # ---- runtime image: base --------------------------------------------------
 # `base` carries everything except the vendor VAAPI/QSV drivers; the `intel`
 # and `amd` targets at the bottom layer those on. `base` is the CPU + NVENC
@@ -122,6 +149,8 @@ RUN apt-get update \
 
 # Replace Debian's HW-less HandBrakeCLI with the HW-enabled build (NVENC/QSV/VCE).
 COPY --from=handbrake-builder /HandBrake/build/HandBrakeCLI /usr/bin/HandBrakeCLI
+# The schema dumped from that same build (see the builder stage).
+COPY --from=handbrake-builder /usr/share/arm/handbrake-schema.json /usr/share/arm/handbrake-schema.json
 
 COPY --from=ghcr.io/astral-sh/uv:0.11 /uv /uvx /usr/local/bin/
 

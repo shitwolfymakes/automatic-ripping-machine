@@ -37,6 +37,7 @@ from __future__ import annotations
 # Empty ARM_HOST_* + no docker client => the transcode dispatcher still starts
 # and ticks live (sweeps + in-process passthrough), but never spawns a container.
 
+import asyncio
 from collections.abc import AsyncIterator, Iterator
 from pathlib import Path
 
@@ -97,6 +98,7 @@ def e2e_app(_sqlite_url: str, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -
     import arm_backend.db as db_mod
     import arm_backend.gpu_inventory as gpu_inventory
     import arm_backend.main as main_mod
+    import arm_backend.release_check as release_check
     import arm_backend.routers.auth as auth_router_mod
     import arm_backend.seeders as seeders_mod
     import arm_backend.thediscdb_schedule as thediscdb_schedule
@@ -133,6 +135,14 @@ def e2e_app(_sqlite_url: str, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -
     # lifespan would branch on whatever the host happens to have, making
     # main.py coverage environment-dependent.
     monkeypatch.setattr(main_mod, "build_docker_client", lambda _docker_host="", **_kw: None)
+
+    # The lifespan starts the latest-release check, which would reach
+    # api.github.com. Pin it to a loop that only waits to be cancelled, so the
+    # tier stays offline and the lifespan still starts and stops the task.
+    async def _offline_release_check(*_args: object, **_kwargs: object) -> None:
+        await asyncio.Event().wait()
+
+    monkeypatch.setattr(release_check, "release_check_loop", _offline_release_check)
 
     # Deterministic GPU inventory: ARM_GPUS is unset under test, so the loader
     # would return [] anyway, but pin it so the `transcode.hw_unavailable` emit

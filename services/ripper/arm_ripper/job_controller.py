@@ -107,7 +107,7 @@ class JobController:
     @property
     def _device_path(self) -> str | None:
         """Read-only view of the shared DriveHandle. Only the poll loop writes
-        the handle (spec §4) — a controller-side write would let a stale
+        the handle — a controller-side write would let a stale
         pickup path override the node the loop just resolved."""
         return self._device.current
 
@@ -343,7 +343,7 @@ class JobController:
                 return
             self._active_job_id = job.id
 
-            # Phase 12 — every log line below carries job_id once identify lands.
+            # Every log line below carries job_id once identify lands.
             with with_log_context(job_id=job.id):
                 if not await self._pass_gate(job, IDENTIFY_WAIT):
                     return
@@ -439,8 +439,8 @@ class JobController:
         )
 
     async def recover_held_job(self, job: JobView, device_path: str) -> asyncio.Task[None] | None:
-        """Reboot recovery for a disc that was PAUSED in the review gate
-        (timed review gate §6.3). Re-park the review wait so the operator can
+        """Reboot recovery for a disc that was PAUSED in the review gate.
+        Re-park the review wait so the operator can
         still Start it; on Start (-> ripping) or auto-start (-> identified), run
         the rip. Unlike resume_inflight_job this does NOT wipe /raw or re-rip —
         the disc never ripped. A re-parked disc waits for an explicit Start; it
@@ -463,7 +463,7 @@ class JobController:
         return self._start_pipeline(job.id, body, "reboot recovery")
 
     async def resume_inflight_job(self, job: JobView, device_path: str) -> asyncio.Task[None] | None:
-        """Phase 9 — drive a crash-recovered rip from the boot probe.
+        """Drive a crash-recovered rip from the boot probe.
 
         The backend's `/resume` endpoint resets tracks to QUEUED and
         sets `resumed_from_crash=True`; we then run the same rip-loop

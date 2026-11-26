@@ -571,7 +571,7 @@ async def test_identify_keeps_a_hint_that_is_only_a_year(monkeypatch):
 
 
 async def test_identify_from_imdb_walks_the_ranked_sources():
-    """D-1: the exact-id lookup asks the enabled sources for the kind in rank
+    """The exact-id lookup asks the enabled sources for the kind in rank
     order; an unconfigured source is skipped and the hit carries its source id."""
     from arm_backend.metadata.base import MetadataResult
 
@@ -668,7 +668,7 @@ async def test_identify_from_imdb_uses_the_kind_list():
 
 
 async def test_label_candidate_skipped_when_the_label_hint_is_ignored():
-    """D-4: with `label` removed from disc_hint_sources the volume label is not
+    """With `label` removed from disc_hint_sources the volume label is not
     searched; only the hint title (and its year-free retry) is."""
     searched: list[str] = []
 
@@ -691,7 +691,7 @@ async def test_label_candidate_skipped_when_the_label_hint_is_ignored():
         assert await dispatcher.identify(scan, cfg) is None
         assert searched == []
         assert await dispatcher.identify(scan, cfg, title_hint="Heat") is None
-    # The label's year still narrows the hint search (D-4 gates the candidate, not the year).
+    # The label's year still narrows the hint search (the hint gate applies to the candidate, not the year).
     assert searched == ["movie:Heat:1995", "tv:Heat:1995"]
 
 
@@ -981,7 +981,7 @@ async def test_fill_external_ids_timeout_keeps_the_hit(monkeypatch):
 
 async def test_title_search_is_kind_major(monkeypatch):
     """All movie sources before any TV source for a movie-shaped candidate:
-    tmdb movie, omdb movie, tmdb tv (spec D-6). OMDb is a movie source only in
+    tmdb movie, omdb movie, tmdb tv. OMDb is a movie source only in
     the automatic order."""
     from arm_backend.metadata import sources as sources_mod
 
@@ -1072,7 +1072,7 @@ async def test_movie_order_follows_movie_sources():
 
 async def test_tv_order_follows_episode_sources():
     """The TV title walk reads the operator's episode list; ids with no adapter
-    yet (tvmaze, tvdb) are skipped and OMDb is not in the list (spec §10)."""
+    yet (tvmaze, tvdb) are skipped and OMDb is not in the list."""
     calls: list[str] = []
 
     def _source(sid: str):
@@ -1133,7 +1133,7 @@ async def test_crc64_lookup_skipped_when_the_switch_is_off():
 
 
 async def test_fill_external_ids_adds_the_tmdb_id_to_a_tvmaze_hit():
-    """S-10: a non-TMDb hit with an IMDb id gets its TMDb id from TMDb /find
+    """A non-TMDb hit with an IMDb id gets its TMDb id from TMDb /find
     when TMDb is configured, so the episode stage can use every provider."""
     from arm_backend.metadata.base import MetadataResult
 

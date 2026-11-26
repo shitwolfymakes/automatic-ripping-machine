@@ -1,5 +1,5 @@
 """Request/response schemas for the identity, match, pin and episode-browse
-endpoints (design spec 2026-09-28-identity-sources, section 7).
+endpoints.
 
 `IdentityView` is a read-shaped projection of `IdentityClaims` (stored
 `identity_claims`) plus each track's currently-resolved values -- not the

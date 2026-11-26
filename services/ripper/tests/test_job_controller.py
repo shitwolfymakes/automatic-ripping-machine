@@ -614,7 +614,7 @@ def _identify_refused(code: int, detail: object) -> httpx.HTTPStatusError:
 
 
 async def test_identify_refusing_an_already_ripped_disc_ejects_it(stub_scan, eject_spy):
-    """on_previously_ripped=reject (D-132): no job, and the disc comes back out."""
+    """on_previously_ripped=reject: no job, and the disc comes back out."""
     client = FakeClient()
     client.identify_responses.append(_identify_refused(409, {"reason": "previously_ripped", "job_id": "job_old"}))
     controller = JobController(client, "drv_test")
@@ -1395,7 +1395,7 @@ async def test_run_command_replaces_invalid_utf8_in_stderr(monkeypatch):
 
 
 async def test_abandon_with_delete_raw_wipes_off_the_event_loop(eject_spy, monkeypatch, tmp_path):
-    """D-175: the raw-dir wipe runs in a thread via a spawned task, so the
+    """The raw-dir wipe runs in a thread via a spawned task, so the
     WS handler returns before a multi-GB rmtree finishes."""
     monkeypatch.setattr(raw_dir_module, "RAW_ROOT", tmp_path)
     monkeypatch.setattr(jc_module, "read_drive_status", lambda _d: jc_module.DriveState.NO_DISC)

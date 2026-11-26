@@ -1,5 +1,4 @@
-"""Direct coverage of JobController.resume_inflight_job's single-flight gate
-(followups: parked from Plan 1, where only the poll-loop path exercised it)."""
+"""Direct coverage of JobController.resume_inflight_job's single-flight gate."""
 
 import asyncio
 import os

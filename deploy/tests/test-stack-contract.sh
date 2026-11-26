@@ -63,7 +63,7 @@ export ARMCTL_SOURCE_ONLY=1
 source "${REL}/armctl.sh"
 armctl_settings
 
-# A storage folder with a space in its name (Review Focus 1).
+# A storage folder with a space in its name.
 PROFILE=full; RIPPER_ONLY=0
 RAW_PATH="${TMP}/My Passport/rips"; MEDIA_PATH="${TMP}/nas/media"
 mkdir -p "${RAW_PATH}" "${MEDIA_PATH}"

@@ -12,7 +12,7 @@ export interface ThemeMeta {
 	tokens: Record<string, string>;
 }
 
-export interface ThemeFull extends ThemeMeta {
+interface ThemeFull extends ThemeMeta {
 	css: string;
 }
 

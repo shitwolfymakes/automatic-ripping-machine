@@ -16,7 +16,7 @@
 /* Winamp's own split: the bitmap face is for titlebars and headings only;
    list and body text runs in the classic Win9x UI stack. An app-wide
    Silkscreen made the nav, stats and form text read as one solid pixel
-   block (user-reported; the pre-rename winamp-shade look was smooth). */
+   block. */
 [data-scheme='winamp-97'] {
 	font-family: 'Trebuchet MS', Tahoma, sans-serif;
 }
@@ -58,13 +58,13 @@
 }
 /* nav — same gray plates as the transport buttons */
 /* The .nav block is a flex column, where adjacent margins do NOT
-   collapse (the original block-level <nav> let them). This scheme's
+   collapse (a block-level <nav> would let them). This scheme's
    inter-link spacing therefore rides the nav's own gap instead of a
    margin on each link, which would otherwise double. */
 [data-scheme='winamp-97'] aside:where([data-sidebar]) .nav {
 	gap: 0.5rem;
-	/* margin-bottom only in the original, so the trailing space is
-	   reproduced on the nav but there is no leading space to add */
+	/* the nav's own spacing is a trailing margin-bottom only, so the trailing space is reproduced on
+	   the nav but there is no leading space to add */
 	padding-bottom: calc(1rem + 0.5rem);
 }
 
@@ -130,16 +130,14 @@
 	height: 6px;
 	background: var(--winamp-ridge);
 }
-/* .progress-track/.progress-fill class branches: the baseline reached every
-   meter (including the sidebar/bottom stats bars) through a universal
-   div[class*='bg-primary/15'] selector that died with the utilities; the
-   block classes are the vocabulary-legal equivalent of that reach. */
+/* .progress-track/.progress-fill class branches: these selectors reach every meter, including the
+   sidebar/bottom stats bars, through the block classes. */
 [data-scheme='winamp-97'] [data-progress-track],
 [data-scheme='winamp-97'] .progress-track {
 	background: rgb(0, 0, 0) !important;
 	border: 1px solid rgb(60, 64, 90) !important;
 	border-radius: 0px !important;
-	/* the baseline forced every track to 10px, the stats bars' 4px
+	/* every track is forced to 10px, the stats bars' 4px
 	   progress-sm included */
 	height: 10px;
 	/* the EQ grabber below is 14px tall on a 10px track and hangs outside it,
@@ -188,14 +186,13 @@
 /* The Auto-Start knob stays white. .toggle-thumb paints from
    --color-on-primary, which this scheme sets to black for text on its silver
    button plates; inherited by the knob it makes a black blob on the green
-   track instead of the white knob the original had. */
+   track instead of a white knob. */
 [data-scheme='winamp-97'] .toggle-thumb {
 	background: rgb(255, 255, 255);
 }
 
-/* ON position 16px from the track's left edge, as the original: the block's
-   2px left inset plus a 1rem translate lands at 18px, hugging the right
-   edge 2px tighter than the baseline's symmetric inset. */
+/* ON position 16px from the track's left edge: the block's 2px left inset plus a 1rem translate
+   would land at 18px, hugging the right edge 2px tighter than a symmetric inset. */
 [data-scheme='winamp-97'] .toggle[aria-checked='true'] .toggle-thumb,
 [data-scheme='winamp-97'] [role='switch'][aria-checked='true'] > .toggle .toggle-thumb {
 	transform: translateX(0.875rem);
@@ -333,10 +330,9 @@
 	border-top-color: rgb(85, 90, 125);
 	color: rgb(214, 218, 235) !important;
 	font-size: 0.68rem;
-	/* the baseline heading's leading was Tailwind's text-lg RATIO, which
-	   scaled with the shrunk font (10.88px x 1.5556 = 16.92px); the block
-	   class's fixed 28px reads 11px too tall here and `normal` read 3px
-	   too short. Pin the ratio the original actually used. */
+	/* the heading's leading is Tailwind's text-lg RATIO, which scales with the shrunk font (10.88px x
+	   1.5556 = 16.92px); the block class's fixed 28px reads 11px too tall here and `normal` reads
+	   3px too short. Pin that ratio. */
 	line-height: calc(1.75 / 1.125);
 	font-weight: 700;
 	letter-spacing: 0.15em;

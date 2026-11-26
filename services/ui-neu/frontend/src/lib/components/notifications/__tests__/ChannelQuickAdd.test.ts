@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { renderComponent, screen, fireEvent, cleanup, waitFor } from '$lib/test-utils';
+import { renderComponent, screen, fireEvent, cleanup, waitFor } from '$lib/testing/render';
 import type { Catalog } from '$lib/types/notifications';
 
 // Branch pins for ChannelQuickAdd. One branch cannot be reached from the
@@ -11,7 +11,17 @@ import type { Catalog } from '$lib/types/notifications';
 
 const catalog: Catalog = {
 	featured: ['ntfy'],
-	services: [{ id: 'ntfy', name: 'ntfy', docs_url: '', url_scheme: 'ntfy', required_fields: [], advanced_fields: [] }]
+	services: [
+		{
+			id: 'ntfy',
+			name: 'ntfy',
+			docs_url: '',
+			setup_url: '',
+			url_scheme: 'ntfy',
+			required_fields: [],
+			advanced_fields: []
+		}
+	]
 };
 const eventTypes = [
 	{ key: 'rip.completed', label: 'Rip completed' },

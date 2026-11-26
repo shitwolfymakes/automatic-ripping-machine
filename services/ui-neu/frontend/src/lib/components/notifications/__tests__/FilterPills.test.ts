@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { renderComponent, screen, fireEvent, cleanup } from '$lib/test-utils';
+import { renderComponent, screen, fireEvent, cleanup } from '$lib/testing/render';
 import FilterPills from '../FilterPills.svelte';
 
 const counts = { all: 4, enabled: 3, paused: 1, issues: 1 };

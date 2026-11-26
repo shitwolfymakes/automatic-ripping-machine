@@ -513,7 +513,7 @@ def test_preview_falls_back_to_drive_default_session(signing_key: bytes) -> None
 
 
 def test_preview_drive_default_session_ignores_auto_idle_flag(signing_key: bytes) -> None:
-    """G-01 (§5.1): the flag gates unattended QUEUEING only. The drive
+    """The flag gates unattended QUEUEING only. The drive
     default is still the routed session — it shapes the rip and is what an
     operator's Apply would use — so the preview must show it."""
     db = FakeSession()

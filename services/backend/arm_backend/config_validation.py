@@ -49,7 +49,7 @@ def _validate_enum_fields(fields: dict[str, Any], cfg: Config) -> None:
 
 def _validate_positive_ints(fields: dict[str, Any]) -> None:
     # The number inputs send null for an emptied box; these columns are NOT
-    # NULL, so refuse it here rather than 500 on the commit (D-096).
+    # NULL, so refuse it here rather than 500 on the commit.
     for key in (
         "drive_scan_interval_seconds",
         "drive_detected_prune_days",
@@ -127,7 +127,7 @@ def _validate_auto_apply_flags(fields: dict[str, Any]) -> None:
 
 def _validate_not_null_columns(fields: dict[str, Any]) -> None:
     # Catch-all for the rest of the NOT NULL columns: a JSON null would
-    # otherwise reach the commit and 500 (D-164). The checks above keep their
+    # otherwise reach the commit and 500. The checks above keep their
     # field-specific messages.
     columns = sa_inspect(Config).columns
     for key, value in fields.items():

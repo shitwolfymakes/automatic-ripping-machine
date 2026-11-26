@@ -10,8 +10,7 @@ TheDiscDB data repo lives at `services/backend/tests/fixtures/thediscdb/`
 (generator `devtools/thediscdb-fixture.py`, upstream commit in
 `manifest.json`; loader `tests/thediscdb_corpus.py`; baseline harness
 `devtools/tv-match-baseline.py`; regression floor
-`services/backend/tests/test_tv_match_baseline.py`). Review
-and numbers: `../arm-ai/arm-v3/docs/superpowers/specs/2026-10-23-tv-season-selection-review.md`.
+`services/backend/tests/test_tv_match_baseline.py`).
 
 Baseline of the matcher on it (`--min-seconds 60`, all 9 series): 24% of
 titles placed correctly with the season known, 16% with nothing known, 47%

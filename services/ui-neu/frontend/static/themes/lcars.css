@@ -142,7 +142,7 @@
 
 /* Nav links are LCARS command buttons: right-aligned coloured pills. */
 /* The .nav block is a flex column, where adjacent margins do NOT
-   collapse (the original block-level <nav> let them). This scheme's
+   collapse (a block-level <nav> would let them). This scheme's
    inter-link spacing therefore rides the nav's own gap instead of a
    margin on each link, which would otherwise double. */
 [data-scheme="lcars"] aside:where([data-sidebar]) .nav {
@@ -172,8 +172,7 @@
 
 /* Per-position colour rotation, then the state rules. All three have the
    same specificity, so source order is what decides which wins: the state
-   rules must come last or an inactive position would beat the active one.
-   (The original sheet forced this with !important instead.) */
+   rules must come last or an inactive position would beat the active one. */
 [data-scheme="lcars"] aside:where([data-sidebar]) .nav-item:nth-child(2) {
 	background: #fca;
 }
@@ -381,9 +380,8 @@
 }
 
 /* The pill itself sits on a dark scrim over the header plate: the
-   original's enabled fill was primary-light-bg-dark at 30%, which this
-   scheme sets to a near-black navy. The tint role the block reaches for
-   is a light blue wash and loses that. */
+   enabled fill is primary-light-bg-dark at 30%, which this scheme sets to a near-black navy. The
+   tint role the block reaches for is a light blue wash and would lose that. */
 [data-scheme="lcars"] header .btn[data-active="true"] {
 	background: rgba(30, 30, 60, 0.3);
 }
@@ -429,11 +427,10 @@
 [data-scheme="lcars"] main .stack > .flex.items-center.justify-between:first-child {
 	background: #fca;
 	border-radius: 21px;
-	/* 0.5rem vertical, the baseline's own value; an earlier pass wrote
-	   0.625rem, making the plate 4px taller than the original. */
+	/* 0.5rem vertical; 0.625rem would make the plate 4px taller. */
 	padding: 0.5rem 1.5rem;
 	/* the plate's own rounded box already separates it from the section
-	   below, so pull the stack's 1.5rem gap back to the original 1rem */
+	   below, so pull the stack's 1.5rem gap back to 1rem */
 	margin-bottom: -0.5rem;
 }
 
@@ -445,7 +442,7 @@
 	background: #fca;
 	color: #000;
 	font-size: 1.8rem;
-	/* 2.375rem (38px): the plate is 54px tall in the original, and its
+	/* 2.375rem (38px): the plate is 54px tall, and its
 	   padding accounts for 16 of that. `normal` leading for this font
 	   stack gives 34 and leaves the plate 4px short, which then shifts
 	   everything below it down the page. */
@@ -454,7 +451,7 @@
 	border-radius: 21px;
 	border-bottom: none;
 	/* the plate sits in a .stack-lg, whose own 1.5rem gap already exceeds
-	   the 1rem the original left below the heading; pull it back rather
+	   the 1rem left below the heading; pull it back rather
 	   than adding to it */
 	margin-bottom: -0.5rem;
 }
@@ -486,26 +483,24 @@
 	background: #fca;
 	color: #000;
 	font-size: 1.2rem;
-	/* the baseline plate took its leading from the ambient text-lg ratio
-	   (29.87px at this 19.2px type); `normal` resolved ~7px shorter and
-	   pulled every band below it up the page. */
+	/* the plate's leading is the ambient text-lg ratio
+	   (29.87px at this 19.2px type); `normal` resolves ~7px shorter and pulls every band below it up
+	   the page. */
 	line-height: calc(1.75 / 1.125);
 	padding: 4px 20px;
 	border-radius: 20px;
 	margin-bottom: 15px;
 }
 
-/* Same stack-stretch problem .page-title solves above: in the original the
-   settings tab panes were block flow (space-y-6), so inline-block shrank the
-   plate to its text; the migrated panes are .stack column flexboxes, whose
-   items stretch to full width regardless of display. Scoped to direct stack
+/* Same stack-stretch problem .page-title solves above: the settings tab panes are .stack column
+   flexboxes, whose items stretch to full width regardless of display, so inline-block alone does
+   not shrink the plate to its text. Scoped to direct stack
    children: h2s in row flexboxes (the dashboard's "All Jobs") must not get
    an align-self that would shift them vertically instead. */
 [data-scheme="lcars"][data-scheme] main .stack > h2 {
 	align-self: flex-start;
-	/* in block flow the 15px margin-bottom collapsed into space-y's 24px
-	   sibling margin (max wins); flex gaps do not collapse, so keeping it
-	   would add 15px the original never showed */
+	/* the stack's flex gap does not collapse with a margin-bottom the way block-flow sibling margins
+	   do, so keeping the 15px margin-bottom would add 15px on top of the gap */
 	margin-bottom: 0;
 }
 
@@ -555,9 +550,8 @@
 [data-scheme="lcars"] main .panel-section {
 	background: rgba(153, 153, 255, 0.05);
 	border-radius: 21px;
-	/* no padding override: the block's own padding matches the originals
-	   (the users rows were p-2.5 mini-rows; a 1.5rem/2rem pad here made
-	   every one of them 26px taller than baseline) */
+	/* no padding override: the block's own padding fits the users rows (compact p-2.5 mini-rows); a
+	   1.5rem/2rem pad here would make every one of them 26px taller */
 }
 
 /* Stat tiles are solid accent plates with black content. */
@@ -806,8 +800,8 @@
 [data-scheme="lcars"] main .tabs:not(.tabs-pills) {
 	display: flex;
 	gap: 6px;
-	/* keep the block's own 8px margin-bottom: the baseline strip sat 8px
-	   above the pane heading, and zeroing it here pulled every settings
+	/* keep the block's own 8px margin-bottom: the strip sits 8px above the pane heading, and zeroing
+	   it here would pull every settings
 	   pane up by that much */
 	border-bottom: none;
 }
@@ -905,8 +899,8 @@
 }
 
 /* Posters and cover art get a hard orange frame. data-poster is the
-   PosterImage theme hook; the old img.object-cover selector died with the
-   utility classes and img[alt*="Poster"] only ever matched untitled jobs. */
+   PosterImage theme hook; matching img[alt*="Poster"] would only ever hit
+   untitled jobs. */
 [data-scheme="lcars"] main [data-poster] {
 	border: 2px solid #f90;
 	border-radius: 0;

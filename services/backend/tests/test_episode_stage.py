@@ -1,5 +1,5 @@
 """The episode stage: match a TV disc's titles against provider episode lists
-and turn the result into identity claims (design spec 5, 6.3, 9; plan Task 7)."""
+and turn the result into identity claims."""
 
 from typing import Any
 
@@ -194,7 +194,7 @@ async def test_applies_a_confident_match() -> None:
     assert claims_of(job).sources["episodes_tmdb"].status == "ok"
 
 
-async def test_unnamed_episode_gets_placeholder_name_c8() -> None:
+async def test_unnamed_episode_gets_placeholder_name() -> None:
     job = _job()
     db = _db(job, DISC)
     provider = FakeProvider(seasons={1: _season(1, DISTINCT, names={3: None})})
@@ -205,7 +205,7 @@ async def test_unnamed_episode_gets_placeholder_name_c8() -> None:
     assert outcome.claims.tracks["1"].episode_name == "Name 4"
 
 
-async def test_extra_and_play_all_titles_get_role_extra_c5() -> None:
+async def test_extra_and_play_all_titles_get_role_extra() -> None:
     job = _job()
     # 300 s trailer between episodes; the last title is a play-all of E3-E6.
     db = _db(job, [1500, 300, 2880, 1800, 2220, 8400])
@@ -222,7 +222,7 @@ async def test_extra_and_play_all_titles_get_role_extra_c5() -> None:
     assert [tracks[r].episode for r in "0234"] == [3, 4, 5, 6]
 
 
-async def test_anchor_counts_only_eligible_titles_c6(monkeypatch) -> None:
+async def test_anchor_counts_only_eligible_titles(monkeypatch) -> None:
     job = _job(disc_number=2, disc_total=4)
     db = _db(
         job,
@@ -274,11 +274,11 @@ async def test_eligibility_rules(monkeypatch) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Uncertain results are suggestions (C2, C4, C1)
+# Uncertain results are suggestions
 # ---------------------------------------------------------------------------
 
 
-async def test_identical_runtimes_are_a_suggestion_applied_as_a_guess_c2() -> None:
+async def test_identical_runtimes_are_a_suggestion_applied_as_a_guess() -> None:
     job = _job()
     db = _db(job, [2580] * 4)
     provider = FakeProvider(seasons={1: _season(1, [2580] * 10)})
@@ -306,15 +306,14 @@ async def test_auto_apply_off_makes_every_result_a_suggestion() -> None:
 
 
 # ---------------------------------------------------------------------------
-# The pin rule (Task 9 F4/F8): a pinned source's stored claims stay
+# The pin rule: a pinned source's stored claims stay
 # non-suggestion, and applied, across later runs -- until unpinned.
 # ---------------------------------------------------------------------------
 
 
 async def test_pin_rule_applies_despite_computed_suggestion() -> None:
     """A pinned source whose own computed result would be a suggestion
-    (episode_auto_apply off) still gets applied -- the RESOLVER (Task 9 F4
-    round 2) lets a pinned "ok" source's suggestion through. The STORED
+    (episode_auto_apply off) still gets applied -- the RESOLVER lets a pinned "ok" source's suggestion through. The STORED
     claims keep the computed `suggestion=True` unchanged (nothing rewrites
     it); only the resolver's own usable-source selection treats it as
     applicable while the pin holds."""
@@ -352,7 +351,7 @@ async def test_unpinned_suggestion_keeps_its_computed_flag_and_applies_as_a_gues
 
 
 async def test_pin_rule_keeps_prior_entry_applied_across_a_same_inputs_error() -> None:
-    """F8: `put_source`'s same-inputs-error "keep the last good claims"
+    """`put_source`'s same-inputs-error "keep the last good claims"
     behavior composes with the resolver's pin rule -- the kept entry is
     still `status="ok"` and still named by the pin, so it stays applicable
     (and applied) even though its `suggestion` (forced True here via
@@ -377,7 +376,7 @@ async def test_pin_rule_keeps_prior_entry_applied_across_a_same_inputs_error() -
 
 
 # ---------------------------------------------------------------------------
-# Operator source settings (PR 4)
+# Operator source settings
 # ---------------------------------------------------------------------------
 
 
@@ -442,7 +441,7 @@ async def test_tolerance_comes_from_config() -> None:
     assert outcome.claims.inputs["tolerance"] == 45
 
 
-async def test_nominal_runtimes_are_applied_as_a_guess_c4() -> None:
+async def test_nominal_runtimes_are_applied_as_a_guess() -> None:
     # TVmaze-style: every episode listed at 60 min, real episodes run ~44 min.
     job = _job()
     db = _db(job, [2640, 2700, 2580, 2660])
@@ -468,7 +467,7 @@ async def test_slot_runtimes_that_fit_are_not_nominal() -> None:
     assert outcome.claims.suggestion is False
 
 
-async def test_sibling_held_episodes_are_never_crossed_c1(monkeypatch) -> None:
+async def test_sibling_held_episodes_are_never_crossed(monkeypatch) -> None:
     pattern = [1320, 2580, 1500, 2880, 1800] * 3
     job = _job(disc_number=3)
     sibling = _job("job_2", disc_number=2)
@@ -576,11 +575,11 @@ async def test_job_without_ids_has_no_siblings() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Provider failures (C7, spec 9)
+# Provider failures
 # ---------------------------------------------------------------------------
 
 
-async def test_provider_error_after_good_run_keeps_last_claims_c7() -> None:
+async def test_provider_error_after_good_run_keeps_last_claims() -> None:
     job = _job()
     db = _db(job, DISC)
     provider = FakeProvider(seasons={1: _season(1, DISTINCT)})
@@ -600,8 +599,8 @@ async def test_provider_error_after_good_run_keeps_last_claims_c7() -> None:
     assert [_tracks(db, job)[r].episode_number for r in "0123"] == [3, 4, 5, 6]
 
 
-async def test_backoff_after_good_run_keeps_applied_episodes_i2() -> None:
-    """I2: a provider in backoff reports an error carrying the stored entry's
+async def test_backoff_after_good_run_keeps_applied_episodes() -> None:
+    """A provider in backoff reports an error carrying the stored entry's
     inputs, so put_source keeps the last good claims and records last_error
     instead of a skipped entry wiping the applied episodes."""
     job = _job()
@@ -623,8 +622,8 @@ async def test_backoff_after_good_run_keeps_applied_episodes_i2() -> None:
     assert [_tracks(db, job)[r].episode_number for r in "0123"] == [3, 4, 5, 6]
 
 
-async def test_show_id_source_error_after_good_run_keeps_last_claims_m3() -> None:
-    """M3: a SourceError while resolving the show id is an error, not a miss,
+async def test_show_id_source_error_after_good_run_keeps_last_claims() -> None:
+    """A SourceError while resolving the show id is an error, not a miss,
     so a good run's claims survive when the request is otherwise unchanged.
     No `identity` section on the job, so the show id is resolved every run."""
     job = _job()
@@ -646,7 +645,7 @@ async def test_show_id_source_error_after_good_run_keeps_last_claims_m3() -> Non
     assert [_tracks(db, job)[r].episode_number for r in "0123"] == [3, 4, 5, 6]
 
 
-async def test_show_id_source_error_without_previous_claims_m3() -> None:
+async def test_show_id_source_error_without_previous_claims() -> None:
     job = _job()
     db = _db(job, DISC)
     provider = FakeProvider(show_id=None)
@@ -655,11 +654,11 @@ async def test_show_id_source_error_without_previous_claims_m3() -> None:
     [outcome] = await compute_episode_claims(db, job, [provider], CFG, StageOptions())  # type: ignore[arg-type]
 
     assert outcome.claims.status == "error"
-    assert outcome.claims.inputs == {}  # R2: no known previous show id, nothing to keep
+    assert outcome.claims.inputs == {}  # no known previous show id, nothing to keep
 
 
-async def test_backoff_with_a_new_season_does_not_keep_the_old_season_r2() -> None:
-    """R2: the backoff keep-path uses this request's season, so a `/match`
+async def test_backoff_with_a_new_season_does_not_keep_the_old_season() -> None:
+    """The backoff keep-path uses this request's season, so a `/match`
     for a different season during backoff replaces the old season's claims
     instead of keeping them."""
     job = _job()
@@ -678,8 +677,8 @@ async def test_backoff_with_a_new_season_does_not_keep_the_old_season_r2() -> No
 
 
 @pytest.mark.parametrize("failure", ["backoff", "show_id_error"])
-async def test_forgotten_show_id_keeps_nothing_r2(failure: str) -> None:
-    """R2: after /resolve names a different show (`forget_episode_show_ids`),
+async def test_forgotten_show_id_keeps_nothing(failure: str) -> None:
+    """After /resolve names a different show (`forget_episode_show_ids`),
     neither keep-path can hold the previous show's claims."""
     job = _job()
     job.metadata_json = {}  # the show id is resolved on every run
@@ -699,7 +698,7 @@ async def test_forgotten_show_id_keeps_nothing_r2(failure: str) -> None:
     assert all(t.episode_number is None for t in _tracks(db, job).values())
 
 
-async def test_show_id_miss_is_still_a_miss_m3() -> None:
+async def test_show_id_miss_is_still_a_miss() -> None:
     job = _job()
     db = _db(job, DISC)
     provider = FakeProvider()
@@ -755,8 +754,8 @@ async def test_exception_before_show_id_has_empty_inputs() -> None:
     assert outcome.claims.inputs == {}
 
 
-async def test_no_eligible_titles_makes_no_provider_call_and_stores_nothing_c1() -> None:
-    """C1: a job with no Track rows yet (identify without the review hold)
+async def test_no_eligible_titles_makes_no_provider_call_and_stores_nothing() -> None:
+    """A job with no Track rows yet (identify without the review hold)
     returns no outcomes before any provider or network call, so nothing is
     stored and `sweep_startup` can retry the job later."""
     job = _job()
@@ -911,8 +910,8 @@ async def test_options_override_job_season_and_disc() -> None:
     assert "season" not in outcome.claims.job.model_fields_set
 
 
-async def test_pinned_source_reuses_its_stored_tolerance_i3() -> None:
-    """I3: with default options the pinned source runs at the tolerance the
+async def test_pinned_source_reuses_its_stored_tolerance() -> None:
+    """With default options the pinned source runs at the tolerance the
     operator's `/match` stored in its inputs; an unpinned source, or an
     explicit option, does not."""
     job = _job()
@@ -1043,7 +1042,7 @@ def test_is_tv_candidate() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Fix round 1
+# Keep-path and resolver fixes
 # ---------------------------------------------------------------------------
 
 # Realistic 44-minute episodes, close enough together that a shifted mapping still fits.
@@ -1054,7 +1053,7 @@ def _scan_provider() -> FakeProvider:
     return FakeProvider(seasons={1: _season(1, [6010] * 10), 2: _season(2, DISTINCT)})
 
 
-async def test_scan_picked_season_is_stable_across_runs_f1() -> None:
+async def test_scan_picked_season_is_stable_across_runs() -> None:
     job = _job(season=None)
     db = _db(job, DISC)
     provider = _scan_provider()
@@ -1073,7 +1072,7 @@ async def test_scan_picked_season_is_stable_across_runs_f1() -> None:
     assert [_tracks(db, job)[r].episode_number for r in "0123"] == [3, 4, 5, 6]
 
 
-async def test_scan_picked_season_survives_an_error_rerun_f1() -> None:
+async def test_scan_picked_season_survives_an_error_rerun() -> None:
     job = _job(season=None)
     db = _db(job, DISC)
     provider = _scan_provider()
@@ -1092,7 +1091,7 @@ async def test_scan_picked_season_survives_an_error_rerun_f1() -> None:
     assert [_tracks(db, job)[r].episode_number for r in "0123"] == [3, 4, 5, 6]
 
 
-async def test_operator_season_is_not_rescanned_f1() -> None:
+async def test_operator_season_is_not_rescanned() -> None:
     job = _job(season=1)
     job.identity_provenance = {"season": "manual"}
     db = _db(job, DISC)
@@ -1105,7 +1104,7 @@ async def test_operator_season_is_not_rescanned_f1() -> None:
     assert ("seasons", "100") not in provider.calls
 
 
-async def test_rerip_of_the_same_disc_is_a_suggestion_applied_as_a_guess_f2() -> None:
+async def test_rerip_of_the_same_disc_is_a_suggestion_applied_as_a_guess() -> None:
     earlier = _job("job_0", disc_number=1)
     job = _job(disc_number=1)
     earlier_tracks = [_track("job_0", i, rt, episode_number=i + 1) for i, rt in enumerate(REALISTIC[:4])]
@@ -1121,7 +1120,7 @@ async def test_rerip_of_the_same_disc_is_a_suggestion_applied_as_a_guess_f2() ->
     assert claims_of(job).unsure is True
 
 
-async def test_sibling_with_unknown_disc_number_forces_a_suggestion_f2(monkeypatch) -> None:
+async def test_sibling_with_unknown_disc_number_forces_a_suggestion(monkeypatch) -> None:
     sibling = _job("job_2", disc_number=None)
     job = _job(disc_number=2)
     db = _db(job, DISC, sibling, extra_tracks=[_track("job_2", 0, 1320, episode_number=1)])
@@ -1143,7 +1142,7 @@ async def test_sibling_with_unknown_disc_number_forces_a_suggestion_f2(monkeypat
 
 
 @pytest.mark.parametrize("status", [JobStatus.FAILED, JobStatus.ABANDONED])
-async def test_failed_or_abandoned_sibling_is_ignored_f2(monkeypatch, status: JobStatus) -> None:
+async def test_failed_or_abandoned_sibling_is_ignored(monkeypatch, status: JobStatus) -> None:
     sibling = _job("job_2", disc_number=1)
     sibling.status = status
     job = _job(disc_number=2)
@@ -1165,7 +1164,7 @@ async def test_failed_or_abandoned_sibling_is_ignored_f2(monkeypatch, status: Jo
     assert outcome.claims.suggestion is False
 
 
-async def test_seasons_miss_is_show_not_found_f3() -> None:
+async def test_seasons_miss_is_show_not_found() -> None:
     job = _job(season=None)
     db = _db(job, DISC)
     provider = FakeProvider()
@@ -1187,7 +1186,7 @@ def _tie_season(number: int, first_runtime: int) -> list[Episode]:
     return _season(number, [first_runtime, 2880, 1800, 2220, 6010, 6010])
 
 
-async def test_near_tie_ratio_about_five_percent_is_a_tie_f5() -> None:
+async def test_near_tie_ratio_about_five_percent_is_a_tie() -> None:
     job = _job(season=None)
     db = _db(job, DISC)
     # Mean costs 100/4 = 25 vs 105/4 = 26.25: 4.8% apart.
@@ -1200,9 +1199,9 @@ async def test_near_tie_ratio_about_five_percent_is_a_tie_f5() -> None:
     assert outcome.claims.suggestion is True
 
 
-async def test_near_tie_ratio_about_twenty_percent_is_not_a_tie_but_a_thin_win_i5() -> None:
+async def test_near_tie_ratio_about_twenty_percent_is_not_a_tie_but_a_thin_win() -> None:
     """Not a near tie (20% apart), but the runner-up is only 6.25 s worse on
-    mean cost, under the 30 s floor (I5): a thin scan win is a suggestion."""
+    mean cost, under the 30 s floor: a thin scan win is a suggestion."""
     job = _job(season=None)
     db = _db(job, DISC)
     # Mean costs 100/4 = 25 vs 125/4 = 31.25: 20% apart.
@@ -1217,7 +1216,7 @@ async def test_near_tie_ratio_about_twenty_percent_is_not_a_tie_but_a_thin_win_i
     assert outcome.claims.alternatives == [{"season": 2, "coverage": 1.0, "matches": 4}]
 
 
-async def test_clear_scan_win_applies_i5() -> None:
+async def test_clear_scan_win_applies() -> None:
     job = _job(season=None)
     db = _db(job, DISC)
     # Mean costs 100/4 = 25 vs 250/4 = 62.5: 37.5 s apart, over both floors.
@@ -1230,7 +1229,7 @@ async def test_clear_scan_win_applies_i5() -> None:
     assert outcome.claims.suggestion is False
 
 
-async def test_known_season_is_never_a_thin_win_i5() -> None:
+async def test_known_season_is_never_a_thin_win() -> None:
     job = _job(season=1)
     db = _db(job, DISC)
     provider = FakeProvider(seasons={1: _tie_season(1, 1600), 2: _tie_season(2, 1625)})
@@ -1420,7 +1419,7 @@ async def test_empty_season_list_is_a_miss() -> None:
     assert outcomes[0].claims.detail == "no seasons listed"
 
 
-async def test_sibling_holding_no_episodes_is_no_conflict_f2() -> None:
+async def test_sibling_holding_no_episodes_is_no_conflict() -> None:
     sibling = _job("job_2", disc_number=None)
     job = _job(disc_number=None)
     db = _db(job, DISC, sibling, extra_tracks=[_track("job_2", 0, 1320)])
