@@ -315,20 +315,20 @@ async def test_spawn_injects_transcode_puid_pgid_when_configured() -> None:
     assert kwargs["environment"]["PGID"] == "1000"
 
 
-async def test_spawn_omits_puid_pgid_when_not_configured() -> None:
-    # Default (empty) ARM_TRANSCODE_PUID/PGID must NOT inject PUID/PGID —
-    # the spawned container keeps the image's default drop uid/gid.
+async def test_spawn_uses_the_stack_puid_pgid_when_no_override() -> None:
+    # Empty ARM_TRANSCODE_PUID/PGID: the transcoder drops to the stack's
+    # PUID/PGID like every other service, not the image's default uid.
     db = _app_with_one_task(TranscodeTaskStatus.QUEUED)
     db.rows["transcode_tasks"][0].created_at = datetime.now(UTC)
     docker = MagicMock()
-    disp = TranscodeDispatcher(_settings(), _db_factory(db), docker, WSHub())
+    disp = TranscodeDispatcher(_settings(PUID="1001", PGID="1001"), _db_factory(db), docker, WSHub())
 
     spawned = await disp.spawn_pending(db)
     assert spawned == 1
 
     kwargs = docker.containers.run.call_args.kwargs
-    assert "PUID" not in kwargs["environment"]
-    assert "PGID" not in kwargs["environment"]
+    assert kwargs["environment"]["PUID"] == "1001"
+    assert kwargs["environment"]["PGID"] == "1001"
 
 
 async def test_spawn_caps_at_max_parallel() -> None:
