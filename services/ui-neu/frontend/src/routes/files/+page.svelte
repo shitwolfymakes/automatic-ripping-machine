@@ -282,12 +282,12 @@
 	{/if}
 
 	<!-- File listing; with no root configured the empty-roots message stands in for it. -->
-	{#if browser.noRootsConfigured}
-		<div class="panel files-page-empty-panel">
-			<p class="files-page-empty-panel-text">No media directories configured</p>
-		</div>
-	{:else}
-		<HoldUntil ready={rootsSettled}>
+	<HoldUntil ready={rootsSettled}>
+		{#if browser.noRootsConfigured}
+			<div class="panel files-page-empty-panel">
+				<p class="files-page-empty-panel-text">No media directories configured</p>
+			</div>
+		{:else}
 			<LoadState
 				data={browser.listing}
 				loading={browser.loading && !browser.listing}
@@ -350,8 +350,8 @@
 					</div>
 				{/snippet}
 			</LoadState>
-		</HoldUntil>
-	{/if}
+		{/if}
+	</HoldUntil>
 </div>
 
 <!-- Delete confirmation -->

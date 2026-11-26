@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { renderComponent, cleanup } from '$lib/testing/render';
+import { renderComponent, cleanup, screen } from '$lib/testing/render';
 import { REVEAL_CAP_MS, REVEAL_SETTLE_MS } from '$lib/stores/page-reveal.svelte';
+import { SKELETON_MIN_SHOW_MS } from '$lib/stores/skeleton-gate.svelte';
 
 type NavCallback = (nav: { from: { route: { id: string } } | null; to: { route: { id: string } } | null }) => void;
 const nav = vi.hoisted(() => ({ callback: null as NavCallback | null }));
@@ -11,6 +12,7 @@ vi.mock('$app/navigation', () => ({
 }));
 
 import PageRevealHarness from './PageRevealHarness.svelte';
+import LoadStateRevealHarness from './LoadStateRevealHarness.svelte';
 
 function revealer(container: HTMLElement): HTMLElement {
 	return container.querySelector('.page-reveal') as HTMLElement;
@@ -68,5 +70,35 @@ describe('PageReveal', () => {
 		nav.callback!({ from: null, to: route('/') });
 		await vi.advanceTimersByTimeAsync(0);
 		expect(revealer(container).dataset.revealed).toBe('false');
+	});
+});
+
+describe('PageReveal with a LoadState', () => {
+	beforeEach(() => vi.useFakeTimers());
+	afterEach(() => {
+		cleanup();
+		vi.useRealTimers();
+	});
+
+	it('reveals with the data, not the skeleton, when the data lands after the skeleton delay', async () => {
+		const { container, rerender } = renderComponent(LoadStateRevealHarness, { props: { data: null } });
+		await vi.advanceTimersByTimeAsync(450);
+		await rerender({ data: 'x' });
+		await vi.advanceTimersByTimeAsync(REVEAL_SETTLE_MS);
+		expect(revealer(container).dataset.revealed).toBe('true');
+		expect(screen.getByText('READY')).toBeInTheDocument();
+		expect(screen.queryByText('LOADING')).toBeNull();
+	});
+
+	it('keeps a skeleton revealed at the cap for the minimum time from the reveal', async () => {
+		const { container, rerender } = renderComponent(LoadStateRevealHarness, { props: { data: null } });
+		await vi.advanceTimersByTimeAsync(REVEAL_CAP_MS);
+		expect(revealer(container).dataset.revealed).toBe('true');
+		await vi.advanceTimersByTimeAsync(100);
+		await rerender({ data: 'x' });
+		await vi.advanceTimersByTimeAsync(SKELETON_MIN_SHOW_MS - 100 - 1);
+		expect(screen.getByText('LOADING')).toBeInTheDocument();
+		await vi.advanceTimersByTimeAsync(1);
+		expect(screen.getByText('READY')).toBeInTheDocument();
 	});
 });

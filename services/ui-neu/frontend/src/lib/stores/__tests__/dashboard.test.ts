@@ -35,7 +35,7 @@ describe('dashboard store sticky merge', () => {
 		};
 	}
 
-	it('keeps prior notification_count when the response sends null on next poll', async () => {
+	it('keeps prior notification_count when BFF sends null on next poll', async () => {
 		fetchDashboardMock
 			.mockResolvedValueOnce(fullPayload({ notification_count: 7 }))
 			.mockResolvedValueOnce(fullPayload({ notification_count: null }));
@@ -44,7 +44,7 @@ describe('dashboard store sticky merge', () => {
 		await dashboard.refresh();
 		expect(get(dashboard).notification_count).toBe(7);
 		await dashboard.refresh();
-		// Sticky: still 7, not 0, even though the response sent null.
+		// Sticky: still 7, not 0, even though BFF sent null.
 		expect(get(dashboard).notification_count).toBe(7);
 	});
 
@@ -80,7 +80,7 @@ describe('dashboard store sticky merge', () => {
 		expect(get(dashboard).drives).toEqual({ drv_1: { name: 'A', kind: 'optical', retired: false, source: null } });
 	});
 
-	it('uses fresh value when the response sends a non-null value', async () => {
+	it('uses fresh value when BFF sends a non-null value', async () => {
 		fetchDashboardMock
 			.mockResolvedValueOnce(fullPayload({ notification_count: 7 }))
 			.mockResolvedValueOnce(fullPayload({ notification_count: 12 }));
@@ -91,7 +91,7 @@ describe('dashboard store sticky merge', () => {
 		expect(get(dashboard).notification_count).toBe(12);
 	});
 
-	it('uses fresh zero when the response sends 0 (not null) - 0 is a real count', async () => {
+	it('uses fresh zero when BFF sends 0 (not null) - 0 is a real count', async () => {
 		fetchDashboardMock
 			.mockResolvedValueOnce(fullPayload({ notification_count: 7 }))
 			.mockResolvedValueOnce(fullPayload({ notification_count: 0 }));

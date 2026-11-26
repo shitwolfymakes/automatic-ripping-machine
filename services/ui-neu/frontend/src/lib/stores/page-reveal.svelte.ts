@@ -70,6 +70,15 @@ export function providePageReveal(state: PageRevealState): void {
 }
 
 /**
+ * Whether the page is on screen yet, as a reactive getter. Call during
+ * component init. Outside a PageReveal it is always true.
+ */
+export function pageRevealed(): () => boolean {
+	const reveal = getContext<PageRevealState | undefined>(KEY);
+	return () => reveal?.revealed ?? true;
+}
+
+/**
  * Hold the page reveal while `isPending()` is true. Call during component
  * init. Outside a PageReveal (tests, the setup walkthrough) it does nothing.
  */
