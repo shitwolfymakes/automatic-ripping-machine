@@ -246,6 +246,10 @@ class GpuWaitLog:
         """Note a spawned task, so it is not logged as waiting again before its transcoder claims it."""
         self._spawned.add(task_id)
 
+    def unclaimed(self, task_id: str) -> None:
+        """Forget a spawn that never claimed and was stopped: its task is queued again, and its next wait is a real one."""
+        self._spawned.discard(task_id)
+
     async def settle(self, db: AsyncSession) -> None:
         """End the logged wait of every task no longer queued (cancelled, deleted or failed elsewhere),
         and forget spawned tasks that have left the queue."""
