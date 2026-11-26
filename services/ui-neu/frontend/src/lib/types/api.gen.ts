@@ -385,6 +385,10 @@ export type CatalogService = {
      */
     docs_url: string;
     /**
+     * Setup Url
+     */
+    setup_url: string;
+    /**
      * Url Scheme
      */
     url_scheme: string;

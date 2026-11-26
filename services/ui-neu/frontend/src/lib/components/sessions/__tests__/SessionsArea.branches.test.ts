@@ -343,7 +343,7 @@ describe('presets, opening', () => {
 		renderComponent(SessionsArea);
 		await screen.findByText('ses Alpha');
 		await fireEvent.click(screen.getByRole('button', { name: /new session/i }));
-		await fireEvent.change(screen.getByLabelText(/transcode preset/i), { target: { value: '__create_tc__' } });
+		await fireEvent.change(screen.getByLabelText(/^transcode preset/i), { target: { value: '__create_tc__' } });
 		const dialog = await screen.findByRole('dialog', { name: 'New transcode preset' });
 		expect(within(dialog).getByTestId('tp-name')).toHaveValue('');
 	});
@@ -582,7 +582,7 @@ describe('the inline dialog and the transcode preset sidebar', () => {
 
 	async function openBuilderTranscodeSelect() {
 		await fireEvent.click(screen.getByRole('button', { name: /new session/i }));
-		return screen.getByLabelText(/transcode preset/i) as HTMLSelectElement;
+		return screen.getByLabelText(/^transcode preset/i) as HTMLSelectElement;
 	}
 
 	it('saving an edited rip preset closes it, reloads and preselects nothing in the builder', async () => {
@@ -596,7 +596,7 @@ describe('the inline dialog and the transcode preset sidebar', () => {
 		await waitFor(() => expect(fetchRipPresets).toHaveBeenCalledTimes(2));
 		await openTab(/^sessions\b/i);
 		await fireEvent.click(screen.getByRole('button', { name: /new session/i }));
-		expect(screen.getByLabelText(/rip preset/i)).toHaveValue('');
+		expect(screen.getByLabelText(/^rip preset/i)).toHaveValue('');
 	});
 
 	it('saving a new transcode preset from the builder preselects it there', async () => {
