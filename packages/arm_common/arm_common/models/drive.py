@@ -36,10 +36,10 @@ class Drive(SQLModel, table=True):
     # instead of quietly overwriting device_path. None when the drive
     # doesn't expose a serial.
     serial: str | None = Field(default=None, nullable=True)
-    # --- lifecycle & identity (spec §1) -----------------------------------
+    # --- lifecycle & identity -----------------------------------
     # The udev /dev/disk/by-id link name for this physical drive: unique and
     # stable across replug/renumbering. NULL for drives without a serial.
-    # UNIQUE with NULLs-distinct is the partial unique index the spec asks for.
+    # UNIQUE with NULLs-distinct is the partial unique index.
     by_id_name: str | None = Field(default=None, sa_column=Column(String, nullable=True, unique=True))
     # sysfs device path cut before the first `hostN` component — the port the
     # drive is plugged into. Fallback identity when there is no by-id link.
@@ -47,8 +47,8 @@ class Drive(SQLModel, table=True):
     identity_kind: DriveIdentityKind | None = Field(
         default=None, sa_column=enum_column(DriveIdentityKind, "drive_identity_kind", nullable=True)
     )
-    # Operator decision. Python default ENROLLED so a row created by the
-    # (Plan-3-removed) hostname register reads as what it is: a served drive.
+    # Operator decision. Python default ENROLLED so a row created without an
+    # explicit lifecycle reads as a served drive.
     # The scanner sets DETECTED explicitly on rows it creates.
     lifecycle: DriveLifecycle = Field(
         default=DriveLifecycle.ENROLLED,
@@ -70,7 +70,7 @@ class Drive(SQLModel, table=True):
     present: bool = Field(default=True, sa_column=Column(Boolean, nullable=False, server_default="true"))
     vendor: str | None = Field(default=None)
     model: str | None = Field(default=None)
-    # Last operator-visible failure (e.g. a Plan 3 docker error on enroll).
+    # Last operator-visible failure (e.g. a docker error on enroll).
     last_error: str | None = Field(default=None)
     # Informational note about the last disc (e.g. "ejected: already ripped").
     # Set by identify, cleared by the next identify on this drive or when the

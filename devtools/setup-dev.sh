@@ -218,7 +218,7 @@ fi
 # docker-compose.yml is generated per host (gitignored, like .env): bootstrap
 # it from the committed docker-compose.yml.example template. Drives are NOT
 # enumerated here: the backend's scanner finds them and the operator enrolls
-# from the UI (drive lifecycle spec §5).
+# from the UI.
 COMPOSE_FILE_PATH="${ROOT_DIR}/docker-compose.yml"
 COMPOSE_TEMPLATE_PATH="${ROOT_DIR}/docker-compose.yml.example"
 
@@ -227,7 +227,7 @@ generate_compose() {
     # regenerate it from the committed template so static services stay in
     # sync — knobs live in .env, so there are no hand-edits to preserve.
     # Drives are NOT enumerated here: the backend's scanner finds them and the
-    # operator enrolls from the UI (drive lifecycle spec §5).
+    # operator enrolls from the UI.
     if [[ ! -f "${COMPOSE_TEMPLATE_PATH}" ]]; then
         echo "ERROR: ${COMPOSE_TEMPLATE_PATH} missing; cannot create docker-compose.yml." >&2
         exit 1

@@ -1,4 +1,4 @@
-"""Transcoder ↔ Backend REST endpoints (Phase 7).
+"""Transcoder ↔ Backend REST endpoints.
 
 The endpoints per `03-protocol.md § Transcode container ↔ Backend`:
 - `POST /register` — bootstrap; transcoder receives the task, session, preset,
@@ -31,12 +31,16 @@ from arm_backend.auth import require_service_token
 from arm_backend.db import get_session
 from arm_backend.gpu_claim import release_gpu_for_task
 from arm_backend.metadata.poster import cover_art_urls
-from arm_backend.routers._deps import get_hub
+from arm_backend.handbrake_schema_runner import HandbrakeSchemaRunner
+from arm_backend.handbrake_schema_store import SchemaStore, get_schema_store
+from arm_backend.preset_views import preset_view
+from arm_backend.routers._deps import get_hub, get_schema_runner
 from arm_backend.routers.images import ImageUnavailable, fetch_allowed_image
 from arm_backend.session_routing import routing_media_type
 from arm_backend.transcode_apply import music_tags_for, settle_session_application
 from arm_backend.ws import WSHub
 from arm_common import (
+    Gpu,
     MediaType,
     Session,
     SessionApplication,
@@ -55,7 +59,6 @@ from arm_common.schemas import (
     RegisterTranscoderResponse,
     SessionView,
     TrackView,
-    TranscodePresetView,
     TranscodeTaskView,
 )
 
@@ -81,10 +84,32 @@ def _require_owner(task: TranscodeTask, hostname: str | None) -> None:
         )
 
 
+_PREDATES_SETTINGS = "transcode image predates HandBrake settings; rebuild or pull it"
+
+
+def _refuse_image_without_settings_support(req: RegisterTranscoderRequest, preset: TranscodePreset | None) -> None:
+    """An image that reports no schema hash cannot apply HandBrake settings, so it must not get a preset that has them."""
+    if req.schema_hash is None and preset is not None and preset.handbrake_settings:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=_PREDATES_SETTINGS)
+
+
+def _request_schema_refresh(
+    req: RegisterTranscoderRequest, store: SchemaStore, runner: HandbrakeSchemaRunner | None
+) -> None:
+    """Version skew: an image whose schema differs from ours (or ours is missing) triggers a background refresh."""
+    if req.schema_hash is None or runner is None:
+        return
+    current = store.current()
+    if current is None or current.content_hash != req.schema_hash:
+        runner.request_refresh_if_hash_differs(req.schema_hash)
+
+
 @router.post("/register", response_model=RegisterTranscoderResponse)
 async def register(
     req: RegisterTranscoderRequest,
     db: AsyncSession = Depends(get_session),
+    store: SchemaStore = Depends(get_schema_store),
+    runner: HandbrakeSchemaRunner | None = Depends(get_schema_runner),
 ) -> RegisterTranscoderResponse:
     task = await _load_task(db, req.task_id)
     if task.status not in (TranscodeTaskStatus.QUEUED, TranscodeTaskStatus.IN_PROGRESS):
@@ -119,12 +144,15 @@ async def register(
             detail=f"source track {track.id} has no output_path on disk; rip not yet complete",
         )
 
+    _refuse_image_without_settings_support(req, transcode_preset)
+    _request_schema_refresh(req, store, runner)
+    gpus = list((await db.execute(select(Gpu))).scalars().all())
     job = (await db.execute(select(Job).where(col(Job.id) == track.job_id))).scalar_one()
     media_root = request_media_root()
     return RegisterTranscoderResponse(
         task=TranscodeTaskView.model_validate(task),
         session=SessionView.model_validate(sess),
-        transcode_preset=TranscodePresetView.model_validate(transcode_preset) if transcode_preset is not None else None,
+        transcode_preset=preset_view(transcode_preset, store.current(), gpus) if transcode_preset is not None else None,
         source_track=TrackView.model_validate(track),
         raw_input_path=track.output_path,
         media_root=media_root,

@@ -82,7 +82,7 @@ def _truncate(text: str) -> str:
     return text[:MAX_ERROR_CHARS]
 
 
-def _is_timeout(exc: BaseException) -> bool:
+def is_timeout(exc: BaseException) -> bool:
     """docker-py surfaces a `wait(timeout=...)` expiry as a requests
     ReadTimeout or a ConnectionError wrapping urllib3's read timeout,
     depending on the transport; match on the shape rather than one class."""
@@ -91,12 +91,12 @@ def _is_timeout(exc: BaseException) -> bool:
     return "timeout" in type(exc).__name__.lower() or "timed out" in str(exc).lower()
 
 
-def _decode(raw: bytes | str) -> str:
+def decode_output(raw: bytes | str) -> str:
     return raw.decode("utf-8", errors="replace") if isinstance(raw, bytes) else raw
 
 
 def _stderr_tail(stderr: bytes | str) -> str:
-    lines = [line.strip() for line in _decode(stderr).splitlines() if line.strip()]
+    lines = [line.strip() for line in decode_output(stderr).splitlines() if line.strip()]
     return " | ".join(lines[-_STDERR_TAIL_LINES:])
 
 
@@ -107,7 +107,7 @@ def parse_probe_payload(status_code: int, stdout: bytes | str) -> dict[str, Any]
     before the worker runs). Anything other than exit 0 with a JSON object
     carrying a `verified` list is a failed probe.
     """
-    lines = [line.strip() for line in _decode(stdout).splitlines() if line.strip()]
+    lines = [line.strip() for line in decode_output(stdout).splitlines() if line.strip()]
     if status_code != 0 or not lines:
         return None
     try:
@@ -404,7 +404,7 @@ class GpuProbeRunner:
             try:
                 result = await asyncio.to_thread(container.wait, timeout=PROBE_TIMEOUT_S)
             except Exception as exc:  # noqa: BLE001 - reported on the row
-                if _is_timeout(exc):
+                if is_timeout(exc):
                     return None, f"probe timed out after {PROBE_TIMEOUT_S} s; the probe container was removed"
                 return None, _truncate(f"probe failed while waiting for the container: {exc}")
             raw_code = result.get("StatusCode")

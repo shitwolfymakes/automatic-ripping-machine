@@ -1,5 +1,5 @@
 """GET /api/drives/diagnostic: lifecycle-aware notes, container state, scanner
-and ripper-manager health (Plan 6 task 2)."""
+and ripper-manager health."""
 
 from __future__ import annotations
 

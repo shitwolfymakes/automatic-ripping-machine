@@ -385,6 +385,10 @@ export type CatalogService = {
      */
     docs_url: string;
     /**
+     * Setup Url
+     */
+    setup_url: string;
+    /**
      * Url Scheme
      */
     url_scheme: string;
@@ -1854,10 +1858,130 @@ export type HttpValidationError = {
 };
 
 /**
+ * HandbrakeSchemaRefreshResult
+ */
+export type HandbrakeSchemaRefreshResult = {
+    /**
+     * Ok
+     */
+    ok: boolean;
+    /**
+     * Error
+     */
+    error?: string | null;
+};
+
+/**
+ * HandbrakeSchemaSlimView
+ *
+ * What the UI needs to render the settings sidebar; no built-in preset values.
+ */
+export type HandbrakeSchemaSlimView = {
+    /**
+     * Handbrake Tag
+     */
+    handbrake_tag: string;
+    /**
+     * Preset Version
+     */
+    preset_version: string;
+    /**
+     * Content Hash
+     */
+    content_hash: string;
+    /**
+     * Keys
+     */
+    keys: Array<SlimKey>;
+    /**
+     * Audio Item Keys
+     */
+    audio_item_keys: Array<SlimKey>;
+    /**
+     * Families
+     */
+    families: Array<SlimFamily>;
+    /**
+     * Lists
+     */
+    lists: {
+        [key: string]: Array<unknown>;
+    };
+    /**
+     * Audio Mixdowns By Encoder
+     */
+    audio_mixdowns_by_encoder: {
+        [key: string]: Array<string>;
+    };
+    /**
+     * Filters
+     */
+    filters: {
+        [key: string]: SlimFilter;
+    };
+    /**
+     * Builtin Names
+     */
+    builtin_names: Array<string>;
+    /**
+     * Static Enums
+     */
+    static_enums: {
+        [key: string]: Array<unknown>;
+    };
+    /**
+     * Source Extras
+     */
+    source_extras: {
+        [key: string]: Array<unknown>;
+    };
+    /**
+     * Selector Filter Aliases
+     */
+    selector_filter_aliases: {
+        [key: string]: string;
+    };
+    /**
+     * Arm Owned Keys
+     */
+    arm_owned_keys: Array<string>;
+    /**
+     * Encoder Specific Keys
+     */
+    encoder_specific_keys: Array<string>;
+    /**
+     * Hidden Keys
+     */
+    hidden_keys: Array<string>;
+};
+
+/**
+ * HandbrakeSettings
+ *
+ * Settings every encoder shares (``common``) plus one block per encoder family (``encoders``).
+ */
+export type HandbrakeSettings = {
+    /**
+     * Common
+     */
+    common?: {
+        [key: string]: unknown;
+    };
+    /**
+     * Encoders
+     */
+    encoders?: {
+        [key: string]: {
+            [key: string]: unknown;
+        };
+    };
+};
+
+/**
  * HardwareCaps
  *
- * Self-reported transcoder capabilities. Phase 7 (CPU-only) ignores these;
- * Phase 7b consumes them for GPU dispatch + `gpus` row writes.
+ * Self-reported transcoder capabilities. The Backend does not dispatch on
+ * these; GPU eligibility comes from the probed `gpus` rows.
  */
 export type HardwareCaps = {
     /**
@@ -1920,9 +2044,9 @@ export type HeartbeatRequest = {
  * Boot-probe payload for a disc held in AWAITING_REVIEW (timed review gate).
  *
  * `paused` is true when the held disc should survive a ripper reboot as a hold
- * (global `ripping_paused` on — or, once it lands, a per-job pause). The ripper
- * uses it to choose re-park (paused) vs. abandon-and-self-heal (counting down)
- * on restart. See the timed-review-gate spec §6.3.
+ * (global `ripping_paused`, or the per-job `manual_pause` set by review-pause).
+ * The ripper uses it to choose re-park (paused) vs. abandon-and-self-heal
+ * (counting down) on restart.
  */
 export type HeldJobView = {
     job: JobView;
@@ -2028,8 +2152,7 @@ export type IdentityFacts = {
  * IdentitySuggestion
  *
  * A confident online match identify did not apply because the media
- * type's "Apply confident matches" switch is off (identification-sources
- * spec D-10). The job keeps its miss title and the `unidentified` flag and
+ * type's "Apply confident matches" switch is off. The job keeps its miss title and the `unidentified` flag and
  * waits in AWAITING_REVIEW with no countdown until the operator accepts
  * it (POST /api/jobs/{id}/identity/accept) or identifies the disc another
  * way (any resolve clears this section).
@@ -2095,6 +2218,93 @@ export type IdentityView = {
      * Tracks
      */
     tracks?: Array<TrackIdentityView>;
+};
+
+/**
+ * ImportParseResponse
+ */
+export type ImportParseResponse = {
+    /**
+     * Handbrake Version
+     */
+    handbrake_version: {
+        [key: string]: string;
+    };
+    /**
+     * Presets
+     */
+    presets: Array<ImportedPresetView>;
+};
+
+/**
+ * ImportProposal
+ *
+ * The preset an import would create from one HandBrake export entry.
+ */
+export type ImportProposal = {
+    /**
+     * Name
+     */
+    name: string;
+    container: ContainerFormat;
+    /**
+     * Encoder
+     */
+    encoder: string;
+    handbrake_settings: HandbrakeSettings;
+};
+
+/**
+ * ImportedPresetView
+ *
+ * One export entry as the review step shows it: the proposal plus everything the import changed.
+ */
+export type ImportedPresetView = {
+    /**
+     * Path
+     */
+    path: Array<string>;
+    /**
+     * Name
+     */
+    name: string;
+    proposal: ImportProposal | null;
+    /**
+     * Source Encoder
+     */
+    source_encoder: string;
+    /**
+     * Dropped Keys
+     */
+    dropped_keys: Array<string>;
+    /**
+     * Not Imported
+     */
+    not_imported: Array<string>;
+    /**
+     * Copied Depth To
+     */
+    copied_depth_to: Array<string>;
+    /**
+     * Eight Bit Only
+     */
+    eight_bit_only: Array<string>;
+    /**
+     * Warnings
+     */
+    warnings: Array<string>;
+    /**
+     * Issues
+     */
+    issues: Array<SettingIssue>;
+    /**
+     * Importable
+     */
+    importable: boolean;
+    /**
+     * Reason
+     */
+    reason?: string | null;
 };
 
 /**
@@ -2709,14 +2919,14 @@ export type JobView = {
      * Looks Episodic
      *
      * The stored scan looks like a TV disc (several same-length episode
-     * titles, no feature): the title search defaults to TV (spec 3.3).
+     * titles, no feature): the title search defaults to TV.
      */
     readonly looks_episodic: boolean;
     /**
      * Has Series
      *
      * A TV show is known: a TMDb id of kind tv, a TVDB or TVmaze id, or a
-     * show id some episode source resolved (spec 3.4). False means the
+     * show id some episode source resolved. False means the
      * Match Episodes tab asks for the series first.
      */
     readonly has_series: boolean;
@@ -3911,6 +4121,10 @@ export type RegisterTranscoderRequest = {
      */
     hostname: string;
     hw_caps: HardwareCaps;
+    /**
+     * Schema Hash
+     */
+    schema_hash?: string | null;
 };
 
 /**
@@ -3997,7 +4211,7 @@ export type ResolveFanOutOutcomeView = {
 /**
  * ResolveMatch
  *
- * A search result the operator picked (match picker spec 3.6). Its
+ * A search result the operator picked (from the match picker). Its
  * presence makes `external_ids` replace the stored show ids wholesale.
  */
 export type ResolveMatch = {
@@ -4638,6 +4852,30 @@ export type SessionView = {
 };
 
 /**
+ * SettingIssue
+ *
+ * One reason a setting is rejected. ``encoder`` names the block it sits in; None for ``common``.
+ */
+export type SettingIssue = {
+    /**
+     * Key
+     */
+    key: string;
+    /**
+     * Encoder
+     */
+    encoder?: string | null;
+    /**
+     * Code
+     */
+    code: 'unknown_key' | 'not_allowed_here' | 'wrong_type' | 'not_in_list' | 'out_of_range' | 'encoder_not_reachable' | 'engine_ignores_settings' | 'not_supported_by_encoder';
+    /**
+     * Message
+     */
+    message: string;
+};
+
+/**
  * SettingsGroup
  *
  * A named section of the settings page (e.g. Metadata, Ripping, System).
@@ -4682,7 +4920,7 @@ export type SetupStatusPublic = {
 /**
  * SetupStep
  *
- * First-run setup walkthrough steps, in walkthrough order (setup spec 2026-10-01).
+ * First-run setup walkthrough steps, in walkthrough order.
  *
  * Stored as VARCHAR keys inside Config.setup_progress JSON, validated in the app.
  */
@@ -4738,6 +4976,165 @@ export type SetupView = {
      * Deferred
      */
     deferred?: boolean;
+};
+
+/**
+ * SlimFamily
+ */
+export type SlimFamily = {
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Codec Id
+     */
+    codec_id: number;
+    /**
+     * Multipass
+     */
+    multipass: boolean;
+    /**
+     * Turbo
+     */
+    turbo: boolean;
+    /**
+     * Rate Controls
+     */
+    rate_controls: Array<number>;
+    /**
+     * Variants
+     */
+    variants: Array<SlimVariant>;
+};
+
+/**
+ * SlimFilter
+ */
+export type SlimFilter = {
+    /**
+     * Presets
+     */
+    presets: Array<string>;
+    /**
+     * Tunes
+     */
+    tunes: Array<string>;
+};
+
+/**
+ * SlimKey
+ */
+export type SlimKey = {
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Type
+     */
+    type: string;
+    /**
+     * Default
+     */
+    default: unknown;
+    /**
+     * Tab
+     */
+    tab: string;
+    /**
+     * Group
+     */
+    group: string;
+    /**
+     * Label
+     */
+    label: string;
+    source: SlimSource | null;
+    /**
+     * Limits
+     */
+    limits: [
+        number,
+        number
+    ] | null;
+    /**
+     * Known
+     */
+    known: boolean;
+    /**
+     * Option Labels
+     */
+    option_labels?: {
+        [key: string]: string;
+    } | null;
+};
+
+/**
+ * SlimQuality
+ */
+export type SlimQuality = {
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Low
+     */
+    low: number;
+    /**
+     * High
+     */
+    high: number;
+    /**
+     * Step
+     */
+    step: number;
+};
+
+/**
+ * SlimSource
+ */
+export type SlimSource = {
+    /**
+     * Kind
+     */
+    kind: string;
+    /**
+     * Ref
+     */
+    ref: string;
+};
+
+/**
+ * SlimVariant
+ */
+export type SlimVariant = {
+    /**
+     * Encoder
+     */
+    encoder: string;
+    /**
+     * Depth
+     */
+    depth: number;
+    /**
+     * Presets
+     */
+    presets: Array<string>;
+    /**
+     * Tunes
+     */
+    tunes: Array<string>;
+    /**
+     * Profiles
+     */
+    profiles: Array<string>;
+    /**
+     * Levels
+     */
+    levels: Array<string>;
+    quality: SlimQuality;
 };
 
 /**
@@ -4958,6 +5355,22 @@ export type SystemVersionResponse = {
      * Version
      */
     version: string;
+    /**
+     * Latest Version
+     */
+    latest_version?: string | null;
+    /**
+     * Update Available
+     */
+    update_available?: boolean | null;
+    /**
+     * Release Url
+     */
+    release_url?: string | null;
+    /**
+     * Repo Url
+     */
+    repo_url?: string | null;
 };
 
 /**
@@ -5156,8 +5569,7 @@ export type TrackKind = 'video_title' | 'audio_track' | 'data_dump' | 'disc_back
  * TrackRole
  *
  * What one title on a disc is. Set by identity sources via the resolver
- * (arm_backend.identity) or by the operator; replaces the old free-text
- * role and the per-track video_type.
+ * (arm_backend.identity) or by the operator.
  */
 export type TrackRole = 'main' | 'episode' | 'extra' | 'trailer' | 'other';
 
@@ -5333,12 +5745,7 @@ export type TranscodePresetCreateRequest = {
      * Preset Ref
      */
     preset_ref?: string | null;
-    /**
-     * Preset Json
-     */
-    preset_json?: {
-        [key: string]: unknown;
-    } | null;
+    handbrake_settings?: HandbrakeSettings | null;
     container: ContainerFormat;
     /**
      * Encoder
@@ -5363,12 +5770,7 @@ export type TranscodePresetUpdateRequest = {
      * Preset Ref
      */
     preset_ref?: string | null;
-    /**
-     * Preset Json
-     */
-    preset_json?: {
-        [key: string]: unknown;
-    } | null;
+    handbrake_settings?: HandbrakeSettings | null;
     container?: ContainerFormat | null;
     /**
      * Encoder
@@ -5402,12 +5804,15 @@ export type TranscodePresetView = {
      * Preset Ref
      */
     preset_ref: string | null;
+    handbrake_settings: HandbrakeSettings | null;
     /**
-     * Preset Json
+     * Issues
      */
-    preset_json: {
-        [key: string]: unknown;
-    } | null;
+    issues?: Array<SettingIssue>;
+    /**
+     * Host Notes
+     */
+    host_notes?: Array<'encodes_on_cpu_here'>;
     container: ContainerFormat;
     /**
      * Encoder
@@ -5640,7 +6045,7 @@ export type UserPasswordSetRequest = {
 /**
  * UserRole
  *
- * Fixed two-account model (spec 2026-07-12-basic-user-management-design).
+ * Fixed two-account model.
  *
  * ADMIN — the single writer; the only account that can hold a session.
  * GUEST — read-everything/write-nothing; acquired by having no token at all
@@ -5708,9 +6113,9 @@ export type ValidationError = {
  * Boot-probe payload for a disc held in AWAITING_REVIEW (timed review gate).
  *
  * `paused` is true when the held disc should survive a ripper reboot as a hold
- * (global `ripping_paused` on — or, once it lands, a per-job pause). The ripper
- * uses it to choose re-park (paused) vs. abandon-and-self-heal (counting down)
- * on restart. See the timed-review-gate spec §6.3.
+ * (global `ripping_paused`, or the per-job `manual_pause` set by review-pause).
+ * The ripper uses it to choose re-park (paused) vs. abandon-and-self-heal
+ * (counting down) on restart.
  */
 export type HeldJobViewWritable = {
     job: JobViewWritable;
@@ -7909,12 +8314,30 @@ export type UpdateRipPresetApiRipPresetsPresetIdPatchResponses = {
 
 export type UpdateRipPresetApiRipPresetsPresetIdPatchResponse = UpdateRipPresetApiRipPresetsPresetIdPatchResponses[keyof UpdateRipPresetApiRipPresetsPresetIdPatchResponses];
 
+export type ParseHandbrakeExportApiTranscodePresetsImportParsePostData = {
+    body: unknown;
+    path?: never;
+    query?: never;
+    url: '/api/transcode-presets/import/parse';
+};
+
+export type ParseHandbrakeExportApiTranscodePresetsImportParsePostResponses = {
+    /**
+     * Successful Response
+     */
+    200: ImportParseResponse;
+};
+
+export type ParseHandbrakeExportApiTranscodePresetsImportParsePostResponse = ParseHandbrakeExportApiTranscodePresetsImportParsePostResponses[keyof ParseHandbrakeExportApiTranscodePresetsImportParsePostResponses];
+
 export type ListTranscodePresetsApiTranscodePresetsGetData = {
     body?: never;
     path?: never;
     query?: {
         /**
          * Media Type
+         *
+         * Only the presets that fit a session of this media type: a movie or TV preset fits either, every other type only its own.
          */
         media_type?: MediaType | null;
     };
@@ -8585,6 +9008,87 @@ export type ListEncodersApiEncodersGetResponses = {
 };
 
 export type ListEncodersApiEncodersGetResponse = ListEncodersApiEncodersGetResponses[keyof ListEncodersApiEncodersGetResponses];
+
+export type GetSlimViewApiHandbrakeSchemaGetData = {
+    body?: never;
+    headers?: {
+        /**
+         * If-None-Match
+         */
+        'if-none-match'?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/handbrake-schema';
+};
+
+export type GetSlimViewApiHandbrakeSchemaGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetSlimViewApiHandbrakeSchemaGetError = GetSlimViewApiHandbrakeSchemaGetErrors[keyof GetSlimViewApiHandbrakeSchemaGetErrors];
+
+export type GetSlimViewApiHandbrakeSchemaGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: HandbrakeSchemaSlimView;
+};
+
+export type GetSlimViewApiHandbrakeSchemaGetResponse = GetSlimViewApiHandbrakeSchemaGetResponses[keyof GetSlimViewApiHandbrakeSchemaGetResponses];
+
+export type GetBuiltinApiHandbrakeSchemaBuiltinNameGetData = {
+    body?: never;
+    path: {
+        /**
+         * Name
+         */
+        name: string;
+    };
+    query?: never;
+    url: '/api/handbrake-schema/builtin/{name}';
+};
+
+export type GetBuiltinApiHandbrakeSchemaBuiltinNameGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetBuiltinApiHandbrakeSchemaBuiltinNameGetError = GetBuiltinApiHandbrakeSchemaBuiltinNameGetErrors[keyof GetBuiltinApiHandbrakeSchemaBuiltinNameGetErrors];
+
+export type GetBuiltinApiHandbrakeSchemaBuiltinNameGetResponses = {
+    /**
+     * Response Get Builtin Api Handbrake Schema Builtin  Name  Get
+     *
+     * Successful Response
+     */
+    200: {
+        [key: string]: unknown;
+    };
+};
+
+export type GetBuiltinApiHandbrakeSchemaBuiltinNameGetResponse = GetBuiltinApiHandbrakeSchemaBuiltinNameGetResponses[keyof GetBuiltinApiHandbrakeSchemaBuiltinNameGetResponses];
+
+export type RefreshApiHandbrakeSchemaRefreshPostData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/handbrake-schema/refresh';
+};
+
+export type RefreshApiHandbrakeSchemaRefreshPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: HandbrakeSchemaRefreshResult;
+};
+
+export type RefreshApiHandbrakeSchemaRefreshPostResponse = RefreshApiHandbrakeSchemaRefreshPostResponses[keyof RefreshApiHandbrakeSchemaRefreshPostResponses];
 
 export type GetConfigApiConfigGetData = {
     body?: never;

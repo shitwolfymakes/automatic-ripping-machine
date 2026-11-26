@@ -1,8 +1,11 @@
 <script lang="ts">
+	import Glyph from '$lib/components/shared/Glyph.svelte';
+	import { errorMessage } from '$lib/utils/errors';
 	import { onMount } from 'svelte';
-	import { ChevronRight } from 'lucide-svelte';
 	import { fetchScript, fetchScripts, type BashScriptInfo, type BashScriptSummary } from '$lib/api/channels';
 	import SchemaField from '../SchemaField.svelte';
+	import FieldLabel from '../../shared/FieldLabel.svelte';
+	import { FIELD_IDS } from '$lib/notifications/channel-form';
 	import type { CatalogField } from '$lib/types/notifications';
 
 	let {
@@ -21,6 +24,7 @@
 	let info = $state<BashScriptInfo | null>(null);
 	let infoMissing = $state(false);
 	let viewerOpen = $state(false);
+	const uid = $props.id();
 
 	const current = $derived(typeof config.script === 'string' ? config.script : '');
 	const inputs = $derived((config.inputs as Record<string, string> | undefined) ?? {});
@@ -31,7 +35,7 @@
 		try {
 			scripts = await fetchScripts();
 		} catch (e) {
-			loadError = e instanceof Error ? e.message : 'Could not list scripts';
+			loadError = errorMessage(e, 'Could not list scripts');
 		} finally {
 			loaded = true;
 		}
@@ -91,9 +95,10 @@
 </script>
 
 <div class="bash-script-fields-grid">
-	<label class="field">
-		<span class="field-label">Script *</span>
+	<div class="field">
+		<FieldLabel for="{uid}-script" label="Script" docsId={FIELD_IDS.script} required />
 		<select
+			id="{uid}-script"
 			aria-label="Script"
 			value={current}
 			onchange={(e) => pick((e.currentTarget as HTMLSelectElement).value)}
@@ -109,10 +114,13 @@
 				</option>
 			{/each}
 		</select>
-	</label>
-	<label class="field">
-		<span class="field-label">Timeout (s)</span>
+	</div>
+	<div class="field">
+		<FieldLabel for="{uid}-timeout" label="Timeout" docsId={FIELD_IDS.timeout}>
+			{#snippet marks()}<span class="bash-script-fields-unit">(s)</span>{/snippet}
+		</FieldLabel>
 		<input
+			id="{uid}-timeout"
 			type="number"
 			aria-label="Timeout (seconds)"
 			min="1"
@@ -120,7 +128,7 @@
 			step="1"
 			bind:value={config.timeout_seconds}
 		/>
-	</label>
+	</div>
 </div>
 
 <div class="cluster bash-script-fields-refresh">
@@ -149,7 +157,7 @@
 			aria-expanded={viewerOpen}
 			onclick={() => (viewerOpen = !viewerOpen)}
 		>
-			<ChevronRight class="chevron" />
+			<Glyph name="chevron-right" class="chevron" />
 			View script
 			<span class="bash-script-fields-viewer-meta"
 				>{info.name}, {info.size_bytes} B{info.executable ? '' : ', not executable'}</span
@@ -197,6 +205,10 @@
 </p>
 
 <style>
+	.bash-script-fields-unit {
+		font-size: 0.75rem;
+		color: var(--color-text-faint);
+	}
 	.bash-script-fields-grid {
 		display: grid;
 		grid-template-columns: 1fr;
@@ -215,14 +227,13 @@
 		color: var(--color-text-muted);
 	}
 	/* .btn-link inherits .btn's own 0.875rem/1.25rem rather than this row's
-	   text-xs (0.75rem/1rem); the original had no size class of its own,
-	   inheriting the paragraph's text-xs (fix round 1). */
+	   text-xs (0.75rem/1rem), so the refresh button restates text-xs. */
 	.bash-script-fields-refresh-btn {
 		font-size: 0.75rem;
 		line-height: 1rem;
 	}
 	/* btn-sm sets font-size but not line-height (inherits .btn's 1.25rem);
-	   the original was text-xs (1rem bundled line-height). */
+	   text-xs bundles a 1rem line-height. */
 	.bash-script-fields-viewer-btn {
 		line-height: 1rem;
 	}
@@ -255,15 +266,14 @@
 		font-weight: 400;
 		color: var(--color-text-muted);
 	}
-	/* text-status-error (not field-error's --color-danger) matches the
-	   original's status token; size restated since field-error's size isn't used here. */
+	/* text-status-error (not field-error's --color-danger) is the status token used here; size is restated since field-error's size isn't used. */
 	.bash-script-fields-status-error {
 		font-size: 0.75rem;
 		line-height: 1rem;
 		color: var(--color-status-error);
 	}
 	/* field-help's own "code" descendant rule gives inline code a background
-	   pill; the original's monospace code snippets here were always plain
+	   pill; the monospace code snippets here are plain
 	   text with no box, so that pill is switched off for this file's codes. */
 	.field-help code.mono {
 		padding: 0;

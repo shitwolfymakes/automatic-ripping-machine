@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { renderComponent, screen, cleanup } from '$lib/test-utils';
+import { renderComponent, screen, cleanup } from '$lib/testing/render';
 import type { SetupView } from '$lib/types/api.gen';
 
 // Branch pin for SystemStep, beside steps-behaviour.test.ts. No branch is

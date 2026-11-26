@@ -92,7 +92,7 @@ def test_0028_downgrade_drops_the_user_role_columns() -> None:
 
 
 def test_0028_matches_the_user_model() -> None:
-    """Model↔migration parity for the columns this branch adds. A field renamed
+    """Model↔migration agreement for the columns this branch adds. A field renamed
     or made nullable on `User` without touching 0028 leaves the app querying a
     column the schema doesn't have — a boot-time failure, not a test failure,
     without this."""
@@ -118,7 +118,7 @@ def test_0045_upgrade_adds_the_identification_columns_and_seeds_them() -> None:
     assert "ALTER TABLE config ADD COLUMN movie_auto_apply BOOLEAN DEFAULT true NOT NULL" in sql
     assert "ALTER TABLE config ADD COLUMN music_auto_apply BOOLEAN DEFAULT true NOT NULL" in sql
     assert "ALTER TABLE config ADD COLUMN crc64service_enabled BOOLEAN DEFAULT true NOT NULL" in sql
-    # D-8: the old choice goes first in the movie order and stays the search provider.
+    # The old choice goes first in the movie order and stays the search provider.
     assert "WHEN metadata_provider = 'omdb' THEN '{omdb,tmdb}'::text[]" in sql
     assert "WHEN metadata_provider IN ('tmdb', 'omdb') THEN metadata_provider" in sql
     assert "search_provider_tv = CASE WHEN metadata_provider IN ('tmdb', 'omdb') THEN metadata_provider" in sql
@@ -165,7 +165,7 @@ def test_0045_matches_the_config_model() -> None:
 
 
 def test_0049_matches_the_transcode_task_model() -> None:
-    """The heartbeat telemetry columns (D-242, D-248) exist on both sides,
+    """The heartbeat telemetry columns exist on both sides,
     nullable, so a row from before the revision reads back as null."""
     sql = _render_sql("0048_drive_status_ripping", "0049_transcode_task_telemetry")
     for name in ("current_pass", "eta_seconds", "fps", "avg_fps"):

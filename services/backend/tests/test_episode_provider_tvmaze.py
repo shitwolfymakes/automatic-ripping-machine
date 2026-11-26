@@ -1,4 +1,4 @@
-"""TvmazeEpisodes provider: resolve_show_id, seasons, season (design spec 6.2)."""
+"""TvmazeEpisodes provider: resolve_show_id, seasons, season."""
 
 import httpx
 import pytest
@@ -298,7 +298,7 @@ async def test_episodes_503_raises_source_error(provider):
 @respx.mock
 async def test_seasons_empty_episodes_raises_source_error(provider):
     """An existing show whose episodes endpoint returns `200 []` is a
-    degenerate/transient response (C7), not a definitive miss — must not
+    degenerate/transient response, not a definitive miss — must not
     read as "this show has no seasons"."""
     respx.get(f"{BASE}/shows/169/episodes").mock(return_value=httpx.Response(200, json=[]))
     with pytest.raises(SourceError):
@@ -313,7 +313,7 @@ async def test_season_empty_episodes_raises_source_error(provider):
 
 
 # ---------------------------------------------------------------------------
-# M1: bounded runtimes and names
+# Bounded runtimes and names
 # ---------------------------------------------------------------------------
 
 
@@ -340,7 +340,7 @@ async def test_season_non_str_name_maps_to_none(provider, name):
 
 @respx.mock
 async def test_show_id_is_escaped_in_episodes_path(provider):
-    """D-161: an operator-pasted id cannot add path segments or query params."""
+    """An operator-pasted id cannot add path segments or query params."""
     route = respx.get(url__startswith=f"{BASE}/shows/").mock(
         return_value=httpx.Response(200, json=[{"season": 1, "number": 1, "name": "Pilot", "runtime": 30}])
     )

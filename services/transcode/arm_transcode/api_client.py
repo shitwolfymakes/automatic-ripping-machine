@@ -20,6 +20,7 @@ from arm_common.schemas import (
     RegisterTranscoderResponse,
     TranscodeTaskView,
 )
+from arm_transcode.schema_file import baked_schema_hash
 
 
 class BackendClient:
@@ -51,7 +52,9 @@ class BackendClient:
         task_id: str,
         hw_caps: HardwareCaps,
     ) -> RegisterTranscoderResponse:
-        req = RegisterTranscoderRequest(task_id=task_id, hostname=self._hostname, hw_caps=hw_caps)
+        req = RegisterTranscoderRequest(
+            task_id=task_id, hostname=self._hostname, hw_caps=hw_caps, schema_hash=baked_schema_hash()
+        )
         r = await self._client.post("/api/transcoder/register", json=req.model_dump())
         r.raise_for_status()
         return RegisterTranscoderResponse.model_validate(r.json())

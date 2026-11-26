@@ -175,7 +175,7 @@ check "table: header names endpoint" "yes" "$( [[ "$out" == *"Remote offload ver
 check "table: ssh row FAIL" "yes" "$( [[ "$out" == *"ssh + docker access"*FAIL* ]] && echo yes || echo no )"
 check "table: callback PENDING wording" "yes" "$( [[ "$out" == *"PENDING — stack not running"* && "$out" == *"re-run \`armctl install\`"* ]] && echo yes || echo no )"
 
-# --- Critical regression: non-interactive persisted rerun must restore remote state
+# --- Non-interactive persisted rerun must restore remote state
 PERSISTDIR="$TMPROOT/persist"; mkdir -p "$PERSISTDIR/ssh"
 cat > "$PERSISTDIR/.env" <<'EOF'
 ARM_TRANSCODE_DOCKER_HOST=ssh://sam@192.168.0.92
@@ -201,9 +201,9 @@ setup_remote_offload </dev/null >/dev/null 2>&1 || true
 check "non-interactive persisted rerun: restored" "1" "$REMOTE_OFFLOAD"
 check "non-interactive persisted rerun: gpus kept" "yes" "$( [[ "$REMOTE_GPUS" == *nvenc* ]] && echo yes || echo no )"
 
-# --- final-review fixes ------------------------------------------------------
+# --- CA reuse and completion report ------------------------------------------------------
 
-# F1: ensure_ca creates a CA when absent, reuses when present (real openssl).
+# ensure_ca creates a CA when absent, reuses when present (real openssl).
 CADIR="$TMPROOT/caprefix"; mkdir -p "$CADIR/certs"
 ARM_CERTS_DIR="$CADIR/certs" ensure_ca >/dev/null 2>&1
 check "ensure_ca: creates" "yes" "$( [[ -s "$CADIR/certs/arm-ca.crt" && -s "$CADIR/certs/arm-ca.key" ]] && echo yes || echo no )"
@@ -211,16 +211,16 @@ before="$(sha256sum "$CADIR/certs/arm-ca.crt")"
 ARM_CERTS_DIR="$CADIR/certs" ensure_ca >/dev/null 2>&1
 check "ensure_ca: idempotent" "$before" "$(sha256sum "$CADIR/certs/arm-ca.crt")"
 
-# F2: unresolved-tag ref renders SKIPPED in the report, no verify call.
+# Unresolved-tag ref renders SKIPPED in the report, no verify call.
 remote_script 'echo SHOULD-NOT-RUN; exit 9'
 BACKEND_RUNNING_TEST=(bash -c 'echo false' --)
 out="$(OFFLOAD_ENV_FILE="$ENVFIX" OFFLOAD_CA_FILE="$CAFIX2" OFFLOAD_IMAGE_REF="x/arm-transcode:" OFFLOAD_REOFFER=0 offload_completion_report)"
 check "report: unresolved tag -> SKIPPED row" "yes" "$( [[ "$out" == *"SKIPPED — image tag unresolved"* ]] && echo yes || echo no )"
 
-# F3: GPUs row rendered from env inventory.
+# GPUs row rendered from env inventory.
 check "report: GPUs row present" "yes" "$( [[ "$out" == *"GPUs"* && "$out" == *"nvenc x1"* ]] && echo yes || echo no )"
 
-# F4: FAIL rows re-offer paste blocks when enabled.
+# FAIL rows re-offer paste blocks when enabled.
 KEYDIR="$TMPROOT/persist/ssh"; mkdir -p "$KEYDIR"
 printf 'ssh-ed25519 AAAA test@x\n' > "$KEYDIR/id_ed25519.pub"
 remote_script 'exit 255'

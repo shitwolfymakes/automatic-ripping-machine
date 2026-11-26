@@ -1,4 +1,4 @@
-"""Ordered alignment of disc titles to a season's episodes (spec 6.2).
+"""Ordered alignment of disc titles to a season's episodes.
 
 Both sequences stay monotone: disc order maps to episode order. A title can
 match one episode, two consecutive episodes (a double-length title), or be

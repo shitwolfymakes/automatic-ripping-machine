@@ -13,7 +13,7 @@ export default defineConfig({
 		// --localstorage-file), which shadows jsdom's. Turn it off so tests use
 		// jsdom's. Older Node rejects the flag as a bad option, so gate it.
 		execArgv: Number(process.versions.node.split('.')[0]) >= 25 ? ['--no-experimental-webstorage'] : [],
-		setupFiles: ['src/lib/test-setup.ts'],
+		setupFiles: ['src/lib/testing/setup.ts'],
 		// Node 25+ defines a global localStorage that is undefined without
 		// --localstorage-file, and it shadows jsdom's; turn Node's off.
 		execArgv: ['--no-experimental-webstorage'],

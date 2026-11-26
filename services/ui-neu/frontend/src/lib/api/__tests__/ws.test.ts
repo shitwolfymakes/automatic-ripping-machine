@@ -161,7 +161,7 @@ describe('wsClient', () => {
 	});
 });
 
-describe('wsStatus (G-28 live-updates state)', () => {
+describe('wsStatus (live-updates state)', () => {
 	beforeEach(() => {
 		FakeWS.instances = [];
 		getTokenMock.mockReturnValue('aaa.bbb.ccc');
@@ -213,7 +213,7 @@ describe('wsStatus (G-28 live-updates state)', () => {
 		expect(get(wsStatus)).toBe('online');
 	});
 
-	it('start() during the reconnect back-off keeps the offline state and opens no extra socket (D-050)', () => {
+	it('start() during the reconnect back-off keeps the offline state and opens no extra socket', () => {
 		wsClient.start();
 		authAck(FakeWS.instances[0]);
 		FakeWS.instances[0].emit('close', {});
@@ -240,7 +240,7 @@ describe('wsStatus (G-28 live-updates state)', () => {
 		expect(get(wsStatus)).toBe('idle');
 	});
 
-	it('a 4401 refusal stops reconnecting and runs the unauthorized handler (D-237)', () => {
+	it('a 4401 refusal stops reconnecting and runs the unauthorized handler', () => {
 		notifyUnauthorizedMock.mockClear();
 		gotoMock.mockClear();
 		wsClient.start();
@@ -257,7 +257,7 @@ describe('wsStatus (G-28 live-updates state)', () => {
 		expect(FakeWS.instances).toHaveLength(2);
 	});
 
-	it('a 4403 refusal stops reconnecting and routes to /change-password (D-237)', () => {
+	it('a 4403 refusal stops reconnecting and routes to /change-password', () => {
 		notifyUnauthorizedMock.mockClear();
 		gotoMock.mockClear();
 		wsClient.start();

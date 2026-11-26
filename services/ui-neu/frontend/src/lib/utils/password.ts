@@ -14,3 +14,10 @@ export function passwordProblem(current: string, next: string, confirm: string):
 	if (next !== confirm) return 'Passwords do not match';
 	return null;
 }
+
+/** The change password form's fields in the field docs registry. */
+export const FIELD_IDS = {
+	current: 'form.change_password.current',
+	next: 'form.change_password.new',
+	confirm: 'form.change_password.confirm'
+} as const;

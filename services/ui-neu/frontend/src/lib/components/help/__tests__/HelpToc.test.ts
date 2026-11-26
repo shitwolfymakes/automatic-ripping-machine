@@ -1,6 +1,6 @@
 import { describe, it, expect, afterEach } from 'vitest';
-import { renderComponent, screen, within, cleanup } from '$lib/test-utils';
-import type { DocsTocEntry } from '$lib/docs/api';
+import { renderComponent, screen, within, cleanup } from '$lib/testing/render';
+import type { DocsTocEntry } from '$lib/help/api';
 import HelpToc from '../HelpToc.svelte';
 
 afterEach(cleanup);
