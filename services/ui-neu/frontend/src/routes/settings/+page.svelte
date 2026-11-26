@@ -88,8 +88,35 @@
 	});
 
 	// --- Drives polling store ---
+	// Only the Drives tab shows drives, so it polls only while that tab is
+	// open. The first visit rescans first, to pick up hardware info (model,
+	// serial) that may not have been available at container startup.
 	const drives = createPollingStore(fetchDrives, [] as Drive[], 10000);
 	const driveError = drives.error;
+	let drivesRescanned = false;
+
+	// `isOpen` says whether the tab visit that asked is still open: the first
+	// visit starts polling only after its rescan, and must not start it once
+	// the tab has closed or Settings has gone.
+	function startDrivesTab(isOpen: () => boolean) {
+		if (drivesRescanned) return drives.start();
+		drivesRescanned = true;
+		rescanDrives()
+			.catch(() => {})
+			.then(() => {
+				if (isOpen()) drives.start();
+			});
+	}
+
+	$effect(() => {
+		if (activeTab !== 'drives') return;
+		let open = true;
+		startDrivesTab(() => open);
+		return () => {
+			open = false;
+			drives.stop();
+		};
+	});
 
 	const driveSessionOptions = new DriveSessionOptions();
 
@@ -125,11 +152,6 @@
 	const setupRestart = new SetupRestart();
 
 	onMount(() => {
-		// Rescan drives to pick up hardware info (model, serial) that
-		// may not have been available at container startup.
-		rescanDrives()
-			.catch(() => {})
-			.then(() => drives.start());
 		loaded.load();
 		// Handle initial hash tab (trigger side effects)
 		loadTabData(activeTab);
@@ -147,7 +169,6 @@
 		}
 		window.addEventListener('hashchange', onHashChange);
 		return () => {
-			drives.stop();
 			window.removeEventListener('hashchange', onHashChange);
 		};
 	});

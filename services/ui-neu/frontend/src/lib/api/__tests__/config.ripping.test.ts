@@ -13,7 +13,7 @@ beforeEach(() => {
 	mockApiFetch.mockClear();
 });
 
-// fetchDashboard composes client-side by fanning out across the drives/jobs/
+// fetchDashboardSnapshot composes client-side by fanning out across the drives/jobs/
 // transcoder/notifications/config modules (each routes through its own get/post
 // helper, not the mocked apiFetch here). Its composition + sticky-merge
 // behaviour is covered by dashboard-store.test.ts. Only setRippingEnabled still
