@@ -65,7 +65,7 @@ def test_report_no_config_returns_404() -> None:
 
 
 def test_report_records_the_checking_drive() -> None:
-    """Setup step 4 shows "Valid, checked by {drive}" (setup spec §6.7)."""
+    """The setup walkthrough shows "Valid, checked by {drive}"."""
     db = FakeSession()
     db.rows["config"] = [Config(id=1)]
     with TestClient(_app(db)) as c:

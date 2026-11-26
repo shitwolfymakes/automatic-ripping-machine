@@ -1,4 +1,4 @@
-"""Wire schemas for `/api/iso` (Rip from ISO, spec 2026-09-30 section 5/6):
+"""Wire schemas for `/api/iso` (Rip from ISO):
 the library listing, the create-rip request/response, and the "preparing"
 status an ISO ripper reports before its job exists."""
 

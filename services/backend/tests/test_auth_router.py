@@ -128,7 +128,9 @@ def test_password_change_rejects_wrong_current(signing_key: bytes, admin_user: U
             headers={"Authorization": f"Bearer {token}"},
             json={"current_password": "WRONG", "new_password": "newpassword123"},
         )
-    assert r.status_code == 401
+    # 400, not 401: a 401 from this route means the token, so the UI can end the session on it.
+    assert r.status_code == 400
+    assert r.json() == {"detail": "current password incorrect"}
     assert admin_user.password_must_change is True
 
 

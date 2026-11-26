@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { errorMessage } from '$lib/utils/errors';
 	import type { Channel, Catalog } from '$lib/types/notifications';
 	import {
 		fetchChannels,
@@ -13,7 +14,7 @@
 	import { addToast } from '$lib/stores/toast.svelte';
 	import StatStrip from './StatStrip.svelte';
 	import FilterPills from './FilterPills.svelte';
-	import { filterCounts, matchesFilter, summaryCounts, type ChannelFilter } from './channelFilters';
+	import { filterCounts, matchesFilter, summaryCounts, type ChannelFilter } from '../../notifications/channel-filters';
 	import ChannelList from './ChannelList.svelte';
 	import AddChannelForm from './AddChannelForm.svelte';
 	import {
@@ -22,9 +23,9 @@
 		testUnsavedBody,
 		type AddChannelBody,
 		type TestOutcome
-	} from './channelActions';
-	import { editorPatch, editorTestPayload, type EditorBody } from './channelEdits';
-	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
+	} from '../../notifications/channel-actions';
+	import { editorPatch, editorTestPayload, type EditorBody } from '../../notifications/channel-edits';
+	import ConfirmDialog from '$lib/components/shared/ConfirmDialog.svelte';
 
 	let channels = $state<Channel[]>([]);
 	let catalog = $state<Catalog>({ featured: [], services: [] });
@@ -56,7 +57,7 @@
 			eventTypes = evts;
 			loaded = true;
 		} catch (e) {
-			loadError = e instanceof Error ? e.message : 'Failed to load channels';
+			loadError = errorMessage(e, 'Failed to load channels');
 		}
 	}
 
@@ -75,7 +76,7 @@
 			addOpen = false;
 			addToast({ tone: 'success', title: 'Channel added', body: `${created.name} is now listening for events.` });
 		} catch (e) {
-			addToast({ tone: 'error', title: 'Add failed', body: e instanceof Error ? e.message : 'Unknown error' });
+			addToast({ tone: 'error', title: 'Add failed', body: errorMessage(e, 'Unknown error') });
 		}
 	}
 
@@ -97,7 +98,7 @@
 			channels = channels.map((x) => (x.id === c.id ? updated : x));
 			addToast({ tone: 'success', title: 'Saved.' });
 		} catch (e) {
-			addToast({ tone: 'error', title: 'Save failed', body: e instanceof Error ? e.message : '' });
+			addToast({ tone: 'error', title: 'Save failed', body: errorMessage(e, '') });
 		}
 	}
 
@@ -142,7 +143,7 @@
 			if (expandedId === c.id) expandedId = null;
 			addToast({ tone: 'info', title: `Deleted ${c.name}` });
 		} catch (e) {
-			addToast({ tone: 'error', title: 'Delete failed', body: e instanceof Error ? e.message : '' });
+			addToast({ tone: 'error', title: 'Delete failed', body: errorMessage(e, '') });
 		}
 	}
 
@@ -230,7 +231,7 @@
 		color: var(--color-text-faint);
 	}
 	/* panel-section's own uniform 1rem padding vs this toolbar's px-4 py-3;
-	   the original was bg-page, not panel-section's own primary-tint-1. */
+	   the background is bg-page, not panel-section's own primary-tint-1. */
 	.notifications-tab-toolbar {
 		display: flex;
 		align-items: center;
@@ -239,7 +240,7 @@
 		padding: 0.75rem 1rem;
 		background: var(--color-page);
 	}
-	/* the original was rounded-md px-3 py-1.5 text-xs (0.375rem radius,
+	/* the button is rounded-md px-3 py-1.5 text-xs (0.375rem radius,
 	   0.375rem vertical padding, 1rem bundled line-height) with no border at
 	   all; btn-primary's radius-lg, btn-sm's 0.25rem vertical padding and
 	   inherited 1.25rem line-height (btn-sm sets font-size but not
@@ -250,8 +251,7 @@
 		padding: 0.375rem 0.75rem;
 		line-height: 1rem;
 	}
-	/* the original was p-8 (2rem all around, matches panel-section's default
-	   of 1rem doubled); stated explicitly for clarity. */
+	/* padding is 2rem all around (panel-section's default of 1rem doubled); stated explicitly for clarity. */
 	.notifications-tab-empty {
 		padding: 2rem;
 		text-align: center;

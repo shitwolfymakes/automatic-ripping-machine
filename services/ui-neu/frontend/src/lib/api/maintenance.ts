@@ -6,32 +6,32 @@ import { get, post } from './client';
 // fetch. The image-cache endpoints are real.
 //
 // The shapes the (dormant) maintenance UI reads are declared locally here and
-// re-exported under the names the pages import; api.gen no longer carries them.
+// re-exported under the names the pages import.
 
-export interface OrphanFolderEntry {
+interface OrphanFolderEntry {
 	path: string;
 	name: string;
 	size_bytes: number;
 	category: string;
 }
 
-export interface OrphanFolderList {
+interface OrphanFolderList {
 	folders: OrphanFolderEntry[];
 	roots?: string[];
 	total_size_bytes?: number;
 }
 
-export interface MaintenanceDeleteResult {
+interface MaintenanceDeleteResult {
 	success: boolean;
 	path: string;
 }
 
-export interface MaintenanceBulkDeleteResult {
+interface MaintenanceBulkDeleteResult {
 	removed: string[];
 	errors: string[];
 }
 
-export interface CleanupTranscoderResult {
+interface CleanupTranscoderResult {
 	deleted: number;
 	errors: string[];
 }
@@ -43,11 +43,8 @@ export interface ImageCacheStats {
 	freed_bytes?: number;
 }
 
-// Legacy aliases — the surrounding pages import these names.
-export type OrphanFolder = OrphanFolderEntry;
+// Alias kept for the pages that still import the old response name.
 export type OrphanFoldersResponse = OrphanFolderList;
-export type DeleteResult = MaintenanceDeleteResult;
-export type BulkDeleteResult = MaintenanceBulkDeleteResult;
 
 export async function fetchOrphanFolders(): Promise<OrphanFolderList> {
 	notAvailable('Orphan folders');

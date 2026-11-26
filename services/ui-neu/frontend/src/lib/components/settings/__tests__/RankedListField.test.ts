@@ -1,9 +1,9 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import { tick } from 'svelte';
-import { renderComponent, screen, cleanup, fireEvent } from '$lib/test-utils';
+import { renderComponent, screen, cleanup, fireEvent } from '$lib/testing/render';
 import RankedListField from '../RankedListField.svelte';
 import type { ConfigFieldMeta, SettingsGroup } from '$lib/types/api.gen';
-import { SETTINGS_SCHEMA_CONTEXT } from '$lib/utils/settings-sections';
+import { SETTINGS_SCHEMA_CONTEXT } from '$lib/settings/sections';
 
 const f = (): ConfigFieldMeta => ({
 	key: 'episode_sources',
@@ -37,6 +37,12 @@ describe('RankedListField', () => {
 		expect(names()).toEqual(['TMDb', 'TVDB', 'TVmaze']);
 		await fireEvent.click(screen.getByRole('checkbox', { name: 'Use TMDb' }));
 		expect(names()).toEqual(['TVDB', 'TMDb', 'TVmaze']);
+	});
+
+	it('keeps the announcer inside one wrapper with the list, so it is anchored to the field', () => {
+		const { container } = renderComponent(RankedListField, { props: { field: f(), value: ['tmdb'] } });
+		expect(container.querySelector('.ranked-list-field > [role="list"]')).not.toBeNull();
+		expect(container.querySelector('.ranked-list-field > [aria-live="polite"]')).not.toBeNull();
 	});
 
 	it('announces a rank on check and keeps focus on that row, then announces "not used" and keeps focus on uncheck', async () => {

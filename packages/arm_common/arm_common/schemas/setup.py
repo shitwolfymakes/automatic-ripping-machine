@@ -1,4 +1,4 @@
-"""First-run setup walkthrough wire schemas (setup spec 2026-10-01 §6.1, §6.5)."""
+"""First-run setup walkthrough wire schemas."""
 
 from datetime import datetime
 

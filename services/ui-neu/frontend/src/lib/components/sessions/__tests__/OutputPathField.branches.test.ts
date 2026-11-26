@@ -1,8 +1,12 @@
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
-import { renderComponent, screen, cleanup } from '$lib/test-utils';
+import { renderComponent, screen, cleanup } from '$lib/testing/render';
 vi.mock('$lib/api/sessions', () => ({ previewTemplate: vi.fn() }));
 import { previewTemplate } from '$lib/api/sessions';
+import { flushSync } from 'svelte';
 import OutputPathField from '../OutputPathField.svelte';
+import OutputPathFieldHarness from './OutputPathFieldHarness.svelte';
+
+type HarnessExports = { setHasTranscodePreset: (next: boolean) => void };
 
 // Branch pins for OutputPathField, beside OutputPathField.svelte.test.ts. No
 // branch is left open.
@@ -42,6 +46,20 @@ describe('OutputPathField preview request body', () => {
 		await vi.advanceTimersByTimeAsync(300);
 		expect(previewTemplate).toHaveBeenCalledWith({
 			template: 'a/{title}',
+			media_type: 'movie',
+			has_transcode_preset: true
+		});
+	});
+
+	it('previews again when only has_transcode_preset changes', async () => {
+		const view = renderComponent(OutputPathFieldHarness, { value: 'movies/{title}.{ext}' });
+		await vi.advanceTimersByTimeAsync(300);
+		expect(previewTemplate).toHaveBeenCalledTimes(1);
+		flushSync(() => (view.component as unknown as HarnessExports).setHasTranscodePreset(true));
+		await vi.advanceTimersByTimeAsync(300);
+		expect(previewTemplate).toHaveBeenCalledTimes(2);
+		expect(previewTemplate).toHaveBeenLastCalledWith({
+			template: 'movies/{title}.{ext}',
 			media_type: 'movie',
 			has_transcode_preset: true
 		});

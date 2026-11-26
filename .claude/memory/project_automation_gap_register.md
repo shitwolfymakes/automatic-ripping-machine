@@ -122,11 +122,10 @@ Status (verified against wolfy remote 2026-09-22):
   the SDD ledgers: systemic test-isolation flakes (4 distinct one-off sightings),
   per-row jobs-list degradation, session-routes IntegrityError 409, paramiko
   keepalives, SessionRoutesCard refresh on same-tab session delete. Gate branch
-  gate/main-plus-phase2 in worktree .claude/worktrees/phase2-lockdown/.gate-merge;
-  SDD ledger at .superpowers/sdd/2026-09-22-phase2-lockdown/progress.md.
+  gate/main-plus-phase2 in worktree .claude/worktrees/phase2-lockdown/.gate-merge.
   Deployed-DB surgical path (old-integration chains): UPDATE alembic_version
   to 0029_thediscdb, upgrade to 0032, stamp past applied drive-lifecycle DDL.
-- NEXT: phase-2 lockdown plan at `../arm-ai/arm-v3/docs/superpowers/plans/2026-09-22-phase2-lockdown.md` (stack-validation gate on quark first, then typed resolve, mirror removal + 0032, wire typing).
+- NEXT: phase-2 lockdown (stack-validation gate on quark first, then typed resolve, mirror removal + 0032, wire typing).
 - Phases 3-6 (routing table, UHD/disc awareness, multi-title/TV, ops
   retention) not started. No PRs opened for the stack yet (queue behind
   drive-lifecycle #61-66, #73, #74).

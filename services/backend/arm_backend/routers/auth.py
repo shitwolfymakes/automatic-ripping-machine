@@ -79,7 +79,8 @@ async def change_password(
     try:
         _hasher.verify(user.password_hash, req.current_password)
     except VerifyMismatchError as exc:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="current password incorrect") from exc
+        # 400, not 401: the route's 401s all come from require_jwt and mean the token, so the UI ends the session on them.
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="current password incorrect") from exc
 
     if req.current_password == req.new_password:
         raise HTTPException(

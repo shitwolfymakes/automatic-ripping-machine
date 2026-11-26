@@ -1,7 +1,9 @@
-import type { JobView, JobStatus, TranscodeTaskView, IsoPrepareView } from '$lib/types/api.gen';
+import type { JobView, JobStatus, TranscodeTaskView, TranscodeStatsView, IsoPrepareView } from '$lib/types/api.gen';
+import { taskCount } from '$lib/transcode/stats';
 import { fetchConfigView } from './config';
 import { fetchDrives } from './drives';
 import { fetchIsoPreparing } from './iso';
+import { liveSource, type LiveSourceDrive } from '$lib/drives/summary';
 import { fetchJobs } from './jobs';
 import { fetchTranscoderStats, fetchTranscoderJobs } from './transcoder';
 import { fetchNotificationCount } from './notifications';
@@ -9,30 +11,36 @@ import { fetchNotificationCount } from './notifications';
 // ---------------------------------------------------------------------------
 // Client-side dashboard composition.
 //
-// v3 has NO single dashboard/BFF endpoint — the legacy `DashboardResponse`
-// aggregation is gone. We FAN OUT across the v3 endpoints and compose the
+// There is no single dashboard endpoint, so this fans out across the v3 endpoints and composes the
 // shape the dashboard store + sidebar components consume. Each field
 // degrades independently (Promise.allSettled): one failing endpoint nulls/zeros
 // that field instead of taking the whole dashboard down, and the store layer
 // (STICKY_FIELDS / TWO_STRIKE_FIELDS) holds last-good values through blips.
 // ---------------------------------------------------------------------------
 
-// Transcoder summary as the sidebar reads it. v3's TranscodeStatsView has no
-// worker_running/pending fields, so those stay undefined; the dashboard badges
-// optional-chain them.
-export interface TranscoderStats {
-	worker_running?: boolean | null;
-	pending?: number | null;
+// Transcoder summary as the header reads it: how many transcode tasks are
+// queued.
+interface TranscoderStats {
+	pending: number;
 }
 
 /** An ISO rip whose ripper is scanning or unpacking the image: no job yet. */
 export interface IsoPreparing extends IsoPrepareView {
-	iso_name: string;
-	iso_kind: IsoSourceKind;
+	drive: LiveSourceDrive;
 }
 
 /** What a virtual drive rips: an .iso file or a disc folder. */
 export type IsoSourceKind = 'iso' | 'folder';
+
+/** One drive as every dashboard consumer reads it. */
+export interface DriveSummary {
+	/** display_name, else the last segment of source_path, else device_path. */
+	name: string;
+	kind: 'optical' | 'virtual';
+	/** What a virtual drive reads from; null for an optical drive. */
+	source: IsoSourceKind | null;
+	retired: boolean;
+}
 
 export interface DashboardData {
 	db_available: boolean;
@@ -41,18 +49,9 @@ export interface DashboardData {
 	// Physical optical drives only (Decision 11) — a virtual (ISO) drive row
 	// isn't a drive an operator can plug/unplug, so it never counts here.
 	drives_online: number;
-	drive_names: Record<string, string>;
-	// drive id -> ISO file name, for the currently-enrolled virtual drives
-	// (one per in-flight ISO rip). Lets the dashboard swap the drive chip for
-	// an ISO source chip without a second fetch.
-	iso_sources: Record<string, string>;
-	// drive id -> 'iso' / 'folder' for the same drives, so the source chip
-	// says ISO or Folder.
-	iso_source_kinds: Record<string, IsoSourceKind>;
-	// drive id -> 'iso' / 'folder' for EVERY virtual drive, retired ones
-	// included, so a finished ISO job (whose drive is retired) still reads as
-	// ISO / Folder (the log list's disc chip).
-	drive_source_kinds: Record<string, IsoSourceKind>;
+	// drive id -> summary for EVERY drive, retired ones included, so a
+	// finished ISO job (whose drive is retired) keeps its name and source kind.
+	drives: Record<string, DriveSummary>;
 	// ISO rips with no job yet (scanning / unpacking the image), so the
 	// dashboard can show them before identify creates the job.
 	preparing: IsoPreparing[];
@@ -63,6 +62,8 @@ export interface DashboardData {
 	transcoder_online: boolean;
 	transcoder_stats: TranscoderStats | null;
 	active_transcodes: TranscodeTaskView[];
+	// Review countdown length (config manual_wait_seconds); 60 when unread.
+	review_wait_seconds: number;
 }
 
 // Fields whose endpoint can blip independently. A snapshot reports them as
@@ -71,12 +72,10 @@ export interface DashboardData {
 export const STICKY_FIELDS = [
 	'active_jobs',
 	'drives_online',
-	'drive_names',
-	'iso_sources',
-	'iso_source_kinds',
-	'drive_source_kinds',
+	'drives',
 	'notification_count',
-	'ripping_enabled'
+	'ripping_enabled',
+	'review_wait_seconds'
 ] as const satisfies readonly (keyof DashboardData)[];
 
 type StickyField = (typeof STICKY_FIELDS)[number];
@@ -97,22 +96,6 @@ function isActiveJob(job: JobView): boolean {
 
 const IN_PROGRESS_TRANSCODE_STATUSES = new Set(['queued', 'in_progress']);
 
-/** The dashboard with every failed read's fields filled with empty defaults. */
-export async function fetchDashboard(): Promise<DashboardData> {
-	const s = await fetchDashboardSnapshot();
-	return {
-		...s,
-		active_jobs: s.active_jobs ?? [],
-		drives_online: s.drives_online ?? 0,
-		drive_names: s.drive_names ?? {},
-		iso_sources: s.iso_sources ?? {},
-		iso_source_kinds: s.iso_source_kinds ?? {},
-		drive_source_kinds: s.drive_source_kinds ?? {},
-		notification_count: s.notification_count ?? 0,
-		ripping_enabled: s.ripping_enabled ?? true
-	};
-}
-
 type DriveList = Awaited<ReturnType<typeof fetchDrives>>;
 
 function settledValue<T>(res: PromiseSettledResult<T>): T | null {
@@ -123,28 +106,33 @@ function orNull<T, R>(value: T | null, fn: (value: T) => R): R | null {
 	return value === null ? null : fn(value);
 }
 
-function sourceKindOf(drive: DriveList[number]): IsoSourceKind {
+type DriveRow = DriveList[number];
+
+function sourceKindOf(drive: DriveRow): IsoSourceKind {
 	return drive.source_kind === 'folder' ? 'folder' : 'iso';
 }
 
-function buildDriveMaps(drives: DriveList) {
-	const driveNames: Record<string, string> = {};
-	const isoSources: Record<string, string> = {};
-	const isoSourceKinds: Record<string, IsoSourceKind> = {};
-	const driveSourceKinds: Record<string, IsoSourceKind> = {};
-	// `drives` includes retired rows so a finished ISO job keeps its label in
-	// drive_names; the live-only maps below skip them.
-	for (const d of drives) {
-		driveNames[d.id] = d.display_name ?? d.device_path;
-		if (d.kind === 'virtual') driveSourceKinds[d.id] = sourceKindOf(d);
-		if (d.kind === 'virtual' && d.lifecycle !== 'retired') {
-			// display_name is the ISO's file name for a virtual drive; fall back
-			// to the last path segment of source_path if it's ever missing.
-			isoSources[d.id] = d.display_name ?? d.source_path?.split('/').pop() ?? d.source_path ?? d.device_path;
-			isoSourceKinds[d.id] = sourceKindOf(d);
-		}
-	}
-	return { driveNames, isoSources, isoSourceKinds, driveSourceKinds };
+/** The last non-empty segment of a path, or undefined when it has none. */
+function baseName(path: string | null | undefined): string | undefined {
+	return path?.split('/').filter(Boolean).pop();
+}
+
+function driveNameOf(drive: DriveRow): string {
+	return drive.display_name ?? baseName(drive.source_path) ?? drive.device_path;
+}
+
+function summarizeDrive(drive: DriveRow): DriveSummary {
+	const virtual = drive.kind === 'virtual';
+	return {
+		name: driveNameOf(drive),
+		kind: virtual ? 'virtual' : 'optical',
+		source: virtual ? sourceKindOf(drive) : null,
+		retired: drive.lifecycle === 'retired'
+	};
+}
+
+function summarizeDrives(drives: DriveList): Record<string, DriveSummary> {
+	return Object.fromEntries(drives.map((d) => [d.id, summarizeDrive(d)]));
 }
 
 function countOpticalDrives(drives: DriveList): number {
@@ -153,16 +141,20 @@ function countOpticalDrives(drives: DriveList): number {
 
 function selectPreparing(
 	preparing: IsoPrepareView[],
-	isoSources: Record<string, string>,
-	isoSourceKinds: Record<string, IsoSourceKind>,
+	drives: Record<string, DriveSummary>,
 	activeJobs: JobView[]
 ): IsoPreparing[] {
 	// Only a live ISO rip that has no active job yet; once identify creates
 	// the job, the job's own row takes over.
 	const jobDrives = new Set(activeJobs.map((j) => j.drive_id));
-	return preparing
-		.filter((p) => p.drive_id in isoSources && !jobDrives.has(p.drive_id))
-		.map((p) => ({ ...p, iso_name: isoSources[p.drive_id], iso_kind: isoSourceKinds[p.drive_id] }));
+	return preparing.flatMap((p) => {
+		const drive = liveSource(drives[p.drive_id]);
+		return drive && !jobDrives.has(p.drive_id) ? [{ ...p, drive }] : [];
+	});
+}
+
+function transcoderStatsOf(stats: TranscodeStatsView): TranscoderStats {
+	return { pending: taskCount(stats, 'queued') };
 }
 
 function activeTranscodesOf(transcodes: TranscodeTaskView[] | null): TranscodeTaskView[] {
@@ -199,8 +191,8 @@ export async function fetchDashboardSnapshot(): Promise<DashboardSnapshot> {
 	const transcoderOnline = transcodesRes.status === 'fulfilled';
 
 	const activeJobs = (jobs ?? []).filter(isActiveJob);
-	const { driveNames, isoSources, isoSourceKinds, driveSourceKinds } = buildDriveMaps(drives ?? []);
-	const preparing = selectPreparing(settledValue(preparingRes) ?? [], isoSources, isoSourceKinds, activeJobs);
+	const driveSummaries = summarizeDrives(drives ?? []);
+	const preparing = selectPreparing(settledValue(preparingRes) ?? [], driveSummaries, activeJobs);
 
 	return {
 		// db_available stands in for "backend config read succeeded" — the
@@ -209,19 +201,15 @@ export async function fetchDashboardSnapshot(): Promise<DashboardSnapshot> {
 		arm_online: armOnline,
 		active_jobs: jobs === null ? null : activeJobs,
 		drives_online: orNull(drives, countOpticalDrives),
-		drive_names: orNull(drives, () => driveNames),
-		iso_sources: orNull(drives, () => isoSources),
-		iso_source_kinds: orNull(drives, () => isoSourceKinds),
-		drive_source_kinds: orNull(drives, () => driveSourceKinds),
+		drives: orNull(drives, () => driveSummaries),
 		preparing,
 		notification_count: notifications === null ? null : (notifications.unseen ?? 0),
 		ripping_enabled: config === null ? null : !config.ripping_paused,
+		review_wait_seconds: config === null ? null : (config.manual_wait_seconds ?? 60),
 		makemkv_key_valid: config?.makemkv_key_valid ?? null,
 		makemkv_key_checked_at: config?.makemkv_key_checked_at ?? null,
 		transcoder_online: transcoderOnline,
-		// v3 TranscodeStatsView has no worker_running/pending — surface nothing
-		// rather than a wrong value; the badges optional-chain these.
-		transcoder_stats: transcoderStatsRes.status === 'fulfilled' ? {} : null,
+		transcoder_stats: orNull(settledValue(transcoderStatsRes), transcoderStatsOf),
 		active_transcodes: activeTranscodesOf(transcodes)
 	};
 }
