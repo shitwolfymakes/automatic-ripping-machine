@@ -3854,6 +3854,51 @@
         ]
       }
     },
+    "/api/transcoder/tasks/{task_id}/cover-art": {
+      "get": {
+        "tags": [
+          "transcoder"
+        ],
+        "summary": "Cover Art",
+        "operationId": "cover_art_api_transcoder_tasks__task_id__cover_art_get",
+        "security": [
+          {
+            "ServiceToken": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "task_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Task Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/transcoder/tasks/{task_id}/claim": {
       "post": {
         "tags": [
@@ -14434,6 +14479,101 @@
         "type": "object",
         "title": "MusicMeta"
       },
+      "MusicTags": {
+        "properties": {
+          "artist": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Artist"
+          },
+          "album": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Album"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "year": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Year"
+          },
+          "disc_number": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Disc Number"
+          },
+          "track_number": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Track Number"
+          },
+          "track_total": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Track Total"
+          },
+          "musicbrainz_release_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Musicbrainz Release Id"
+          }
+        },
+        "type": "object",
+        "title": "MusicTags",
+        "description": "The tags a music track's encoded file carries, from the job's stored\nMusicBrainz identity. Every field is optional: an unknown one is left\nout of the file rather than written empty."
+      },
       "MusicTrackMeta": {
         "properties": {
           "title": {
@@ -15552,6 +15692,16 @@
           "media_root": {
             "type": "string",
             "title": "Media Root"
+          },
+          "music_tags": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MusicTags"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "type": "object",
@@ -15564,7 +15714,7 @@
           "media_root"
         ],
         "title": "RegisterTranscoderResponse",
-        "description": "Bootstrap bundle the transcoder needs before it can claim + run.\n\n`raw_input_path` is the absolute path the transcoder should read from\n(`/raw/<job>/title_tNN.mkv` for video, `/raw/<job>/track_NN.wav` for\naudio, `/raw/<job>/dump.iso` for data). `media_root` plus the task's\n`output_path` is where the final file lands."
+        "description": "Bootstrap bundle the transcoder needs before it can claim + run.\n\n`raw_input_path` is the absolute path the transcoder should read from\n(`/raw/<job>/title_tNN.mkv` for video, `/raw/<job>/track_NN.wav` for\naudio, `/raw/<job>/dump.iso` for data). `media_root` plus the task's\n`output_path` is where the final file lands. `music_tags` is set for a\nmusic job's track only."
       },
       "RenameRequest": {
         "properties": {
