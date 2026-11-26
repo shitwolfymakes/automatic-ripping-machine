@@ -21,7 +21,7 @@ VIRTUAL_LABEL_KEY = "arm.virtual"
 # sha256 of the spec the container was created from; reconcile recreates an idle
 # ripper whose label no longer matches (a changed ARM_RIPPER_* tunable, PUID, ...).
 SPEC_HASH_LABEL_KEY = "arm.spec_hash"
-_DEVICE_CGROUP_RULES = ["b 11:* rmw", "c 21:* rmw"]  # sr* block + sg* char majors (spec §3)
+_DEVICE_CGROUP_RULES = ["b 11:* rmw", "c 21:* rmw"]  # sr* block + sg* char majors
 _HOST_DISK_MOUNT = "/host-disk"
 # Optical-only env: a virtual (ISO) ripper has no device, no /dev/disk and no cdrom group.
 _OPTICAL_ONLY_ENV = ("ARM_DRIVE_DEV", "ARM_HOST_DISK_ROOT", "ARM_DRIVE_BY_ID", "CDROM_GID")
@@ -69,8 +69,8 @@ def container_name(drive: Drive) -> str:
 
 
 def container_spec(settings: Settings, drive: Drive) -> dict[str, Any]:
-    """kwargs for `containers.run` — what the ripper needs and nothing more
-    (spec §3): no `devices:` bind (the entrypoint pre-creates nodes), no
+    """kwargs for `containers.run` — what the ripper needs and nothing more:
+    no `devices:` bind (the entrypoint pre-creates nodes), no
     per-ripper cert, `/dev/disk` not `/dev`."""
     s = settings
     name = container_name(drive)
@@ -119,7 +119,7 @@ def container_spec(settings: Settings, drive: Drive) -> dict[str, Any]:
 
 
 def _virtual_spec(settings: Settings, drive: Drive, spec: dict[str, Any]) -> dict[str, Any]:
-    """Turn the optical spec into a one-shot ISO ripper's (spec 6.1): only
+    """Turn the optical spec into a one-shot ISO ripper's: only
     the chosen ISO is mounted, read-only, at the drive's device_path
     (`/source/<file name>`); no /dev/disk, no device cgroup rules, no
     cdrom group; restart policy "no" (the watchdog cleans up).

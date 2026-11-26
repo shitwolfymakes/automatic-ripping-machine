@@ -1,7 +1,8 @@
 <script lang="ts">
+	import Glyph from '$lib/components/shared/Glyph.svelte';
 	import type { Catalog, CatalogService } from '$lib/types/notifications';
 	import ServiceGlyph from './ServiceGlyph.svelte';
-	import { serviceGroups, matchingServices } from './serviceCatalog';
+	import { serviceGroups, matchingServices } from '../../notifications/service-catalog';
 	import { onOutsideClick } from '$lib/utils/outside-click';
 
 	let { catalog, selectedId, onpick }: { catalog: Catalog; selectedId: string | null; onpick?: (id: string) => void } =
@@ -43,9 +44,7 @@
 		{:else}
 			<span class="service-dropdown-placeholder">Select a service...</span>
 		{/if}
-		<svg class="service-dropdown-chevron" fill="none" stroke="currentColor" viewBox="0 0 24 24"
-			><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" /></svg
-		>
+		<Glyph name="chevron-down" class="service-dropdown-chevron" />
 	</button>
 
 	{#if open}
@@ -114,13 +113,15 @@
 	.service-dropdown-placeholder {
 		color: var(--color-text-muted);
 	}
-	.service-dropdown-chevron {
+	/* :global: set on Glyph through its class prop */
+	:global(.service-dropdown-chevron) {
 		width: 1rem;
 		height: 1rem;
 		flex-shrink: 0;
 		transition: transform var(--motion-fast) var(--ease);
 	}
-	.service-dropdown-trigger[aria-expanded='true'] .service-dropdown-chevron {
+	/* :global: set on Glyph through its class prop */
+	.service-dropdown-trigger[aria-expanded='true'] :global(.service-dropdown-chevron) {
 		transform: rotate(180deg);
 	}
 	.service-dropdown-panel {

@@ -1,26 +1,26 @@
 <script lang="ts">
 	import { onMount, untrack } from 'svelte';
-	import { createSessionsData, type JoinedSession } from './sessionsData.svelte';
-	import { copyName, isRipPreset, ripPresetCopy, transcodePresetCopy } from './sessionPresets';
+	import { createSessionsData, type JoinedSession } from '../../stores/sessions-data.svelte';
+	import { copyName, isRipPreset, ripPresetCopy, transcodePresetCopy } from '../../sessions/session-presets';
 	import SessionsHub from './SessionsHub.svelte';
 	import PresetLibrary from './PresetLibrary.svelte';
 	import RoutingMatrix from './RoutingMatrix.svelte';
 	import SessionBuilderSlideOver from './SessionBuilderSlideOver.svelte';
 	import RipPresetSidebar from './RipPresetSidebar.svelte';
 	import PresetSidebar from '$lib/components/handbrake/PresetSidebar.svelte';
-	import type { SidebarMode } from '$lib/handbrake/sidebarModel';
-	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
+	import type { SidebarMode } from '$lib/handbrake/display';
+	import ConfirmDialog from '$lib/components/shared/ConfirmDialog.svelte';
 	import { deleteSession, cloneSession } from '$lib/api/sessions';
-	import { createRipPreset, deleteRipPreset } from '$lib/api/ripPresets';
-	import { createTranscodePreset, deleteTranscodePreset } from '$lib/api/transcodePresets';
+	import { createRipPreset, deleteRipPreset } from '$lib/api/rip-presets';
+	import { createTranscodePreset, deleteTranscodePreset } from '$lib/api/transcode-presets';
 	import { addToast } from '$lib/stores/toast.svelte';
+	import { errorMessage } from '$lib/utils/errors';
 	import { transcoderEnabled } from '$lib/stores/config';
 	import {
 		activePresetKey,
 		activeSessionKey,
 		deletePresetMessage,
 		deleteSessionMessage,
-		errorMessage,
 		isCreatingRipPreset,
 		isCreatingTranscodePreset,
 		isRipSidebarReadOnly,
@@ -33,8 +33,8 @@
 		passthroughTranscodePresets,
 		type EditorState,
 		type View
-	} from './sessionsAreaModel';
-	import { countByMediaType } from '$lib/utils/sessions';
+	} from '../../sessions/sessions-area-model';
+	import { countByMediaType } from '$lib/sessions/sessions';
 	import AutoSaveToggle from '$lib/components/settings/AutoSaveToggle.svelte';
 	import AutoSaveSelect from '$lib/components/settings/AutoSaveSelect.svelte';
 	import type { RipPresetView, SessionView, SettingsGroup, TranscodePresetView } from '$lib/types/api.gen';
@@ -116,19 +116,28 @@
 			await data.load();
 			return true;
 		} catch (e) {
-			addToast({ tone: 'error', title: failTitle, body: errorMessage(e) });
+			addToast({ tone: 'error', title: failTitle, body: errorMessage(e, 'Unknown error') });
 			return false;
 		}
 	}
 
 	// ── Sessions view callbacks ────────────────────────────────────────────────
 
+	// A preset created inline belongs to the builder it was created from, so
+	// each opening of the builder starts without one.
+	function forgetPreselectedPresets() {
+		preselectRipId = undefined;
+		preselectTranscodeId = undefined;
+	}
+
 	function openNewSession() {
+		forgetPreselectedPresets();
 		editing = null;
 		builderOpen = true;
 	}
 
 	function openEditSession(s: JoinedSession) {
+		forgetPreselectedPresets();
 		editing = s;
 		builderOpen = true;
 	}
@@ -137,7 +146,7 @@
 		await reloadAfter(() => cloneSession(s.id, { name: copyName(s.name) }), 'Clone failed');
 	}
 
-	// FIX 1: open confirm dialog instead of deleting immediately
+	// open confirm dialog instead of deleting immediately
 	function handleDeleteSession(s: JoinedSession) {
 		deleteSessionTarget = s;
 	}
@@ -203,7 +212,7 @@
 		}
 	}
 
-	// FIX 1 (preset): open confirm before deleting a preset
+	// open confirm before deleting a preset
 	function handleDeletePreset(p: RipPresetView | TranscodePresetView) {
 		deletePresetTarget = p;
 	}
@@ -435,7 +444,7 @@
 />
 
 <style>
-	/* original: flex flex-wrap items-start justify-between gap-4 - .page-header
+	/* wrapping row (items-start, justify-between, gap-4); .page-header
 	   is items-center/gap-3/margin-bottom-6, tuned for a top-level H1 row, not
 	   this sub-tab header (items-start, gap-4, no own margin - the stack-lg
 	   parent supplies spacing to the next sibling). */
@@ -484,7 +493,7 @@
 		box-shadow: var(--shadow-1);
 		padding: 0.25rem;
 	}
-	/* original padding was px-3 py-1.5 (0.75rem/0.375rem), not tabs-pills'
+	/* padding is 0.75rem/0.375rem, not tabs-pills'
 	   default 0.25rem 0.75rem - 2px taller per side. */
 	/* reach the imported block's class from this scoped selector */
 	.sessions-area-tabs :global(.tabs-tab) {

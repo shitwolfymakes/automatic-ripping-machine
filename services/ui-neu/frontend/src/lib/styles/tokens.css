@@ -1,5 +1,5 @@
 /* Design tokens. Primitives (the raw palette) are private to this file;
-   components and themes reference the semantic roles only (spec 5).
+   components and themes reference the semantic roles only.
    Colour roles live in @theme so Tailwind also emits them as utilities
    for @apply. Themes override the roles under [data-scheme]. */
 

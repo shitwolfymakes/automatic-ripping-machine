@@ -1,4 +1,4 @@
-import type { StepCommitResult } from '$lib/components/setup/steps';
+import type { StepCommitResult } from '$lib/setup/steps';
 
 /** What the stubbed step reports: its commit() and the setBlocked it was given. */
 export const stubState: {

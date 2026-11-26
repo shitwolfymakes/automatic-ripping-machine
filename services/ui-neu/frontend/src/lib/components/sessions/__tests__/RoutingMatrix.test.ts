@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { renderComponent, screen, fireEvent, cleanup, waitFor } from '$lib/test-utils';
+import { renderComponent, screen, fireEvent, cleanup, waitFor } from '$lib/testing/render';
 import type { SessionRouteView, SessionView } from '$lib/types/api.gen';
 
 vi.mock('$lib/stores/auth', async () => {
@@ -17,7 +17,7 @@ vi.mock('$lib/stores/auth', async () => {
 const fetchSessionRoutes = vi.fn();
 const upsertSessionRoute = vi.fn();
 const deleteSessionRoute = vi.fn();
-vi.mock('$lib/api/sessionRoutes', () => ({
+vi.mock('$lib/api/session-routes', () => ({
 	fetchSessionRoutes: (...args: unknown[]) => fetchSessionRoutes(...args),
 	upsertSessionRoute: (...args: unknown[]) => upsertSessionRoute(...args),
 	deleteSessionRoute: (...args: unknown[]) => deleteSessionRoute(...args)

@@ -53,7 +53,7 @@ def test_matrix256_uses_7z_records_when_pycdlib_refuses(monkeypatch: pytest.Monk
 def test_matrix256_7z_record_cannot_escape_the_skeleton(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path, caplog: pytest.LogCaptureFixture
 ) -> None:
-    """D-003: a `..` path in the 7z listing is refused like a pycdlib one."""
+    """A `..` path in the 7z listing is refused like a pycdlib one."""
     _pycdlib_refuses(monkeypatch)
     victim = tmp_path / "victim.mkv"
     victim.write_bytes(b"x" * 1000)
@@ -71,7 +71,7 @@ def test_matrix256_none_when_7z_unavailable(monkeypatch: pytest.MonkeyPatch) -> 
 
 
 def test_thediscdb_hash_uses_7z_stream_files_when_pycdlib_refuses(monkeypatch: pytest.MonkeyPatch) -> None:
-    """D-123: a UDF-only Blu-ray still gets its ContentHash, from BDMV/STREAM
+    """A UDF-only Blu-ray still gets its ContentHash, from BDMV/STREAM
     m2ts files only (not the SSIF subfolder, not other BDMV files)."""
     _pycdlib_refuses(monkeypatch)
     records = [

@@ -1,4 +1,4 @@
-"""on_previously_ripped (D-132): a disc whose fingerprint matches an earlier rip
+"""on_previously_ripped: a disc whose fingerprint matches an earlier rip
 is held for the operator, rejected (ejected), or ripped again.
 
 Covers identify's three modes and the one-shot "Rip again" override, the held

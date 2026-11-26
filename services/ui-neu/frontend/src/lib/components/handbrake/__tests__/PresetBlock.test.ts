@@ -4,11 +4,11 @@
 // `(... ) ?? ''` plus a select-sync `if`, and none of those values is ever
 // null (draft fields are strings, catalog ids and labels are strings).
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { renderComponent, screen, fireEvent, cleanup, waitFor, within } from '$lib/test-utils';
+import { renderComponent, screen, fireEvent, cleanup, waitFor, within } from '$lib/testing/render';
 import type { EncoderAvailabilityView, SettingIssue } from '$lib/types/api.gen';
 import type { WSEnvelope } from '$lib/api/ws';
 import { stopEncoderEvents } from '$lib/stores/encoders.svelte';
-import { initialDraft, type Draft } from '$lib/handbrake/sidebarModel';
+import { initialDraft, type Draft } from '$lib/handbrake/draft';
 import PresetBlock from '../PresetBlock.svelte';
 
 // One entry per group, in catalog order, standing in for the full
@@ -123,19 +123,48 @@ describe('fields', () => {
 
 	it("links the base preset to HandBrake's official presets page for a HandBrake preset", () => {
 		mount();
-		const link = screen.getByTestId('tp-preset-ref-docs');
+		const link = screen.getByRole('link', { name: 'Docs for Base preset (opens in a new tab)' });
 		expect(link).toHaveAttribute('href', 'https://handbrake.fr/docs/en/latest/technical/official-presets.html');
 		expect(link).toHaveAttribute('target', '_blank');
 		expect(link).toHaveAttribute('rel', 'noopener noreferrer');
-		expect(link).toHaveAccessibleName('HandBrake docs: official presets');
+		expect(link).toHaveAttribute('data-field-id', 'form.transcode_preset.preset_ref');
 		expect(screen.getByLabelText('Base preset')).toBe(screen.getByTestId('tp-preset-ref'));
 		cleanup();
 		mount({}, { builtinNames: null });
 		expect(screen.getByLabelText('Preset ref')).toBe(screen.getByTestId('tp-preset-ref'));
-		expect(screen.getByTestId('tp-preset-ref-docs')).toBeInTheDocument();
+		expect(screen.getByRole('link', { name: 'Docs for Preset ref (opens in a new tab)' })).toBeInTheDocument();
 		cleanup();
 		mount({ tool: 'abcde' });
-		expect(screen.queryByTestId('tp-preset-ref-docs')).not.toBeInTheDocument();
+		expect(
+			screen.queryByRole('link', { name: /^Docs for (Base preset|Preset ref) \(opens in a new tab\)$/ })
+		).not.toBeInTheDocument();
+	});
+
+	it("links extra args to HandBrake's command line reference only when HandBrake runs the preset", () => {
+		mount();
+		const link = screen.getByRole('link', { name: 'Docs for Extra args (opens in a new tab)' });
+		expect(link).toHaveAttribute('href', 'https://handbrake.fr/docs/en/latest/cli/command-line-reference.html');
+		expect(link).toHaveAttribute('data-field-id', 'form.transcode_preset.extra_args');
+		cleanup();
+		mount({ tool: 'abcde' });
+		expect(screen.queryByRole('link', { name: 'Docs for Extra args (opens in a new tab)' })).not.toBeInTheDocument();
+		cleanup();
+		mount({ encoder: 'vaapi_h264' });
+		expect(
+			screen.queryByRole('link', { name: 'Docs for ffmpeg arguments (opens in a new tab)' })
+		).not.toBeInTheDocument();
+	});
+
+	it('links the tool and the encoder to the ARM help', () => {
+		mount();
+		expect(screen.getByRole('link', { name: 'Docs for Tool (opens in a new tab)' })).toHaveAttribute(
+			'href',
+			'/help/guide/configuring-arm#rip-presets-transcode-presets-and-sessions'
+		);
+		expect(screen.getByRole('link', { name: 'Docs for Encoder (opens in a new tab)' })).toHaveAttribute(
+			'href',
+			'/help/guide/hardware-transcoding#the-encoder-catalog'
+		);
 	});
 
 	it('notes that extra args win over the settings while the tabs show', () => {

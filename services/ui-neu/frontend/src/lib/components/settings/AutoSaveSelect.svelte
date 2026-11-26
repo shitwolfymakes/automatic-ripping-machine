@@ -2,6 +2,7 @@
 	// A choice setting as a select that saves on change (no Save button), such as
 	// Defaults' unidentified-disc media type. The caller saves.
 	import AutoSaveRow from './AutoSaveRow.svelte';
+	import FieldLabel from '$lib/components/shared/FieldLabel.svelte';
 
 	let {
 		key,
@@ -21,10 +22,10 @@
 </script>
 
 <AutoSaveRow {key} {help}>
-	<span class="field-label">{label}</span>
+	<FieldLabel for="auto-save-{key}" {label} docsId={`config.${key}`} />
 	<select
+		id="auto-save-{key}"
 		class="field-control auto-save-select"
-		aria-label={label}
 		{value}
 		onchange={(e) => onchange((e.target as HTMLSelectElement).value)}
 	>

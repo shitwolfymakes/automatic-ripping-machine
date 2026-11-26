@@ -434,7 +434,7 @@ SESSIONS: list[dict[str, Any]] = [
 ]
 
 
-# --- Built-in session routes (G-17) --------------------------------------------
+# --- Built-in session routes --------------------------------------------
 
 # A music disc routes to a music session out of the box; video stays on the
 # drive default to preserve existing behavior (no video routes seeded).
@@ -445,7 +445,7 @@ SESSION_ROUTES: list[dict[str, Any]] = [
 
 
 async def _seed_session_routes(session: AsyncSession) -> None:
-    """Seed the built-in session routes exactly once (I1).
+    """Seed the built-in session routes exactly once.
 
     Unlike the id-keyed builtins above, `SessionRoute` rows have no
     deterministic id to key an idempotent per-row insert on (their natural

@@ -61,7 +61,7 @@ async def _preview_session(db: AsyncSession, job: Job, session_id: str | None) -
     # drive default, else a session_routes match) - via the shared
     # session_routing helper so previews cannot drift from apply.
     # auto_transcode_on_idle deliberately does not gate the preview: it only
-    # gates unattended queueing at rip-complete (gap analysis §5.1).
+    # gates unattended queueing at rip-complete.
     effective: str | None = await resolve_routed_session_id(db, job)
     if effective is None:
         return None

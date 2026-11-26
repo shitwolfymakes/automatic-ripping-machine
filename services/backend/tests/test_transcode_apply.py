@@ -372,7 +372,7 @@ def test_custom_filename_different_ext_stripped_and_resolved_ext_appended() -> N
 
 
 def test_tv_tokens_prefer_job_columns_over_metadata(tmp_path) -> None:
-    """G-14: {season}/{disc} read jobs.season / jobs.disc_number (zero-padded)
+    """{season}/{disc} read jobs.season / jobs.disc_number (zero-padded)
     and only fall back to the legacy metadata keys; the two can no longer
     disagree silently once resolve lifts the keys."""
     job = Job(
@@ -554,7 +554,7 @@ def test_unknown_role_on_tv_disc_keeps_strict_check() -> None:
 def test_unidentified_job_on_tv_session_role_none_keeps_strict_check() -> None:
     """An unidentified job (media_type=None) can still be applied to a TV
     session (auto_session.py allows this); a role-None track must fall back
-    to the session's media type, not silently go lenient (fix round 1)."""
+    to the session's media type, not silently go lenient."""
     template = "{show} - S{season}E{episode}.{ext}"
     job = _tv_job()
     job.media_type = None
@@ -568,7 +568,7 @@ def test_unidentified_job_on_tv_session_role_none_keeps_strict_check() -> None:
 def test_tidy_raises_when_a_path_segment_becomes_empty() -> None:
     """A leading segment made entirely of skipped episode tokens must not
     collapse to "" (which would escape MEDIA_ROOT via a leading "/" once
-    joined downstream) — raise instead of returning it (fix round 1)."""
+    joined downstream) — raise instead of returning it."""
     template = "{episode_title}/{show} S{season}E{episode}.{ext}"
     job = _tv_job()
     track = _tv_track(1, role=TrackRole.EXTRA)
@@ -636,7 +636,7 @@ def test_bonus_title_with_an_empty_optional_year() -> None:
 
 
 def test_bonus_title_drops_a_segment_made_only_of_an_empty_optional_token() -> None:
-    # D-145: the per-segment render must collapse a lone `{year?}` segment
+    # The per-segment render must collapse a lone `{year?}` segment
     # like the whole-template render does, not raise "output path is empty".
     template = "{show}/{year?}/Season {season}/{show} - S{season}E{episode} - {episode_title?}.{ext}"
     job = _tv_job(title="Show", year=None)  # type: ignore[arg-type]

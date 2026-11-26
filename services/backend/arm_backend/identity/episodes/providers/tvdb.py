@@ -1,4 +1,4 @@
-"""TVDB v4 episode-list provider (design spec 6.2, source `episodes_tvdb`).
+"""TVDB v4 episode-list provider (source `episodes_tvdb`).
 
 TVDB v4 authenticates via a login handshake: `POST /login {"apikey": ...}`
 returns a bearer token (see `arm_backend.metadata.tvdb.TVDBClient`, which does

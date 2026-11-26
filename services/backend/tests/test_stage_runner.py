@@ -1,6 +1,6 @@
 """The episode stage's background runner: scheduling/dedup/rerun-once,
 provider caching, event emission, exception swallowing, and the startup
-sweep (design spec 5, 6.2, 6.3, 9; plan Task 8)."""
+sweep."""
 
 import asyncio
 import logging
@@ -57,7 +57,7 @@ class _Hub:
 
 
 class _TrackingSession:
-    """Session double for fix round 2's no-flush invariant: `FakeSession`
+    """Session double for the no-flush invariant: `FakeSession`
     has no identity map at all (a "fresh" re-select just returns the same
     live object with whatever it currently holds), so it cannot see the
     round-2 bug — a real SQLAlchemy session autoflushes a dirty *attached*
@@ -303,7 +303,7 @@ async def test_reschedule_while_a_run_is_in_flight_reruns_once() -> None:
 
 
 # ---------------------------------------------------------------------------
-# fetch/apply split (fix round 1): a run in flight must not clobber a
+# fetch/apply split: a run in flight must not clobber a
 # concurrent edit with outcomes computed against a stale snapshot.
 # ---------------------------------------------------------------------------
 
@@ -354,7 +354,7 @@ async def test_operator_edit_committed_during_network_phase_survives() -> None:
     mid-network-phase must survive: the runner re-selects the job fresh
     right before applying outcomes, not the stale copy it read before the
     network wait. A show id newly resolved during that same network phase
-    (fix round 2) still ends up on the fresh row, merged in rather than
+    still ends up on the fresh row, merged in rather than
     lost along with the detached snapshot it was resolved on."""
     job = _job(season=1)  # default metadata: imdb only — tmdb gets resolved
     tracks = [_track(job.id, i, s) for i, s in enumerate(DISC)]
@@ -391,8 +391,8 @@ async def test_operator_edit_committed_during_network_phase_survives() -> None:
     assert claims_of(edited).sources["episodes_tmdb"].status == "ok"  # the stage still ran
 
 
-async def test_in_flight_run_never_re_adds_a_cleared_id_i4() -> None:
-    """I4: the runner merges only the ids its compute phase newly found. An
+async def test_in_flight_run_never_re_adds_a_cleared_id() -> None:
+    """The runner merges only the ids its compute phase newly found. An
     id the snapshot already had, which a concurrent /resolve then cleared on
     the fresh row, stays cleared."""
     job = _job(season=1, meta={"identity": {"external_ids": {"imdb": "tt1", "tvmaze": "55"}}})
@@ -433,8 +433,8 @@ class _CountingProvider(FakeProvider):
             self.active -= 1
 
 
-async def test_at_most_two_runs_compute_at_once_m5() -> None:
-    """M5: the runner's semaphore lets two jobs compute and apply at a time;
+async def test_at_most_two_runs_compute_at_once() -> None:
+    """The runner's semaphore lets two jobs compute and apply at a time;
     the third waits its turn, then runs."""
     jobs = [_job(f"job_{n}") for n in range(3)]
     tracks = [_track(j.id, i, s) for j in jobs for i, s in enumerate(DISC)]
@@ -457,10 +457,10 @@ async def test_at_most_two_runs_compute_at_once_m5() -> None:
     assert all(claims_of(j).sources["episodes_tmdb"].status == "ok" for j in jobs)
 
 
-async def test_invalidated_job_queued_behind_the_cap_writes_nothing_first_r1(
+async def test_invalidated_job_queued_behind_the_cap_writes_nothing_first(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """R1: a job queued behind two gated runs is invalidated. Its first run,
+    """A job queued behind two gated runs is invalidated. Its first run,
     once it gets a slot, writes nothing; only the rerun applies."""
     jobs = [_job(f"job_{n}") for n in range(3)]
     tracks = [_track(j.id, i, s) for j in jobs for i, s in enumerate(DISC)]
@@ -504,8 +504,8 @@ async def test_invalidated_job_queued_behind_the_cap_writes_nothing_first_r1(
     assert claims_of(jobs[2]).sources["episodes_tmdb"].status == "ok"
 
 
-async def test_run_with_no_eligible_titles_writes_and_emits_nothing_c1() -> None:
-    """C1 polish: an identify-time run with no tracks yet stops right after
+async def test_run_with_no_eligible_titles_writes_and_emits_nothing() -> None:
+    """An identify-time run with no tracks yet stops right after
     compute: no lock, no resolve, no event."""
     job = _job()
     db = _db(job, tracks=[])
@@ -523,7 +523,7 @@ async def test_run_with_no_eligible_titles_writes_and_emits_nothing_c1() -> None
 
 
 async def test_compute_phase_mutation_never_reaches_a_flush() -> None:
-    """Fix round 2's core invariant: nothing the compute phase mutates can
+    """Core invariant: nothing the compute phase mutates can
     ever reach a flush. `resolve_show_ids` mutates the compute snapshot's
     `metadata_json` in memory (a newly resolved show id); this must never
     show up in any session's autoflush log, on any session, at any point —
@@ -613,7 +613,7 @@ async def test_shutdown_cancels_in_flight_and_disables_schedule() -> None:
 
 
 # ---------------------------------------------------------------------------
-# invalidate (Task 9 F4 part 2): the identity router's `apply=True` path
+# invalidate: the identity router's `apply=True` path
 # calls this before computing so an in-flight background run can't clobber
 # the write it's about to commit.
 # ---------------------------------------------------------------------------
@@ -628,9 +628,9 @@ async def test_invalidate_noop_when_nothing_pending() -> None:
     assert runner._rerun == set()
 
 
-async def test_invalidate_marks_rerun_for_a_run_not_yet_started_r1() -> None:
+async def test_invalidate_marks_rerun_for_a_run_not_yet_started() -> None:
     """Immediately after `schedule()`, before any `await` yields control,
-    the task exists in `_pending` but hasn't started. R1: `invalidate` still
+    the task exists in `_pending` but hasn't started. `invalidate` still
     marks a rerun, since a queued run can take its slot and compute while the
     caller computes, then apply after the caller commits."""
     job = _job()
@@ -659,7 +659,7 @@ async def test_invalidate_marks_rerun_when_run_has_started() -> None:
     ever writes: it commits nothing, emits nothing, and the job's claims stay
     empty right up to the point the rerun-once it triggers applies fresh
     outcomes -- exactly the no-stale-write guarantee `schedule()`'s own
-    mid-flight rerun gives (fix round 1), now reachable through
+    mid-flight rerun gives, now reachable through
     `invalidate()` too. Only the SECOND run's `job.identity_updated` ever
     lands (exactly one), and the stored claims are that second run's."""
     job = _job()
@@ -890,7 +890,7 @@ def test_public_providers_method_returns_the_cached_list() -> None:
 
 
 # ---------------------------------------------------------------------------
-# sweep_startup (Review Focus 5)
+# sweep_startup
 # ---------------------------------------------------------------------------
 
 
@@ -909,7 +909,7 @@ async def test_sweep_startup_schedules_only_eligible_jobs_once() -> None:
     not_tv = _job("job_movie", status=JobStatus.IDENTIFIED, media_type=MediaType.MOVIE)
     # The operator cleared this one: the sweep must not bring the match back.
     cleared = _job("job_cleared", status=JobStatus.IDENTIFIED, meta={"identity_claims": {"episodes_cleared": True}})
-    # RIPPED is terminal: pre-PR-3b jobs must not all be matched on upgrade.
+    # RIPPED is terminal: already-ripped jobs must not all be matched on upgrade.
     wrong_status = _job("job_ripped", status=JobStatus.RIPPED)
 
     db = _db(
@@ -947,7 +947,7 @@ async def test_sweep_startup_returns_zero_when_nothing_is_eligible() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Review Focus 4: a season change followed by a provider error must not
+# A season change followed by a provider error must not
 # resurrect the stale season's claims.
 # ---------------------------------------------------------------------------
 
@@ -1009,8 +1009,8 @@ async def test_movie_tmdb_swapped_for_the_resolved_show_is_merged() -> None:
     assert (stored["tmdb"], stored["tmdb_kind"]) == ("999", "tv")
 
 
-async def test_rerun_after_invalidate_waits_for_the_callers_write_d093() -> None:
-    """D-093: the invalidated run finishes while the caller (the identity
+async def test_rerun_after_invalidate_waits_for_the_callers_write() -> None:
+    """The invalidated run finishes while the caller (the identity
     router's `/identity/match` apply) is still computing. Its rerun must not
     snapshot the job until the caller has committed and released; a
     `schedule()` arriving in the meantime waits too. After `release`, the
@@ -1045,8 +1045,8 @@ async def test_rerun_after_invalidate_waits_for_the_callers_write_d093() -> None
     assert ("season", 3) in provider.calls  # the rerun read the committed season
 
 
-async def test_overlapping_holds_wait_for_the_last_release_d093() -> None:
-    """D-093 follow-up: two identity writes on one job overlap. The first
+async def test_overlapping_holds_wait_for_the_last_release() -> None:
+    """Two identity writes on one job overlap. The first
     caller's release must not start the deferred run while the second
     caller is still writing."""
     job = _job()

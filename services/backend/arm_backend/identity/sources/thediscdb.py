@@ -163,7 +163,7 @@ def build_claims(match: DiscMatch, scan: ScanResult, *, now: datetime) -> Source
             "release_slug": match.release_slug,
             "title_slug": match.title_slug,
             "kind": match.kind,
-            # Community credit (spec): who contributed this disc layout.
+            # Community credit: who contributed this disc layout.
             "contributors": _contributors(match),
         },
     )
@@ -212,7 +212,7 @@ def release_identity(match: DiscMatch) -> tuple[str | None, int | None]:
 
 
 def release_result(match: DiscMatch, imdb_id: str) -> MetadataResult | None:
-    """The disc named by its TheDiscDB release alone (spec D-1, no online call);
+    """The disc named by its TheDiscDB release alone (no online call);
     None when the release has no usable title."""
     title, year = release_identity(match)
     if not title:

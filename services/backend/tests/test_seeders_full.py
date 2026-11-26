@@ -62,7 +62,7 @@ async def test_seed_config_backfills_missing_signing_key() -> None:
 
 
 async def test_fresh_config_singleton_carries_the_env_parallel_cap(monkeypatch: pytest.MonkeyPatch) -> None:
-    """D-060: a first boot seeds max_parallel_transcodes from the env value,
+    """A first boot seeds max_parallel_transcodes from the env value,
     so Settings and the dispatcher agree before the second boot."""
     from arm_backend.config import settings
 
@@ -166,7 +166,7 @@ async def test_seed_session_routes_skips_when_table_not_empty() -> None:
 
 
 async def test_seed_session_routes_flips_flag_on_fresh_seed(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """I1: a fresh empty DB seeds the built-ins once and flips
+    """A fresh empty DB seeds the built-ins once and flips
     `session_routes_seeded` true so a later boot's empty table (deliberately
     cleared) does not get reseeded."""
     monkeypatch.setattr(seeders, "FIRST_BOOT_LOG", tmp_path / "fb.log")
@@ -179,7 +179,7 @@ async def test_seed_session_routes_flips_flag_on_fresh_seed(tmp_path: Path, monk
 async def test_upgraded_install_with_flag_false_and_empty_routes_seeds_once(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Fix 76-1: simulates an existing deployment that has been through
+    """Simulates an existing deployment that has been through
     migration 0035 under the corrected (conditional) UPDATE — a config row
     already exists with `session_routes_seeded=False` because
     session_routes was empty at migration time (the seeder never shipped
@@ -214,7 +214,7 @@ async def test_upgraded_install_with_flag_false_and_empty_routes_seeds_once(
 async def test_delete_all_routes_then_rerun_seeders_stays_empty(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """I1: clearing every session route and re-running seeders must not
+    """Clearing every session route and re-running seeders must not
     resurrect them — the one-shot marker set on the first boot prevents the
     empty-table gate from re-firing."""
     monkeypatch.setattr(seeders, "FIRST_BOOT_LOG", tmp_path / "fb.log")

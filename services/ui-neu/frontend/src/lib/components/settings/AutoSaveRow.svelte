@@ -8,10 +8,10 @@
 </script>
 
 <div class="stack stack-sm" id="setting-{key}" data-testid="setting-{key}">
-	<label class="field field-row auto-save-row">
+	<div class="field field-row auto-save-row">
 		{@render children()}
 		<span class="auto-save-row-hint">(changes save automatically)</span>
-	</label>
+	</div>
 	{#if help}<p class="field-help">{help}</p>{/if}
 </div>
 

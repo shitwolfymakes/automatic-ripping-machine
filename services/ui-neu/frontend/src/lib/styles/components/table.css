@@ -2,9 +2,8 @@
    Elements: table-header (th), table-row (tr in tbody), table-cell (td),
    table-sort (a th that sorts; contains the SortIndicator).
    Modifiers: table-compact, table-right (right-aligns a header/cell -
-   `text-right` is a banned inline utility per spec 6.4, and this recurs
-   across every table this task migrated, so it is a table-block modifier
-   rather than a per-component scoped duplicate; Task 11), responsive-table
+   `text-right` is a banned inline utility, and this recurs across tables, so it is a table-block
+   modifier rather than a per-component scoped duplicate), responsive-table
    (stacks to label/value cards below lg (1024px) - add data-label="Column
    Name" to each <td> that should show a label when stacked; the <thead> is
    hidden below lg).
@@ -16,12 +15,10 @@
    (`display: table` / `table-row` / `table-cell`). Those Tailwind
    utilities land in Tailwind's `utilities` layer, which always outranks
    this block's `components` layer regardless of selector specificity or
-   source order, so a bare Tailwind utility of the same name silently won
-   over any `display: block` this layer declared for `.responsive-table
-   tr`/`td` - breaking the documented mobile stacking for every consumer
-   app-wide (Task 11 fix round 1 found this; fix round 2 moved the rules to
-   the utilities layer instead of using `!important`, the more correct fix
-   per the cascade-layer rules - see utilities.css's own header). */
+   source order, so a bare Tailwind utility of the same name would win over any `display: block`
+   this layer declared for `.responsive-table tr`/`td`, breaking the mobile stacking for every
+   consumer; the rules therefore live in the utilities layer instead of using `!important`, the more
+   correct fix per the cascade-layer rules - see utilities.css's own header. */
 @layer components {
 	.table {
 		width: 100%;

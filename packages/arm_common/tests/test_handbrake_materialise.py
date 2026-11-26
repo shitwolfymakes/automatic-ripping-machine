@@ -1,4 +1,4 @@
-"""resolve_depth (R2) and materialise: the one-preset file and encoder flags the transcoder runs."""
+"""resolve_depth and materialise: the one-preset file and encoder flags the transcoder runs."""
 
 from __future__ import annotations
 
@@ -114,7 +114,7 @@ def test_no_family_no_flags(hb_schema, plex_settings):
 
 
 def test_preset_encoder_uses_base_family_block_without_encoder_flag(hb_schema):
-    """Ruling 24: the base family's block is written and flagged, but the base's own encoder is kept."""
+    """The base family's block is written and flagged, but the base's own encoder is kept."""
     block = {"VideoPreset": "slow", "VideoQualitySlider": 20}
     settings = HandbrakeSettings(encoders={"x265": block})
     result = materialise(hb_schema, BASE, settings, "x265", MKV, emit_encoder=False)

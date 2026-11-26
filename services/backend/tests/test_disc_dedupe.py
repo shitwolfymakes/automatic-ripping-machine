@@ -99,7 +99,7 @@ async def test_blank_algo_or_value_fingerprints_short_circuit() -> None:
     assert decision is None
 
 
-# --- find_previous_rips (D-132) --------------------------------------------
+# --- find_previous_rips --------------------------------------------
 
 
 @pytest.mark.asyncio

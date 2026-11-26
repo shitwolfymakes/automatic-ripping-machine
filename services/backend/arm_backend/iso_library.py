@@ -1,4 +1,4 @@
-"""Pure helpers for the ISO library (Rip from ISO, spec section 4.4).
+"""Pure helpers for the ISO library (Rip from ISO).
 
 Dependency-free on purpose: it imports only settings and the stdlib, so both
 `ripper_container_spec` (spawn mounts) and `iso_rips` (create) can use it

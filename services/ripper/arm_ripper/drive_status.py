@@ -8,13 +8,11 @@ The probe is a pure ioctl read — `CDROM_DRIVE_STATUS` returns the
 medium-presence signal without touching the SCSI read path. Cheap
 enough to run every HEARTBEAT_INTERVAL_SECONDS.
 
-(Earlier versions of this file also offered a `verify_read=True` mode
-that pulled bytes from offset 0 to catch the "drive reports CDS_DISC_OK
-but next SCSI read returns NOT_READY" case. That whole class of failure
-came from the per-title rip loop letting the drive idle between
-`makemkvcon` invocations; with the single-invocation rip the drive
-stays open for the entire rip and the verify-read path is no longer
-needed. See [.claude/memory/](.claude/memory/) for the rationale.)
+The probe deliberately does not read bytes from the disc to catch the "drive
+reports CDS_DISC_OK but the next SCSI read returns NOT_READY" case. That
+failure came from letting the drive idle between `makemkvcon` invocations;
+with one `makemkvcon` per disc the drive stays open for the entire rip, so
+there is no idle gap for a verify-read to guard against.
 """
 
 from __future__ import annotations
