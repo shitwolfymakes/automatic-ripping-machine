@@ -114,6 +114,36 @@ def test_stream_without_a_token_reads_as_guest(
     assert r.status_code == 200
 
 
+def test_zip_reads_the_logs_off_the_event_loop(
+    tmp_path: Path, signing_key: bytes, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """/logs is often a network share and the legacy fallback reads every
+    service log: that runs in a worker thread (no running event loop), so
+    one download can't stall every other request."""
+    import asyncio
+    from collections.abc import Iterator
+
+    loop_running: list[bool] = []
+
+    def spy(job_id: str) -> Iterator[tuple[str, list[str]]]:
+        try:
+            asyncio.get_running_loop()
+            loop_running.append(True)
+        except RuntimeError:
+            loop_running.append(False)
+        yield "svc.log", ["line\n"]
+
+    monkeypatch.setattr(log_reader, "LOG_DIR", tmp_path)
+    monkeypatch.setattr(logs_router, "job_log_slices", spy)
+    app, token = _make_app(signing_key)
+    with TestClient(app) as client:
+        r = client.get("/api/logs/job_01JZXR7K3M5Q8N4VWA00000001.zip", headers=_auth(token))
+    assert r.status_code == 200, r.text
+    with zipfile.ZipFile(io.BytesIO(r.content)) as zf:
+        assert zf.namelist() == ["svc.log"]
+    assert loop_running == [False]
+
+
 def test_zip_per_entry_line_cap(tmp_path: Path, signing_key: bytes, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(log_reader, "LOG_DIR", tmp_path)
     monkeypatch.setattr(log_reader.settings, "ARM_LOG_ZIP_PER_ENTRY_LINE_CAP", 3)
