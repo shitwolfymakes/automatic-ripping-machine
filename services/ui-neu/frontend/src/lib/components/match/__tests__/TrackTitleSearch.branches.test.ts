@@ -5,8 +5,9 @@ import TrackTitleSearch from '../TrackTitleSearch.svelte';
 import { createTrack } from '../../../__fixtures__/job';
 
 // Branch pins for TrackTitleSearch, beside TrackTitleSearch.test.ts. Every
-// branch of the component is reachable from the rendered component, so
-// nothing is left unpinned.
+// branch of the component's own code is covered. The coverage tool still
+// reports one open arm that is Svelte's: the heading's `{track.index}` compiles
+// to `(...) ?? ''`, and a track's index is a required number.
 
 vi.mock('$lib/api/jobs', () => ({
 	searchMetadata: vi.fn(),
@@ -255,12 +256,29 @@ describe('TrackTitleSearch IMDb search', () => {
 // ---- search: text path ------------------------------------------------
 
 describe('TrackTitleSearch text search', () => {
-	it('sends only the trimmed query to searchMetadata, not the year', async () => {
+	it('sends the trimmed query and the trimmed four-digit year to searchMetadata', async () => {
 		show();
-		await type(yearInput(), '2020');
+		await type(yearInput(), ' 2020 ');
 		await runTextSearch([cand()], '  Some Film  ');
 		expect(mockSearch).toHaveBeenCalledTimes(1);
-		expect(mockSearch.mock.calls[0]).toEqual(['Some Film']);
+		expect(mockSearch.mock.calls[0]).toEqual(['Some Film', undefined, undefined, 2020]);
+	});
+
+	it('sends the year seeded from the track', async () => {
+		show({ track: { year: 1999 } });
+		await runTextSearch([cand()], 'q');
+		expect(mockSearch.mock.calls[0]).toEqual(['q', undefined, undefined, 1999]);
+	});
+
+	it.each([
+		['blank', ''],
+		['not four digits', '99'],
+		['not a number', 'abcd']
+	])('sends no year when the Year field is %s', async (_n, value) => {
+		show();
+		await type(yearInput(), value);
+		await runTextSearch([cand()], 'q');
+		expect(mockSearch.mock.calls[0]).toEqual(['q', undefined, undefined, null]);
 	});
 
 	it('shows "No results found." for no candidates', async () => {
@@ -324,7 +342,7 @@ describe('TrackTitleSearch search triggers', () => {
 		mockSearch.mockResolvedValue({ candidates: [] } as never);
 		show({ track: { title: 'Seeded' } });
 		await fireEvent.keyDown(get(), { key: 'Enter' });
-		await waitFor(() => expect(mockSearch).toHaveBeenCalledWith('Seeded'));
+		await waitFor(() => expect(mockSearch).toHaveBeenCalledWith('Seeded', undefined, undefined, null));
 	});
 
 	it('another key does not search', async () => {
@@ -642,17 +660,15 @@ describe('TrackTitleSearch save options', () => {
 		expect(await screen.findByText('Track options saved')).toBeInTheDocument();
 	});
 
-	it("shows no outcome line when no editor is open (today's behaviour)", async () => {
+	it('shows the outcome line when no editor is open', async () => {
 		const onapply = vi.fn();
 		show({ onapply });
 		await fireEvent.click(saveButton());
-		await waitFor(() => expect(onapply).toHaveBeenCalledTimes(1));
-		expect(screen.queryByText('Track options saved')).toBeNull();
-		mockUpdateTrack.mockRejectedValue(new Error('hidden failure'));
+		expect(await screen.findByText('Track options saved')).toHaveAttribute('data-tone', 'success');
+		expect(onapply).toHaveBeenCalledTimes(1);
+		mockUpdateTrack.mockRejectedValue(new Error('save failure'));
 		await fireEvent.click(saveButton());
-		await waitFor(() => expect(saveButton()).toHaveTextContent('Save options'));
-		await waitFor(() => expect(mockUpdateTrack).toHaveBeenCalledTimes(2));
-		expect(screen.queryByText('hidden failure')).toBeNull();
+		expect(await screen.findByText('save failure')).toHaveAttribute('data-tone', 'error');
 	});
 
 	it.each([
@@ -720,13 +736,18 @@ describe('TrackTitleSearch clear override', () => {
 		expect(onclear).not.toHaveBeenCalled();
 	});
 
-	it("shows nothing on failure when no editor is open (today's behaviour)", async () => {
+	it('shows the failure when no editor is open', async () => {
 		show({ track: { title: 'Old' } });
-		mockClear.mockRejectedValue(new Error('hidden clear failure'));
+		mockClear.mockRejectedValue(new Error('clear failure'));
 		await fireEvent.click(clearButton());
-		await waitFor(() => expect(clearButton()).toHaveTextContent('Clear Override'));
-		await waitFor(() => expect(mockClear).toHaveBeenCalledTimes(1));
-		expect(screen.queryByText('hidden clear failure')).toBeNull();
-		expect(screen.queryByText('Clear failed')).toBeNull();
+		expect(await screen.findByText('clear failure')).toHaveAttribute('data-tone', 'error');
+	});
+
+	it('shows "Reverted to job title" after a clear closes the editor', async () => {
+		show({ track: { title: 'Old' } });
+		await openEditorViaImdb();
+		await fireEvent.click(clearButton());
+		expect(await screen.findByText('Reverted to job title')).toHaveAttribute('data-tone', 'success');
+		expect(screen.queryByRole('button', { name: 'Apply' })).toBeNull();
 	});
 });
