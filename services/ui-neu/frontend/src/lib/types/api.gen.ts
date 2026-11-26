@@ -1148,13 +1148,13 @@ export type Drive = {
      */
     uhd_capable?: boolean | null;
     /**
-     * Prescan Cache Mb
-     */
-    prescan_cache_mb?: number | null;
-    /**
      * Prescan Timeout
      */
     prescan_timeout?: number | null;
+    /**
+     * Prescan Cache Mb
+     */
+    prescan_cache_mb?: number | null;
     /**
      * Prescan Retries
      */
@@ -1381,21 +1381,9 @@ export type DriveUpdateRequest = {
      */
     uhd_capable?: boolean | null;
     /**
-     * Prescan Cache Mb
-     */
-    prescan_cache_mb?: number | null;
-    /**
      * Prescan Timeout
      */
     prescan_timeout?: number | null;
-    /**
-     * Prescan Retries
-     */
-    prescan_retries?: number | null;
-    /**
-     * Disc Enum Timeout
-     */
-    disc_enum_timeout?: number | null;
 };
 
 /**
@@ -1442,21 +1430,9 @@ export type DriveView = {
      */
     uhd_capable: boolean | null;
     /**
-     * Prescan Cache Mb
-     */
-    prescan_cache_mb: number | null;
-    /**
      * Prescan Timeout
      */
     prescan_timeout: number | null;
-    /**
-     * Prescan Retries
-     */
-    prescan_retries: number | null;
-    /**
-     * Disc Enum Timeout
-     */
-    disc_enum_timeout: number | null;
     /**
      * Created At
      */
