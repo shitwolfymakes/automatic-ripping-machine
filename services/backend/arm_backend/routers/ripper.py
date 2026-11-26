@@ -13,6 +13,7 @@ from arm_backend.auth import (
     require_service_token,
 )
 from arm_backend.session_drain import after_rip, cancel_parked_applications
+from arm_backend.config import settings
 from arm_backend.crash_recovery import reset_job_for_recovery
 from arm_backend.db import get_session
 from arm_backend.log_safely import log_safely, log_safely_sync
@@ -67,6 +68,7 @@ from arm_common.schemas import (
     RegisterRequest,
     RipperConfigView,
     RipperHeartbeatRequest,
+    ResumePolicy,
     RipStartResponse,
     ScanResult,
     SdfStatusReport,
@@ -467,6 +469,10 @@ async def _rip_start_response(
         tracks=[TrackView.model_validate(t) for t in tracks],
         min_length_seconds=min_length_seconds,
         min_title_length_seconds=await _title_length_floor(session, job),
+        resume_policy=ResumePolicy(
+            mode=settings.ARM_RESUME_MODE,
+            per_title_max_remaining_pct=settings.ARM_RESUME_PER_TITLE_MAX_REMAINING_PCT,
+        ),
     )
 
 

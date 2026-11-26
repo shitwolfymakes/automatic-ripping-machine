@@ -12,6 +12,7 @@ from arm_common.enums import (
     DiscType,
     JobStatus,
     MediaType,
+    ResumeMode,
     SessionApplicationStatus,
     TrackKind,
     TrackRole,
@@ -425,6 +426,21 @@ class TrackView(BaseModel):
     identity_provenance: dict[str, str] | None = None
 
 
+DEFAULT_RESUME_PER_TITLE_MAX_REMAINING_PCT = 50
+
+
+class ResumePolicy(BaseModel):
+    """How a resumed rip chooses between one `mkv all` and one invocation per unsettled title.
+
+    In `auto`, a resume rips per title when the unsettled titles' expected data is at most
+    `per_title_max_remaining_pct` percent of what `mkv all` would read (every title at or above
+    the minimum length, settled and unselected ones included). Tunable while the defaults are dialled in.
+    """
+
+    mode: ResumeMode = ResumeMode.AUTO
+    per_title_max_remaining_pct: int = Field(default=DEFAULT_RESUME_PER_TITLE_MAX_REMAINING_PCT, ge=0, le=100)
+
+
 class RipStartResponse(BaseModel):
     job_id: str
     rip_preset_id: str
@@ -437,6 +453,9 @@ class RipStartResponse(BaseModel):
     # configured setting for an older scan). The rip never goes below it, so
     # it writes no title the scan did not list. None from an older backend.
     min_title_length_seconds: int | None = None
+    # How a resume of this rip reads the disc again (after a restart, or when
+    # the drive drops off the bus and comes back). From backend settings.
+    resume_policy: ResumePolicy = Field(default_factory=ResumePolicy)
 
 
 # The one definition of apply/fan-out skip reasons — the backend engine

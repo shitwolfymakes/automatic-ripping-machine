@@ -229,8 +229,10 @@ def _stub_rip_disc(
         on_title_done: Any | None = None,
         hash_outputs: bool = True,
         stop: Any | None = None,
+        title: int | None = None,
     ) -> RipDiscResult:
         if captured is not None:
+            captured["title"] = title
             captured["hash_outputs"] = hash_outputs
             captured["device_path"] = device_path
             captured["output_dir"] = output_dir

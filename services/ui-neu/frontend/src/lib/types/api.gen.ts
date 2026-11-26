@@ -4470,6 +4470,32 @@ export type ResolveResponse = {
 };
 
 /**
+ * ResumeMode
+ *
+ * How a rip resumed after a restart or a lost drive reads the disc again.
+ *
+ * `auto` picks per resume by data (see `ResumePolicy`); the other two force one path.
+ */
+export type ResumeMode = 'auto' | 'mkv_all' | 'per_title';
+
+/**
+ * ResumePolicy
+ *
+ * How a resumed rip chooses between one `mkv all` and one invocation per unsettled title.
+ *
+ * In `auto`, a resume rips per title when the unsettled titles' expected data is at most
+ * `per_title_max_remaining_pct` percent of what `mkv all` would read (every title at or above
+ * the minimum length, settled and unselected ones included). Tunable while the defaults are dialled in.
+ */
+export type ResumePolicy = {
+    mode?: ResumeMode;
+    /**
+     * Per Title Max Remaining Pct
+     */
+    per_title_max_remaining_pct?: number;
+};
+
+/**
  * RetentionPolicy
  */
 export type RetentionPolicy = 'keep_forever' | 'prune_after_session' | 'custom';
@@ -4630,6 +4656,7 @@ export type RipStartResponse = {
      * Min Title Length Seconds
      */
     min_title_length_seconds?: number | null;
+    resume_policy?: ResumePolicy;
 };
 
 /**

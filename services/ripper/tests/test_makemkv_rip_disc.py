@@ -1034,7 +1034,7 @@ async def test_exit_error_nonzero_without_stderr_reports_the_exit_code(stderr):
 
 
 def test_mkv_all_command_for_a_device(tmp_path):
-    assert makemkv_rip._mkv_all_command("/dev/sr0", tmp_path, 120) == [
+    assert makemkv_rip._mkv_command("/dev/sr0", tmp_path, 120, None) == [
         "makemkvcon",
         "mkv",
         "--robot",
@@ -1049,7 +1049,7 @@ def test_mkv_all_command_for_a_device(tmp_path):
 def test_mkv_all_command_for_an_iso_file(tmp_path):
     iso = tmp_path / "movie.iso"
     iso.write_bytes(b"")
-    assert makemkv_rip._mkv_all_command(str(iso), tmp_path, 300) == [
+    assert makemkv_rip._mkv_command(str(iso), tmp_path, 300, None) == [
         "makemkvcon",
         "mkv",
         "--robot",
@@ -1062,9 +1062,15 @@ def test_mkv_all_command_for_an_iso_file(tmp_path):
 
 
 def test_mkv_all_command_has_all_exactly_once_right_before_the_output_dir(tmp_path):
-    cmd = makemkv_rip._mkv_all_command("/dev/sr0", tmp_path, 120)
+    cmd = makemkv_rip._mkv_command("/dev/sr0", tmp_path, 120, None)
     assert cmd.count("all") == 1
     assert cmd[-2:] == ["all", str(tmp_path)]
+
+
+def test_mkv_command_for_one_title_names_it_in_place_of_all(tmp_path):
+    cmd = makemkv_rip._mkv_command("/dev/sr0", tmp_path, 120, 7)
+    assert "all" not in cmd
+    assert cmd[-2:] == ["7", str(tmp_path)]
 
 
 def _pending_state(**titles: tuple[bool, bool]) -> makemkv_stream.ParserState:

@@ -1,4 +1,5 @@
-"""The DVD and Blu-ray rip: one makemkvcon run for the whole disc, attributed back to the selected tracks."""
+"""The DVD and Blu-ray rip: one makemkvcon run for the whole disc (or, on a resume, one per unsettled title),
+attributed back to the selected tracks."""
 
 import asyncio
 import logging
@@ -129,8 +130,10 @@ class _OpticalRip:
         min_length_seconds: int,
         stop: asyncio.Event | None,
         drive_lost: Callable[[], bool] | None,
+        title: int | None = None,
     ) -> None:
         self._device_path = device_path
+        self._title = title
         self._output_dir = output_dir
         self._track_by_index = track_by_index
         self._eligible = eligible
@@ -277,6 +280,7 @@ class _OpticalRip:
                 on_title_done=self._on_title_done,
                 hash_outputs=False,
                 stop=self._stop,
+                title=self._title,
             )
             _delete_skipped_outputs(self._output_dir, self._eligible, self._skipped)
             if disc_result.overall_error is None and self._drive_dropped():
@@ -376,8 +380,12 @@ async def rip_optical(
     stop: asyncio.Event | None = None,
     skip_track_ids: Collection[str] = (),
     drive_lost: Callable[[], bool] | None = None,
+    per_title: bool = False,
 ) -> None:
     """Single-invocation DVD/BD rip with per-title attribution.
+
+    `per_title` (a resume that chose it, see `resume_plan`) instead runs one
+    `mkv … <title>` per unsettled eligible title, each into its own folder.
 
     The makemkvcon invocation rips every title ≥ minlength to
     `output_dir`. The caller settles minlength never below the minimum
@@ -417,6 +425,21 @@ async def rip_optical(
     # drive dropped off the bus): makemkvcon rips them again, as `mkv all`
     # does, but they get no callbacks and their new files are deleted.
     skipped = {idx for idx, t in track_by_index.items() if t.id in skip_track_ids}
+    if per_title:
+        await _rip_each_title(
+            device_path=device_path,
+            output_dir=output_dir,
+            track_by_index=track_by_index,
+            eligible=eligible_source_indexes,
+            skipped=skipped,
+            on_track_start=on_track_start,
+            on_track_done=on_track_done,
+            on_track_progress=on_track_progress,
+            min_length_seconds=min_length_seconds,
+            stop=stop,
+            drive_lost=drive_lost,
+        )
+        return
     await _OpticalRip(
         device_path=device_path,
         output_dir=output_dir,
@@ -430,6 +453,55 @@ async def rip_optical(
         stop=stop,
         drive_lost=drive_lost,
     ).run()
+
+
+async def _rip_each_title(
+    *,
+    device_path: str,
+    output_dir: Path,
+    track_by_index: dict[int, TrackView],
+    eligible: list[int],
+    skipped: set[int],
+    on_track_start: OnTrackStart,
+    on_track_done: OnTrackDone,
+    on_track_progress: OnTrackProgress | None,
+    min_length_seconds: int,
+    stop: asyncio.Event | None,
+    drive_lost: Callable[[], bool] | None,
+) -> None:
+    """One `mkv … <title>` per unsettled eligible title, each into `output_dir/title-NN`, in source order.
+
+    Settled titles are never read. Once `stop` is set (the drive dropped), the titles not yet reached are reported
+    stopped so the caller leaves them for its next resume. Selected titles MakeMKV would not rip (below the minimum
+    length) fail with the same reason a full pass gives them.
+    """
+    pending = [idx for idx in eligible if idx not in skipped]
+    for n, idx in enumerate(pending):
+        if stop is not None and stop.is_set():
+            for rest in pending[n:]:
+                await on_track_done(track_by_index[rest], RipResult(ok=False, error=STOPPED_ERROR))
+            return
+        await _OpticalRip(
+            device_path=device_path,
+            output_dir=output_dir / f"title-{idx:02d}",
+            track_by_index={idx: track_by_index[idx]},
+            eligible=[idx],
+            skipped=set(),
+            on_track_start=on_track_start,
+            on_track_done=on_track_done,
+            on_track_progress=on_track_progress,
+            min_length_seconds=min_length_seconds,
+            stop=stop,
+            drive_lost=drive_lost,
+            title=idx,
+        ).run()
+    for idx, track in track_by_index.items():
+        if idx in skipped or idx in eligible:
+            continue
+        await on_track_start(track)
+        await on_track_done(
+            track, RipResult(ok=False, error=_no_output_error(idx, track, min_length_seconds, eligible))
+        )
 
 
 def _delete_skipped_outputs(output_dir: Path, eligible_source_indexes: list[int], skipped: set[int]) -> None:
