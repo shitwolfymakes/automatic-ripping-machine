@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { formatFps } from '../fps';
+import { formatFps, fpsLabel } from '../fps';
 
 describe('formatFps', () => {
 	it('shows the live rate with the average in brackets', () => {
@@ -14,5 +14,17 @@ describe('formatFps', () => {
 	it('is null until a rate has been reported', () => {
 		expect(formatFps(null, 23.46)).toBeNull();
 		expect(formatFps(undefined)).toBeNull();
+	});
+});
+
+describe('fpsLabel', () => {
+	it('formats a sample with and without an average', () => {
+		expect(fpsLabel({ fps: 45.67, avgFps: 23.46 })).toBe('45.7 fps (avg 23.5)');
+		expect(fpsLabel({ fps: 45.67, avgFps: null })).toBe('45.7 fps');
+	});
+
+	it('is null with no sample or no rate', () => {
+		expect(fpsLabel(null)).toBeNull();
+		expect(fpsLabel({ fps: null, avgFps: 5 })).toBeNull();
 	});
 });

@@ -2,19 +2,19 @@
 	import { errorMessage } from '$lib/utils/errors';
 	import type { JobView } from '$lib/types/api.gen';
 	import StatusBadge from '../shared/StatusBadge.svelte';
-	import ProgressBar from '../shared/ProgressBar.svelte';
+	import LiveProgressLine from '../jobs/LiveProgressLine.svelte';
 	import ActiveJobRowDetails from './active-job-row/ActiveJobRowDetails.svelte';
 	import { statusAccentVar } from '$lib/jobs/status-format';
-	import { formatEta, formatTransfer } from '$lib/utils/format';
 	import { getVideoTypeConfig, discTypeLabel } from '$lib/jobs/type';
-	import { effectiveJobStatus, isPartialComplete } from '$lib/jobs/status';
+	import { effectiveJobStatus } from '$lib/jobs/status';
 	import { isInProgress } from '$lib/jobs/status-groups';
 	import DiscTypeIcon from '../shared/DiscTypeIcon.svelte';
 	import PosterImage from '../shared/PosterImage.svelte';
 	import { jobPoster } from '$lib/match/poster';
 	import SkeletonCard from '../shared/SkeletonCard.svelte';
 	import IsoSourceChip from '../drives/IsoSourceChip.svelte';
-	import type { RipLiveProgress } from '$lib/stores/rips.svelte';
+	import { jobLive } from '$lib/stores/job-live.svelte';
+	import { progressSample, ripStageWords } from '$lib/jobs/progress';
 	import { slide } from 'svelte/transition';
 	import { isAdmin } from '$lib/stores/auth';
 	import { cancelIsoRip } from '$lib/api/iso';
@@ -22,32 +22,23 @@
 
 	interface Props {
 		job?: JobView;
-		progress?: number | null;
-		progressStage?: string | null;
-		tracksRipped?: number | null;
-		tracksTotal?: number | null;
-		eta?: number | null;
 		/** ISO file name for this job's (virtual) drive, when it's an ISO rip. */
 		isoSource?: string | null;
-		/** Live progress from the rips store; carries bytes and rate for a copy. */
-		live?: RipLiveProgress | null;
 		/** Whether that virtual drive rips an .iso file or a disc folder. */
 		isoKind?: 'iso' | 'folder';
 	}
 
-	let {
-		job,
-		progress = null,
-		progressStage = null,
-		tracksRipped = null,
-		tracksTotal = null,
-		eta = null,
-		isoSource = null,
-		live = null,
-		isoKind = 'iso'
-	}: Props = $props();
+	let { job, isoSource = null, isoKind = 'iso' }: Props = $props();
 
-	let transfer = $derived(formatTransfer(live));
+	// Re-watch exactly when the id or status changes, not on other field updates.
+	let watchId = $derived(job?.id);
+	let watchStatus = $derived(job?.status);
+	$effect(() => {
+		const id = watchId;
+		const status = watchStatus;
+		if (id === undefined || status === undefined) return;
+		return jobLive.watch({ id, status });
+	});
 
 	let cancelling = $state(false);
 
@@ -64,19 +55,9 @@
 		}
 	}
 
-	// Use progress-polled counts when available (real-time), fall back to
-	// the rip-progress summary surfaced on JobView.
-	let displayRipped = $derived(tracksRipped ?? job?.rip_progress?.tracks_done ?? 0);
-	let displayTotal = $derived(tracksTotal ?? job?.rip_progress?.tracks_total ?? 0);
 	let expanded = $state(false);
 
 	let typeConfig = $derived(getVideoTypeConfig(null, job?.disc_type ?? null));
-	// Gate the progress row on isInProgress: isLive minus the idle post-rip
-	// statuses (ripped, ripped_partial, ripped_awaiting_identify). A job
-	// waiting on the operator shows no progress bar, a transcoding job
-	// (effective 'transcoding') does, and a terminal one (complete/failed)
-	// does not.
-	let active = $derived(job ? isInProgress(job) : false);
 	let accentVar = $derived(statusAccentVar(job?.status));
 
 	function toggle(e: MouseEvent) {
@@ -89,6 +70,14 @@
 {#if !job}
 	<SkeletonCard lines={3} />
 {:else}
+	{@const live = jobLive.get(job.id)}
+	<!-- The progress row shows while the job is in progress: live minus the
+	     idle post-rip statuses, so a transcoding job shows it and a terminal
+	     one does not. -->
+	{@const active = isInProgress(job)}
+	{@const sample = progressSample(job, live)}
+	{@const ripped = job.rip_progress?.tracks_done ?? 0}
+	{@const total = job.rip_progress?.tracks_total ?? 0}
 	<!-- svelte-ignore a11y_click_events_have_key_events -->
 	<div
 		class="card card-status job-active-row"
@@ -129,11 +118,6 @@
 				<!-- Status badge -->
 				<div class="shrink-0 flex items-center gap-1.5">
 					<StatusBadge status={effectiveJobStatus(job)} />
-					{#if isPartialComplete(job)}
-						<span class="badge badge-sm badge-warning"
-							>Done {job.transcode_progress?.tasks_done}/{job.transcode_progress?.tasks_total}</span
-						>
-					{/if}
 				</div>
 
 				<!-- Type + disc badges -->
@@ -155,9 +139,9 @@
 				<span class="flex-1"></span>
 
 				<!-- Track counts -->
-				{#if active && displayTotal > 0}
+				{#if active && total > 0}
 					<span class="shrink-0 job-active-row-meta">
-						{displayRipped}/{displayTotal}
+						{ripped}/{total}
 					</span>
 				{/if}
 
@@ -198,27 +182,15 @@
 		<!-- Progress row: own line below a divider, indented under content -->
 		{#if active}
 			<div class="job-active-row-progress">
-				{#if progress != null}
-					<!-- Render the bar even at 0%. The MakeMKV prelude (libredrive
-				     init, key ingest) can sit at 0 for several seconds and
-				     "ripping 0%" is more honest than an indeterminate spinner. -->
-					<div class="flex items-center gap-2">
-						<div class="flex-1"><ProgressBar value={progress} colorVar={accentVar} /></div>
-						{#if eta != null}
-							<span class="shrink-0 job-active-row-meta">{formatEta(eta)} left</span>
-						{/if}
-					</div>
-					{#if transfer}
-						<div class="job-active-row-meta mono">{transfer}</div>
-					{/if}
+				{#if sample?.pct != null}
+					<LiveProgressLine {sample} colorVar={accentVar} />
 				{:else}
-					<div class="flex items-center gap-2">
-						<!-- data-indeterminate: the progress vocabulary's state hook,
-					     so themes reach this shimmer without scoped class names. -->
-						<div data-indeterminate="true" class="job-active-row-indeterminate-track">
-							<div class="job-active-row-indeterminate-fill" style:--jt-progress-color={accentVar}></div>
-						</div>
-						<span class="job-active-row-meta job-active-row-ellipsis">...</span>
+					<!-- No figure yet (scanning, waiting on the operator, or a rip
+					     before its first report): an indeterminate bar, not a
+					     promise that a report is on its way. data-indeterminate is
+					     the progress vocabulary's state hook. -->
+					<div data-indeterminate="true" class="job-active-row-indeterminate-track">
+						<div class="job-active-row-indeterminate-fill" style:--jt-progress-color={accentVar}></div>
 					</div>
 				{/if}
 			</div>
@@ -227,14 +199,7 @@
 		<!-- Expanded detail -->
 		{#if expanded}
 			<div transition:slide={{ duration: 200 }} class="job-active-row-expanded">
-				<ActiveJobRowDetails
-					{job}
-					{typeConfig}
-					tracksRipped={displayRipped}
-					tracksTotal={displayTotal}
-					{active}
-					{progressStage}
-				/>
+				<ActiveJobRowDetails {job} {typeConfig} {active} stageWords={ripStageWords(live.rip?.phase ?? null)} />
 			</div>
 		{/if}
 	</div>
@@ -327,9 +292,12 @@
 		border-top: 1px solid var(--color-border);
 		padding: 0.625rem 1rem 0.625rem 4rem;
 	}
+	.job-active-row-expanded {
+		border-top: 1px solid var(--color-border);
+		padding: 0.75rem 1rem;
+	}
 	.job-active-row-indeterminate-track {
 		height: 0.625rem;
-		flex: 1 1 0%;
 		overflow: hidden;
 		border-radius: 9999px;
 		background: var(--color-primary-tint-3);
@@ -341,13 +309,5 @@
 		background: var(--jt-progress-color);
 		opacity: 0.6;
 		animation: var(--animate-indeterminate);
-	}
-	.job-active-row-ellipsis {
-		min-width: 3ch;
-		text-align: right;
-	}
-	.job-active-row-expanded {
-		border-top: 1px solid var(--color-border);
-		padding: 0.75rem 1rem;
 	}
 </style>

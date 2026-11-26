@@ -1,34 +1,3 @@
-import { formatRemaining } from '$lib/utils/format';
-
-/**
- * Estimate time remaining for an in-flight job.
- * Returns null when an ETA can't be reasonably computed (just started,
- * already done, no progress signal); the caller renders an em-dash.
- *
- * The 30s elapsed threshold smooths the noisy first-percent jitter
- * that MakeMKV/abcde produce during drive-spin and warm-up.
- * Capped at 24h+ to avoid printing absurd estimates from sub-1%
- * progress values that haven't yet stabilised.
- */
-export function etaTime(startTime: string | null | undefined, progressPct: number | null | undefined): string | null {
-	if (!startTime || progressPct == null) return null;
-	if (progressPct <= 0 || progressPct >= 100) return null;
-	const start = new Date(startTime);
-	const elapsedSec = (Date.now() - start.getTime()) / 1000;
-	if (elapsedSec < 30) return null;
-	return formatRemaining((elapsedSec * (100 - progressPct)) / progressPct);
-}
-
-/**
- * The words for a rip's live progress stage: the two copy stages get plain
- * words and any other stage is shown as the ripper named it.
- */
-export function formatRipStage(stage: string): string {
-	if (stage === 'scratch-to-media') return 'Copying to shared storage';
-	if (stage === 'work-to-completed') return 'Moving to completed';
-	return stage;
-}
-
 /**
  * Map a status to a themeable CSS variable reference suitable for inline
  * `style="background: ${statusAccentVar(status)}"` use. Falls back to the

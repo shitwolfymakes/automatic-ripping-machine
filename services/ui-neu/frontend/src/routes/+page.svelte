@@ -8,7 +8,7 @@
 	import DiscReviewWidget from '$lib/components/dashboard/DiscReviewWidget.svelte';
 	import ActiveJobRow from '$lib/components/dashboard/ActiveJobRow.svelte';
 	import IsoPreparingRow from '$lib/components/dashboard/IsoPreparingRow.svelte';
-	import { ripProgress, startWS, stopWS, reconcileSubscriptions } from '$lib/stores/rips.svelte';
+	import { wsClient } from '$lib/api/ws';
 	import TranscodeCard from '$lib/components/dashboard/TranscodeCard.svelte';
 	import DashboardSection from '$lib/components/dashboard/DashboardSection.svelte';
 	import AllJobsPanel from '$lib/components/dashboard/AllJobsPanel.svelte';
@@ -67,16 +67,9 @@
 		)
 	);
 
-	// Live rip-progress: open the WS once, then keep the per-job
-	// `ripper.progress.{id}` subscriptions in sync with the set of jobs
-	// currently ripping. The $effect re-runs whenever that set changes.
-	$effect(() => {
-		reconcileSubscriptions(nonWaitingActiveJobs.map((j) => j.id));
-	});
-
 	onMount(() => {
 		let stopped = false;
-		startWS();
+		wsClient.start();
 		// Instant status: any ripper.events burst -> immediate refresh of both
 		// surfaces (sections/cards AND the jobs table). Polls below stay as
 		// reconciliation. Unregister only our listener on unmount — the topic
@@ -101,7 +94,6 @@
 		return () => {
 			stopped = true;
 			offRipperEvents();
-			stopWS();
 		};
 	});
 </script>
@@ -155,6 +147,7 @@
 						isoSources={dash.iso_sources}
 						isoSourceKinds={dash.iso_source_kinds}
 						paused={!dash.ripping_enabled}
+						manualWaitSeconds={dash.review_wait_seconds}
 						onrefresh={refreshDashboard}
 						ondismiss={() => dismissJob(job.id)}
 					/>
@@ -199,9 +192,6 @@
 				{#snippet row(job)}
 					<ActiveJobRow
 						{job}
-						progress={ripProgress.value[job.id]?.progress_pct ?? null}
-						eta={ripProgress.value[job.id]?.eta_seconds ?? null}
-						live={ripProgress.value[job.id] ?? null}
 						isoSource={isoSourceFor(job.drive_id, dash.iso_sources)}
 						isoKind={isoKindFor(job.drive_id, dash.iso_source_kinds)}
 					/>

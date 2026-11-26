@@ -1,3 +1,6 @@
+// Open arm the coverage tool reports that is Svelte's, not the component's:
+// the title link's `{job.id}` compiles to `(...) ?? ''`, and a job id is a
+// string.
 // The active job row's expanded panel, rendered directly.
 import { describe, it, expect, afterEach } from 'vitest';
 import { renderComponent, screen, within, cleanup } from '$lib/testing/render';
@@ -14,10 +17,8 @@ function renderDetails(overrides: Partial<JobView> = {}, props: Record<string, u
 		props: {
 			job,
 			typeConfig: getVideoTypeConfig(null, job.disc_type ?? null),
-			tracksRipped: 0,
-			tracksTotal: 0,
 			active: false,
-			progressStage: null,
+			stageWords: null,
 			...props
 		}
 	} as Defaults);
@@ -85,38 +86,41 @@ describe('ActiveJobRowDetails', () => {
 		expect(valueCell('Year')).toHaveTextContent('-');
 	});
 
-	it('shows ripped over total tracks', () => {
-		renderDetails({}, { tracksRipped: 3, tracksTotal: 8 });
+	const ripProgress = (done: number, total: number) => ({
+		tracks_total: total,
+		tracks_done: done,
+		tracks_failed: 0,
+		current_track_id: null,
+		current_track_index: null
+	});
+
+	it('shows ripped over total tracks from rip_progress', () => {
+		renderDetails({ rip_progress: ripProgress(3, 8) });
 		expect(valueCell('Tracks')).toHaveTextContent('3 / 8 ripped');
 	});
 
 	it('shows a dash for tracks when the total is 0', () => {
-		renderDetails({}, { tracksRipped: 0, tracksTotal: 0 });
+		renderDetails({ rip_progress: ripProgress(0, 0) });
 		expect(valueCell('Tracks').textContent?.trim()).toBe('-');
 	});
 
-	it('words the scratch-to-media stage in plain language', () => {
-		renderDetails({}, { active: true, progressStage: 'scratch-to-media' });
+	it('shows a dash for tracks without rip_progress', () => {
+		renderDetails({ rip_progress: null });
+		expect(valueCell('Tracks').textContent?.trim()).toBe('-');
+	});
+
+	it('shows the rip stage words', () => {
+		renderDetails({}, { active: true, stageWords: 'Copying to shared storage' });
 		expect(valueCell('Progress')).toHaveTextContent('Copying to shared storage');
 	});
 
-	it('words the work-to-completed stage in plain language', () => {
-		renderDetails({}, { active: true, progressStage: 'work-to-completed' });
-		expect(valueCell('Progress')).toHaveTextContent('Moving to completed');
-	});
-
-	it('shows any other stage as the ripper named it', () => {
-		renderDetails({}, { active: true, progressStage: 'ripping' });
-		expect(valueCell('Progress')).toHaveTextContent('ripping');
-	});
-
 	it('shows a dash for progress when the job is not active', () => {
-		renderDetails({}, { active: false, progressStage: 'ripping' });
+		renderDetails({}, { active: false, stageWords: 'ripping' });
 		expect(valueCell('Progress').textContent?.trim()).toBe('-');
 	});
 
 	it('shows a dash for progress when there is no stage', () => {
-		renderDetails({}, { active: true, progressStage: null });
+		renderDetails({}, { active: true, stageWords: null });
 		expect(valueCell('Progress').textContent?.trim()).toBe('-');
 	});
 
