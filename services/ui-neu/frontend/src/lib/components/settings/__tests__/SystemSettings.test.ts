@@ -4,8 +4,13 @@ import SystemSettings from '../SystemSettings.svelte';
 import { SetupRestart } from '$lib/stores/setup-restart.svelte';
 import { goto } from '$app/navigation';
 import { restartSetup } from '$lib/api/setup';
-import type { SettingsData } from '$lib/api/settings';
-import type { SettingsGroup } from '$lib/types/api.gen';
+import { fetchSystemDiagnostics, fetchSystemEnvironment } from '$lib/api/system';
+import { ApiError } from '$lib/api/client';
+import { fetchDiagnostics } from '$lib/api/diagnostics';
+
+// Branches not forced here: the `?? ''` fallbacks Svelte compiles around the
+// expressions in the summary line (`{env.version}`, `{yesNo(...)}`): version is
+// a required string and yesNo always returns a string, so none is ever nullish.
 
 vi.mock('$app/navigation', async (importOriginal) => ({
 	...(await importOriginal<Record<string, unknown>>()),
@@ -16,10 +21,30 @@ vi.mock('$lib/api/setup', () => ({
 	restartSetup: vi.fn(() => Promise.resolve({}))
 }));
 
-// SystemHealth and DiagnosticsSection fetch on mount; their calls are faked
+// SystemHealth and the environment section fetch on mount; their calls are faked
 // so the component renders without a network.
 vi.mock('$lib/api/system', () => ({
 	fetchSystemDiagnostics: vi.fn(() => Promise.reject(new Error('checks unavailable'))),
+	fetchSystemEnvironment: vi.fn(() =>
+		Promise.resolve({
+			version: '3.1.0',
+			summary: { host_paths_set: true, transcode_capable: false, gpus: ['nvidia'] },
+			groups: [{ name: 'Paths', vars: [] }],
+			containers: [
+				{
+					kind: 'ripper',
+					label: 'arm-ripper',
+					state: 'running',
+					image: 'arm',
+					network: null,
+					docker_host: null,
+					mounts: [],
+					devices: [],
+					env: []
+				}
+			]
+		})
+	),
 	fetchSystemVersion: vi.fn()
 }));
 
@@ -31,44 +56,25 @@ vi.mock('$lib/api/diagnostics', () => ({
 	fetchDiagnostics: vi.fn(() => Promise.resolve({ services: [] }))
 }));
 
-function field(key: string, label: string) {
-	return {
-		key,
-		group: 'System',
-		tier: 'infra',
-		label,
-		help: '',
-		type: 'string',
-		editable: false,
-		enum_values: null
-	};
+const health = { status: 'ok', checks: [{ name: 'config', status: 'ok', detail: null }], paths: [] };
+
+const originalClipboard = Object.getOwnPropertyDescriptor(navigator, 'clipboard');
+
+function stubClipboard(): ReturnType<typeof vi.fn> {
+	const writeText = vi.fn((_text: string) => Promise.resolve());
+	Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
+	return writeText;
 }
 
-const group = {
-	name: 'System',
-	fields: [field('RAW_ROOT', 'Raw root'), field('DB_URL', 'Database url')]
-} as unknown as SettingsGroup;
-
-function settingsData(over: Record<string, unknown> = {}): SettingsData {
-	return {
-		config: { RAW_ROOT: '/from-config' },
-		schema: { groups: [group] },
-		infra: { RAW_ROOT: '/from-infra', DB_URL: 'postgres://db' },
-		arm_config: {},
-		transcoder_config: null,
-		...over
-	} as unknown as SettingsData;
+async function copyReport(writeText: ReturnType<typeof vi.fn>): Promise<string> {
+	await fireEvent.click(screen.getByRole('button', { name: 'Copy deployment report' }));
+	await waitFor(() => expect(writeText).toHaveBeenCalledTimes(1));
+	return writeText.mock.calls[0][0] as string;
 }
 
-function renderSystem(over: { settings?: SettingsData; group?: SettingsGroup; setup?: SetupRestart } = {}) {
+function renderSystem(over: { setup?: SetupRestart } = {}) {
 	const setup = over.setup ?? new SetupRestart();
-	renderComponent(SystemSettings, {
-		props: {
-			settings: over.settings ?? settingsData(),
-			group: 'group' in over ? over.group : group,
-			setup
-		}
-	});
+	renderComponent(SystemSettings, { props: { setup } });
 	return setup;
 }
 
@@ -78,6 +84,8 @@ describe('SystemSettings', () => {
 	});
 
 	afterEach(() => {
+		if (originalClipboard) Object.defineProperty(navigator, 'clipboard', originalClipboard);
+		else delete (navigator as unknown as Record<string, unknown>).clipboard;
 		cleanup();
 	});
 
@@ -87,6 +95,13 @@ describe('SystemSettings', () => {
 		const card = screen.getByTestId('run-setup-again');
 		expect(within(card).getByRole('heading', { name: 'Setup walkthrough' })).toBeInTheDocument();
 		expect(within(card).getByText(/Your current values are kept/)).toBeInTheDocument();
+	});
+
+	it('heads the health checks and their run button with Diagnostics', () => {
+		renderSystem();
+		const block = screen.getByTestId('system-health-block');
+		expect(within(block).getByRole('heading', { name: 'Diagnostics' })).toBeInTheDocument();
+		expect(block).toHaveAccessibleName('Diagnostics');
 	});
 
 	it('labels the restart button "Run setup again" and enables it when idle', () => {
@@ -110,36 +125,106 @@ describe('SystemSettings', () => {
 		expect(screen.queryByRole('button', { name: 'Run setup again' })).not.toBeInTheDocument();
 	});
 
-	it('omits the Configuration list when there is no group', () => {
-		renderSystem({ group: undefined });
+	it('renders no settings fields (the drive scanner tunables live on the Drives tab)', () => {
+		renderSystem();
 		expect(screen.queryByText('Configuration (read-only)')).not.toBeInTheDocument();
-		expect(screen.queryByTestId('setting-RAW_ROOT')).not.toBeInTheDocument();
+		expect(screen.queryByText('Operator settings')).not.toBeInTheDocument();
+		expect(screen.queryByTestId('setting-drive_scan_interval_seconds')).not.toBeInTheDocument();
 	});
 
-	it('lists each group field in the Configuration list when a group is given', () => {
+	it('orders summary, health, environment, containers, setup walkthrough', async () => {
 		renderSystem();
-		expect(screen.getByRole('heading', { name: 'Configuration (read-only)' })).toBeInTheDocument();
-		expect(screen.getByTestId('setting-RAW_ROOT')).toBeInTheDocument();
-		expect(screen.getByTestId('setting-DB_URL')).toBeInTheDocument();
+		await screen.findByTestId('environment-section');
+		const ids = [
+			'system-summary',
+			'system-health-block',
+			'environment-section',
+			'containers-section',
+			'run-setup-again'
+		];
+		const els = ids.map((id) => screen.getByTestId(id));
+		for (let i = 1; i < els.length; i++) {
+			expect(els[i - 1].compareDocumentPosition(els[i]) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+		}
+		expect(screen.getByTestId('system-summary')).toHaveTextContent('Version 3.1.0');
+		expect(screen.getByRole('button', { name: 'Copy deployment report' })).toBeInTheDocument();
 	});
 
-	it('reads a field value from settings.config when the key is present', () => {
+	it('shows a log-level load error', async () => {
+		vi.mocked(fetchDiagnostics).mockRejectedValueOnce(new Error('nope'));
 		renderSystem();
-		expect(within(screen.getByTestId('setting-RAW_ROOT')).getByText('/from-config')).toBeInTheDocument();
+		expect(await screen.findByTestId('log-levels-error')).toHaveTextContent('Failed to load log levels');
 	});
 
-	it('reads a field value from settings.infra when settings.config lacks the key', () => {
+	it('still shows log levels when the environment fails', async () => {
+		vi.mocked(fetchSystemEnvironment).mockRejectedValueOnce(new Error('env down'));
+		vi.mocked(fetchDiagnostics).mockResolvedValueOnce({ services: [{ name: 'arm-ripper', log_level: 'INFO' }] });
 		renderSystem();
-		expect(within(screen.getByTestId('setting-DB_URL')).getByText('postgres://db')).toBeInTheDocument();
+		expect(await screen.findByTestId('diag-level-arm-ripper')).toHaveTextContent('INFO');
 	});
 
-	it('reads field values from settings.infra when settings.config is absent', () => {
-		renderSystem({ settings: settingsData({ config: undefined }) });
-		expect(within(screen.getByTestId('setting-RAW_ROOT')).getByText('/from-infra')).toBeInTheDocument();
-	});
-
-	it('renders the Diagnostics section', () => {
+	it('shows the environment load error', async () => {
+		vi.mocked(fetchSystemEnvironment).mockRejectedValueOnce(new Error('env down'));
 		renderSystem();
-		expect(screen.getByRole('heading', { name: 'Diagnostics' })).toBeInTheDocument();
+		expect(await screen.findByTestId('environment-error')).toHaveTextContent('env down');
+	});
+
+	it('explains an admin-only environment to a guest instead of erroring, and hides the copy button', async () => {
+		vi.mocked(fetchSystemEnvironment).mockRejectedValueOnce(
+			new ApiError(403, 'read-only role: write access required', null)
+		);
+		vi.mocked(fetchDiagnostics).mockResolvedValueOnce({ services: [{ name: 'arm-ripper', log_level: 'INFO' }] });
+		renderSystem();
+		expect(await screen.findByTestId('environment-forbidden')).toHaveTextContent(/admins only/);
+		expect(screen.queryByTestId('environment-error')).not.toBeInTheDocument();
+		expect(screen.queryByRole('button', { name: 'Copy deployment report' })).not.toBeInTheDocument();
+		expect(screen.getByTestId('diag-level-arm-ripper')).toHaveTextContent('INFO');
+	});
+
+	it('copies a report from the loaded environment and the health result of the last system check', async () => {
+		vi.mocked(fetchSystemDiagnostics).mockResolvedValueOnce(health);
+		const writeText = stubClipboard();
+		renderSystem();
+		await screen.findByTestId('system-summary');
+		await fireEvent.click(screen.getByRole('button', { name: 'Run system check' }));
+		await waitFor(() => expect(fetchSystemDiagnostics).toHaveBeenCalledTimes(1));
+		const report = await copyReport(writeText);
+		expect(report).toContain('## ARM deployment report | 3.1.0');
+		expect(report).toContain('- PASS');
+		expect(fetchSystemEnvironment).toHaveBeenCalledTimes(1);
+		expect(fetchSystemDiagnostics).toHaveBeenCalledTimes(1);
+	});
+
+	it('fetches the environment and health on copy when neither loaded', async () => {
+		vi.mocked(fetchSystemEnvironment).mockRejectedValueOnce(new Error('env down'));
+		vi.mocked(fetchSystemDiagnostics).mockResolvedValueOnce(health);
+		const writeText = stubClipboard();
+		renderSystem();
+		await screen.findByTestId('environment-error');
+		const report = await copyReport(writeText);
+		expect(report).toContain('## ARM deployment report | 3.1.0');
+		expect(report).toContain('### Health');
+		expect(fetchSystemEnvironment).toHaveBeenCalledTimes(2);
+		expect(fetchSystemDiagnostics).toHaveBeenCalledTimes(1);
+	});
+
+	it('summarises unknown host paths and no GPUs', async () => {
+		vi.mocked(fetchSystemEnvironment).mockResolvedValueOnce({
+			version: '3.1.0',
+			summary: { host_paths_set: null, transcode_capable: true, gpus: [] },
+			groups: [],
+			containers: []
+		});
+		renderSystem();
+		const summary = await screen.findByTestId('system-summary');
+		expect(summary).toHaveTextContent('Host paths set: unknown');
+		expect(summary).toHaveTextContent('Transcode capable: yes');
+		expect(summary).toHaveTextContent('GPUs: none');
+	});
+
+	it('falls back to a generic environment error for a non-Error rejection', async () => {
+		vi.mocked(fetchSystemEnvironment).mockRejectedValueOnce('boom');
+		renderSystem();
+		expect(await screen.findByTestId('environment-error')).toHaveTextContent('Failed to load the environment');
 	});
 });

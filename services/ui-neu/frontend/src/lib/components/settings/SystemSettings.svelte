@@ -1,26 +1,96 @@
 <script lang="ts">
-	import type { SettingsData } from '$lib/api/settings';
-	import type { SettingsGroup } from '$lib/types/api.gen';
+	import { onMount } from 'svelte';
 	import type { SetupRestart } from '$lib/stores/setup-restart.svelte';
-	import ConfigSchemaField from '$lib/components/settings/ConfigSchemaField.svelte';
 	import SystemHealth from '$lib/components/shared/SystemHealth.svelte';
-	import DiagnosticsSection from '$lib/components/settings/DiagnosticsSection.svelte';
 	import FeedbackAlert from '$lib/components/shared/FeedbackAlert.svelte';
+	import EnvironmentSection from '$lib/components/settings/EnvironmentSection.svelte';
+	import ContainersSection from '$lib/components/settings/ContainersSection.svelte';
+	import CopyReportButton from '$lib/components/settings/CopyReportButton.svelte';
+	import { fetchSystemDiagnostics, fetchSystemEnvironment } from '$lib/api/system';
+	import { fetchDiagnostics } from '$lib/api/diagnostics';
+	import { ApiError } from '$lib/api/client';
+	import { buildDeploymentReport } from '$lib/settings/deployment-report';
+	import type {
+		DiagnosticsServiceView,
+		SystemDiagnosticsResponse,
+		SystemEnvironmentResponse
+	} from '$lib/types/api.gen';
 
 	interface Props {
-		settings: SettingsData;
-		group: SettingsGroup | undefined;
 		setup: SetupRestart;
 	}
 
-	let { settings, group, setup }: Props = $props();
+	let { setup }: Props = $props();
+
+	let env = $state<SystemEnvironmentResponse | null>(null);
+	let envError = $state<string | null>(null);
+	// The environment report is admin-only; a guest gets 403.
+	let envForbidden = $state(false);
+	let logLevels = $state<DiagnosticsServiceView[]>([]);
+	let logError = $state<string | null>(null);
+	let health: SystemDiagnosticsResponse | null = null;
+
+	onMount(async () => {
+		const [envRes, logRes] = await Promise.allSettled([fetchSystemEnvironment(), fetchDiagnostics()]);
+		if (envRes.status === 'fulfilled') env = envRes.value;
+		else if (envRes.reason instanceof ApiError && envRes.reason.status === 403) envForbidden = true;
+		else envError = envRes.reason instanceof Error ? envRes.reason.message : 'Failed to load the environment';
+		if (logRes.status === 'fulfilled') logLevels = logRes.value.services;
+		else logError = 'Failed to load log levels';
+	});
+
+	async function getReport(): Promise<string> {
+		const current = env ?? (await fetchSystemEnvironment());
+		health ??= await fetchSystemDiagnostics();
+		return buildDeploymentReport(current, health, logLevels, new Date());
+	}
+
+	function yesNo(v: boolean | null): string {
+		if (v === null) return 'unknown';
+		return v ? 'yes' : 'no';
+	}
 </script>
 
 <div class="stack stack-lg" data-page-section>
 	<div class="stack stack-lg">
-		<h2 class="settings-page-section-title" data-page-section-title>System</h2>
+		<div class="settings-page-system-header">
+			<h2 class="settings-page-section-title" data-page-section-title>System</h2>
+			{#if !envForbidden}
+				<CopyReportButton {getReport} />
+			{/if}
+		</div>
 
-		<!-- Health check (API keys + path permissions) -->
+		{#if env}
+			<p class="settings-page-system-summary" data-testid="system-summary">
+				Version {env.version} | Host paths set: {yesNo(env.summary.host_paths_set)} | Transcode capable:
+				{yesNo(env.summary.transcode_capable)} | GPUs: {env.summary.gpus.length ? env.summary.gpus.join(', ') : 'none'}
+			</p>
+		{:else if envError}
+			<p class="field-error" data-testid="environment-error">{envError}</p>
+		{:else if envForbidden}
+			<p class="settings-page-system-summary" data-testid="environment-forbidden">
+				The environment report and deployment report are for admins only.
+			</p>
+		{/if}
+
+		<section class="stack" data-testid="system-health-block" aria-labelledby="system-diagnostics-title">
+			<h3 id="system-diagnostics-title" class="settings-page-section-title">Diagnostics</h3>
+			<SystemHealth
+				grouped
+				onresult={(r) => {
+					health = r;
+				}}
+			/>
+		</section>
+
+		{#if env}
+			<EnvironmentSection groups={env.groups} {logLevels} {logError} />
+			<ContainersSection containers={env.containers} />
+		{:else if envError || envForbidden}
+			<!-- Log levels do not depend on the environment endpoint. -->
+			<EnvironmentSection groups={[{ name: 'Logging', vars: [] }]} {logLevels} {logError} />
+		{/if}
+
 		<!-- First-run walkthrough re-entry -->
 		<FeedbackAlert feedback={setup.feedback.current} />
 		<section class="panel settings-page-setup-again" data-testid="run-setup-again">
@@ -34,32 +104,21 @@
 				{setup.running ? 'Opening...' : 'Run setup again'}
 			</button>
 		</section>
-
-		<SystemHealth grouped />
-
-		<!-- Read-only infra configuration (schema-driven) -->
-		{#if group}
-			<section class="stack">
-				<h3 class="settings-page-section-title">Configuration (read-only)</h3>
-				<div class="panel stack">
-					{#each group.fields as f (f.key)}
-						<ConfigSchemaField
-							field={f}
-							value={(settings.config as Record<string, unknown>)?.[f.key] ?? settings.infra?.[f.key]}
-						/>
-					{/each}
-				</div>
-			</section>
-		{/if}
 	</div>
-
-	<!-- Diagnostics -->
-	<section class="mt-6">
-		<DiagnosticsSection />
-	</section>
 </div>
 
 <style>
+	.settings-page-system-header {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		justify-content: space-between;
+		gap: 0.75rem;
+	}
+	.settings-page-system-summary {
+		font-size: 0.875rem;
+		color: var(--color-text-muted);
+	}
 	.settings-page-section-title {
 		font-size: 1.125rem;
 		line-height: 1.75rem;
