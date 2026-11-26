@@ -57,9 +57,9 @@
 {#if phase === 'error'}
 	<div in:fade|local={fadeIn}>
 		{#if errorSlot}
-			{@render errorSlot(error!)}
+			{@render errorSlot(error as Error)}
 		{:else}
-			<p class="load-state-error">Failed to load: {error!.message}</p>
+			<p class="load-state-error">Failed to load: {(error as Error).message}</p>
 		{/if}
 	</div>
 {:else if phase === 'waiting'}
@@ -83,7 +83,7 @@
 	</div>
 {:else}
 	<div in:fade|local={fadeIn}>
-		{@render ready(data!)}
+		{@render ready(data as T)}
 	</div>
 {/if}
 

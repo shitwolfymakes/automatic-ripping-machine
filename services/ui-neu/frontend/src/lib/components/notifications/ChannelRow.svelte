@@ -1,6 +1,7 @@
 <script lang="ts">
+	import Glyph from '$lib/components/shared/Glyph.svelte';
 	import type { Channel } from '$lib/types/notifications';
-	import { ChevronRight, Send, Pencil } from 'lucide-svelte';
+	import { Send, Pencil } from 'lucide-svelte';
 	import StatusDot from './StatusDot.svelte';
 	import ServiceGlyph from './ServiceGlyph.svelte';
 	import Toggle from '../shared/Toggle.svelte';
@@ -105,7 +106,7 @@
 			}}
 			class="btn btn-icon"
 		>
-			<ChevronRight size={16} class="chevron channel-row-chevron" />
+			<Glyph name="chevron-right" class="chevron channel-row-chevron" />
 		</button>
 	</div>
 </div>
@@ -135,7 +136,7 @@
 		background: var(--color-warning-soft);
 		color: var(--color-warning);
 	}
-	/* :global: this class is set on a lucide ChevronRight component instance, which Svelte's scoping can't see. .btn-icon svg and .btn .chevron both force 0.875rem; this expand chevron is 16px (size=16), not 14px. */
+	/* :global: this class is set on a Glyph component instance, which Svelte's scoping can't see. .btn-icon svg and .btn .chevron both force 0.875rem; this expand chevron Glyph is 1rem (16px), not 14px. */
 	:global(.channel-row-chevron) {
 		width: 1rem;
 		height: 1rem;

@@ -162,11 +162,11 @@ describe('followLabel', () => {
 	});
 
 	it('says Paused with 1 new line', () => {
-		expect(followLabel(false, 1)).toBe('Paused · 1 new line');
+		expect(followLabel(false, 1)).toBe('Paused | 1 new line');
 	});
 
 	it('says Paused with N new lines', () => {
-		expect(followLabel(false, 2)).toBe('Paused · 2 new lines');
+		expect(followLabel(false, 2)).toBe('Paused | 2 new lines');
 	});
 });
 

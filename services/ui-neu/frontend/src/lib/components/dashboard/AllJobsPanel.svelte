@@ -89,11 +89,13 @@
 		<span class="flex-1"></span>
 		<div class="dashboard-view-group">
 			<button
+				type="button"
 				onclick={() => (viewMode = 'card')}
 				class="btn btn-sm dashboard-view-toggle"
 				aria-pressed={viewMode === 'card'}>Cards</button
 			>
 			<button
+				type="button"
 				onclick={() => (viewMode = 'table')}
 				class="btn btn-sm dashboard-view-toggle"
 				aria-pressed={viewMode === 'table'}>Table</button
@@ -108,10 +110,14 @@
 		<div class="dashboard-jobs-selection" data-testid="jobs-selection-bar" transition:slide={{ duration: 120 }}>
 			<span class="dashboard-jobs-selection-count">{jobsList.selected.size} selected</span>
 			<span class="dashboard-jobs-selection-divider"></span>
-			<button onclick={deleteSelected} disabled={bulkBusy} class="btn btn-sm btn-danger">Delete selected</button>
+			<button type="button" onclick={deleteSelected} disabled={bulkBusy} class="btn btn-sm btn-danger"
+				>Delete selected</button
+			>
 			<span class="flex-1"></span>
-			<button onclick={() => jobsList.selected.clear()} class="btn btn-link dashboard-jobs-selection-clear"
-				>Clear selection</button
+			<button
+				type="button"
+				onclick={() => jobsList.selected.clear()}
+				class="btn btn-link dashboard-jobs-selection-clear">Clear selection</button
 			>
 		</div>
 	{/if}

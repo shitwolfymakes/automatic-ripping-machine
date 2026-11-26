@@ -235,7 +235,7 @@ describe('AllJobsPanel', () => {
 
 	it('pages and filters through the jobs instance', async () => {
 		const { fetchJobsPage } = await renderLoaded([JOB], 100);
-		await waitFor(() => expect(screen.getByTestId('jobs-pagination')).toHaveTextContent('Showing 1–48 of 100'));
+		await waitFor(() => expect(screen.getByTestId('jobs-pagination')).toHaveTextContent('Showing 1-48 of 100'));
 		await fireEvent.click(screen.getByText('2'));
 		await waitFor(() => expect(fetchJobsPage).toHaveBeenLastCalledWith({ status: undefined, limit: 48, offset: 48 }));
 		await fireEvent.change(screen.getByDisplayValue('All Status'), { target: { value: 'failed' } });

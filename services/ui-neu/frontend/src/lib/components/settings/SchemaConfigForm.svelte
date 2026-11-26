@@ -208,7 +208,7 @@
 
 	{#if editable.length > 0 && !deferred}
 		<div class="flex items-center gap-3">
-			<button onclick={save} disabled={saving} class="btn btn-primary">
+			<button type="button" onclick={save} disabled={saving} class="btn btn-primary">
 				{saving ? 'Saving...' : 'Save'}
 			</button>
 			{#if feedback?.type === 'error'}

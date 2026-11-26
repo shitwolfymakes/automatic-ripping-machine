@@ -3,6 +3,7 @@ import { renderComponent, screen, fireEvent, cleanup, waitFor, within } from '$l
 import DriveCard from '../DriveCard.svelte';
 import type { DriveView as Drive, SessionView, TranscodePresetView } from '$lib/types/api.gen';
 import { setTranscoderEnabled } from '$lib/stores/config';
+import { GLYPH_PATHS } from '$lib/ui/glyph-names';
 vi.mock('$lib/api/drives', () => ({
 	updateDrive: vi.fn(() => Promise.resolve()),
 	unenrollDrive: vi.fn(() => Promise.resolve())
@@ -100,7 +101,9 @@ describe('DriveCard', () => {
 
 		it('renders the detached copy and dims the card when offline and absent', () => {
 			const { container } = renderDrive({ status: 'offline', present: false, media_status: 'detached' });
-			expect(screen.getByText('○ detached: reconnect the drive')).toBeInTheDocument();
+			const pill = screen.getByText('detached: reconnect the drive');
+			// the empty-circle indicator the label carried as a character, drawn as a Glyph
+			expect(pill.querySelector(`svg path[d="${GLYPH_PATHS.circle}"]`)).not.toBeNull();
 			// the shell's only status-driven style is opacity-60 while
 			// detached, carried here as the data-detached state hook.
 			expect(container.querySelector('.drive-card')).toHaveAttribute('data-detached', 'true');

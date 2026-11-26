@@ -99,6 +99,13 @@ export function stepMeta(id: string): StepMeta | undefined {
 	return STEPS.find((s) => s.id === id);
 }
 
+/** The step's metadata; throws for an id that is not a setup step (the route's loader 404s those first). */
+export function requiredStepMeta(id: string): StepMeta {
+	const meta = stepMeta(id);
+	if (!meta) throw new Error(`Unknown setup step "${id}"`);
+	return meta;
+}
+
 export function stepIndex(id: string): number {
 	return STEPS.findIndex((s) => s.id === id);
 }

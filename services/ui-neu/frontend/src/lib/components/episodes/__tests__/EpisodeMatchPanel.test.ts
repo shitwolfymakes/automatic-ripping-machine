@@ -170,7 +170,7 @@ describe('EpisodeMatchPanel', () => {
 			'href',
 			'/settings#Identification/episode_sources'
 		);
-		expect(screen.getByRole('link', { name: /Settings/ })).toHaveTextContent('Settings › Identification › Identity');
+		expect(screen.getByRole('link', { name: /Settings/ })).toHaveTextContent('Settings > Identification > Identity');
 	});
 
 	it('a guess: amber chip, one-line reason, rows placed, nothing to accept', async () => {

@@ -44,7 +44,7 @@ describe('MatchPicker', () => {
 		mockDetails.mockResolvedValue(detail('Kolchak: The Night Stalker', ['Darren McGavin']));
 		renderComponent(MatchPicker, { props: props() });
 		expect(screen.getByText('2 RESULTS')).toBeInTheDocument();
-		expect(screen.getByText('"Kolchak: The Night Stalker" · 1974 · TVmaze')).toBeInTheDocument();
+		expect(screen.getByText('"Kolchak: The Night Stalker" | 1974 | TVmaze')).toBeInTheDocument();
 		expect(screen.getAllByRole('button', { pressed: true })).toHaveLength(1);
 		expect(mockDetails).toHaveBeenCalledWith('tvmaze', 'tv', '1');
 		await screen.findByText('Darren McGavin');

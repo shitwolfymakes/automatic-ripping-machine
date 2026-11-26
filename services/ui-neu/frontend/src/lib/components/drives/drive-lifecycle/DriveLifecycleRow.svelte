@@ -61,17 +61,23 @@
 		<span class="drive-lifecycle-lists-actions">
 			{#if ignored}
 				<button
+					type="button"
 					data-testid={`unignore-${drive.id}`}
 					disabled={!!busy}
 					onclick={() => ontoggleignore()}
 					class="btn btn-sm">Un-ignore</button
 				>
 			{:else}
-				<button data-testid={`ignore-${drive.id}`} disabled={!!busy} onclick={() => ontoggleignore()} class="btn btn-sm"
-					>Ignore</button
+				<button
+					type="button"
+					data-testid={`ignore-${drive.id}`}
+					disabled={!!busy}
+					onclick={() => ontoggleignore()}
+					class="btn btn-sm">Ignore</button
 				>
 			{/if}
 			<button
+				type="button"
 				data-testid={`enroll-${drive.id}`}
 				disabled={!!busy || !!enrollDisabledReason || absent}
 				title={absent ? 'Not connected; plug the drive in to enroll it' : undefined}

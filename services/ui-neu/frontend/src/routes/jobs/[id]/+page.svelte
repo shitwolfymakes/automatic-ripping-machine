@@ -1,4 +1,5 @@
 <script lang="ts">
+	import Glyph from '$lib/components/shared/Glyph.svelte';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/stores';
 	import { onMount } from 'svelte';
@@ -168,7 +169,7 @@
 			<!-- Breadcrumb -->
 			<nav class="job-detail-breadcrumb">
 				<a href="/" class="job-detail-breadcrumb-link">Dashboard</a>
-				<span class="mx-1.5 job-detail-breadcrumb-sep">&rsaquo;</span>
+				<span class="mx-1.5 inline-flex job-detail-breadcrumb-sep"><Glyph name="chevron-right" class="h-3 w-3" /></span>
 				<span class="job-detail-breadcrumb-current">{job.title || 'Untitled'}</span>
 			</nav>
 

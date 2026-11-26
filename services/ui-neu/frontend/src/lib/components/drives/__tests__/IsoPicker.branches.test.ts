@@ -229,7 +229,7 @@ describe('IsoPicker ISO mode states', () => {
 		});
 		renderComponent(IsoPicker, { props: isoProps() });
 
-		expect(await screen.findByText('-- · --')).toBeInTheDocument();
+		expect(await screen.findByText('-- | --')).toBeInTheDocument();
 	});
 
 	it('goes back to a parent segment from the breadcrumb', async () => {

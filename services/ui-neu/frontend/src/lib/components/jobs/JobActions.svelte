@@ -103,6 +103,7 @@
 	<div class="cluster job-actions-row">
 		{#if canRipAgain}
 			<button
+				type="button"
 				onclick={handleRipAgain}
 				disabled={loading !== null}
 				data-compact={compact}
@@ -114,6 +115,7 @@
 		{/if}
 		{#if canAbandon}
 			<button
+				type="button"
 				onclick={() => (confirming = 'abandon')}
 				disabled={loading !== null}
 				data-compact={compact}
@@ -124,6 +126,7 @@
 		{/if}
 		{#if canDelete}
 			<button
+				type="button"
 				onclick={() => (confirming = 'delete')}
 				disabled={loading !== null}
 				data-compact={compact}

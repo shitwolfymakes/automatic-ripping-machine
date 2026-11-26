@@ -22,7 +22,7 @@
 			</span>
 		</div>
 		<span class="transcoder-page-worker-summary">
-			GPUs: {stats.gpus_available}/{stats.gpus_total} available &middot; Queue: {taskCount(stats, 'queued')} queued
+			GPUs: {stats.gpus_available}/{stats.gpus_total} available | Queue: {taskCount(stats, 'queued')} queued
 		</span>
 	</div>
 	{#if gpus.length > 0}
@@ -44,13 +44,14 @@
 						<p class="truncate transcoder-page-worker-task" title={worker.output_path ?? worker.source_track_id}>
 							Task #{worker.task_id}
 							{#if worker.claimed_by}
-								<span class="transcoder-page-worker-claimed"> &mdash; {worker.claimed_by}</span>
+								<span class="transcoder-page-worker-claimed">: {worker.claimed_by}</span>
 							{/if}
 						</p>
 						{#if worker.claim_heartbeat_at}
 							{@const dur = formatElapsed(worker.claim_heartbeat_at)}
 							<p class="transcoder-page-worker-heartbeat">
-								{worker.progress_pct}%{#if dur}&nbsp;&middot; {dur} since heartbeat{/if}
+								{worker.progress_pct}%{#if dur}
+									| {dur} since heartbeat{/if}
 							</p>
 						{:else}
 							<p class="transcoder-page-worker-heartbeat-idle">{worker.progress_pct}%</p>

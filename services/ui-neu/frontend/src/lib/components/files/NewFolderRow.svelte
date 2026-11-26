@@ -17,14 +17,7 @@
 
 <div class="flex items-center gap-2 files-page-nav-row files-page-new-folder-row">
 	<span class="w-10"></span>
-	<svg class="h-5 w-5 shrink-0 files-page-folder-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-		<path
-			stroke-linecap="round"
-			stroke-linejoin="round"
-			stroke-width="1.5"
-			d="M9 13h6m-3-3v6m-9 1V7a2 2 0 012-2h6l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z"
-		/>
-	</svg>
+	<Glyph name="folder-plus" class="h-5 w-5 shrink-0 files-page-folder-icon" />
 	<input
 		type="text"
 		bind:value={name}
@@ -59,7 +52,8 @@
 		min-height: auto;
 		padding: 0.25rem 0.5rem;
 	}
-	.files-page-folder-icon {
+	/* :global: set on Glyph through its class prop */
+	:global(.files-page-folder-icon) {
 		color: var(--color-warning);
 	}
 	.files-page-new-folder-confirm {

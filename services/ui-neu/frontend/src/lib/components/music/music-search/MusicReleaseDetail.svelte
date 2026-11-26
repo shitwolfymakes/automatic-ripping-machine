@@ -100,6 +100,7 @@
 				><Glyph name="warning" /> Total length differs, likely the wrong release</span
 			>
 			<button
+				type="button"
 				onclick={() => {
 					release.acceptMismatch();
 					onapply();
@@ -108,7 +109,11 @@
 			>
 				Apply anyway
 			</button>
-			<button onclick={() => (release.confirmMismatch = false)} class="btn btn-ghost music-search-action-btn">
+			<button
+				type="button"
+				onclick={() => (release.confirmMismatch = false)}
+				class="btn btn-ghost music-search-action-btn"
+			>
 				Cancel
 			</button>
 		</div>
@@ -128,6 +133,7 @@
 	<div class="flex items-center gap-2">
 		{#if $isAdmin}
 			<button
+				type="button"
 				onclick={() => onapply()}
 				disabled={release.applying || !fields.album.trim()}
 				class="btn music-search-success-btn music-search-action-btn"

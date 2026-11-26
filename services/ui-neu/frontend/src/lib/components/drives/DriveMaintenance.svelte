@@ -29,14 +29,15 @@
 
 	let summaryText = $derived(
 		summary
-			? `${summary.detected ?? 0} detected · ${summary.enrolled ?? 0} enrolled · ${summary.ignored ?? 0} ignored` +
-					((summary.pruned ?? 0) > 0 ? ` · ${summary.pruned} removed` : '')
+			? `${summary.detected ?? 0} detected | ${summary.enrolled ?? 0} enrolled | ${summary.ignored ?? 0} ignored` +
+					((summary.pruned ?? 0) > 0 ? ` | ${summary.pruned} removed` : '')
 			: ''
 	);
 </script>
 
 <div class="flex flex-wrap items-center justify-end gap-2">
 	<button
+		type="button"
 		data-testid="drive-rescan"
 		onclick={() => run(false)}
 		disabled={scanning}
@@ -44,6 +45,7 @@
 		title="Look for optical drives on this host now">{scanning ? 'Scanning...' : 'Scan for drives'}</button
 	>
 	<button
+		type="button"
 		data-testid="drive-force-rescan"
 		onclick={() => {
 			confirmOpen = true;

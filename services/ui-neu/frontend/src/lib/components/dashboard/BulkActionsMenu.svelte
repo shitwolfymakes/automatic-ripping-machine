@@ -1,8 +1,8 @@
 <script lang="ts">
+	import Glyph from '$lib/components/shared/Glyph.svelte';
 	import Flyout from '../shared/Flyout.svelte';
 	import FlyoutItem from '../shared/FlyoutItem.svelte';
 	import FlyoutDivider from '../shared/FlyoutDivider.svelte';
-	import Glyph from '../shared/Glyph.svelte';
 
 	interface Props {
 		// Job ids are strings.

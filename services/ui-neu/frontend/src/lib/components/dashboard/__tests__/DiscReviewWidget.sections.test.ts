@@ -420,7 +420,7 @@ describe('DiscReviewWidget sections', () => {
 			await fireEvent.click(await screen.findByRole('button', { name: 'Cancel' }));
 			expect(await screen.findByText('Failed to cancel the job')).toBeInTheDocument();
 			expect(ondismiss).not.toHaveBeenCalled();
-			await fireEvent.click(screen.getByRole('button', { name: '×' }));
+			await fireEvent.click(screen.getByRole('button', { name: 'Dismiss error' }));
 			expect(screen.queryByText('Failed to cancel the job')).toBeNull();
 		});
 

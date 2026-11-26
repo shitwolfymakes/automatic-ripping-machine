@@ -131,6 +131,7 @@
 			<!-- Top bar -->
 			<header class="layout-header flex h-14 items-center justify-between px-4 lg:px-6">
 				<button
+					type="button"
 					onclick={() => (sidebarOpen ? (sidebarOpen = false) : openSidebar())}
 					aria-label="Toggle sidebar"
 					class="btn btn-icon layout-header-icon lg:hidden"
@@ -149,7 +150,11 @@
 			<!-- Mobile sidebar overlay -->
 			{#if sidebarOpen}
 				<div class="layout-drawer-overlay fixed inset-0 lg:hidden">
-					<button class="layout-scrim absolute inset-0" aria-label="Close sidebar" onclick={() => (sidebarOpen = false)}
+					<button
+						type="button"
+						class="layout-scrim absolute inset-0"
+						aria-label="Close sidebar"
+						onclick={() => (sidebarOpen = false)}
 					></button>
 					<aside data-sidebar class="layout-drawer relative flex h-full flex-col">
 						<div data-logo class="nav-logo layout-drawer-logo">

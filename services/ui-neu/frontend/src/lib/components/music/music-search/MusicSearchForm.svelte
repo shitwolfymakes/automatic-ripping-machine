@@ -143,6 +143,7 @@
 		<div class="flex items-center gap-2">
 			<span class="eyebrow music-search-label">&nbsp;</span>
 			<button
+				type="button"
 				onclick={submit}
 				disabled={searching || locked || !query.trim()}
 				class="btn btn-primary music-search-action-btn"
@@ -150,7 +151,7 @@
 				{searching ? 'Searching...' : 'Search'}
 			</button>
 			{#if activeFilterCount > 0}
-				<button onclick={clearFilters} class="btn btn-ghost music-search-clear-btn"> Clear </button>
+				<button type="button" onclick={clearFilters} class="btn btn-ghost music-search-clear-btn"> Clear </button>
 			{/if}
 		</div>
 	</div>

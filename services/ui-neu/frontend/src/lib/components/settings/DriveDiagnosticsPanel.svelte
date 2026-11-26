@@ -14,7 +14,12 @@
 
 <hr class="settings-page-diag-divider" />
 <div data-diag>
-	<button onclick={diagnostics.toggle} aria-expanded={diagnostics.open} class="btn settings-page-diag-toggle">
+	<button
+		type="button"
+		onclick={diagnostics.toggle}
+		aria-expanded={diagnostics.open}
+		class="btn settings-page-diag-toggle"
+	>
 		<Glyph name="shield-check" />
 		Drive Diagnostics
 		<Glyph name="chevron-down" class="chevron ml-auto" />
@@ -24,6 +29,7 @@
 		<div class="panel-section settings-page-diag-panel" transition:slide={{ duration: 200 }}>
 			<div class="mb-2.5 flex items-center justify-between">
 				<button
+					type="button"
 					onclick={diagnostics.run}
 					disabled={diagnostics.running}
 					data-busy={diagnostics.running}

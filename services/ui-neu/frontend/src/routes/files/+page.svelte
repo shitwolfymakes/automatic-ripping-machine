@@ -1,4 +1,5 @@
 <script lang="ts">
+	import Glyph from '$lib/components/shared/Glyph.svelte';
 	import { plural } from '$lib/utils/plural';
 	import { errorMessage } from '$lib/utils/errors';
 	import { onDestroy, onMount } from 'svelte';
@@ -250,19 +251,7 @@
 	<!-- Read-only mount banner -->
 	{#if browser.isReadonly}
 		<div class="alert alert-warning cluster files-page-readonly-banner">
-			<svg
-				class="h-4 w-4 shrink-0 files-page-readonly-icon"
-				fill="none"
-				stroke="currentColor"
-				viewBox="0 0 24 24"
-				stroke-width="2"
-			>
-				<path
-					stroke-linecap="round"
-					stroke-linejoin="round"
-					d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"
-				/>
-			</svg>
+			<Glyph name="lock" class="h-4 w-4 shrink-0 files-page-readonly-icon" />
 			<p>This directory is on a read-only mount. File operations are disabled.</p>
 		</div>
 	{/if}
@@ -324,20 +313,14 @@
 				{#snippet ready(lst)}
 					<div class="files-page-listing">
 						{#if lst.parent_subpath != null}
+							{@const parent = lst.parent_subpath}
 							<button
 								type="button"
-								onclick={() => browser.navigate(browser.current.root, lst.parent_subpath!)}
+								onclick={() => browser.navigate(browser.current.root, parent)}
 								class="flex w-full items-center gap-2 files-page-nav-row"
 							>
 								<span class="w-10"></span>
-								<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-									<path
-										stroke-linecap="round"
-										stroke-linejoin="round"
-										stroke-width="2"
-										d="M11 17l-5-5m0 0l5-5m-5 5h12"
-									/>
-								</svg>
+								<Glyph name="arrow-left-short" class="h-4 w-4" />
 								..
 							</button>
 						{/if}
@@ -426,7 +409,8 @@
 	.files-page-feedback {
 		padding: 0.5rem 1rem;
 	}
-	.files-page-readonly-icon {
+	/* :global: set on Glyph through its class prop */
+	:global(.files-page-readonly-icon) {
 		color: var(--color-warning);
 	}
 	/* replaces the banned inline `hidden lg:table-cell`/`hidden

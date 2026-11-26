@@ -1,6 +1,6 @@
 import type { DriveMediaStatus, DriveView } from '$lib/types/api.gen';
 
-export const DETACHED_LABEL = '○ detached: reconnect the drive';
+export const DETACHED_LABEL = 'detached: reconnect the drive';
 export const NO_SERIAL_LABEL = 'no serial, identified by port';
 
 // Settings > Drives lists optical drives only; an in-flight ISO

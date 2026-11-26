@@ -450,7 +450,7 @@
 													</div>
 													{#if entry.kind === 'iso'}
 														<div class="iso-picker-row-detail">
-															{formatSize(entry.size_bytes)} · {formatDate(entry.modified_at)}
+															{formatSize(entry.size_bytes)} | {formatDate(entry.modified_at)}
 														</div>
 													{/if}
 												</div>

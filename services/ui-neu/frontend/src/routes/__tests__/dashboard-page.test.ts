@@ -188,7 +188,7 @@ describe('Dashboard Page', () => {
 		it('shows the job count beside the title and the page summary in the footer', async () => {
 			await renderDashboard();
 			await waitFor(() => expect(screen.getByText('1 job')).toBeInTheDocument());
-			expect(screen.getByTestId('jobs-pagination')).toHaveTextContent('Showing 1–1 of 1');
+			expect(screen.getByTestId('jobs-pagination')).toHaveTextContent('Showing 1-1 of 1');
 			expect(screen.queryByText('Next')).toBeNull();
 		});
 
@@ -219,10 +219,10 @@ describe('Dashboard Page', () => {
 			const mock = fetchJobsPage as ReturnType<typeof vi.fn>;
 			mock.mockImplementation(() => Promise.resolve({ jobs: [COMPLETED_JOB], total: 100 }));
 			await renderDashboard();
-			await waitFor(() => expect(screen.getByTestId('jobs-pagination')).toHaveTextContent('Showing 1–48 of 100'));
+			await waitFor(() => expect(screen.getByTestId('jobs-pagination')).toHaveTextContent('Showing 1-48 of 100'));
 			await fireEvent.click(screen.getByText('2'));
 			await waitFor(() => expect(mock).toHaveBeenLastCalledWith({ status: undefined, limit: 48, offset: 48 }));
-			await waitFor(() => expect(screen.getByTestId('jobs-pagination')).toHaveTextContent('Showing 49–96 of 100'));
+			await waitFor(() => expect(screen.getByTestId('jobs-pagination')).toHaveTextContent('Showing 49-96 of 100'));
 			await fireEvent.change(screen.getByDisplayValue('All Status'), { target: { value: 'failed' } });
 			await waitFor(() => expect(mock).toHaveBeenLastCalledWith({ status: 'failed', limit: 48, offset: 0 }));
 		});
@@ -232,7 +232,7 @@ describe('Dashboard Page', () => {
 			const mock = fetchJobsPage as ReturnType<typeof vi.fn>;
 			mock.mockImplementation(() => Promise.resolve({ jobs: [COMPLETED_JOB], total: 100 }));
 			await renderDashboardTable();
-			await waitFor(() => expect(screen.getByTestId('jobs-pagination')).toHaveTextContent('Showing 1–48 of 100'));
+			await waitFor(() => expect(screen.getByTestId('jobs-pagination')).toHaveTextContent('Showing 1-48 of 100'));
 
 			// a page-1 reload (the poll) hangs; page 2 is asked for and answers first
 			let resolveStale!: (v: unknown) => void;

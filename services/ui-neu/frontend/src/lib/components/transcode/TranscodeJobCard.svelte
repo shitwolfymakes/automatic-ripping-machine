@@ -1,4 +1,5 @@
 <script lang="ts">
+	import Glyph from '$lib/components/shared/Glyph.svelte';
 	import { fade } from 'svelte/transition';
 	import StatusBadge from '$lib/components/shared/StatusBadge.svelte';
 	import ProgressBar from '$lib/components/shared/ProgressBar.svelte';
@@ -38,10 +39,12 @@
 			{#if $isAdmin}
 				<div class="flex shrink-0 gap-2">
 					{#if job.status === 'failed'}
-						<button onclick={() => onretry(job.id)} class="btn btn-primary transcoder-page-job-action-btn">Retry</button
+						<button type="button" onclick={() => onretry(job.id)} class="btn btn-primary transcoder-page-job-action-btn"
+							>Retry</button
 						>
 					{/if}
 					<button
+						type="button"
 						onclick={() => ondelete(job.id)}
 						class="btn transcoder-page-job-action-btn transcoder-page-job-delete-btn">Delete</button
 					>
@@ -99,7 +102,7 @@
 		<!-- Output path for done tasks -->
 		{#if job.status === 'done' && job.output_path}
 			<p class="mt-2 flex items-center gap-1 transcoder-page-job-meta-sm">
-				<span class="transcoder-page-arrow">&rarr;</span>
+				<span class="transcoder-page-arrow"><Glyph name="arrow-right" class="h-3 w-3" /></span>
 				<span class="mono truncate" title={job.output_path}>{sourceFile}</span>
 			</p>
 		{/if}
