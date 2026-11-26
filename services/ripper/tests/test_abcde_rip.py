@@ -452,7 +452,7 @@ async def test_rip_cd_clean_exit_but_wav_missing_yields_failure(monkeypatch, tmp
 
 @pytest.mark.asyncio
 async def test_rip_cd_kills_the_whole_process_group_on_timeout(monkeypatch, tmp_path, killpg_calls):
-    """D-174: abcde forks cdparanoia per track. Killing bash alone left
+    """abcde forks cdparanoia per track. Killing bash alone left
     cdparanoia holding the drive; the spawn must start a new session and
     the kill must target its process group."""
 

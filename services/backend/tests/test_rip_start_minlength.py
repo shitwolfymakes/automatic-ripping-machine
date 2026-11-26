@@ -140,7 +140,7 @@ async def test_missing_session_returns_none() -> None:
 
 @pytest.mark.asyncio
 async def test_drive_default_session_override_applies_without_flag() -> None:
-    """G-01: the override follows the ROUTED session, so an auto-rip whose
+    """The override follows the ROUTED session, so an auto-rip whose
     drive has a default session gets that session's min-length even with
     auto_transcode_on_idle off."""
     from arm_common import Config, Drive, DriveStatus

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Phase 9 + 15 — backend crash recovery drill.
+# Backend crash recovery drill.
 #
 # Inserts a synthetic in-flight job (status=ripping, one track in_progress)
 # directly into the DB, force-kills the backend, brings it back, and asserts

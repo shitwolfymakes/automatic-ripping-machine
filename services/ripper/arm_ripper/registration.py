@@ -45,7 +45,7 @@ async def register_with_retry(client: BackendClient, device_path: str) -> str:
     not enrolled, identity mismatch) is self-healing rather than fatal: the
     operator can fix the enrollment from the UI (e.g. unenroll/re-enroll to
     rebind identity) without restarting this container, so we log it and
-    keep polling slowly instead of parking forever (spec §3)."""
+    keep polling slowly instead of parking forever."""
     delay = 1.0
     last_refusal: str | None = None
     while True:

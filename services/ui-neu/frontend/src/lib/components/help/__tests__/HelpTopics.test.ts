@@ -1,6 +1,6 @@
 import { describe, it, expect, afterEach } from 'vitest';
-import { renderComponent, screen, fireEvent, cleanup } from '$lib/test-utils';
-import type { DocsNavSection } from '$lib/docs/api';
+import { renderComponent, screen, fireEvent, cleanup } from '$lib/testing/render';
+import type { DocsNavSection } from '$lib/help/api';
 import HelpTopicsHarness from './HelpTopicsHarness.svelte';
 
 afterEach(cleanup);

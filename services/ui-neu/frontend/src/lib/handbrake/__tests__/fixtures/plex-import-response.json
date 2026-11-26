@@ -1,0 +1,131 @@
+{
+	"handbrake_version": {
+		"export": "72.0.0",
+		"schema": "72.0.0"
+	},
+	"presets": [
+		{
+			"path": [],
+			"name": "Custom_Plex_720p",
+			"proposal": {
+				"name": "Custom_Plex_720p",
+				"container": "mkv",
+				"encoder": "any_h264",
+				"handbrake_settings": {
+					"common": {
+						"AlignAVStart": false,
+						"AudioCopyMask": ["copy:aac"],
+						"AudioEncoderFallback": "av_aac",
+						"AudioLanguageList": ["eng"],
+						"AudioList": [
+							{
+								"AudioBitrate": 384,
+								"AudioCompressionLevel": 0,
+								"AudioEncoder": "av_aac",
+								"AudioMixdown": "5point1",
+								"AudioNormalizeMixLevel": false,
+								"AudioSamplerate": "auto",
+								"AudioTrackQualityEnable": false,
+								"AudioTrackQuality": -1,
+								"AudioTrackGainSlider": 8,
+								"AudioTrackDRCSlider": 0
+							}
+						],
+						"AudioSecondaryEncoderMode": true,
+						"AudioTrackSelectionBehavior": "first",
+						"AudioTrackNamePassthru": true,
+						"AudioAutomaticNamingBehavior": "unnamed",
+						"ChapterMarkers": true,
+						"Optimize": false,
+						"Mp4iPodCompatible": false,
+						"PictureCropMode": 0,
+						"PictureBottomCrop": 0,
+						"PictureLeftCrop": 0,
+						"PictureRightCrop": 0,
+						"PictureTopCrop": 0,
+						"PictureDARWidth": 1280,
+						"PictureDeblockPreset": "off",
+						"PictureDeblockTune": "medium",
+						"PictureDeblockCustom": "strength=strong:thresh=20:blocksize=8",
+						"PictureDeinterlaceFilter": "decomb",
+						"PictureCombDetectPreset": "default",
+						"PictureCombDetectCustom": "",
+						"PictureDeinterlacePreset": "default",
+						"PictureDeinterlaceCustom": "",
+						"PictureDenoiseCustom": "",
+						"PictureDenoiseFilter": "off",
+						"PictureSharpenCustom": "",
+						"PictureSharpenFilter": "off",
+						"PictureSharpenPreset": "medium",
+						"PictureSharpenTune": "none",
+						"PictureDetelecine": "off",
+						"PictureDetelecineCustom": "",
+						"PictureColorspacePreset": "off",
+						"PictureColorspaceCustom": "",
+						"PictureChromaSmoothPreset": "off",
+						"PictureChromaSmoothTune": "none",
+						"PictureChromaSmoothCustom": "",
+						"PictureItuPAR": false,
+						"PictureKeepRatio": true,
+						"PicturePAR": "auto",
+						"PicturePARWidth": 1,
+						"PicturePARHeight": 1,
+						"PictureWidth": 1280,
+						"PictureHeight": 720,
+						"PictureUseMaximumSize": true,
+						"PictureAllowUpscaling": false,
+						"PictureForceHeight": 0,
+						"PictureForceWidth": 0,
+						"PicturePadMode": "none",
+						"PicturePadTop": 0,
+						"PicturePadBottom": 0,
+						"PicturePadLeft": 0,
+						"PicturePadRight": 0,
+						"PicturePadColor": "black",
+						"SubtitleAddCC": false,
+						"SubtitleAddForeignAudioSearch": true,
+						"SubtitleAddForeignAudioSubtitle": false,
+						"SubtitleBurnBehavior": "foreign",
+						"SubtitleBurnBDSub": false,
+						"SubtitleBurnDVDSub": false,
+						"SubtitleLanguageList": ["eng"],
+						"SubtitleTrackSelectionBehavior": "first",
+						"SubtitleTrackNamePassthru": true,
+						"VideoAvgBitrate": 0,
+						"VideoColorRange": "limited",
+						"VideoFramerateMode": "cfr",
+						"VideoGrayScale": false,
+						"VideoScaler": "swscale",
+						"VideoQualityType": 2,
+						"VideoPasshtruHDRDynamicMetadata": "all",
+						"MetadataPassthru": true
+					},
+					"encoders": {
+						"qsv_h264": {
+							"bit_depth": 8
+						},
+						"x264": {
+							"bit_depth": 8
+						},
+						"nvenc_h264": {
+							"bit_depth": 8,
+							"VideoPreset": "slower",
+							"VideoProfile": "main",
+							"VideoLevel": "4.0",
+							"VideoQualitySlider": 18
+						}
+					}
+				}
+			},
+			"source_encoder": "nvenc_h264",
+			"dropped_keys": ["VideoColorMatrixCode"],
+			"not_imported": ["VideoMultiPass", "VideoTurboMultiPass", "x264UseAdvancedOptions"],
+			"copied_depth_to": ["qsv_h264", "x264"],
+			"eight_bit_only": [],
+			"warnings": [],
+			"issues": [],
+			"importable": true,
+			"reason": null
+		}
+	]
+}

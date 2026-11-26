@@ -1,7 +1,7 @@
 <script lang="ts">
 	// A secret field's status under its input: saved, with a Remove
 	// button, or to be removed on the next save.
-	import Glyph from '$lib/components/Glyph.svelte';
+	import Glyph from '$lib/components/shared/Glyph.svelte';
 
 	interface Props {
 		/** The field holds a saved secret. */

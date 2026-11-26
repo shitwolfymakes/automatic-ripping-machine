@@ -1,8 +1,8 @@
 """Coverage for `TranscodeDispatcher.probe()` and `last_spawn_error`.
 
-`/api/system/diagnostics` used to say the transcoder was `ok` even when the
-docker host was unreachable or the transcode image was missing there (the
-old check only asked "is a dispatcher wired up + are host paths set", never
+`/api/system/diagnostics` must not call the transcoder `ok` when the
+docker host is unreachable or the transcode image is missing there (asking
+only "is a dispatcher wired up + are host paths set" never answers
 "can this dispatcher actually run a transcode right now"). `probe()` answers
 that question; `last_spawn_error` remembers the most recent spawn failure so
 a crash-looping container (image present, spawn itself failing) is visible
@@ -546,7 +546,7 @@ def _one_encode_task_db(attempts: int = 0) -> FakeSession:
 
 
 async def test_missing_image_holds_spawns_with_one_rate_limited_line(caplog) -> None:
-    """D-121: with the base image absent every spawn fails the same way; the
+    """With the base image absent every spawn fails the same way; the
     tick holds the task (no attempts burned) and logs once, not per tick."""
     db = _one_encode_task_db()
     d = _disp(db, MAX_PARALLEL_TRANSCODES=1, ARM_TRANSCODE_IMAGE="arm-transcode:test")
@@ -562,7 +562,7 @@ async def test_missing_image_holds_spawns_with_one_rate_limited_line(caplog) -> 
 
 
 async def test_a_missing_base_image_is_pulled_before_spawns_are_held() -> None:
-    """D-121 follow-up: before the probe gated spawning, containers.run pulled
+    """Before the probe gated spawning, containers.run pulled
     a missing image. A pruned host must still pull it instead of holding
     every encode task until someone pulls it by hand."""
     db = _one_encode_task_db()
@@ -596,7 +596,7 @@ async def test_a_failed_base_image_pull_holds_and_is_not_retried_every_tick() ->
 
 
 async def test_spawn_failures_count_toward_max_attempts() -> None:
-    """D-121: a spawn that fails with the host healthy is task-specific; it
+    """A spawn that fails with the host healthy is task-specific; it
     must end at ARM_TRANSCODE_MAX_ATTEMPTS instead of looping forever."""
     db = _one_encode_task_db()
     d = _disp(db, MAX_PARALLEL_TRANSCODES=1, ARM_TRANSCODE_MAX_ATTEMPTS=2)
@@ -610,7 +610,7 @@ async def test_spawn_failures_count_toward_max_attempts() -> None:
 
 
 async def test_commit_failure_after_a_started_spawn_is_not_an_attempt() -> None:
-    """D-121 follow-up: when the container started and only the commit after
+    """When the container started and only the commit after
     it failed, the transcoder is running and will claim the task. That must
     not count toward ARM_TRANSCODE_MAX_ATTEMPTS."""
     db = _one_encode_task_db()
@@ -633,7 +633,7 @@ async def test_commit_failure_after_a_started_spawn_is_not_an_attempt() -> None:
 
 
 def test_remote_spawn_probe_checks_the_backend_url(monkeypatch) -> None:
-    """D-129: a remote transcoder that cannot reach ARM_TRANSCODE_BACKEND_URL
+    """A remote transcoder that cannot reach ARM_TRANSCODE_BACKEND_URL
     spawns and then never claims; the probe (which gates spawning) must fail
     with the URL, the resolved address and the TLS reason."""
     import ssl
@@ -676,7 +676,7 @@ def test_remote_spawn_probe_checks_the_backend_url(monkeypatch) -> None:
 
 
 def test_backend_url_check_set_to_warn_reports_but_does_not_hold(monkeypatch) -> None:
-    """D-129 follow-up: a backend that cannot reach a URL the offload host can
+    """A backend that cannot reach a URL the offload host can
     (no NAT hairpin, split DNS) must not hold every spawn once the operator
     sets ARM_TRANSCODE_BACKEND_URL_CHECK=warn; the failure is still kept for
     diagnostics."""
@@ -712,7 +712,7 @@ def test_backend_url_that_does_not_resolve(monkeypatch) -> None:
 
 
 def test_backend_url_with_a_bad_port_fails_the_probe_without_raising() -> None:
-    """D-129 follow-up: probe() promises never to raise; a typo in the URL
+    """`probe()` promises never to raise; a typo in the URL
     must read as a failed check, not abort every spawn tick."""
     from arm_backend import docker_probe
 

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { renderComponent, screen, fireEvent, cleanup, waitFor } from '$lib/test-utils';
+import { renderComponent, screen, fireEvent, cleanup, waitFor } from '$lib/testing/render';
 import BashTestPanel from '../BashTestPanel.svelte';
 
 // Branch pins for BashTestPanel, beside BashTestPanel.svelte.test.ts. The

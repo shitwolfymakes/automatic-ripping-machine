@@ -1,4 +1,4 @@
-"""Foreign-key `ondelete` audit.
+"""Foreign-key `ondelete` coverage.
 
 Locks down the cascade semantics that Postgres enforces at delete time
 — we can't catch these with FakeSession because the in-memory test
@@ -26,7 +26,7 @@ _EXPECTED: dict[tuple[str, str], str] = {
     # tracks) doesn't trip on the FK from any transcode_task that ever
     # referenced one of those tracks. Job-level delete is the user-visible
     # operation; cascading the operational transcode-task row with it is
-    # the right semantic. Originally RESTRICT — see migration 0008.
+    # the right semantic.
     ("transcode_tasks", "source_track_id"): "CASCADE",
     # transcode_tasks → session_applications: CASCADE so deleting a
     # session_application (which itself cascades from jobs) takes its

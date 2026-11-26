@@ -1,9 +1,23 @@
 <script lang="ts">
+	import { errorMessage } from '$lib/utils/errors';
 	import type { MediaType, SessionView, RipPresetView, TranscodePresetView } from '$lib/types/api.gen';
-	import type { JoinedSession } from './sessionsData.svelte';
+	import { transcodePresetFits } from '$lib/sessions/sessions';
+	import type { JoinedSession } from '../../stores/sessions-data.svelte';
 	import { createSession, updateSession } from '$lib/api/sessions';
+	import type { EditorStatus } from '$lib/ui/editor-status';
 	import OutputPathField from './OutputPathField.svelte';
-	import { parseOverrides, sessionUpdate, sessionCreate, type SessionForm } from './sessionForm';
+	import { errorId, focusFirstInvalid, invalidAttrs } from '$lib/ui/form-validation';
+	import FieldLabel from '$lib/components/shared/FieldLabel.svelte';
+	import {
+		FIELD_IDS,
+		SESSION_FIELDS,
+		SESSION_FIELD_ORDER,
+		parseOverrides,
+		sessionErrors,
+		sessionUpdate,
+		sessionCreate,
+		type SessionForm
+	} from '../../sessions/session-form';
 
 	interface Props {
 		session?: JoinedSession | null;
@@ -12,9 +26,12 @@
 		oncreaterip: () => void;
 		oncreatetranscode: () => void;
 		onsaved: (s: SessionView) => void;
-		oncancel: () => void;
 		preselectRipId?: string;
 		preselectTranscodeId?: string;
+		/** The hosting EditorSidebar's footer owns the buttons and submits this form by id. */
+		formId: string;
+		/** Reports the save state to the hosting footer, whenever it changes. */
+		onstatus?: (status: EditorStatus) => void;
 	}
 
 	let {
@@ -24,9 +41,10 @@
 		oncreaterip,
 		oncreatetranscode,
 		onsaved,
-		oncancel,
 		preselectRipId,
-		preselectTranscodeId
+		preselectTranscodeId,
+		formId,
+		onstatus
 	}: Props = $props();
 
 	const MEDIA_TYPES: { value: MediaType; label: string }[] = [
@@ -44,13 +62,15 @@
 	let tcId = $state(session?.transcode_preset_id ?? '');
 	let template = $state(session?.output_path_template ?? '');
 	let overridesJson = $state(session?.overrides_json ? JSON.stringify(session.overrides_json, null, 2) : '');
-	let jsonError = $state<string | null>(null);
+	// The Advanced section opens itself when Save sends focus to the overrides field inside it.
+	let advancedOpen = $state(false);
 	let submitError = $state<string | null>(null);
 	let submitting = $state(false);
 
 	// Derived options filtered by media type
 	let ripOptions = $derived(ripPresets.filter((p) => p.media_type === mediaType));
-	let tcOptions = $derived(transcodePresets.filter((p) => p.media_type === mediaType));
+	// A movie or TV transcode preset fits a session of either.
+	let tcOptions = $derived(transcodePresets.filter((p) => transcodePresetFits(p.media_type, mediaType)));
 
 	// Apply preselect when parent sets them (after inline-create)
 	$effect(() => {
@@ -67,10 +87,18 @@
 	const isEdit = $derived(!!session);
 	// Built-in sessions are read-only — every field is locked, no save path.
 	const readOnly = $derived(session?.is_builtin ?? false);
-	const canSubmit = $derived(!readOnly && !!(name && ripId && template));
+	// Marks show from the first Save on, and each clears once its field is valid.
+	let attempted = $state(false);
+	const inputs = $derived({ name, ripId, template, overridesText: overridesJson });
+	const errors = $derived(attempted ? sessionErrors(inputs) : {});
 
+	$effect(() => {
+		onstatus?.({ submitting, note: tcId ? '' : 'Rips only, no transcode step.' });
+	});
+
+	// The media chips are disabled on edit and for a built-in session, so this
+	// only runs while the media type may still change.
 	function switchMediaType(mt: MediaType) {
-		if (isEdit || readOnly) return; // immutable on edit / locked when built-in
 		mediaType = mt;
 		ripId = '';
 		tcId = '';
@@ -100,18 +128,13 @@
 	async function handleSubmit(e: SubmitEvent) {
 		e.preventDefault();
 		if (readOnly) return; // built-ins can't be saved
-		jsonError = null;
+		attempted = true;
+		const found = sessionErrors(inputs);
+		if (SESSION_FIELDS.overrides in found) advancedOpen = true;
+		if (await focusFirstInvalid(found, SESSION_FIELD_ORDER)) return;
 		submitError = null;
 
-		let parsedOverrides: Record<string, unknown> | null;
-		try {
-			parsedOverrides = parseOverrides(overridesJson);
-		} catch {
-			jsonError = 'Invalid JSON in overrides field';
-			return;
-		}
-
-		const form: SessionForm = { name, mediaType, ripId, tcId, template, overrides: parsedOverrides };
+		const form: SessionForm = { name, mediaType, ripId, tcId, template, overrides: parseOverrides(overridesJson) };
 
 		submitting = true;
 		try {
@@ -120,15 +143,15 @@
 				: await createSession(sessionCreate(form));
 			onsaved(result);
 		} catch (err) {
-			submitError = err instanceof Error ? err.message : 'Failed to save session';
+			submitError = errorMessage(err, 'Failed to save session');
 		} finally {
 			submitting = false;
 		}
 	}
 </script>
 
-<div role="dialog" aria-modal="true" aria-label={isEdit ? 'Edit session' : 'Create session'} class="stack stack-lg">
-	<form onsubmit={handleSubmit} class="stack stack-lg">
+<div class="stack stack-lg">
+	<form id={formId} onsubmit={handleSubmit} class="stack stack-lg">
 		{#if readOnly}
 			<div class="alert alert-warning" data-testid="sb-builtin-note" role="status">
 				This is a built-in session and can't be edited. Clone it to make an editable copy.
@@ -136,21 +159,22 @@
 		{/if}
 
 		<!-- Session name -->
-		<label for="sb-name" class="field">
-			<span class="field-label">Session name</span>
+		<div class="field">
+			<FieldLabel for={SESSION_FIELDS.name} label="Session name" docsId={FIELD_IDS.name} />
 			<input
-				id="sb-name"
+				id={SESSION_FIELDS.name}
 				type="text"
 				bind:value={name}
 				placeholder="e.g. Movies: Archive"
 				disabled={readOnly}
-				required
+				{...invalidAttrs(SESSION_FIELDS.name, errors[SESSION_FIELDS.name])}
 			/>
-		</label>
+			{@render fieldError(SESSION_FIELDS.name)}
+		</div>
 
 		<!-- Media type segmented control -->
 		<div class="field">
-			<span class="field-label">Media type</span>
+			<FieldLabel label="Media type" docsId={FIELD_IDS.media_type} />
 			<div class="cluster">
 				{#each MEDIA_TYPES as mt (mt.value)}
 					<button
@@ -167,20 +191,29 @@
 		</div>
 
 		<!-- Rip preset -->
-		<label for="sb-rip" class="field">
-			<span class="field-label">Rip preset <span class="session-builder-required">*</span></span>
-			<select id="sb-rip" value={ripId} onchange={handleRipChange} disabled={readOnly} required>
+		<div class="field">
+			<FieldLabel for={SESSION_FIELDS.rip} label="Rip preset" docsId={FIELD_IDS.rip_preset} required />
+			<select
+				id={SESSION_FIELDS.rip}
+				value={ripId}
+				onchange={handleRipChange}
+				disabled={readOnly}
+				{...invalidAttrs(SESSION_FIELDS.rip, errors[SESSION_FIELDS.rip])}
+			>
 				<option value="">Select a rip preset</option>
 				{#each ripOptions as rp (rp.id)}
 					<option value={rp.id}>{rp.name}</option>
 				{/each}
 				<option value="__create_rip__">+ Create new rip preset...</option>
 			</select>
-		</label>
+			{@render fieldError(SESSION_FIELDS.rip)}
+		</div>
 
 		<!-- Transcode preset (optional) -->
-		<label for="sb-tc" class="field">
-			<span class="field-label">Transcode preset <span class="session-builder-optional">(optional)</span></span>
+		<div class="field">
+			<FieldLabel for="sb-tc" label="Transcode preset" docsId={FIELD_IDS.transcode_preset}>
+				{#snippet marks()}<span class="session-builder-optional">(optional)</span>{/snippet}
+			</FieldLabel>
 			<select id="sb-tc" value={tcId} onchange={handleTcChange} disabled={readOnly}>
 				<option value="">No transcode, rip only</option>
 				{#each tcOptions as tc (tc.id)}
@@ -188,13 +221,14 @@
 				{/each}
 				<option value="__create_tc__">+ Create new transcode preset...</option>
 			</select>
-		</label>
+		</div>
 
 		<!-- Output path template -->
 		<div class="field">
-			<label class="field-label" for="sb-path">Output path <span class="session-builder-required">*</span></label>
+			<FieldLabel for={SESSION_FIELDS.path} label="Output path" docsId={FIELD_IDS.output_path} required />
 			<OutputPathField
-				id="sb-path"
+				id={SESSION_FIELDS.path}
+				errorId={errors[SESSION_FIELDS.path] ? errorId(SESSION_FIELDS.path) : undefined}
 				value={template}
 				{mediaType}
 				onchange={(v) => {
@@ -203,70 +237,47 @@
 				has_transcode_preset={!!tcId}
 				disabled={readOnly}
 			/>
+			{@render fieldError(SESSION_FIELDS.path)}
 		</div>
 
 		<!-- Advanced (collapsed) -->
-		<details class="session-builder-advanced">
+		<details class="session-builder-advanced" bind:open={advancedOpen}>
 			<summary class="session-builder-advanced-summary"> Advanced </summary>
 			<div class="stack stack-sm session-builder-advanced-body">
-				<label for="sb-overrides" class="field-label session-builder-overrides-label"> Overrides JSON </label>
+				<FieldLabel for={SESSION_FIELDS.overrides} label="Overrides JSON" docsId={FIELD_IDS.overrides} />
 				<textarea
-					id="sb-overrides"
+					id={SESSION_FIELDS.overrides}
 					class="mono field-control"
 					rows="4"
 					bind:value={overridesJson}
 					placeholder={`{"key": "value"}`}
-					disabled={readOnly}></textarea>
-				{#if jsonError}
-					<p class="field-error">{jsonError}</p>
-				{/if}
+					disabled={readOnly}
+					{...invalidAttrs(SESSION_FIELDS.overrides, errors[SESSION_FIELDS.overrides])}></textarea>
+				{@render fieldError(SESSION_FIELDS.overrides)}
 			</div>
 		</details>
 
 		{#if submitError}
 			<p class="field-error">{submitError}</p>
 		{/if}
-
-		<!-- Footer -->
-		<div class="session-builder-footer">
-			<div class="session-builder-footer-note">
-				{#if !tcId}
-					Rips only, no transcode step.
-				{/if}
-			</div>
-			<div class="cluster">
-				<button type="button" onclick={oncancel} class="btn">
-					{readOnly ? 'Close' : 'Cancel'}
-				</button>
-				{#if !readOnly}
-					<button type="submit" disabled={!canSubmit || submitting} class="btn btn-primary session-builder-submit-btn">
-						{isEdit ? 'Save changes' : 'Create session'}
-					</button>
-				{/if}
-			</div>
-		</div>
 	</form>
 </div>
 
+{#snippet fieldError(id: string)}
+	{#if errors[id]}<p class="field-error" id={errorId(id)}>{errors[id]}</p>{/if}
+{/snippet}
+
 <style>
-	/* original: ml-1 text-red-500 (no dark: variant - same shade in both modes).
-	   --color-danger is red-600 in light / red-400 in dark, a mode-dependent
-	   shift the original never had; kept anyway per the migration reference's
-	   own ruling (row 38: "red-600 reads fine as both fill and text") since no
-	   mode-independent danger role exists in spec 5.1. */
-	.session-builder-required {
-		margin-left: 0.25rem;
-		color: var(--color-danger);
-	}
-	/* original: ml-1 text-xs text-gray-400 dark:text-gray-500 - text-faint
+	/* text-red-500 (same shade in both modes). --color-danger is red-600 in light / red-400 in
+	   dark, a mode-dependent shift; accepted since no mode-independent danger role exists. */
+	/* text-xs text-gray-400 (gray-500 in dark) - text-faint
 	   already flips gray-400/gray-500 across modes, matching exactly. */
 	.session-builder-optional {
-		margin-left: 0.25rem;
 		font-size: 0.75rem;
 		line-height: 1rem;
 		color: var(--color-text-faint);
 	}
-	/* original media-type chips: rounded-md border px-3 py-1 text-sm
+	/* media-type chips are rounded-md border px-3 py-1 text-sm
 	   font-medium - chip's own radius (--radius-sm), padding (0.125rem
 	   0.375rem) and size (0.75rem) are tuned for the tighter filter-pill look,
 	   so the segmented-control metrics are restated here on top of chip's
@@ -293,8 +304,7 @@
 		opacity: 0.5;
 		cursor: not-allowed;
 	}
-	/* original: rounded-md border border-gray-200 dark:border-gray-700 - a
-	   plain neutral-bordered disclosure with no equivalent block. */
+	/* a plain neutral-bordered disclosure with no equivalent block. */
 	.session-builder-advanced {
 		border: 1px solid var(--color-border);
 		border-radius: var(--radius-md);
@@ -311,35 +321,14 @@
 	.session-builder-advanced-body {
 		padding: 0.5rem 0.75rem 0.75rem;
 	}
-	/* original: text-xs font-medium text-gray-600 dark:text-gray-400
+	/* text-xs font-medium
 	   (12px/16px) - field-label's own default is 0.875rem/1.25rem/600, tuned
 	   for a top-level field label, not this smaller nested-textarea caption. */
-	.session-builder-overrides-label {
+	/* :global: the label is rendered by the child FieldLabel component, outside this component's own template */
+	.session-builder-advanced-body :global(.field-label) {
 		font-size: 0.75rem;
 		line-height: 1rem;
 		font-weight: 500;
 		color: var(--color-text-secondary);
-	}
-	.session-builder-footer {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		gap: 0.75rem;
-		border-top: 1px solid var(--color-border);
-		padding-top: 1rem;
-	}
-	.session-builder-footer-note {
-		font-size: 0.75rem;
-		line-height: 1rem;
-		color: var(--color-text-faint);
-	}
-	/* original submit button: rounded-md bg-primary ... - no border/ring class
-	   at all. .btn-primary's own 1px border is invisible (same colour as the
-	   fill) but still occupies 2px of layout height, and its default radius
-	   is --radius-lg, not the original's smaller --radius-md (Task 9/10
-	   finding: a bare fill button with no border class needs border: 0). */
-	.session-builder-submit-btn {
-		border: 0;
-		border-radius: var(--radius-md);
 	}
 </style>

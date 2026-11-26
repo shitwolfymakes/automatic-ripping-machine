@@ -1,19 +1,22 @@
-// Single API client core. JWT in localStorage, attached on every request;
-// a 401 fires the unauthorized handler (wired in Tier B to redirect to /login).
+// Single API client core. JWT in site storage (see safe-storage), attached on every request;
+// a 401 fires the unauthorized handler (which redirects to /login), except
+// on a request that checks credentials.
 // Same-origin by default — nginx proxies /api/* to the v3 backend.
+
+import { readStorage, removeStorage, writeStorage } from '$lib/utils/safe-storage';
 
 const TOKEN_KEY = 'arm_token';
 
 export function getToken(): string | null {
-	return localStorage.getItem(TOKEN_KEY);
+	return readStorage(TOKEN_KEY);
 }
 
 export function setToken(token: string): void {
-	localStorage.setItem(TOKEN_KEY, token);
+	writeStorage(TOKEN_KEY, token);
 }
 
 export function clearToken(): void {
-	localStorage.removeItem(TOKEN_KEY);
+	removeStorage(TOKEN_KEY);
 }
 
 export class ApiError extends Error {
@@ -62,42 +65,47 @@ function authHeaders(extra?: HeadersInit): Record<string, string> {
 	return { ...headers, ...(extra as Record<string, string> | undefined) };
 }
 
-async function handle<T>(res: Response): Promise<T> {
-	if (res.status === 401) {
-		on401();
-		let body: unknown = null;
-		try {
-			body = await res.json();
-		} catch {
-			/* no/non-JSON body */
-		}
-		throw new ApiError(401, 'API 401: Unauthorized', body);
+/** Options for one request. */
+export interface RequestOptions {
+	/**
+	 * The request submits credentials (sign in, change password), so a 401
+	 * means they are wrong, not that the session expired: the unauthorized
+	 * handler is left alone and the backend's detail is thrown.
+	 */
+	checksCredentials?: boolean;
+}
+
+/**
+ * A response body's detail as a message: a string detail as-is, or a
+ * Pydantic 422's list of {msg, loc, ...} error objects joined by their
+ * `msg` strings. Null for any other shape.
+ */
+function detailMessage(body: unknown): string | null {
+	const detail = (body as { detail?: unknown } | null)?.detail;
+	if (typeof detail === 'string') return detail;
+	if (!Array.isArray(detail)) return null;
+	const msgs = detail
+		.map((item) => (item as { msg?: unknown } | null)?.msg)
+		.filter((msg): msg is string => typeof msg === 'string');
+	return msgs.length > 0 ? msgs.join('; ') : null;
+}
+
+/** The ApiError for a failed response: its detail, else "API {status}: {statusText}". */
+async function responseError(res: Response): Promise<ApiError> {
+	let message = `API ${res.status}: ${res.statusText}`;
+	let body: unknown = null;
+	try {
+		body = await res.json();
+		message = detailMessage(body) ?? message;
+	} catch {
+		/* no/non-JSON body: use the default message */
 	}
-	if (!res.ok) {
-		let message = `API ${res.status}: ${res.statusText}`;
-		let body: unknown = null;
-		try {
-			body = await res.json();
-			// A string detail becomes the message as-is; a Pydantic 422's detail is
-			// instead a list of {msg, loc, ...} error objects, so join their `msg`
-			// strings into one readable message. Any other shape keeps the
-			// status-text default, and the full body is always on .body.
-			const detail = (body as { detail?: unknown } | null)?.detail;
-			if (typeof detail === 'string') {
-				message = detail;
-			} else if (Array.isArray(detail) && detail.length > 0) {
-				const msgs = detail
-					.map((item) => (item as { msg?: unknown } | null)?.msg)
-					.filter((msg): msg is string => typeof msg === 'string');
-				if (msgs.length > 0) {
-					message = msgs.join('; ');
-				}
-			}
-		} catch {
-			/* use default message */
-		}
-		throw new ApiError(res.status, message, body);
-	}
+	return new ApiError(res.status, message, body);
+}
+
+async function handle<T>(res: Response, options: RequestOptions = {}): Promise<T> {
+	if (res.status === 401 && !options.checksCredentials) on401();
+	if (!res.ok) throw await responseError(res);
 	try {
 		return (await res.json()) as T;
 	} catch {
@@ -106,9 +114,9 @@ async function handle<T>(res: Response): Promise<T> {
 	}
 }
 
-export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
+export async function apiFetch<T>(path: string, init?: RequestInit, options?: RequestOptions): Promise<T> {
 	const res = await fetch(path, { ...init, headers: authHeaders(init?.headers) });
-	return handle<T>(res);
+	return handle<T>(res, options);
 }
 
 /** Like apiFetch, but also hands back the response headers (for paged
@@ -131,11 +139,15 @@ export function get<T>(path: string): Promise<T> {
 	return apiFetch<T>(path, { method: 'GET' });
 }
 
-export function post<T>(path: string, body?: unknown): Promise<T> {
-	return apiFetch<T>(path, {
-		method: 'POST',
-		body: body !== undefined ? JSON.stringify(body) : undefined
-	});
+export function post<T>(path: string, body?: unknown, options?: RequestOptions): Promise<T> {
+	return apiFetch<T>(
+		path,
+		{
+			method: 'POST',
+			body: body !== undefined ? JSON.stringify(body) : undefined
+		},
+		options
+	);
 }
 
 export function patch<T>(path: string, body?: unknown): Promise<T> {

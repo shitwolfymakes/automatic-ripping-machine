@@ -1,5 +1,5 @@
 """Typed `jobs.metadata_json["identity_claims"]`: what each identity source
-proposed for a job (design spec 2026-09-28-identity-sources, section 4.1).
+proposed for a job.
 
 Field PRESENCE is meaningful in TrackClaim / JobClaim: an absent field means
 "no opinion"; a field present with value null means "propose empty" (only the
@@ -65,7 +65,7 @@ class SourceClaims(BaseModel):
 
     run_at: datetime | None = None
     status: ClaimStatus = "ok"
-    # True: stored for the operator to accept, never applied by the resolver (spec 5, C2).
+    # True: stored for the operator to accept, never applied by the resolver.
     suggestion: bool = False
     detail: str | None = None
     inputs: dict[str, Any] = Field(default_factory=dict)
@@ -79,7 +79,7 @@ class IdentityClaims(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     sources: dict[str, SourceClaims] = Field(default_factory=dict)
-    # capability name -> source id the operator pinned for this job (PR 3 uses
+    # capability name -> source id the operator pinned for this job (e.g.
     # "episode"); a pinned source outranks its tier-mates in the resolver.
     pin: dict[str, str] = Field(default_factory=dict)
     # The winning episode source's result was held (a guess). Written by the

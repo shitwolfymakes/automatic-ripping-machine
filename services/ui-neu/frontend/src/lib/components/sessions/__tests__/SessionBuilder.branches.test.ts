@@ -1,21 +1,18 @@
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
-import { renderComponent, screen, fireEvent, cleanup, waitFor } from '$lib/test-utils';
+import { renderComponent, screen, fireEvent, cleanup, waitFor } from '$lib/testing/render';
 vi.mock('$lib/api/sessions', () => ({
 	createSession: vi.fn(),
 	updateSession: vi.fn(),
 	previewTemplate: vi.fn().mockResolvedValue({ expansion: 'p' })
 }));
 import { createSession, updateSession, previewTemplate } from '$lib/api/sessions';
-import SessionBuilder from '../SessionBuilder.svelte';
+import SessionBuilder from './SessionBuilderHarness.svelte';
 
-// Branch pins for SessionBuilder, beside SessionBuilder.svelte.test.ts. Two
-// branches cannot be reached from the rendered component, so nothing here
-// forces them:
-// - switchMediaType's guard, `if (isEdit || readOnly) return;`: the media chips
-//   are disabled exactly when it would return, and a disabled button's click
-//   never reaches its handler.
-// - handleSubmit's guard, `if (readOnly) return;`: a read-only builder renders
-//   no submit button and disables every field, so the form cannot be submitted.
+// Branch pins for SessionBuilder, beside SessionBuilder.svelte.test.ts. One
+// branch cannot be reached from the rendered component, so nothing here
+// forces it: switchMediaType's guard, `if (isEdit || readOnly) return;`. The
+// media chips are disabled exactly when it would return, and a disabled
+// button's click never reaches its handler.
 
 const rip = (id: string, mt = 'movie') => ({ id, name: `rip ${id}`, media_type: mt }) as any;
 const props = (over = {}) => ({
@@ -25,7 +22,6 @@ const props = (over = {}) => ({
 	oncreaterip: vi.fn(),
 	oncreatetranscode: vi.fn(),
 	onsaved: vi.fn(),
-	oncancel: vi.fn(),
 	...over
 });
 
@@ -41,13 +37,13 @@ const editSession = {
 
 async function fillRequired() {
 	await fireEvent.input(screen.getByLabelText(/session name/i), { target: { value: 'My Movies' } });
-	await fireEvent.change(screen.getByLabelText(/rip preset/i), { target: { value: 'r1' } });
-	await fireEvent.input(screen.getByLabelText(/output path/i), { target: { value: 'movies/{title}.{ext}' } });
+	await fireEvent.change(screen.getByLabelText(/^rip preset/i), { target: { value: 'r1' } });
+	await fireEvent.input(screen.getByLabelText(/^output path/i), { target: { value: 'movies/{title}.{ext}' } });
 }
 
 const setOverrides = (value: string) =>
 	fireEvent.input(screen.getByLabelText(/overrides json/i), { target: { value } });
-const submit = () => fireEvent.click(screen.getByRole('button', { name: /create session/i }));
+const submit = () => fireEvent.click(screen.getByRole('button', { name: /^save$/i }));
 
 beforeEach(() => {
 	vi.mocked(createSession).mockReset();
@@ -56,6 +52,14 @@ beforeEach(() => {
 });
 
 afterEach(cleanup);
+
+it('a submit event on a built-in session sends nothing and marks nothing', async () => {
+	const { container } = renderComponent(SessionBuilder, props({ session: { ...editSession, is_builtin: true } }));
+	await fireEvent.submit(container.querySelector('form') as HTMLFormElement);
+	expect(createSession).not.toHaveBeenCalled();
+	expect(updateSession).not.toHaveBeenCalled();
+	expect(container.querySelector('[aria-invalid]')).toBeNull();
+});
 
 describe('SessionBuilder overrides', () => {
 	it('sends overrides_json null when the field is blank', async () => {
@@ -77,14 +81,24 @@ describe('SessionBuilder overrides', () => {
 		);
 	});
 
-	it('shows an error for invalid JSON, sends nothing, and clears it on the next submit', async () => {
+	it('Save with invalid JSON sends nothing, opens Advanced, marks the field and focuses it; valid JSON clears it', async () => {
 		vi.mocked(createSession).mockResolvedValue({ id: 's1' } as any);
-		renderComponent(SessionBuilder, props());
+		const { container } = renderComponent(SessionBuilder, props());
 		await fillRequired();
 		await setOverrides('{nope');
+		const details = container.querySelector('details') as HTMLDetailsElement;
+		expect(details.open).toBe(false);
 		await submit();
-		expect(screen.getByText('Invalid JSON in overrides field')).toBeInTheDocument();
+		const field = screen.getByLabelText(/overrides json/i);
+		await waitFor(() => expect(document.activeElement).toBe(field));
+		expect(details.open).toBe(true);
+		expect(field).toHaveAttribute('aria-invalid', 'true');
+		expect(field).toHaveAttribute('aria-describedby', 'sb-overrides-error');
+		expect(document.getElementById('sb-overrides-error')).toHaveTextContent('Invalid JSON in overrides field');
 		expect(createSession).not.toHaveBeenCalled();
+
+		await setOverrides('{"ok": true}');
+		expect(field).not.toHaveAttribute('aria-invalid');
 
 		await setOverrides('{"ok": true}');
 		await submit();
@@ -115,7 +129,7 @@ describe('SessionBuilder save', () => {
 	it('edit sends the fields without media_type', async () => {
 		vi.mocked(updateSession).mockResolvedValue({ id: 'ses1' } as any);
 		renderComponent(SessionBuilder, props({ session: editSession }));
-		await fireEvent.click(screen.getByRole('button', { name: /save changes/i }));
+		await fireEvent.click(screen.getByRole('button', { name: /^save$/i }));
 		await waitFor(() =>
 			expect(updateSession).toHaveBeenCalledWith('ses1', {
 				name: 'My Session',
@@ -159,7 +173,7 @@ describe('SessionBuilder save', () => {
 		vi.mocked(createSession).mockReturnValue(new Promise((res) => (finish = res)));
 		renderComponent(SessionBuilder, props());
 		await fillRequired();
-		const button = screen.getByRole('button', { name: /create session/i }) as HTMLButtonElement;
+		const button = screen.getByRole('button', { name: /^save$/i }) as HTMLButtonElement;
 		expect(button.disabled).toBe(false);
 		await fireEvent.click(button);
 		await waitFor(() => expect(button.disabled).toBe(true));
@@ -174,7 +188,7 @@ describe('SessionBuilder selects', () => {
 		renderComponent(SessionBuilder, props());
 		await fillRequired();
 		expect(screen.getByText('Rips only, no transcode step.')).toBeInTheDocument();
-		await fireEvent.change(screen.getByLabelText(/transcode preset/i), { target: { value: 't1' } });
+		await fireEvent.change(screen.getByLabelText(/^transcode preset/i), { target: { value: 't1' } });
 		expect(screen.queryByText('Rips only, no transcode step.')).not.toBeInTheDocument();
 		await submit();
 		await waitFor(() =>
@@ -185,7 +199,7 @@ describe('SessionBuilder selects', () => {
 	it('"+ Create new rip preset..." calls oncreaterip and keeps the previous rip value', async () => {
 		const oncreaterip = vi.fn();
 		renderComponent(SessionBuilder, props({ oncreaterip }));
-		const sel = screen.getByLabelText(/rip preset/i) as HTMLSelectElement;
+		const sel = screen.getByLabelText(/^rip preset/i) as HTMLSelectElement;
 		await fireEvent.change(sel, { target: { value: 'r1' } });
 		await fireEvent.change(sel, { target: { value: '__create_rip__' } });
 		expect(oncreaterip).toHaveBeenCalledOnce();
@@ -195,7 +209,7 @@ describe('SessionBuilder selects', () => {
 	it('"+ Create new transcode preset..." calls oncreatetranscode and keeps the previous transcode value', async () => {
 		const oncreatetranscode = vi.fn();
 		renderComponent(SessionBuilder, props({ oncreatetranscode }));
-		const sel = screen.getByLabelText(/transcode preset/i) as HTMLSelectElement;
+		const sel = screen.getByLabelText(/^transcode preset/i) as HTMLSelectElement;
 		await fireEvent.change(sel, { target: { value: 't1' } });
 		await fireEvent.change(sel, { target: { value: '__create_tc__' } });
 		expect(oncreatetranscode).toHaveBeenCalledOnce();
@@ -208,7 +222,7 @@ describe('SessionBuilder output path', () => {
 		vi.mocked(createSession).mockResolvedValue({ id: 's1' } as any);
 		renderComponent(SessionBuilder, props());
 		await fillRequired();
-		await fireEvent.input(screen.getByLabelText(/output path/i), { target: { value: 'x/{title}' } });
+		await fireEvent.input(screen.getByLabelText(/^output path/i), { target: { value: 'x/{title}' } });
 		await submit();
 		await waitFor(() =>
 			expect(createSession).toHaveBeenCalledWith(expect.objectContaining({ output_path_template: 'x/{title}' }))
@@ -219,8 +233,8 @@ describe('SessionBuilder output path', () => {
 		vi.useFakeTimers();
 		try {
 			renderComponent(SessionBuilder, props());
-			await fireEvent.input(screen.getByLabelText(/output path/i), { target: { value: 'x/{title}' } });
-			await fireEvent.change(screen.getByLabelText(/transcode preset/i), { target: { value: 't1' } });
+			await fireEvent.input(screen.getByLabelText(/^output path/i), { target: { value: 'x/{title}' } });
+			await fireEvent.change(screen.getByLabelText(/^transcode preset/i), { target: { value: 't1' } });
 			await vi.advanceTimersByTimeAsync(300);
 			expect(previewTemplate).toHaveBeenLastCalledWith({
 				template: 'x/{title}',

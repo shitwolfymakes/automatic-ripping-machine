@@ -3,7 +3,7 @@
 Templates reference `{token}` (required) or `{token?}` (optional: dropped, with
 a wrapping ()/[] pair and one leading space, when its value is empty).
 
-The token whitelist per `MediaType` mirrors arch §02 (`docs/developers/architecture/02-job-lifecycle.md`).
+The token whitelist per `MediaType` mirrors the token table in `docs/developers/architecture/02-job-lifecycle.md`.
 Save-time validation expands the template against a synthetic context that
 populates every legal token; an empty expansion or an unknown token both
 raise `TemplateValidationError`.
@@ -23,7 +23,7 @@ class TemplateValidationError(ValueError):
     pass
 
 
-# Per-media-type allowed tokens (arch §02 token table).
+# Per-media-type allowed tokens.
 _ALLOWED_TOKENS_BY_MEDIA: dict[MediaType, set[str]] = {
     MediaType.MOVIE: {"title", "year", "track", "duration_human", "transcode_slug", "ext"},
     MediaType.TV: {

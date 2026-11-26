@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from fastapi import HTTPException, Request, status
 
+from arm_backend.handbrake_schema_runner import HandbrakeSchemaRunner
 from arm_backend.identity.stage_runner import EpisodeStageRunner
 from arm_backend.ripper_manager import RipperManager
 from arm_backend.ws import WSHub
@@ -18,6 +19,11 @@ def get_stage_runner(request: Request) -> EpisodeStageRunner | None:
     """None when `app.state` carries no runner (e.g. an existing router test
     that never set one up) — callers then just skip scheduling."""
     return getattr(request.app.state, "episode_stage", None)
+
+
+def get_schema_runner(request: Request) -> HandbrakeSchemaRunner | None:
+    """None when `app.state` carries no runner (e.g. a narrow router test) — callers then skip the refresh."""
+    return getattr(request.app.state, "handbrake_schema_runner", None)
 
 
 def require_ripper_manager(request: Request) -> RipperManager:
