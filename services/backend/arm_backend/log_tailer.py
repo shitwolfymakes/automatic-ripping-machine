@@ -1,4 +1,4 @@
-"""Phase 12 — singleton tail of `/logs/*.log` → `logs.{job_id}` WS topic.
+"""Singleton tail of `/logs/*.log` → `logs.{job_id}` WS topic.
 
 A single asyncio task started in the FastAPI lifespan, mirroring the shape
 of `NotificationDispatcher`. Each tick:

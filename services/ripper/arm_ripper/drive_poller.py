@@ -58,7 +58,7 @@ async def _current_hint(
     is on `last_port`, the port this drive was last seen on.
 
     `absent` is the PREVIOUS tick's state, not `handle.absent`: a node that
-    resolves but answers ENXIO (Ruling C) is absence too, and it leaves the
+    resolves but answers ENXIO is absence too, and it leaves the
     handle populated, so keying off the handle would never refresh there.
 
     Only called from `poll_loop`, i.e. optical mode — `main.amain` has already
@@ -79,7 +79,7 @@ async def _current_hint(
         # drive replugged back onto it is found even when the backend cannot
         # be asked. Only when that node sits on this drive's port: on a
         # multi-drive host it may now be another drive's. Trying it while
-        # present is what used to flap (D-004).
+        # present is what made the hint flap.
         fallback = settings.ARM_DRIVE_DEV
     if absent_ticks % _hint_refresh_every_n_ticks() != 0:
         return fallback
@@ -98,7 +98,7 @@ async def _on_reattached(client: BackendClient, drive_id: str, handle: DriveHand
         # A rip pipeline is still running: the drive dropped off the bus
         # mid-rip. boot_probe would resume the same job, wiping the raw dir
         # under it and starting a second rip. The running rip reads the new
-        # node from the shared handle and resumes there itself (D-133).
+        # node from the shared handle and resumes there itself.
         logger.info("reattach: the running rip resumes on %s; skipping boot probe", handle.current)
         return
     logger.info("boot probe after reattach on %s", handle.current)

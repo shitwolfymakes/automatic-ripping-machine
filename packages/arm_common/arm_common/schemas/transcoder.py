@@ -1,4 +1,4 @@
-"""Phase 7 wire schemas: transcoder ↔ Backend.
+"""Wire schemas: transcoder ↔ Backend.
 
 The transcode container is short-lived and single-purpose; its API surface is
 five endpoints (register / claim / heartbeat / complete / fail). The Backend
@@ -21,8 +21,8 @@ from arm_common.schemas.sessions import (
 
 
 class HardwareCaps(BaseModel):
-    """Self-reported transcoder capabilities. Phase 7 (CPU-only) ignores these;
-    Phase 7b consumes them for GPU dispatch + `gpus` row writes.
+    """Self-reported transcoder capabilities. The Backend does not dispatch on
+    these; GPU eligibility comes from the probed `gpus` rows.
     """
 
     cpu_count: int = Field(ge=1)
@@ -35,6 +35,7 @@ class RegisterTranscoderRequest(BaseModel):
     task_id: str
     hostname: str
     hw_caps: HardwareCaps
+    schema_hash: str | None = None  # content hash of the image's HandBrake schema; None before this feature
 
 
 class RegisterTranscoderResponse(BaseModel):

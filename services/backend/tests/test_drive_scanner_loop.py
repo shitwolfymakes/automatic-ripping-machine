@@ -1,4 +1,4 @@
-"""DriveScanner.scan_once + .run loop: config tunables, error survival (spec §2)."""
+"""DriveScanner.scan_once + .run loop: config tunables, error survival."""
 
 from __future__ import annotations
 
@@ -87,12 +87,12 @@ async def test_run_reads_interval_from_config_each_tick_and_survives_errors(monk
     with pytest.raises(asyncio.CancelledError):
         await scanner.run()
     assert calls["n"] == 3
-    # Ruling A: run() reads tunables BEFORE scanning, so a failed tick keeps
+    # run() reads tunables BEFORE scanning, so a failed tick keeps
     # the configured cadence. tick1 reads 5, scans ok, sleep#1 appends 5;
     # tick2 reads 5, scan raises, sleep#2 retunes to 9 THEN appends 5;
     # tick3 reads 9, sleep#3 appends 9 and raises Cancelled.
     assert sleeps == [5, 5, 9]
-    # Ruling B: the failing tick (#2) sets last_error to the exception text;
+    # The failing tick (#2) sets last_error to the exception text;
     # sleep is called right after run()'s except block, so
     # last_error_after_sleep[1] captures that state.
     assert last_error_after_sleep[1] is not None and "boom" in last_error_after_sleep[1]

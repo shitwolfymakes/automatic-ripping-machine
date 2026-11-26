@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
-import { renderComponent, screen, cleanup, fireEvent } from '$lib/test-utils';
+import { renderComponent, screen, cleanup, fireEvent } from '$lib/testing/render';
 import ConfigSchemaField from '../ConfigSchemaField.svelte';
 import type { ConfigFieldMeta } from '$lib/types/api.gen';
 
@@ -42,7 +42,7 @@ describe('ConfigSchemaField', () => {
 		renderComponent(ConfigSchemaField, {
 			props: { field: f({ key: 'tmdb_api_key', type: 'string', tier: 'secret', label: 'TMDb key' }), value: '<hidden>' }
 		});
-		const input = screen.getByLabelText(/tmdb key/i) as HTMLInputElement;
+		const input = screen.getByLabelText(/^tmdb key$/i) as HTMLInputElement;
 		expect(input.type).toBe('password');
 		expect(input.value).toBe('');
 		expect(input.placeholder).toMatch(/set, leave blank to keep/i);
@@ -154,7 +154,7 @@ describe('ConfigSchemaField', () => {
 	});
 });
 
-describe('ConfigSchemaField key rows (setup spec §7.3)', () => {
+describe('ConfigSchemaField key rows', () => {
 	it('links to the signup page and shows a saved secret as Saved', () => {
 		renderComponent(ConfigSchemaField, {
 			props: {

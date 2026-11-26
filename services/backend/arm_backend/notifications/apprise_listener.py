@@ -1,9 +1,8 @@
 """Apprise delivery as a notification listener.
 
-Extracted verbatim from the old `NotificationDispatcher._tick`: for each
-enabled apprise channel subscribed to the event type, apply the channel's
-per-event template override, fire the apprise URL, record per-channel
-outcome (`last_*`), and write a dispatch-log row. Per-channel failures are
+For each enabled apprise channel subscribed to the event type, apply the
+channel's per-event template override, fire the apprise URL, record
+per-channel outcome (`last_*`), and write a dispatch-log row. Per-channel failures are
 isolated; failure logs the REDACTED url.
 """
 

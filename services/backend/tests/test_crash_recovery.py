@@ -1,4 +1,4 @@
-"""Phase 9 — direct tests on `reset_job_for_recovery` and `sweep_in_flight_jobs`."""
+"""Direct tests on `reset_job_for_recovery` and `sweep_in_flight_jobs`."""
 
 from __future__ import annotations
 

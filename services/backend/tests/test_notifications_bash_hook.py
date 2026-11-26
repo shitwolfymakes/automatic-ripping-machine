@@ -193,7 +193,7 @@ def test_storage_config(tmp_path: Path) -> None:
 
 
 def test_patch_bash_config_keeps_the_stored_secret_set_for_a_missing_script(tmp_path: Path) -> None:
-    """D-038: a script name not on disk cannot strip secret_keys and unmask the stored value."""
+    """A script name not on disk cannot strip secret_keys and unmask the stored value."""
     _script(tmp_path)
     incoming = _config(script="does-not-exist.sh", inputs={"TO": "me@x", "SMTP_PASS": "<hidden>"}, secret_keys=[])
     out = patch_bash_config(_config(), incoming, str(tmp_path))
@@ -202,7 +202,7 @@ def test_patch_bash_config_keeps_the_stored_secret_set_for_a_missing_script(tmp_
 
 
 def test_patch_bash_config_keeps_a_carried_secret_under_a_script_that_drops_it(tmp_path: Path) -> None:
-    """D-038: a header that no longer declares the key secret cannot unmask the stored value."""
+    """A header that no longer declares the key secret cannot unmask the stored value."""
     _script(tmp_path)
     _script(tmp_path, "plain.sh", "#!/usr/bin/env bash\n# arm-input: SMTP_PASS\n")
     hidden = _config(script="plain.sh", inputs={"SMTP_PASS": "<hidden>"})
@@ -237,7 +237,7 @@ def test_patch_bash_config_keeps_a_hidden_secret_on_the_same_script(tmp_path: Pa
 
 
 def test_prepare_run_refuses_a_width_spec_blowup(tmp_path: Path) -> None:
-    """D-042: an input rendered past the cap is a HookError, not an execve E2BIG."""
+    """An input rendered past the cap is a HookError, not an execve E2BIG."""
     _script(tmp_path)
     with pytest.raises(HookError, match="input TO renders to 300000 characters"):
         _prep(tmp_path, _config(inputs={"TO": "{job_title:>300000}", "SMTP_PASS": "pw"}))

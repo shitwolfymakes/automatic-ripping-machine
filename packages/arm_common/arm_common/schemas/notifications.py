@@ -188,6 +188,8 @@ class CatalogService(BaseModel):
     id: str
     name: str
     docs_url: str
+    # Apprise's documentation page for setting the service up.
+    setup_url: str
     url_scheme: str
     required_fields: list[CatalogField]
     advanced_fields: list[CatalogField]

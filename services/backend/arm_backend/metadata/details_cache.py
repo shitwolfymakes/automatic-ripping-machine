@@ -1,4 +1,4 @@
-"""A small in-process TTL cache for match details (match picker spec 3.4)."""
+"""A small in-process TTL cache for match details."""
 
 from __future__ import annotations
 
