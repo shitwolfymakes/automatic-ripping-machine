@@ -212,17 +212,10 @@ verify_images_present() {
 
 # SELinux (lib/selinux.sh): on a host whose Docker labels containers, write the
 # overlay that labels the mounts under ${ARM_DIR} and runs the backend (it
-# mounts the Docker socket) unlabelled, and put it on the compose command line.
-# Once written, the file stays: emptied when no longer needed, so every armctl
-# command keeps a valid file list.
+# mounts the Docker socket) with label=disable, and put it on the compose
+# command line (use_env_file adds it once the file exists).
 apply_selinux_labels() {
-    if selinux_labels_needed; then
-        ensure_selinux_overlay_file "${SELINUX_OVERLAY}"
-        use_env_file "${ENV_FILE}"
-        write_selinux_overlay "${SELINUX_OVERLAY}" "armctl"
-    elif [[ -f "${SELINUX_OVERLAY}" ]]; then
-        printf '%s\n' "${SELINUX_OVERLAY_EMPTY}" > "${SELINUX_OVERLAY}"
-    fi
+    selinux_apply "${SELINUX_OVERLAY}" armctl use_env_file "${ENV_FILE}"
 }
 
 # Remove what the backend spawned, start from the pulled images, and bring the
@@ -577,6 +570,9 @@ cmd_apply_upgrade() {
     set +e
     ( set -e; go_live )
     rc=$?
+    # go_live ran in a subshell: if it created the SELinux overlay, put it on
+    # this shell's compose command line too, so finish_up sees the same stack.
+    use_env_file "${live_env}"
     if [[ "${rc}" -eq 0 ]]; then
         ( set -e; finish_up )
         rc=$?

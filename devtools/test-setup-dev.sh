@@ -233,16 +233,108 @@ check "selinux list: an up-to-date list is unchanged"          "docker-compose.y
 check "selinux list: other entries keep their order, overlay last" "a.yml:docker-compose.yml:b.yml:docker-compose.override.yml:docker-compose.selinux.yml" "$(cfl 'a.yml:docker-compose.yml:docker-compose.selinux.yml:b.yml' '' 1)"
 check "selinux list: a custom separator is kept"               "docker-compose.yml;docker-compose.override.yml;docker-compose.selinux.yml" "$(cfl 'docker-compose.yml;docker-compose.selinux.yml' ';' 1)"
 check "selinux list: a list naming only the overlay gets the default" "docker-compose.yml:docker-compose.selinux.yml" "$(cfl 'docker-compose.selinux.yml' '' 0)"
-present "setup-dev re-syncs the list on every run, down included" '^    sync_selinux_compose_files keep$' "${SETUP}"
-present "setup-dev adds the overlay through the same sync" '^        sync_selinux_compose_files add$' "${SETUP}"
+present "setup-dev prepares the overlay before any compose command" '^selinux_dev_prepare "\$\{ROOT_DIR\}" "\$\{SELINUX_OVERLAY_NAME\}"$' "${SETUP}"
+
+# se_dev <.env content> <override yes|no> <snippet>: run <snippet> in a scratch
+# checkout with setup-dev's own apply_selinux_labels loaded, then print the
+# COMPOSE_FILE that .env ends with and the overlay file (| for newlines).
+se_dev() {
+    local root
+    root="$(mktemp -d)"
+    printf '%b' "$1" > "${root}/.env"
+    if [[ "$2" == yes ]]; then : > "${root}/docker-compose.override.yml"; fi
+    # shellcheck disable=SC2016 # expanded inside dev_out's eval
+    SE_ROOT="${root}" SE_CMD="$3" dev_out '
+        unset COMPOSE_FILE
+        ROOT_DIR="${SE_ROOT}"; ENV_FILE="${SE_ROOT}/.env"; ARM_DIR="${SE_ROOT}/arm"
+        SELINUX_OVERLAY_NAME="docker-compose.selinux.yml"
+        SELINUX_OVERLAY="${ROOT_DIR}/${SELINUX_OVERLAY_NAME}"
+        eval "$(sed -n "/^apply_selinux_labels() {/,/^}/p" "'"${SETUP}"'")"
+        eval "${SE_CMD}"
+        printf "ENV=%s\n" "$(env_file_value COMPOSE_FILE)"
+        if [[ -f "${SELINUX_OVERLAY}" ]]; then printf "FILE=%s\n" "$(tr "\n" "|" < "${SELINUX_OVERLAY}")"; else echo FILE=none; fi
+    ' 2>&1
+    rm -rf "${root}"
+}
+se_has() {  # se_has <label> <needle> <haystack>
+    check "$1" yes "$([[ "$3" == *"$2"* ]] && echo yes || echo no)"
+}
+se_lacks() {  # se_lacks <label> <needle> <haystack>
+    check "$1" no "$([[ "$3" == *"$2"* ]] && echo yes || echo no)"
+}
+# shellcheck disable=SC2016 # the snippets expand inside se_dev's eval
+ADD='selinux_sync_compose_files add "${ROOT_DIR}" "${SELINUX_OVERLAY_NAME}"'
+# shellcheck disable=SC2016
+KEEP='selinux_sync_compose_files keep "${ROOT_DIR}" "${SELINUX_OVERLAY_NAME}"'
+# shellcheck disable=SC2016
+PREP='selinux_dev_prepare "${ROOT_DIR}" "${SELINUX_OVERLAY_NAME}"'
+
+out="$(se_dev 'A=1\n' no "${ADD}")"
+se_has "selinux sync: add with no COMPOSE_FILE starts from the default" "ENV=docker-compose.yml:docker-compose.selinux.yml" "$out"
+se_has "selinux sync: add says what it set" "==> SELinux: COMPOSE_FILE in .env is now docker-compose.yml:docker-compose.selinux.yml" "$out"
+out="$(se_dev 'A=1\n' yes "${ADD}")"
+se_has "selinux sync: add keeps an existing override" "ENV=docker-compose.yml:docker-compose.override.yml:docker-compose.selinux.yml" "$out"
+out="$(se_dev 'A=1\n' no "${ADD}; ${ADD}")"
+check "selinux sync: a second add changes nothing and says nothing" 1 "$(grep -c 'COMPOSE_FILE in .env is now' <<<"$out")"
+out="$(se_dev 'A=1\n' yes "${KEEP}")"
+check "selinux sync: keep leaves a .env without the overlay alone" 1 "$(grep -cx 'ENV=' <<<"$out")"
+se_lacks "selinux sync: keep adds nothing" "docker-compose.selinux.yml" "$out"
+out="$(se_dev 'COMPOSE_FILE=docker-compose.yml:docker-compose.override.yml:docker-compose.selinux.yml\n' no "${KEEP}")"
+se_has "selinux sync: keep drops a deleted override" "ENV=docker-compose.yml:docker-compose.selinux.yml" "$out"
+out="$(se_dev 'COMPOSE_PATH_SEPARATOR=;\nCOMPOSE_FILE=a.yml;docker-compose.selinux.yml\n' yes "${KEEP}")"
+se_has "selinux sync: keep uses the .env separator" "ENV=a.yml;docker-compose.override.yml;docker-compose.selinux.yml" "$out"
+out="$(se_dev 'A=1\n' no "COMPOSE_FILE=docker-compose.yml; ${ADD}")"
+se_has "selinux sync: a COMPOSE_FILE in the shell without the overlay is warned about" \
+    "WARNING: SELinux: COMPOSE_FILE is set in your shell (docker-compose.yml)" "$out"
+out="$(se_dev 'A=1\n' no "COMPOSE_FILE=docker-compose.yml:docker-compose.selinux.yml; ${ADD}")"
+se_lacks "selinux sync: a shell COMPOSE_FILE that names the overlay is fine" "set in your shell" "$out"
+
+out="$(se_dev '# docker-compose.selinux.yml is mentioned in a comment\n' no "${PREP}")"
+se_has "selinux prepare: a comment naming the overlay creates no file" "FILE=none" "$out"
+out="$(se_dev 'COMPOSE_FILE=docker-compose.yml:docker-compose.selinux.yml\n' yes "${PREP}")"
+se_has "selinux prepare: a listed overlay that is missing is created empty" "FILE=services: {}|" "$out"
+se_has "selinux prepare: a listed overlay keeps the override in step" "ENV=docker-compose.yml:docker-compose.override.yml:docker-compose.selinux.yml" "$out"
+
+# setup-dev's apply_selinux_labels, end to end with compose stubbed.
+# shellcheck disable=SC2016 # expanded inside se_dev
+SE_NEEDED='selinux_labels_needed() { return 0; }; selinux_label_type() { echo user_home_t; }
+    mkdir -p "${ARM_DIR}/db"
+    compose() { printf "services:\n  arm-db:\n    volumes:\n      - type: bind\n        source: %s/db\n        target: /var/lib/postgresql\n" "${ARM_DIR}"; }'
+out="$(se_dev 'A=1\n' no "${SE_NEEDED}; apply_selinux_labels")"
+se_has "selinux apply: needed: the overlay joins COMPOSE_FILE" "ENV=docker-compose.yml:docker-compose.selinux.yml" "$out"
+se_has "selinux apply: needed: the overlay names setup-dev as its writer" "FILE=# Generated by devtools/setup-dev.sh" "$out"
+se_has "selinux apply: needed: the arm folder's mounts are labelled" 'target: "/var/lib/postgresql"|        bind:|          selinux: z' "$out"
+out="$(se_dev 'A=1\n' no 'selinux_labels_needed() { return 1; }; apply_selinux_labels')"
+se_has "selinux apply: not needed: no file is written" "FILE=none" "$out"
+check "selinux apply: not needed: COMPOSE_FILE is left alone" 1 "$(grep -cx 'ENV=' <<<"$out")"
+se_lacks "selinux apply: not needed: nothing is said" "SELinux" "$out"
+# shellcheck disable=SC2016 # expanded inside se_dev
+out="$(se_dev 'COMPOSE_FILE=docker-compose.yml:docker-compose.selinux.yml\n' no \
+    'printf "old\n" > "${SELINUX_OVERLAY}"; selinux_labels_needed() { return 1; }; apply_selinux_labels')"
+se_has "selinux apply: no longer needed: the overlay is emptied, not removed" "FILE=services: {}|" "$out"
+se_has "selinux apply: no longer needed: COMPOSE_FILE still names it" "ENV=docker-compose.yml:docker-compose.selinux.yml" "$out"
 present "the generated SELinux overlay is gitignored" '^/docker-compose\.selinux\.yml$' "${ROOT}/.gitignore"
 absent  "setup-dev no longer shells out to install.sh" 'install\.sh" *\\$' "${SETUP}"
 
 # --- compose template -----------------------------------------------------------
 absent  "template has no generated region"      'arm-ripper services'       "${TEMPLATE}"
 # SELinux labels come from the generated overlay (deploy/lib/selinux.sh), only
-# on hosts that need them; a :z in the template would relabel on every host.
-absent  "template hard-codes no SELinux relabel" '^ *- [^#]*:(z|Z|[a-z,]*,[zZ])$' "${TEMPLATE}"
+# on hosts that need them; a relabel in a committed compose file would relabel
+# on every host. RELABEL matches a short-form mount whose options include z or
+# Z in any position (`:z`, `:ro,z`, `:Z,ro`) and the long form's `selinux:` key.
+RELABEL='^[[:space:]]*-[^#]*:([a-zA-Z]+,)*[zZ](,[a-zA-Z]+)*[[:space:]]*$|^[[:space:]]*selinux:'
+relabel_probe="$(mktemp)"
+for line in '      - ./a:/b:z' '      - ./a:/b:ro,z' '      - ./a:/b:Z,ro' '          selinux: z'; do
+    printf '%s\n' "${line}" > "${relabel_probe}"
+    present "the relabel check catches: ${line#"${line%%[! ]*}"}" "${RELABEL}" "${relabel_probe}"
+done
+for line in '      - ./a:/b:ro' '      - "8081:443"' '      - ./a:/b # not :z' '      - ./zone:/z'; do
+    printf '%s\n' "${line}" > "${relabel_probe}"
+    absent "the relabel check ignores: ${line#"${line%%[! ]*}"}" "${RELABEL}" "${relabel_probe}"
+done
+rm -f "${relabel_probe}"
+absent  "template hard-codes no SELinux relabel" "${RELABEL}" "${TEMPLATE}"
+absent  "release overlay hard-codes no SELinux relabel" "${RELABEL}" "${ROOT}/deploy/docker-compose.release.yml"
 absent  "template has no arm-ripper-srN"        'arm-ripper-sr'             "${TEMPLATE}"
 present "template has the arm-ripper service"   '^  arm-ripper:$'           "${TEMPLATE}"
 present "arm-ripper image defaults like transcode" 'ARM_RIPPER_IMAGE:-arm-ripper:latest' "${TEMPLATE}"

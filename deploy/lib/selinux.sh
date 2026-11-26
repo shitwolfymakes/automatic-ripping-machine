@@ -28,19 +28,54 @@
 #     folders). Relabelling would replace a label something else may rely on,
 #     such as a Samba share's. When its label would block the containers, the
 #     run prints the command that fixes it.
+#   - a device or runtime path (/dev/disk, anything on devtmpfs, proc or
+#     sysfs): skipped. udev manages those labels, and relabelling them would
+#     do harm.
 # Compose merges an overlay's mounts into the template's by target path, so the
-# overlay restates each mount's source, mode and create_host_path and adds the
-# label. With nothing to label it is `services: {}` and changes nothing.
+# overlay restates each mount's source, mode, create_host_path and propagation
+# and adds the label. With nothing to label it is `services: {}`.
+#
+# `:z` also works for the backend, which runs with label=disable: Docker then
+# gives the container the shared container mount label, so the backend's own
+# mounts of raw/, media/ and logs/ are what labels the folders the rippers and
+# transcoders it spawns use. Their files keep the shared label (plain s0), so
+# one container can read what another wrote.
+#
+# Flow: selinux_bind_mounts (parse) -> selinux_plan (decide, one line per
+# mount) -> selinux_report (hints and summary, stderr) and selinux_emit_overlay
+# (YAML, stdout). selinux_apply is the entry point both callers share.
 #
 # ARM_SELINUX_LABELS in .env: auto (default; follow `docker info`), on, off.
 
 SELINUX_OVERLAY_EMPTY='services: {}'
+
+# selinux_empty_overlay <path>: write the overlay that changes nothing.
+selinux_empty_overlay() { printf '%s\n' "${SELINUX_OVERLAY_EMPTY}" > "$1"; }
+
+# ensure_selinux_overlay_file <path>: create an empty overlay if none exists,
+# so a compose file list that names it stays valid.
+ensure_selinux_overlay_file() {
+    [[ -f "$1" ]] || selinux_empty_overlay "$1"
+}
 
 # Filesystems that keep no per-file SELinux label: Docker cannot relabel a path
 # on them, and asking it to (`:z`) makes container creation fail.
 selinux_unlabelled_fs() {
     case "$1" in
         nfs*|cifs|smb*|fuse*|msdos|vfat|exfat|v9fs|9p|ntfs*|autofs) return 0 ;;
+    esac
+    return 1
+}
+
+# selinux_never_label <real path> <fs type>: true for device and runtime trees.
+# They are neither labelled nor reported: their labels belong to udev and the
+# kernel, and the containers that mount them do not need container_file_t.
+selinux_never_label() {
+    case "$2" in
+        devtmpfs|proc|sysfs|cgroup*|securityfs|debugfs|tracefs) return 0 ;;
+    esac
+    case "$1" in
+        /dev|/dev/*|/proc|/proc/*|/sys|/sys/*|/run|/run/*) return 0 ;;
     esac
     return 1
 }
@@ -57,7 +92,8 @@ selinux_label_type() {
 }
 selinux_is_socket()  { [[ -S "$1" ]]; }
 selinux_bool_on()    { [[ "$(getsebool "$1" 2>/dev/null)" == *"--> on" ]]; }
-# True when Docker labels the containers it starts.
+# True when Docker labels the containers it starts. Podman's docker emulation
+# is not detected; ARM_SELINUX_LABELS=on covers it.
 docker_labels_containers() {
     local opts
     opts="$(docker info --format '{{json .SecurityOptions}}' 2>/dev/null)" || return 1
@@ -83,10 +119,25 @@ selinux_labels_needed() {
     docker_labels_containers
 }
 
-# ensure_selinux_overlay_file <path>: create an empty overlay if none exists,
-# so a compose file list that names it stays valid.
-ensure_selinux_overlay_file() {
-    [[ -f "$1" ]] || printf '%s\n' "${SELINUX_OVERLAY_EMPTY}" > "$1"
+# --- COMPOSE_FILE (setup-dev.sh) -------------------------------------------
+# setup-dev puts the overlay on COMPOSE_FILE in .env, so manual `docker compose`
+# commands get it too. armctl names its files with -f and does not use this.
+
+# selinux_list_names <list> <separator> <name>: true when the list names <name>.
+selinux_list_names() {
+    [[ "$2$1$2" == *"$2$3$2"* ]]
+}
+
+# selinux_compose_separator: COMPOSE_PATH_SEPARATOR from .env, or compose's ':'.
+selinux_compose_separator() {
+    local sep
+    sep="$(env_file_value COMPOSE_PATH_SEPARATOR)"
+    printf '%s' "${sep:-:}"
+}
+
+# selinux_overlay_listed <name>: true when COMPOSE_FILE in .env names it.
+selinux_overlay_listed() {
+    selinux_list_names "$(env_file_value COMPOSE_FILE)" "$(selinux_compose_separator)" "$1"
 }
 
 # selinux_compose_files <COMPOSE_FILE> <separator> <overlay name> <override 0|1>:
@@ -116,10 +167,50 @@ selinux_compose_files() {
     printf '%s%s%s\n' "${out}" "${sep}" "${overlay}"
 }
 
+# selinux_warn_shell_compose_file <separator> <name>: a COMPOSE_FILE exported in
+# the shell overrides the one in .env, so compose would not load the overlay.
+selinux_warn_shell_compose_file() {
+    [[ -n "${COMPOSE_FILE+x}" ]] || return 0
+    selinux_list_names "${COMPOSE_FILE}" "$1" "$2" && return 0
+    arm_warn "SELinux: COMPOSE_FILE is set in your shell (${COMPOSE_FILE}). It overrides .env, so docker compose will not load $2."
+    arm_sub  "       Unset it, or add $2 to it."
+}
+
+# selinux_sync_compose_files add|keep <root dir> <overlay name>: bring
+# COMPOSE_FILE in .env to the list selinux_compose_files gives. An override
+# created or deleted after the overlay joined the list is picked up here, on
+# the next run. `add` puts the overlay on the list; `keep` changes the list only
+# if it already names the overlay.
+selinux_sync_compose_files() {
+    local mode="$1" root="$2" name="$3" sep files want override=0
+    sep="$(selinux_compose_separator)"
+    files="$(env_file_value COMPOSE_FILE)"
+    if [[ "${mode}" == keep ]] && ! selinux_list_names "${files}" "${sep}" "${name}"; then
+        return 0
+    fi
+    if [[ -f "${root}/docker-compose.override.yml" ]]; then override=1; fi
+    want="$(selinux_compose_files "${files}" "${sep}" "${name}" "${override}")"
+    selinux_warn_shell_compose_file "${sep}" "${name}"
+    [[ "${want}" != "${files}" ]] || return 0
+    env_set COMPOSE_FILE "${want}"
+    arm_say "SELinux: COMPOSE_FILE in .env is now ${want}"
+}
+
+# selinux_dev_prepare <root dir> <overlay name>: run at the top of setup-dev,
+# before any compose command (`down` included). Once .env names the overlay,
+# the file must exist, and the list must follow docker-compose.override.yml.
+selinux_dev_prepare() {
+    selinux_overlay_listed "$2" || return 0
+    ensure_selinux_overlay_file "$1/$2"
+    selinux_sync_compose_files keep "$1" "$2"
+}
+
+# --- reading the compose config -------------------------------------------
+
 # The bind mounts of a `docker compose config` document on stdin, one per line:
 # service <TAB> target <TAB> read_only (0|1) <TAB> create_host_path (0|1) <TAB>
-# source. Compose prints every mount in the long form, fields at fixed indents;
-# a quoted value is unquoted.
+# propagation (- for none) <TAB> source. Compose prints every mount in the long
+# form, fields at fixed indents; a quoted value is unquoted.
 selinux_bind_mounts() {
     awk '
         function unq(v) {
@@ -128,9 +219,10 @@ selinux_bind_mounts() {
             return v
         }
         function flush() {
-            if (type == "bind" && src != "" && tgt != "") printf "%s\t%s\t%d\t%d\t%s\n", svc, tgt, ro, chp, src
-            type = ""; src = ""; tgt = ""; ro = 0; chp = 0
+            if (type == "bind" && src != "" && tgt != "") printf "%s\t%s\t%d\t%d\t%s\t%s\n", svc, tgt, ro, chp, prop, src
+            type = ""; src = ""; tgt = ""; ro = 0; chp = 0; prop = "-"
         }
+        BEGIN { prop = "-" }
         /^[^ ]/            { flush(); insvc = ($0 == "services:"); invol = 0; next }
         !insvc             { next }
         /^  [^ ]/          { flush(); svc = $0; sub(/^  /, "", svc); sub(/:$/, "", svc); invol = 0; next }
@@ -146,8 +238,54 @@ selinux_bind_mounts() {
             else if (key == "read_only") ro = (val == "true")
         }
         /^          create_host_path: true$/ { chp = 1 }
+        /^          propagation: [a-z]+$/ { prop = $2 }
         END { flush() }
     '
+}
+
+selinux_real_path() { readlink -f -- "$1" 2>/dev/null || printf '%s' "$1"; }
+
+# selinux_mount_action <inside ARM_DIR 0|1> <fs type> <label type>: what to do
+# with one existing, non-device bind mount. Prints one word:
+#   label  inside ARM_DIR on a filesystem that keeps labels: add `selinux: z`
+#   skip   already usable (container_file_t), or a host without labels
+#   hint   anything else: leave it, tell the user how to fix it
+selinux_mount_action() {
+    if [[ "$1" -eq 1 ]] && ! selinux_unlabelled_fs "$2"; then
+        echo label
+    elif [[ -z "$3" || "$3" == container_file_t ]]; then
+        echo skip
+    else
+        echo hint
+    fi
+}
+
+# selinux_plan: read a `docker compose config` document on stdin, print one
+# line per mount that matters, tab-separated:
+#   socket <svc>
+#   label  <svc> <target> <ro> <chp> <propagation> <source> <real path>
+#   hint   <svc> <source> <fs type> <label type> <real path>
+selinux_plan() {
+    local root svc target ro chp prop src real fs label inside
+    root="$(selinux_real_path "${ARM_DIR}")"
+    while IFS=$'\t' read -r svc target ro chp prop src; do
+        [[ -n "${svc}" ]] || continue
+        if selinux_is_socket "${src}"; then
+            printf 'socket\t%s\n' "${svc}"
+            continue
+        fi
+        [[ -f "${src}" || -d "${src}" ]] || continue
+        real="$(selinux_real_path "${src}")"
+        fs="$(selinux_fs_type "${real}")"
+        selinux_never_label "${real}" "${fs}" && continue
+        label="$(selinux_label_type "${real}")"
+        inside=0
+        [[ "${real}" == "${root}/"* ]] && inside=1
+        case "$(selinux_mount_action "${inside}" "${fs}" "${label}")" in
+            label) printf 'label\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "${svc}" "${target}" "${ro}" "${chp}" "${prop}" "${src}" "${real}" ;;
+            hint)  printf 'hint\t%s\t%s\t%s\t%s\t%s\n' "${svc}" "${src}" "${fs:--}" "${label}" "${real}" ;;
+        esac
+    done < <(selinux_bind_mounts)
 }
 
 selinux_yaml_quote() {
@@ -157,114 +295,119 @@ selinux_yaml_quote() {
     printf '"%s"' "${s}"
 }
 
-# selinux_hint <path> <fs type> <label type> <inside ARM_DIR 0|1>: warn about a
-# mount whose label would block the containers, with the command that fixes it.
-selinux_hint() {
-    local path="$1" fs="$2" label="$3" inside="$4" bool=""
-    if selinux_unlabelled_fs "${fs}"; then
-        case "${fs}" in
-            nfs*)       bool=virt_use_nfs ;;
-            cifs|smb*)  bool=virt_use_samba ;;
-            fuse*)      bool=virt_use_fusefs ;;
+# selinux_mount_yaml <target> <ro> <chp> <propagation> <source>: one overlay
+# mount. Compose replaces the template's whole `bind:` block with this one, so
+# create_host_path and propagation are carried over.
+selinux_mount_yaml() {
+    printf '      - type: bind\n        source: %s\n        target: %s\n' \
+        "$(selinux_yaml_quote "$5")" "$(selinux_yaml_quote "$1")"
+    if [[ "$2" -eq 1 ]]; then printf '        read_only: true\n'; fi
+    printf '        bind:\n'
+    if [[ "$3" -eq 1 ]]; then printf '          create_host_path: true\n'; fi
+    if [[ "$4" != - ]]; then printf '          propagation: %s\n' "$4"; fi
+    printf '          selinux: z\n'
+}
+
+# selinux_emit_overlay <writer>: read a plan on stdin, print the overlay.
+selinux_emit_overlay() {
+    local kind svc target ro chp prop src
+    local -a order=()
+    local -A body=() unconfined=() listed=()
+    while IFS=$'\t' read -r kind svc target ro chp prop src _; do
+        case "${kind}" in
+            socket) unconfined["${svc}"]=1 ;;
+            label)  body["${svc}"]+="$(selinux_mount_yaml "${target}" "${ro}" "${chp}" "${prop}" "${src}")"$'\n' ;;
+            *)      continue ;;
         esac
-        if [[ -n "${bool}" ]]; then
-            selinux_bool_on "${bool}" && return 0
-            arm_warn "SELinux: ${path} is on ${fs}, which has no per-file labels, so containers cannot use it yet."
-            arm_sub  "       Allow containers on ${fs} once with: sudo setsebool -P ${bool} 1"
-        else
-            arm_warn "SELinux: ${path} is on ${fs}, which has no per-file labels, so containers cannot use it."
-            arm_sub  "       Mount it with context=\"system_u:object_r:container_file_t:s0\", or move it to a Linux filesystem."
-        fi
+        if [[ -z "${listed[${svc}]+x}" ]]; then listed["${svc}"]=1; order+=("${svc}"); fi
+    done
+    printf '# Generated by %s (deploy/lib/selinux.sh). Do not edit: it is rewritten on every run.\n' "$1"
+    if [[ ${#order[@]} -eq 0 ]]; then
+        printf '%s\n' "${SELINUX_OVERLAY_EMPTY}"
         return 0
     fi
-    [[ "${inside}" -eq 1 ]] && return 0
-    arm_warn "SELinux: ${path} is labelled ${label}, which containers cannot use. It is outside ${ARM_DIR}, so ARM leaves its label alone."
-    arm_sub  "       To give it to ARM: sudo chcon -R -t container_file_t '${path}'"
-    arm_sub  "       That replaces its current label; check first that nothing else on this host relies on ${label}."
+    printf 'services:\n'
+    for svc in "${order[@]}"; do
+        printf '  %s:\n' "${svc}"
+        if [[ -n "${unconfined[${svc}]+x}" ]]; then printf '    security_opt:\n      - label=disable\n'; fi
+        if [[ -n "${body[${svc}]+x}" ]]; then printf '    volumes:\n%s' "${body[${svc}]}"; fi
+    done
+}
+
+# selinux_fs_hint <path> <fs type>: a path on a filesystem without per-file
+# labels: name the boolean that lets containers use it, if there is one.
+selinux_fs_hint() {
+    local bool=""
+    case "$2" in
+        nfs*)       bool=virt_use_nfs ;;
+        cifs|smb*)  bool=virt_use_samba ;;
+        fuse*)      bool=virt_use_fusefs ;;
+    esac
+    if [[ -z "${bool}" ]]; then
+        arm_warn "SELinux: $1 is on $2, which has no per-file labels, so containers cannot use it."
+        arm_sub  "       Mount it with context=\"system_u:object_r:container_file_t:s0\", or move it to a Linux filesystem."
+        return 0
+    fi
+    selinux_bool_on "${bool}" && return 0
+    arm_warn "SELinux: $1 is on $2, which has no per-file labels, so containers cannot use it yet."
+    arm_sub  "       Allow containers on $2 once with: sudo setsebool -P ${bool} 1"
+}
+
+# selinux_hint <path> <fs type> <label type>: warn about a mount whose label
+# would block the containers, with the command that fixes it. A path inside
+# ARM_DIR only gets here on a filesystem without labels (selinux_mount_action).
+selinux_hint() {
+    if selinux_unlabelled_fs "$2"; then
+        selinux_fs_hint "$1" "$2"
+        return 0
+    fi
+    arm_warn "SELinux: $1 is labelled $3, which containers cannot use. It is outside ${ARM_DIR}, so ARM leaves its label alone."
+    arm_sub  "       To give it to ARM: sudo chcon -R -t container_file_t '$1'"
+    arm_sub  "       That replaces its current label; check first that nothing else on this host relies on $3."
+}
+
+# selinux_report: read a plan on stdin; print each hint once per real path,
+# then what was labelled and which services run unlabelled.
+selinux_report() {
+    local svc
+    local -a f=() sockets=()
+    local -A seen=() relabelled=() listed=()
+    while IFS=$'\t' read -r -a f; do
+        [[ ${#f[@]} -gt 0 ]] || continue
+        case "${f[0]}" in
+            label) relabelled["${f[7]}"]=1 ;;
+            socket)
+                if [[ -z "${listed[${f[1]}]+x}" ]]; then listed["${f[1]}"]=1; sockets+=("${f[1]}"); fi ;;
+            hint)
+                if [[ -z "${seen[${f[5]}]+x}" ]]; then seen["${f[5]}"]=1; selinux_hint "${f[2]}" "${f[3]}" "${f[4]}"; fi ;;
+        esac
+    done
+    if [[ ${#relabelled[@]} -gt 0 ]]; then
+        arm_say "SELinux: labelling ${#relabelled[@]} bind-mounted path(s) under ${ARM_DIR} for containers"
+    fi
+    for svc in "${sockets[@]+"${sockets[@]}"}"; do
+        arm_say "SELinux: ${svc} mounts the Docker socket; running it with label=disable"
+    done
 }
 
 # selinux_overlay_from_config <writer>: read a `docker compose config` document
 # on stdin, print the overlay. Notes and warnings go to stderr.
 selinux_overlay_from_config() {
-    local writer="$1" root records svc target ro chp src real fs label inside
-    local -a order=()
-    local -A body=() unconfined=() listed=() seen=() relabelled=()
-    root="$(readlink -f -- "${ARM_DIR}" 2>/dev/null || printf '%s' "${ARM_DIR}")"
-    records="$(selinux_bind_mounts)"
-    while IFS=$'\t' read -r svc target ro chp src; do
-        [[ -n "${svc}" ]] || continue
-        if [[ -z "${listed[${svc}]+x}" ]]; then
-            listed["${svc}"]=1
-            order+=("${svc}")
-        fi
-        if selinux_is_socket "${src}"; then
-            unconfined["${svc}"]=1
-            continue
-        fi
-        # Devices and runtime trees (e.g. /dev/disk) never take a label.
-        [[ -f "${src}" || -d "${src}" ]] || continue
-        real="$(readlink -f -- "${src}" 2>/dev/null || printf '%s' "${src}")"
-        fs="$(selinux_fs_type "${real}")"
-        label="$(selinux_label_type "${real}")"
-        inside=0
-        [[ "${real}" == "${root}/"* ]] && inside=1
-        if [[ "${inside}" -eq 1 ]] && ! selinux_unlabelled_fs "${fs}"; then
-            body["${svc}"]+="      - type: bind
-        source: $(selinux_yaml_quote "${src}")
-        target: $(selinux_yaml_quote "${target}")
-"
-            [[ "${ro}" -eq 1 ]] && body["${svc}"]+="        read_only: true
-"
-            # Compose replaces the template's whole `bind:` block with this
-            # one, so carry its create_host_path over.
-            body["${svc}"]+="        bind:
-"
-            [[ "${chp}" -eq 1 ]] && body["${svc}"]+="          create_host_path: true
-"
-            body["${svc}"]+="          selinux: z
-"
-            relabelled["${real}"]=1
-            continue
-        fi
-        # Already usable: nothing to say.
-        [[ -z "${label}" || "${label}" == container_file_t ]] && continue
-        [[ -n "${seen[${real}]+x}" ]] && continue
-        seen["${real}"]=1
-        selinux_hint "${src}" "${fs}" "${label}" "${inside}" >&2
-    done <<<"${records}"
-
-    local any=0
-    printf '# Generated by %s (deploy/lib/selinux.sh). Do not edit: it is rewritten on every run.\n' "${writer}"
-    for svc in "${order[@]}"; do
-        [[ -n "${body[${svc}]+x}" || -n "${unconfined[${svc}]+x}" ]] || continue
-        if [[ "${any}" -eq 0 ]]; then printf 'services:\n'; any=1; fi
-        printf '  %s:\n' "${svc}"
-        if [[ -n "${unconfined[${svc}]+x}" ]]; then
-            printf '    security_opt:\n      - label=disable\n'
-        fi
-        if [[ -n "${body[${svc}]+x}" ]]; then
-            printf '    volumes:\n%s' "${body[${svc}]}"
-        fi
-    done
-    [[ "${any}" -eq 1 ]] || printf '%s\n' "${SELINUX_OVERLAY_EMPTY}"
-
-    if [[ ${#relabelled[@]} -gt 0 ]]; then
-        arm_say "SELinux: labelling ${#relabelled[@]} bind-mounted path(s) under ${ARM_DIR} for containers" >&2
-    fi
-    for svc in "${order[@]}"; do
-        [[ -n "${unconfined[${svc}]+x}" ]] && arm_say "SELinux: ${svc} mounts the Docker socket; running it with label=disable" >&2
-    done
-    return 0
+    local plan
+    plan="$(selinux_plan)"
+    selinux_report <<<"${plan}" >&2
+    selinux_emit_overlay "$1" <<<"${plan}"
 }
 
 # write_selinux_overlay <path> <writer>: rewrite the overlay from the stack's
 # resolved config. The caller has already put <path> on the compose file list.
 # The overlay is emptied before the config is read: otherwise the previous run's
 # overlay would be part of the input, and its replacements (not the template's
-# mounts) would be what this run copies.
+# mounts) would be what this run copies. On failure it stays empty, which
+# leaves the stack as it would be without SELinux handling.
 write_selinux_overlay() {
     local overlay="$1" writer="$2" cfg tmp
-    printf '%s\n' "${SELINUX_OVERLAY_EMPTY}" > "${overlay}"
+    selinux_empty_overlay "${overlay}"
     if ! cfg="$(compose config)"; then
         arm_err "could not read the compose config to write ${overlay}"
         return 1
@@ -272,4 +415,21 @@ write_selinux_overlay() {
     tmp="${overlay}.tmp"
     selinux_overlay_from_config "${writer}" <<<"${cfg}" > "${tmp}" || { rm -f "${tmp}"; return 1; }
     mv "${tmp}" "${overlay}"
+}
+
+# selinux_apply <overlay> <writer> <register command...>: the step both callers
+# run. When labels are needed, create the overlay, run <register command> to
+# put it on the compose file list (armctl: use_env_file; setup-dev: the
+# COMPOSE_FILE sync), then write it. When they are not, an overlay from an
+# earlier run is emptied, never removed, so a file list naming it stays valid.
+selinux_apply() {
+    local overlay="$1" writer="$2"
+    shift 2
+    if selinux_labels_needed; then
+        ensure_selinux_overlay_file "${overlay}"
+        "$@"
+        write_selinux_overlay "${overlay}" "${writer}"
+    elif [[ -f "${overlay}" ]]; then
+        selinux_empty_overlay "${overlay}"
+    fi
 }

@@ -138,31 +138,9 @@ ENV_FILE="${ROOT_DIR}/.env"
 SELINUX_OVERLAY_NAME="docker-compose.selinux.yml"
 SELINUX_OVERLAY="${ROOT_DIR}/${SELINUX_OVERLAY_NAME}"
 
-# sync_selinux_compose_files add|keep: bring COMPOSE_FILE in .env to the list
-# selinux_compose_files gives. With a COMPOSE_FILE set, compose no longer loads
-# docker-compose.override.yml on its own, so an override created or deleted
-# after the overlay joined the list is picked up here, on the next run. `add`
-# puts the overlay on the list; `keep` changes the list only if it already
-# names the overlay.
-sync_selinux_compose_files() {
-    local sep files want override=0
-    sep="$(env_file_value COMPOSE_PATH_SEPARATOR)"
-    sep="${sep:-:}"
-    files="$(env_file_value COMPOSE_FILE)"
-    if [[ "$1" == keep && "${sep}${files}${sep}" != *"${sep}${SELINUX_OVERLAY_NAME}${sep}"* ]]; then
-        return 0
-    fi
-    [[ -f "${ROOT_DIR}/docker-compose.override.yml" ]] && override=1
-    want="$(selinux_compose_files "${files}" "${sep}" "${SELINUX_OVERLAY_NAME}" "${override}")"
-    [[ "${want}" != "${files}" ]] || return 0
-    env_set COMPOSE_FILE "${want}"
-    echo "==> SELinux: COMPOSE_FILE in .env is now ${want}"
-}
-
-if grep -qs "${SELINUX_OVERLAY_NAME}" "${ENV_FILE}"; then
-    ensure_selinux_overlay_file "${SELINUX_OVERLAY}"
-    sync_selinux_compose_files keep
-fi
+# When .env already names the overlay, it must exist before any compose command
+# runs (`down` included), and the list follows docker-compose.override.yml.
+selinux_dev_prepare "${ROOT_DIR}" "${SELINUX_OVERLAY_NAME}"
 
 if [[ "${ACTION}" == "down" ]]; then
     require docker "Install docker first."
@@ -346,17 +324,10 @@ fi
 # Compose reads COMPOSE_FILE from .env on every call, so the overlay is added to
 # that list and applies to manual `docker compose` commands too. With no
 # COMPOSE_FILE yet, the list starts from what compose loads by default; the
-# override stays in step with the list on every run (sync_selinux_compose_files).
+# override stays in step with the list on every run (selinux_sync_compose_files).
 apply_selinux_labels() {
-    if selinux_labels_needed; then
-        ensure_selinux_overlay_file "${SELINUX_OVERLAY}"
-        sync_selinux_compose_files add
-        write_selinux_overlay "${SELINUX_OVERLAY}" "devtools/setup-dev.sh"
-    elif [[ -f "${SELINUX_OVERLAY}" ]]; then
-        # No longer needed (ARM_SELINUX_LABELS=off, or Docker stopped labelling):
-        # empty it, which keeps a COMPOSE_FILE entry valid.
-        printf '%s\n' "${SELINUX_OVERLAY_EMPTY}" > "${SELINUX_OVERLAY}"
-    fi
+    selinux_apply "${SELINUX_OVERLAY}" "devtools/setup-dev.sh" \
+        selinux_sync_compose_files add "${ROOT_DIR}" "${SELINUX_OVERLAY_NAME}"
 }
 apply_selinux_labels
 
