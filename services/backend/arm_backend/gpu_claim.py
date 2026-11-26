@@ -3,7 +3,7 @@ and releasing it again."""
 
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Collection, Mapping
 from typing import Literal, NamedTuple
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -56,6 +56,14 @@ async def release_gpu_for_task(db: AsyncSession, task_id: str) -> None:
     for gpu in gpus:
         gpu.status = GpuStatus.AVAILABLE
         gpu.claimed_by_task_id = None
+
+
+async def gpu_claimed_task_ids(db: AsyncSession, task_ids: Collection[str]) -> set[str]:
+    """The ids among `task_ids` that a GPU row is claimed by."""
+    if not task_ids:
+        return set()
+    gpus = (await db.execute(select(Gpu).where(col(Gpu.claimed_by_task_id).in_(tuple(task_ids))))).scalars().all()
+    return {gpu.claimed_by_task_id for gpu in gpus if gpu.claimed_by_task_id is not None}
 
 
 WAITING_FOR_PROBE_REASON = "waiting for GPU probe"

@@ -16,6 +16,7 @@ from arm_backend.auto_session import (
 )
 from arm_backend.config import settings
 from arm_backend.db import get_session
+from arm_backend.gpu_claim import gpu_claimed_task_ids
 from arm_backend.identity.apply import apply_identity_result, suggestion_to_result
 from arm_backend.identity.manual_edits import apply_manual_edits
 from arm_backend.identity.resolve_service import identity_snapshot, resolve_identity
@@ -39,6 +40,7 @@ from arm_common import (
     JobStatus,
     MediaType,
     Session,
+    SessionApplication,
     TranscodeTaskStatus,
     User,
 )
@@ -67,6 +69,7 @@ from arm_common.enums import (
     POST_RIP_JOB_STATUSES,
     RESOLVABLE_JOB_STATUSES,
     TERMINAL_JOB_STATUSES,
+    transcode_task_blocks_job_delete,
 )
 from arm_common.schemas.job_metadata import (
     identity_suggestion_of,
@@ -459,6 +462,46 @@ def _bulk_delete_candidates(
     return list(rows)
 
 
+async def _jobs_with_active_transcodes(db: AsyncSession, job_ids: Sequence[str]) -> set[str]:
+    """The ids among `job_ids` with a task that `transcode_task_blocks_job_delete`:
+    in progress, or queued with a GPU claimed for it.
+
+    Such a job is not deleted: the cascade would remove the task under its
+    transcoder (whose final report then 404s, leaving a claimed GPU busy until
+    a restart) and `delete_raw` would remove the input it is reading. A queued
+    task without a GPU does not block, so the cascade never removes a task a
+    GPU row is claimed by. Single-table queries rather than a join, which
+    FakeSession can't evaluate.
+    """
+    if not job_ids:
+        return set()
+    applications = (
+        (await db.execute(select(SessionApplication).where(col(SessionApplication.job_id).in_(tuple(job_ids)))))
+        .scalars()
+        .all()
+    )
+    job_of = {a.id: a.job_id for a in applications}
+    if not job_of:
+        return set()
+    live = (
+        (
+            await db.execute(
+                select(TranscodeTask)
+                .where(col(TranscodeTask.session_application_id).in_(tuple(job_of)))
+                .where(col(TranscodeTask.status).in_((TranscodeTaskStatus.QUEUED, TranscodeTaskStatus.IN_PROGRESS)))
+            )
+        )
+        .scalars()
+        .all()
+    )
+    holding_gpu = await gpu_claimed_task_ids(db, [t.id for t in live if t.status == TranscodeTaskStatus.QUEUED])
+    return {
+        job_of[t.session_application_id]
+        for t in live
+        if transcode_task_blocks_job_delete(t.status, holds_gpu=t.id in holding_gpu)
+    }
+
+
 async def _clean_up_job_files(db: AsyncSession, job_id: str, *, raw_root: Path, media_root: Path) -> dict[str, int]:
     """Delete a job's raw dir and recorded media outputs. Returns the counters."""
     media_outputs = await _resolve_media_outputs(db, job_id)
@@ -507,6 +550,10 @@ async def delete_job(
     Refuses non-terminal jobs (CREATED / AWAITING_USER_ID / IDENTIFIED /
     RIPPING) — caller must `POST /abandon` first if they want a job in
     flight gone. This keeps the active-rip cancel logic in one place.
+    Likewise refuses a job with a running transcode (in progress, or queued
+    with a GPU claimed for it): its tasks are cancelled through
+    `/api/transcodes/{id}`, which stops the container. A queued task the
+    dispatcher holds does not block the delete.
 
     `delete_raw=true` also unlinks every transcode output recorded for the
     job and rmtrees `/raw/{job_id}/`. Backend mounts both bind paths
@@ -522,6 +569,11 @@ async def delete_job(
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=f"job in non-terminal status {enum_value_str(job.status)}; abandon it first",
+        )
+    if await _jobs_with_active_transcodes(db, [job.id]):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="job is still transcoding; cancel its transcodes first",
         )
 
     counters: dict[str, int] | None = None
@@ -546,7 +598,8 @@ async def delete_all_jobs(
     """Hard-delete terminal jobs. An optional body filters the set:
     `job_ids` (only those), `status` (only that JobStatus), or neither
     (all terminal jobs — legacy). `job_ids` wins over `status`. Non-terminal
-    jobs are always skipped and reported in `skipped_non_terminal`.
+    jobs and jobs still transcoding are always skipped and reported in
+    `skipped_non_terminal`.
 
     `delete_raw=true` runs the filesystem cleanup (raw rmtree + media file
     unlink + empty-parent prune) for each deleted job. Cleanups are
@@ -558,6 +611,7 @@ async def delete_all_jobs(
 
     rows = (await db.execute(select(Job))).scalars().all()
     candidates = _bulk_delete_candidates(rows, req, target_status)
+    transcoding = await _jobs_with_active_transcodes(db, [j.id for j in candidates])
 
     raw_root = Path(settings.RAW_ROOT)
     media_root = Path(settings.MEDIA_ROOT)
@@ -565,7 +619,7 @@ async def delete_all_jobs(
     skipped: list[str] = []
     totals = {"raw_dir_removed": 0, "media_files_removed": 0, "media_dirs_pruned": 0}
     for job in candidates:
-        if job.status not in TERMINAL_JOB_STATUSES:
+        if job.status not in TERMINAL_JOB_STATUSES or job.id in transcoding:
             skipped.append(job.id)
             continue
         if delete_raw:
