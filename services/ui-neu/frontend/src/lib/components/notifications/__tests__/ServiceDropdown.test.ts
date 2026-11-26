@@ -6,9 +6,33 @@ import type { Catalog } from '$lib/types/notifications';
 const catalog: Catalog = {
 	featured: ['discord', 'slack'],
 	services: [
-		{ id: 'discord', name: 'Discord', docs_url: '', url_scheme: 'discord', required_fields: [], advanced_fields: [] },
-		{ id: 'slack', name: 'Slack', docs_url: '', url_scheme: 'slack', required_fields: [], advanced_fields: [] },
-		{ id: 'gotify', name: 'Gotify', docs_url: '', url_scheme: 'gotify', required_fields: [], advanced_fields: [] }
+		{
+			id: 'discord',
+			name: 'Discord',
+			docs_url: '',
+			setup_url: '',
+			url_scheme: 'discord',
+			required_fields: [],
+			advanced_fields: []
+		},
+		{
+			id: 'slack',
+			name: 'Slack',
+			docs_url: '',
+			setup_url: '',
+			url_scheme: 'slack',
+			required_fields: [],
+			advanced_fields: []
+		},
+		{
+			id: 'gotify',
+			name: 'Gotify',
+			docs_url: '',
+			setup_url: '',
+			url_scheme: 'gotify',
+			required_fields: [],
+			advanced_fields: []
+		}
 	]
 };
 

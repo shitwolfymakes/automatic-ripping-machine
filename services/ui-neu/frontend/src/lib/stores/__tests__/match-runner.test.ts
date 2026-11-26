@@ -46,7 +46,6 @@ describe('MatchRunner.run: a preview', () => {
 		const { runner, host } = setup();
 		const p = runner.run(PREVIEW_REQ);
 		expect(runner.busy).toBe(true);
-		expect(runner.lastRequest).toBe(PREVIEW_REQ);
 		d.resolve(PREVIEW);
 		await p;
 		expect(matchIdentity).toHaveBeenCalledWith('job-1', PREVIEW_REQ);
@@ -213,25 +212,54 @@ describe('MatchRunner: stale runs', () => {
 });
 
 describe('MatchRunner.drop and reset', () => {
-	it('drop clears the preview, its source and the error, and keeps lastRequest', async () => {
+	it('drop clears the preview, its source, the error and its retry', async () => {
 		matchIdentity.mockResolvedValue(PREVIEW);
 		const { runner } = setup();
 		await runner.run(PREVIEW_REQ);
-		runner.error = 'x';
+		const retry = vi.fn();
+		runner.fail('x', retry);
 		runner.drop();
 		expect(runner.preview).toBeNull();
 		expect(runner.previewSource).toBeNull();
 		expect(runner.error).toBeNull();
-		expect(runner.lastRequest).toBe(PREVIEW_REQ);
 		expect(runner.applyPreview()).toBeUndefined();
+		runner.retry();
+		expect(retry).not.toHaveBeenCalled();
 	});
 
-	it('reset also forgets lastRequest', async () => {
+	it('reset drops the preview', async () => {
 		matchIdentity.mockResolvedValue(PREVIEW);
 		const { runner } = setup();
 		await runner.run(PREVIEW_REQ);
 		runner.reset();
 		expect(runner.preview).toBeNull();
-		expect(runner.lastRequest).toBeNull();
+	});
+});
+
+describe('MatchRunner.fail and retry', () => {
+	it('fail shows the message and retry runs the action it was given', () => {
+		const { runner } = setup();
+		const retry = vi.fn();
+		runner.fail('Could not clear', retry);
+		expect(runner.error).toBe('Could not clear');
+		runner.retry();
+		expect(retry).toHaveBeenCalledOnce();
+	});
+
+	it('retry does nothing before any failure', () => {
+		const { runner } = setup();
+		expect(() => runner.retry()).not.toThrow();
+		expect(matchIdentity).not.toHaveBeenCalled();
+	});
+
+	it('retry after a failed run sends the same request again', async () => {
+		matchIdentity.mockRejectedValueOnce(new Error('HTTP 502')).mockResolvedValueOnce(PREVIEW);
+		const { runner } = setup();
+		await runner.run(PREVIEW_REQ);
+		expect(runner.error).not.toBeNull();
+		runner.retry();
+		await vi.waitFor(() => expect(runner.preview).toEqual(PREVIEW));
+		expect(matchIdentity).toHaveBeenCalledTimes(2);
+		expect(matchIdentity.mock.calls[1]).toEqual(['job-1', PREVIEW_REQ]);
 	});
 });

@@ -10,7 +10,7 @@ vi.mock('$lib/api/jobs', () => ({
 import { MusicReleaseApply, type ReleaseApplyPlan } from '$lib/stores/music-release-apply.svelte';
 
 const RESOLVE_BODY = { title: 'Album' } as unknown as ReleaseApplyPlan['resolveBody'];
-const PATCH_BODY = { poster_url: 'x' } as unknown as NonNullable<ReturnType<ReleaseApplyPlan['patchBody']>>;
+const PATCH_BODY = { poster_url: 'x' } as unknown as NonNullable<ReleaseApplyPlan['patchBody']>;
 
 function plan(over: Partial<ReleaseApplyPlan> = {}): ReleaseApplyPlan {
 	return {
@@ -18,7 +18,7 @@ function plan(over: Partial<ReleaseApplyPlan> = {}): ReleaseApplyPlan {
 		totalMismatch: false,
 		needsMapping: false,
 		resolveBody: RESOLVE_BODY,
-		patchBody: () => PATCH_BODY,
+		patchBody: PATCH_BODY,
 		...over
 	};
 }
@@ -104,25 +104,24 @@ describe('MusicReleaseApply', () => {
 		const r = new MusicReleaseApply();
 		const pending = deferred<unknown>();
 		resolveJobMock.mockReturnValue(pending.promise);
-		const patchBody = vi.fn(() => PATCH_BODY);
 		const onapply = vi.fn();
-		const run = r.apply(plan({ patchBody }), onapply);
+		const run = r.apply(plan(), onapply);
 		expect(r.applying).toBe(true);
 		expect(resolveJobMock).toHaveBeenCalledWith('job-1', RESOLVE_BODY);
-		expect(patchBody).not.toHaveBeenCalled();
+		expect(patchJobMock).not.toHaveBeenCalled();
 		pending.resolve({});
 		await run;
 		expect(r.applying).toBe(false);
 		expect(r.feedback).toEqual({ type: 'success', message: 'Release applied' });
-		expect(patchBody).toHaveBeenCalledTimes(1);
+		expect(patchJobMock).toHaveBeenCalledTimes(1);
 		expect(patchJobMock).toHaveBeenCalledWith('job-1', PATCH_BODY);
 		expect(onapply).toHaveBeenCalledTimes(1);
 	});
 
-	it('sends no PATCH when patchBody returns null', async () => {
+	it('sends no PATCH when patchBody is null', async () => {
 		const r = new MusicReleaseApply();
 		const onapply = vi.fn();
-		await r.apply(plan({ patchBody: () => null }), onapply);
+		await r.apply(plan({ patchBody: null }), onapply);
 		expect(patchJobMock).not.toHaveBeenCalled();
 		expect(onapply).toHaveBeenCalled();
 		expect(r.feedback?.message).toBe('Release applied');
@@ -137,14 +136,12 @@ describe('MusicReleaseApply', () => {
 		expect(onapply).toHaveBeenCalledTimes(1);
 	});
 
-	it('reports a failed resolve with the Error message and skips patchBody, PATCH and onapply', async () => {
+	it('reports a failed resolve with the Error message and skips the PATCH and onapply', async () => {
 		const r = new MusicReleaseApply();
 		resolveJobMock.mockRejectedValue(new Error('boom'));
-		const patchBody = vi.fn(() => PATCH_BODY);
 		const onapply = vi.fn();
-		await r.apply(plan({ patchBody }), onapply);
+		await r.apply(plan(), onapply);
 		expect(r.feedback).toEqual({ type: 'error', message: 'boom' });
-		expect(patchBody).not.toHaveBeenCalled();
 		expect(patchJobMock).not.toHaveBeenCalled();
 		expect(onapply).not.toHaveBeenCalled();
 		expect(r.applying).toBe(false);
@@ -155,22 +152,6 @@ describe('MusicReleaseApply', () => {
 		resolveJobMock.mockRejectedValue('bad');
 		await r.apply(plan());
 		expect(r.feedback).toEqual({ type: 'error', message: 'Apply failed' });
-	});
-
-	it('reports a throwing patchBody as the error and skips onapply', async () => {
-		const r = new MusicReleaseApply();
-		const onapply = vi.fn();
-		await r.apply(
-			plan({
-				patchBody: () => {
-					throw new Error('closed');
-				}
-			}),
-			onapply
-		);
-		expect(r.feedback).toEqual({ type: 'error', message: 'closed' });
-		expect(patchJobMock).not.toHaveBeenCalled();
-		expect(onapply).not.toHaveBeenCalled();
 	});
 
 	it('does not throw when no onapply is passed', async () => {

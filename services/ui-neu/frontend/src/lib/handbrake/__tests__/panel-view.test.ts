@@ -62,6 +62,12 @@ describe('presetBlockView', () => {
 		expect(presetBlockView(input({ draft: draft({ tool: 'none' }) })).showPresetsDocLink).toBe(false);
 	});
 
+	it("links the extra args to HandBrake's command line reference only when HandBrake runs the preset", () => {
+		expect(presetBlockView(input()).showCliDocLink).toBe(true);
+		expect(presetBlockView(input({ draft: draft({ tool: 'abcde' }) })).showCliDocLink).toBe(false);
+		expect(presetBlockView(input({ draft: draft({ encoder: 'vaapi_h264' }) })).showCliDocLink).toBe(false);
+	});
+
 	it('lists encoders as loading, empty or grouped', () => {
 		expect(presetBlockView(input({ encodersLoading: true })).encoderList).toBe('loading');
 		expect(presetBlockView(input({ encoderCount: 0 })).encoderList).toBe('empty');

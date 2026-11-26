@@ -1,4 +1,4 @@
-"""Phase 6 wire schemas: session/preset CRUD + apply + collision detection.
+"""Wire schemas: session/preset CRUD + apply + collision detection.
 
 Read views (`SessionView`, `RipPresetView`, `TranscodePresetView`) project the
 SQLModel rows for the UI; create/update requests are deliberately split so

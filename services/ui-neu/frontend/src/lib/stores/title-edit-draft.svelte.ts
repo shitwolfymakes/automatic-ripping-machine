@@ -7,8 +7,7 @@ import { isSeriesKind } from '$lib/match/match';
 export class TitleEditDraft {
 	/**
 	 * Whether the edit fields are open. "Edit before using": the edit fields
-	 * start from the selected match and, once opened, are what Use applies
-	 * (spec 4.2).
+	 * start from the selected match and, once opened, are what Use applies.
 	 */
 	editing = $state(false);
 	/** The title field. */

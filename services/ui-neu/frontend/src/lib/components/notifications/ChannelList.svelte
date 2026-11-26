@@ -72,7 +72,7 @@
 		border-radius: var(--radius-xl);
 		background: var(--color-surface);
 	}
-	/* :global: .list-row is ChannelRow.svelte's own root class (a different component); fixed 64px for the actions column reproduces the original's grid-cols-[44px_1fr_110px_64px_64px] exactly, on both header and row, so they stay aligned (auto resolves independently per grid and shifts them apart - see fix round 1). */
+	/* :global: .list-row is ChannelRow.svelte's own root class (a different component); fixed 64px for the actions column gives the grid-cols-[44px_1fr_110px_64px_64px] layout exactly, on both header and row, so they stay aligned (auto resolves independently per grid and shifts them apart). */
 	.channel-list :global(.list-row) {
 		grid-template-columns: 44px 1fr 110px 64px 64px;
 	}

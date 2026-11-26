@@ -87,7 +87,7 @@
 		justify-content: center;
 		padding: 1rem;
 	}
-	/* original was p-6 (1.5rem), not panel's own 1rem default */
+	/* padding is 1.5rem, not panel's own 1rem default */
 	.login-page-form {
 		width: 100%;
 		max-width: 24rem;
@@ -100,11 +100,10 @@
 		font-weight: 600;
 		color: var(--color-text);
 	}
-	/* the original inputs had no background utility at all (transparent,
-	   inheriting the panel's own surface colour, since text-sm was inherited
+	/* the inputs have no background (transparent,
+	   inheriting the panel's own surface colour, since text-sm is inherited
 	   from the wrapping <label> so field's own default text-sm sizing
-	   already matches) and a lighter border (border-primary/20 =
-	   --color-border, not field's own --color-border-strong default) */
+	   already matches) and a lighter border (--color-border, not field's own --color-border-strong default) */
 	.login-page-form input {
 		border-color: var(--color-border);
 		background: transparent;
@@ -118,14 +117,14 @@
 		font-size: 1rem;
 		line-height: 1.5rem;
 	}
-	/* original had no border/ring class at all; .btn-primary's own border
+	/* this button has no border; .btn-primary's own border
 	   is invisible (same colour as the fill) but still occupies 2px of
-	   layout height without this - measured 2px taller than baseline */
+	   layout height without this */
 	.login-page-submit {
 		width: 100%;
 		border: 0;
 	}
-	/* the original Continue-as-Guest button was a SOLID filled amber pill
+	/* the Continue-as-Guest button is a SOLID filled amber pill
 	   (bg-amber-500 text-white), not btn-warning's outlined/soft look - the
 	   button's own fill/text colours are restated on top of the modifier for
 	   its distinct call-to-action tone; btn-warning still supplies the base
@@ -136,7 +135,7 @@
 		background: var(--color-warning);
 		color: var(--color-on-primary);
 	}
-	/* darkens on hover like the original's bg-amber-500 -> hover:bg-amber-600;
+	/* darkens on hover;
 	   no darker warning token exists, so filter substitutes for a literal
 	   colour (the lint bans raw colour keywords, even inside color-mix) */
 	.login-page-first-run {

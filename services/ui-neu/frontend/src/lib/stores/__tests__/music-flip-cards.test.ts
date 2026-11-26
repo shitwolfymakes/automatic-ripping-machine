@@ -96,18 +96,38 @@ describe('MusicFlipCards', () => {
 		expect(f.isFlipped('r2')).toBe(true);
 	});
 
-	it('unflipping while the fetch is pending flips the card again once it resolves (#594)', async () => {
+	it('unflipping while the fetch is pending keeps the card unflipped once it resolves', async () => {
 		const d = deferred<MetadataReleaseDetail>();
 		fetchMusicDetailMock.mockReturnValue(d.promise);
 		const f = new MusicFlipCards();
 		const p = f.toggle(candidate());
 		await f.toggle(candidate());
 		expect(f.isFlipped('r1')).toBe(false);
-		const detail = detailOf('r1');
-		d.resolve(detail);
+		d.resolve(detailOf('r1'));
 		await p;
-		expect(f.isFlipped('r1')).toBe(true);
-		expect(f.get('r1')).toBe(detail);
+		expect(f.isFlipped('r1')).toBe(false);
+	});
+
+	it('unflipping while the fetch is pending keeps the card unflipped once it rejects', async () => {
+		const d = deferred<MetadataReleaseDetail>();
+		fetchMusicDetailMock.mockReturnValue(d.promise);
+		const f = new MusicFlipCards();
+		const p = f.toggle(candidate());
+		await f.toggle(candidate());
+		d.reject(new Error('boom'));
+		await p;
+		expect(f.isFlipped('r1')).toBe(false);
+	});
+
+	it('clearing while the fetch is pending keeps the card unflipped once it resolves', async () => {
+		const d = deferred<MetadataReleaseDetail>();
+		fetchMusicDetailMock.mockReturnValue(d.promise);
+		const f = new MusicFlipCards();
+		const p = f.toggle(candidate());
+		f.clear();
+		d.resolve(detailOf('r1'));
+		await p;
+		expect(f.isFlipped('r1')).toBe(false);
 	});
 
 	it('clear unflips every card', async () => {

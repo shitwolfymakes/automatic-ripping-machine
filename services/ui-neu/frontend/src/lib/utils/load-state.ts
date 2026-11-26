@@ -9,8 +9,8 @@ export interface LoadInputs<T> {
 	data: T | null | undefined;
 	loading: boolean;
 	error: Error | null;
-	/** The loading has lasted longer than the component's minimum delay. */
-	delayElapsed: boolean;
+	/** The skeleton gate has the skeleton on screen (see SkeletonGate). */
+	skeletonShown: boolean;
 	isEmpty?: (data: T) => boolean;
 }
 
@@ -19,16 +19,21 @@ function defaultIsEmpty(d: unknown): boolean {
 	return false;
 }
 
+/** Nothing to show yet: a load is running, or none has produced data. */
+export function isPending<T>(s: Pick<LoadInputs<T>, 'data' | 'loading' | 'error'>): boolean {
+	return !s.error && (s.loading || s.data == null);
+}
+
 /**
- * The phase for the inputs. With no `isEmpty`, only an empty array is
- * empty.
+ * The phase for the inputs. A skeleton on screen stays until the gate
+ * releases it, even once the data is in. With no `isEmpty`, only an empty
+ * array is empty.
  */
 export function loadPhase<T>(s: LoadInputs<T>): LoadPhase {
 	if (s.error) return 'error';
-	if (s.loading && s.delayElapsed) return 'loading';
-	if (s.loading) return 'waiting';
-	if (s.data == null) return 'loading';
+	if (s.skeletonShown) return 'loading';
+	if (isPending(s)) return 'waiting';
 	const emptyCheck = s.isEmpty ?? defaultIsEmpty;
-	if (emptyCheck(s.data)) return 'empty';
+	if (emptyCheck(s.data as T)) return 'empty';
 	return 'ready';
 }

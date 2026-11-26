@@ -1,5 +1,8 @@
+// Open arm the coverage tool reports that is Svelte's, not the component's:
+// `{tracks.length}` in the heading compiles to `(...) ?? ''`, and a length is
+// always a number.
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { renderComponent, screen, cleanup, waitFor, fireEvent } from '$lib/testing/render';
+import { renderComponent, screen, cleanup, waitFor, fireEvent, within } from '$lib/testing/render';
 import JobTracksTable from '../JobTracksTable.svelte';
 import { createJob, createTrack } from '$lib/__fixtures__/job';
 import type { NamingPreviewItem, TrackView } from '$lib/types/api.gen';
@@ -32,6 +35,7 @@ const ontitleapplied = vi.fn();
 interface Overrides {
 	tracksAreSeries?: boolean;
 	previews?: NamingPreviewItem[];
+	excludeError?: { trackId: string; message: string } | null;
 }
 
 function renderTable(tracks: TrackView[], overrides: Overrides = {}) {
@@ -41,6 +45,7 @@ function renderTable(tracks: TrackView[], overrides: Overrides = {}) {
 		tracksAreSeries: overrides.tracksAreSeries ?? false,
 		previewByTrack: new Map((overrides.previews ?? []).map((p) => [p.track_id, p])),
 		onexcludedchange,
+		excludeError: overrides.excludeError,
 		ontitleapplied
 	});
 }
@@ -48,6 +53,7 @@ function renderTable(tracks: TrackView[], overrides: Overrides = {}) {
 const text = (el: HTMLElement) => (el.textContent ?? '').replace(/\s+/g, ' ').trim();
 const trackRows = () => Array.from(document.querySelectorAll<HTMLElement>('tr.table-row'));
 const cellOf = (row: HTMLElement, label: string) => row.querySelector<HTMLElement>(`td[data-label="${label}"]`)!;
+const titleButtonOf = (row: HTMLElement) => within(cellOf(row, 'Title')).getByRole('button');
 
 const series = () => [
 	createTrack({ id: 'trk_1', index: 1, title: 'Pilot', status: 'done' }),
@@ -103,13 +109,45 @@ describe('JobTracksTable', () => {
 		expect(onexcludedchange).toHaveBeenLastCalledWith('trk_2', false);
 	});
 
+	it('shows a failed exclusion change on its own row only', () => {
+		renderTable(series(), { excludeError: { trackId: 'trk_2', message: 'denied' } });
+		const rows = trackRows();
+		expect(text(cellOf(rows[1], 'Include'))).toBe('denied');
+		expect(text(cellOf(rows[0], 'Include'))).toBe('');
+		expect(screen.getAllByRole('alert')).toHaveLength(1);
+	});
+
+	it('moves the exclusion error and the track count with the props', async () => {
+		const props = {
+			job: createJob({}),
+			tracks: series(),
+			tracksAreSeries: false,
+			previewByTrack: new Map(),
+			onexcludedchange,
+			ontitleapplied
+		};
+		const { rerender } = renderComponent(JobTracksTable, {
+			...props,
+			excludeError: { trackId: 'trk_2', message: 'denied' }
+		});
+		await rerender({ ...props, tracks: series().slice(0, 2), excludeError: { trackId: 'trk_1', message: 'nope' } });
+		expect(screen.getByText('Tracks (2)')).toBeInTheDocument();
+		expect(text(cellOf(trackRows()[0], 'Include'))).toBe('nope');
+		expect(text(cellOf(trackRows()[1], 'Include'))).toBe('');
+	});
+
+	it('shows no exclusion error when none is given', () => {
+		renderTable(series());
+		expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+	});
+
 	describe('per-track title search', () => {
 		const picked = { title: 'Picked', year: 2001, kind: 'movie', poster_url: null, provider_id: 'tt3333' };
 		const two = () => [createTrack({ id: 'trk_1', status: 'done' }), createTrack({ id: 'trk_2', index: 1 })];
 
 		it('opens under the row when an admin clicks the title cell and closes on the next click', async () => {
 			renderTable([createTrack({ id: 'trk_1', status: 'done' })]);
-			const cell = cellOf(trackRows()[0], 'Title');
+			const cell = titleButtonOf(trackRows()[0]);
 			await fireEvent.click(cell);
 			expect(screen.getByRole('button', { name: 'Search' })).toBeInTheDocument();
 			await fireEvent.click(cell);
@@ -119,14 +157,14 @@ describe('JobTracksTable', () => {
 		it('moves from one track to another when a second title cell is clicked', async () => {
 			renderTable(two());
 			const rows = trackRows();
-			await fireEvent.click(cellOf(rows[0], 'Title'));
-			await fireEvent.click(cellOf(rows[1], 'Title'));
+			await fireEvent.click(titleButtonOf(rows[0]));
+			await fireEvent.click(titleButtonOf(rows[1]));
 			expect(screen.getAllByRole('button', { name: 'Search' })).toHaveLength(1);
 		});
 
 		it('closes from its close button', async () => {
 			renderTable(two());
-			await fireEvent.click(cellOf(trackRows()[0], 'Title'));
+			await fireEvent.click(titleButtonOf(trackRows()[0]));
 			await fireEvent.click(screen.getByTitle('Close'));
 			expect(screen.queryByRole('button', { name: 'Search' })).not.toBeInTheDocument();
 		});
@@ -135,7 +173,7 @@ describe('JobTracksTable', () => {
 			vi.mocked(searchMetadata).mockResolvedValue({ candidates: [picked] });
 			vi.mocked(updateTrack).mockResolvedValue(undefined as never);
 			renderTable(two());
-			await fireEvent.click(cellOf(trackRows()[0], 'Title'));
+			await fireEvent.click(titleButtonOf(trackRows()[0]));
 			await fireEvent.click(screen.getByRole('button', { name: 'Search' }));
 			await fireEvent.click(await screen.findByText('Picked'));
 			await fireEvent.click(await screen.findByRole('button', { name: 'Apply' }));
@@ -146,6 +184,7 @@ describe('JobTracksTable', () => {
 		it('opens nothing when a guest clicks a title cell', async () => {
 			setRole('guest');
 			renderTable(two());
+			expect(within(cellOf(trackRows()[0], 'Title')).queryByRole('button')).not.toBeInTheDocument();
 			await fireEvent.click(cellOf(trackRows()[0], 'Title'));
 			expect(screen.queryByRole('button', { name: 'Search' })).not.toBeInTheDocument();
 		});

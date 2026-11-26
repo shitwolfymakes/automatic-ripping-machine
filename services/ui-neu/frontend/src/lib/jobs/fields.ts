@@ -153,10 +153,10 @@ function padToRow(fields: MetadataField[], width: number): MetadataField[] {
 	return [...fields, ...padding];
 }
 
-// v3 JobView exposes only a small set of fields. The rich BFF metadata
+// JobView exposes only a small set of fields. Richer metadata
 // (video_type, label, devpath, multi_title, crc_id, imdb_id, season,
-// tvdb_id, artist/album, output paths, stop_time, job_length, …) has no
-// v3 equivalent, so those fields are dropped here rather than synthesized.
+// tvdb_id, artist/album, output paths, stop_time, job_length, …) is not carried
+// by JobView, so those fields are dropped here rather than synthesized.
 export function buildMetadataFields(
 	job: JobView,
 	driveNames?: Record<string, string> | null,

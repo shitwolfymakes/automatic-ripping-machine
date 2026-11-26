@@ -29,7 +29,7 @@ describe('statusColor', () => {
 		// Fallthrough
 		['unknown', 'status-unknown'],
 		[null, 'status-unknown'],
-		// Removed v2 names now fall through to status-unknown
+		// Names from the old status vocabulary fall through to status-unknown
 		['video_ripping', 'status-unknown'],
 		['success', 'status-unknown'],
 		['error', 'status-unknown']

@@ -131,6 +131,13 @@ describe('buildRows', () => {
 		id.tracks![2].season = null;
 		expect(buildRows(tracks, id, null)[2].code).toBe('S-E03');
 	});
+	it('values a seasonless episode e<n>, which never reads back as season 0', () => {
+		const id = identity();
+		id.tracks![2].season = null;
+		const value = buildRows(tracks, id, null)[2].pickValue;
+		expect(value).toBe('e3');
+		expect(parseHandPick(value)).toBeNull();
+	});
 	it('carries the saved season and the length in seconds', () => {
 		const id = identity();
 		id.tracks![1].season = null;
@@ -147,7 +154,7 @@ it('formatLength', () => {
 	expect(formatLength(542)).toBe('9:02');
 	expect(formatLength(null)).toBe('-');
 });
-describe('fix round 1', () => {
+describe('failed sources and hand-set provenance', () => {
 	const errOnly = () =>
 		identity({ sources: { episodes_tmdb: { status: 'error', detail: 'boom' }, episodes_tvdb: { status: 'error' } } });
 	it('error-only is nomatch and names the failed sources', () => {

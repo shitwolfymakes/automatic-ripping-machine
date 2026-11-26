@@ -20,6 +20,7 @@ const catalog: Catalog = {
 			id: 'discord',
 			name: 'Discord',
 			docs_url: '',
+			setup_url: '',
 			url_scheme: 'discord',
 			required_fields: [{ key: 'webhook_id', label: 'Webhook ID', type: 'string', private: false, required: true }],
 			advanced_fields: []

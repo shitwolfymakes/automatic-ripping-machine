@@ -512,6 +512,21 @@ describe('rename', () => {
 		await vi.advanceTimersByTimeAsync(200);
 		await waitFor(() => expect(screen.queryByText('Renamed to film.mkv')).not.toBeInTheDocument());
 	});
+
+	it("keeps a later message up for its own 3 seconds, not the earlier one's", async () => {
+		vi.useFakeTimers({ shouldAdvanceTime: true });
+		await renderPage();
+		await rename('movie.mkv', 'film.mkv');
+		await screen.findByText('Renamed to film.mkv');
+		await vi.advanceTimersByTimeAsync(2000);
+		mockRename.mockRejectedValueOnce(new Error('Name taken'));
+		await rename('movie.mkv', 'clip.mkv');
+		await screen.findByText('Name taken');
+		await vi.advanceTimersByTimeAsync(2000);
+		expect(screen.getByText('Name taken')).toBeInTheDocument();
+		await vi.advanceTimersByTimeAsync(1100);
+		await waitFor(() => expect(screen.queryByText('Name taken')).not.toBeInTheDocument());
+	});
 });
 
 describe('fix permissions', () => {

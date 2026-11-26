@@ -109,7 +109,7 @@ describe('Job Detail Page', () => {
 
 		it('renders tracks table', async () => {
 			renderComponent(JobDetailPage);
-			// Source column was replaced by Kind + Filename; assert on the Kind header.
+			// The table has Kind + Filename columns; assert on the Kind header.
 			await waitFor(() => {
 				expect(screen.getByRole('columnheader', { name: 'Kind' })).toBeInTheDocument();
 			});
@@ -174,7 +174,8 @@ describe('Job Detail Page', () => {
 		it('redirects to home on 404', async () => {
 			const { fetchJob } = await import('$lib/api/jobs');
 			const { goto } = await import('$app/navigation');
-			vi.mocked(fetchJob).mockRejectedValueOnce(new Error('404 Not Found'));
+			const { ApiError } = await import('$lib/api/client');
+			vi.mocked(fetchJob).mockRejectedValueOnce(new ApiError(404, 'unknown job_id: job_1', null));
 
 			renderComponent(JobDetailPage);
 			await waitFor(() => {

@@ -7,7 +7,7 @@ import type { Catalog, CatalogService } from '$lib/types/notifications';
 // branch is reachable, so none is left open.
 
 function svc(id: string, name: string): CatalogService {
-	return { id, name, docs_url: '', url_scheme: id, required_fields: [], advanced_fields: [] };
+	return { id, name, docs_url: '', setup_url: '', url_scheme: id, required_fields: [], advanced_fields: [] };
 }
 
 const catalog: Catalog = {

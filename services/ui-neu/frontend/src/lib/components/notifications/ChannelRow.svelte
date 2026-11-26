@@ -38,7 +38,8 @@
 	tabindex="0"
 	onclick={() => onexpand?.()}
 	onkeydown={(e) => {
-		if (e.key === 'Enter') onexpand?.();
+		// Only the focused row itself: Enter on a button inside it runs that button.
+		if (e.key === 'Enter' && e.target === e.currentTarget) onexpand?.();
 	}}
 >
 	<div class="list-row-lead">
@@ -112,8 +113,8 @@
 <style>
 	/* the bash/webhook type glyph: a monospace two-char tile, one of two
 	   tones. Distinct from the .glyph block's own default tint since these
-	   use per-type accent tones, not the shared primary tint. The original's
-	   border-white/5 has no token; --color-border is the nearest hairline role. */
+	   use per-type accent tones, not the shared primary tint. The border is --color-border, the
+	   nearest hairline role. */
 	.channel-row-type-glyph {
 		display: inline-flex;
 		align-items: center;
@@ -125,8 +126,7 @@
 		font-family: var(--font-mono);
 		font-size: 0.75rem;
 	}
-	/* tone soft backgrounds (the vocabulary's own tinted-surface roles),
-	   replacing the earlier ad hoc 20% mixes flagged in Task 9's review */
+	/* tone soft backgrounds (the vocabulary's own tinted-surface roles) */
 	.channel-row-type-glyph[data-type='webhook'] {
 		background: var(--color-info-soft);
 		color: var(--color-info);
@@ -135,7 +135,7 @@
 		background: var(--color-warning-soft);
 		color: var(--color-warning);
 	}
-	/* :global: this class is set on a lucide ChevronRight component instance, which Svelte's scoping can't see. .btn-icon svg and .btn .chevron both force 0.875rem; this expand chevron was 16px (size=16) in the original, not 14px. */
+	/* :global: this class is set on a lucide ChevronRight component instance, which Svelte's scoping can't see. .btn-icon svg and .btn .chevron both force 0.875rem; this expand chevron is 16px (size=16), not 14px. */
 	:global(.channel-row-chevron) {
 		width: 1rem;
 		height: 1rem;

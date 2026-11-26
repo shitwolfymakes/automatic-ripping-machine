@@ -49,8 +49,7 @@
 </div>
 
 <style>
-	/* the original header buttons were px-3 py-1.5 text-sm (0.75rem/0.375rem,
-	   0.875rem) - between .btn's default and .btn-sm */
+	/* header buttons are text-sm (0.875rem) with 0.375rem/0.75rem padding - between .btn's default and .btn-sm */
 	.job-detail-header-btn {
 		min-height: auto;
 		padding: 0.375rem 0.75rem;

@@ -147,7 +147,7 @@
 <style>
 	/* Same look as .panel-section (border/radius/tint background) but the
 	   padding lives on the toggle button and body separately, matching the
-	   original's own px-4 py-3 / px-4 pb-4 split rather than one uniform pad. */
+	   px-4 py-3 / px-4 pb-4 split rather than one uniform pad. */
 	.bash-test-panel {
 		border: 1px solid var(--color-border);
 		border-radius: var(--radius-lg);
@@ -216,7 +216,7 @@
 	.bash-test-panel-result-label {
 		font-weight: 600;
 	}
-	/* the original pre was plain (no box), inheriting the alert's own text-xs
+	/* the pre is plain (no box), inheriting the alert's own text-xs
 	   size/line-height rather than code-block's 0.72rem/1.6. */
 	.bash-test-panel-pre {
 		margin: 0;

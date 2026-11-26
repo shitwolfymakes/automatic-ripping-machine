@@ -1,6 +1,6 @@
 // The Match episodes tab's match runs: a preview or an apply sent for
 // the job on screen, the preview it left and the request behind it, and
-// the error line of the last run.
+// the error line of the last failed action with its retry.
 import { matchIdentity, type EpisodeSource } from '$lib/api/identity';
 import type { MatchPreview, MatchRequest } from '$lib/types/api.gen';
 import { shortSourceLabel } from '$lib/episodes/sources';
@@ -31,9 +31,11 @@ export class MatchRunner {
 	preview = $state<MatchPreview | null>(null);
 	previewSource = $state<EpisodeSource | null>(null);
 	busy = $state(false);
-	/** The error line under the form. Clear episodes writes it too. */
+	/** The error line under the form. Clear episodes writes it too, through
+	 * fail. */
 	error = $state<string | null>(null);
-	lastRequest = $state.raw<MatchRequest | null>(null);
+	// What Try again on the error line runs: the action that failed.
+	#retry: (() => unknown) | null = null;
 	// The request that produced the preview on screen: Apply sends exactly it.
 	// previewSeq invalidates a preview still in flight when the form changes.
 	#previewRequest: MatchRequest | null = null;
@@ -52,19 +54,29 @@ export class MatchRunner {
 		this.preview = null;
 		this.previewSource = null;
 		this.error = null;
+		this.#retry = null;
 	};
 
 	/** Forgets every run, for a panel handed another job. */
 	reset = (): void => {
 		this.drop();
-		this.lastRequest = null;
+	};
+
+	/** Shows an action's failure on the error line; Try again runs `retry`. */
+	fail = (message: string, retry: () => unknown): void => {
+		this.error = message;
+		this.#retry = retry;
+	};
+
+	/** Runs the action whose failure is on the error line again. */
+	retry = (): void => {
+		this.#retry?.();
 	};
 
 	/** Sends a preview or an apply and keeps what it leaves. */
 	run = async (req: MatchRequest): Promise<void> => {
 		this.busy = true;
 		this.error = null;
-		this.lastRequest = req;
 		const label = shortSourceLabel(req.source);
 		const jobId = this.#host.jobId();
 		const seq = ++this.#previewSeq;
@@ -86,7 +98,7 @@ export class MatchRunner {
 			await this.#keep(req, out);
 		} catch (e) {
 			if (stale()) return;
-			this.error = matchErrorLine(label, e, this.#host.placementLabel());
+			this.fail(matchErrorLine(label, e, this.#host.placementLabel()), () => this.run(req));
 		} finally {
 			this.busy = false;
 		}

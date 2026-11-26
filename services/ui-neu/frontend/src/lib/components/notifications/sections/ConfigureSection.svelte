@@ -5,6 +5,8 @@
 	import ServiceGlyph from '../ServiceGlyph.svelte';
 	import LabelEnabledRow from './LabelEnabledRow.svelte';
 	import BashScriptFields from './BashScriptFields.svelte';
+	import FieldDocsLink from '$lib/components/shared/FieldDocsLink.svelte';
+	import { hasFieldDocs } from '$lib/docs/field-docs';
 
 	let {
 		type,
@@ -38,6 +40,16 @@
 
 	const flatFields = $derived(type === 'webhook' ? webhookFields : []);
 
+	// A featured service links each field to its own docs; any other service
+	// links its form once, to Apprise's setup page for it.
+	// Both are read only while an Apprise service is shown.
+	const docsPrefix = $derived(`notify.${service?.id}.`);
+	const featured = $derived(hasFieldDocs(docsPrefix));
+
+	function fieldDocsId(key: string): string | undefined {
+		return featured ? `${docsPrefix}${key}` : undefined;
+	}
+
 	function applyPreserve(fields: CatalogField[]): CatalogField[] {
 		return preserveExisting ? fields.map((f) => ({ ...f, required: false })) : fields;
 	}
@@ -54,6 +66,13 @@
 				<ServiceGlyph id={service.id} name={service.name} size={18} />
 				{service.name} configuration
 				<span class="mono configure-section-scheme">{service.url_scheme}://...</span>
+				{#if !featured}
+					<FieldDocsLink
+						id={`notify.${service.id}`}
+						label={service.name}
+						link={{ type: 'external', url: service.setup_url }}
+					/>
+				{/if}
 			</div>
 			{#if preserveExisting}
 				<p class="panel-hint configure-section-hint">
@@ -64,7 +83,7 @@
 			{#if appriseRequired.length}
 				<div class="grid-2">
 					{#each applyPreserve(appriseRequired) as f (f.key)}
-						<SchemaField field={f} bind:value={config[f.key]} />
+						<SchemaField field={f} bind:value={config[f.key]} docsId={fieldDocsId(f.key)} />
 					{/each}
 				</div>
 			{/if}
@@ -78,14 +97,14 @@
 						{#if appriseAdvancedText.length}
 							<div class="grid-2">
 								{#each applyPreserve(appriseAdvancedText) as f (f.key)}
-									<SchemaField field={f} bind:value={config[f.key]} />
+									<SchemaField field={f} bind:value={config[f.key]} docsId={fieldDocsId(f.key)} />
 								{/each}
 							</div>
 						{/if}
 						{#if appriseAdvancedBool.length}
 							<div class="configure-section-bool-grid">
 								{#each applyPreserve(appriseAdvancedBool) as f (f.key)}
-									<SchemaField field={f} bind:value={config[f.key]} />
+									<SchemaField field={f} bind:value={config[f.key]} docsId={fieldDocsId(f.key)} />
 								{/each}
 							</div>
 						{/if}

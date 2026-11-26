@@ -5,8 +5,8 @@ created at startup and re-ensured before every read — see `ensure_roots`);
 this endpoint reports only what cannot be healed from inside a container:
 a mount that is read-only or wrong-owner (v3 never chowns user mounts —
 docs/developers/architecture/06-deployment.md), no rippers registered yet, a missing config
-row. The ported UI's settings System-Health panel and first-run wizard
-render it (Tier-12)."""
+row. The settings System-Health panel and the first-run walkthrough
+render it."""
 
 import asyncio
 import os
@@ -50,7 +50,7 @@ def system_roots(request: Request) -> dict[str, str]:
 
 
 # Host-side bind source for each container root, so the report can print the
-# exact `chown` the operator runs on the server (setup spec §6.3).
+# exact `chown` the operator runs on the server.
 _HOST_PATH_SETTING = {
     "MEDIA_ROOT": "ARM_HOST_MEDIA_PATH",
     "RAW_ROOT": "ARM_HOST_RAW_PATH",
@@ -303,7 +303,7 @@ async def online_enrolled_drives(db: AsyncSession) -> list[Drive]:
     """Online drives a ripper actually serves.
 
     Scanner-created DETECTED rows and virtual ISO rows are ``online`` by default,
-    so ``status`` alone would count a drive that is merely plugged in (D-149).
+    so ``status`` alone would count a drive that is merely plugged in.
     """
     stmt = (
         select(Drive)

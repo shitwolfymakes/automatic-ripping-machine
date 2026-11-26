@@ -9,10 +9,9 @@
 	import { NotificationInbox } from '$lib/stores/notification-inbox.svelte';
 
 	const inbox = new NotificationInbox();
-	let showCleared = $state(false);
 	let purgeConfirmOpen = $state(false);
 
-	let filtered = $derived(showCleared ? inbox.rows : inbox.rows.filter((n) => !n.seen));
+	let filtered = $derived(inbox.includeCleared ? inbox.rows : inbox.rows.filter((n) => !n.seen));
 
 	function handlePurge() {
 		purgeConfirmOpen = false;
@@ -42,7 +41,7 @@
 		unseenCount={inbox.unseenCount}
 		clearedCount={inbox.clearedCount}
 		purging={inbox.purging}
-		bind:showCleared
+		bind:showCleared={() => inbox.includeCleared, inbox.setIncludeCleared}
 		onpurge={() => (purgeConfirmOpen = true)}
 		ondismissall={inbox.dismissAll}
 	/>
@@ -57,7 +56,7 @@
 		{/snippet}
 		{#snippet ready(_items)}
 			{#if filtered.length === 0}
-				<InboxEmptyState {showCleared} />
+				<InboxEmptyState showCleared={inbox.includeCleared} />
 			{:else}
 				<div class="stack stack-sm notifications-page-list">
 					{#each filtered as notif (notif.id)}
@@ -84,7 +83,7 @@
 	.notifications-page {
 		gap: 1.5rem;
 	}
-	/* alert's own border isn't in the original (a plain tinted strip, no
+	/* alert's own border isn't wanted here (a plain tinted strip, no
 	   border), and its padding (0.5rem 0.75rem) is a hair short of this
 	   banner's own px-4 py-2.5. */
 	.notifications-page-feedback {
@@ -99,7 +98,7 @@
 	.notifications-page-feedback-close:hover {
 		opacity: 1;
 	}
-	/* space-y-3 (0.75rem), the original's per-card gap. */
+	/* 0.75rem per-card gap. */
 	.notifications-page-list {
 		gap: 0.75rem;
 	}

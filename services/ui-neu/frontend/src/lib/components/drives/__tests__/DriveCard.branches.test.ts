@@ -619,13 +619,13 @@ describe('DriveCard branches', () => {
 			['an example name', { vendor: null, model: null }, 'Living room Blu-ray']
 		] as [string, Partial<Drive>, string][])('suggests %s as the name placeholder', (_label, overrides, expected) => {
 			renderEssentials({ display_name: null, ...overrides });
-			expect(input(/Friendly name/).placeholder).toBe(expected);
+			expect(input(/^Friendly name/).placeholder).toBe(expected);
 		});
 
 		it('saves a changed name on blur and says so', async () => {
 			const onupdate = vi.fn();
 			renderEssentials({}, { onupdate });
-			await typeAndBlur(input(/Friendly name/), 'Den Drive');
+			await typeAndBlur(input(/^Friendly name/), 'Den Drive');
 			expect(updateDriveMock).toHaveBeenCalledWith('drv_1', { display_name: 'Den Drive' });
 			expect(await screen.findByText('Name saved')).toBeInTheDocument();
 			expect(onupdate).toHaveBeenCalled();
@@ -633,7 +633,7 @@ describe('DriveCard branches', () => {
 
 		it('saves a changed name on Enter', async () => {
 			renderEssentials();
-			const field = input(/Friendly name/);
+			const field = input(/^Friendly name/);
 			await typeInto(field, 'Den Drive');
 			await fireEvent.keyDown(field, { key: 'Enter' });
 			await waitFor(() => expect(updateDriveMock).toHaveBeenCalledWith('drv_1', { display_name: 'Den Drive' }));
@@ -641,7 +641,7 @@ describe('DriveCard branches', () => {
 
 		it('ignores other keys in the name field', async () => {
 			renderEssentials();
-			const field = input(/Friendly name/);
+			const field = input(/^Friendly name/);
 			await typeInto(field, 'Den Drive');
 			await fireEvent.keyDown(field, { key: 'a' });
 			expect(updateDriveMock).not.toHaveBeenCalled();
@@ -649,39 +649,39 @@ describe('DriveCard branches', () => {
 
 		it('sends nothing when the name was never edited', async () => {
 			renderEssentials();
-			await fireEvent.blur(input(/Friendly name/));
+			await fireEvent.blur(input(/^Friendly name/));
 			expect(updateDriveMock).not.toHaveBeenCalled();
 		});
 
 		it('sends nothing when the name is unchanged once trimmed', async () => {
 			renderEssentials();
-			await typeAndBlur(input(/Friendly name/), '  Main Drive  ');
+			await typeAndBlur(input(/^Friendly name/), '  Main Drive  ');
 			expect(updateDriveMock).not.toHaveBeenCalled();
 		});
 
 		it('sends null for a blank name', async () => {
 			renderEssentials();
-			await typeAndBlur(input(/Friendly name/), '   ');
+			await typeAndBlur(input(/^Friendly name/), '   ');
 			expect(updateDriveMock).toHaveBeenCalledWith('drv_1', { display_name: null });
 		});
 
 		it('sends a name on a drive that had none', async () => {
 			renderEssentials({ display_name: null });
-			await typeAndBlur(input(/Friendly name/), 'Den Drive');
+			await typeAndBlur(input(/^Friendly name/), 'Den Drive');
 			expect(updateDriveMock).toHaveBeenCalledWith('drv_1', { display_name: 'Den Drive' });
 		});
 
 		it('shows the Error message when saving the name fails', async () => {
 			updateDriveMock.mockRejectedValueOnce(new Error('name taken'));
 			renderEssentials();
-			await typeAndBlur(input(/Friendly name/), 'Den Drive');
+			await typeAndBlur(input(/^Friendly name/), 'Den Drive');
 			expect(await screen.findByRole('alert')).toHaveTextContent('name taken');
 		});
 
 		it('shows a generic message when saving the name fails with a non-Error', async () => {
 			updateDriveMock.mockRejectedValueOnce('boom');
 			renderEssentials();
-			await typeAndBlur(input(/Friendly name/), 'Den Drive');
+			await typeAndBlur(input(/^Friendly name/), 'Den Drive');
 			expect(await screen.findByRole('alert')).toHaveTextContent('Saving the name failed');
 		});
 

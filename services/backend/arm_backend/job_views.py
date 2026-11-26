@@ -62,8 +62,8 @@ def _summarize_rip_progress(tracks: list[Track]) -> RipProgressSummary:
 
 # A session_application counts as "terminal" for the job-done rollup when its
 # own status is terminal, OR it fanned out 0 tasks and isn't genuinely waiting
-# to be identified (the rip-only / all-excluded 0-task QUEUED deadlock — see
-# the design doc; absorbed here in the read layer).
+# to be identified (the rip-only / all-excluded 0-task QUEUED deadlock, absorbed
+# here in the read layer).
 _TERMINAL_SESSION_STATUSES: frozenset[SessionApplicationStatus] = frozenset(
     {
         SessionApplicationStatus.DONE,
@@ -94,7 +94,7 @@ def _parked_apps_are_settled(job: Job) -> bool:
     a failed or abandoned job never drains. A RIPPED_AWAITING_IDENTIFY job's
     (or an unidentified RIPPED_PARTIAL one's) parked application is still
     waiting for resolve to drain it, but it is waiting on identity, not
-    transcoding, so it is settled for the rollup too (D-142);
+    transcoding, so it is settled for the rollup too;
     `parked_session_ids` shows it as waiting."""
     return job.status in TERMINAL_JOB_STATUSES
 

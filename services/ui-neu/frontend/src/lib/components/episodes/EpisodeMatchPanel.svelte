@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { errorMessage } from '$lib/utils/errors';
-	// The Match Episodes tab (design spec 2026-10-02 section 4): which source
+	// The Match Episodes tab: which source
 	// placed this disc's tracks, how sure it was, and the per-track placement.
 	import { untrack } from 'svelte';
 	import { MediaQuery } from 'svelte/reactivity';
@@ -19,6 +19,7 @@
 		failedSources,
 		pickerOptions,
 		parseHandPick,
+		placementValue,
 		pickedEpisodeName,
 		usedEpisodeNumbers,
 		ROLE_OPTIONS,
@@ -170,7 +171,7 @@
 			rerunOpen = false;
 			onchanged?.();
 		} catch (e) {
-			if (job.id === jobId) runner.error = `Could not clear the episodes (${errorMessage(e, 'error')}).`;
+			if (job.id === jobId) runner.fail(`Could not clear the episodes (${errorMessage(e, 'error')}).`, clearEpisodes);
 		} finally {
 			clearing = false;
 		}
@@ -256,9 +257,23 @@
 		return true;
 	}
 
+	// A seasonless placement picked back (its value is no list's): saved again
+	// as it is, still seasonless and with its name. Any other value saves nothing.
+	async function keepSeasonlessPlacement(trackId: string, value: string) {
+		const t = placed.get(trackId);
+		if (t?.episode_number == null || value !== placementValue(t.season, t.episode_number)) return;
+		const data = {
+			role: 'episode' as const,
+			season: null,
+			episode_number: t.episode_number,
+			episode_name: t.episode_name ?? null
+		};
+		if (await saveTrack(trackId, data)) clearRowSeason(trackId);
+	}
+
 	async function setByHand(trackId: string, value: string) {
 		const pick = parseHandPick(value);
-		if (!pick) return;
+		if (!pick) return keepSeasonlessPlacement(trackId, value);
 		if ('role' in pick) return saveTrack(trackId, { role: pick.role });
 		const row = rows.find((r) => r.trackId === trackId);
 		const listSeason = row ? seasonOf(row) : null;
@@ -295,12 +310,7 @@
 	{#if runner.error}
 		<div class="alert alert-danger episode-panel-error" role="alert">
 			<p class="alert-body">{runner.error}</p>
-			<button
-				type="button"
-				class="btn btn-sm"
-				disabled={runner.busy}
-				onclick={() => runner.lastRequest && runner.run(runner.lastRequest)}>Try again</button
-			>
+			<button type="button" class="btn btn-sm" disabled={runner.busy} onclick={runner.retry}>Try again</button>
 		</div>
 	{/if}
 {/snippet}
