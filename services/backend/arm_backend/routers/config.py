@@ -1,14 +1,15 @@
 """UI-side config read/write. Never wire-exposes `session_signing_key`.
 
-`notification_apprise_urls` round-trips by value but never appears in log
-output — the validation helper redacts the URL in any 400 response, and
-the handler itself logs nothing about config bodies. The
+`notification_apprise_urls` is read back redacted to each URL's scheme
+(`discord://****`): the URLs carry the destination's credential, and this
+route is readable by every logged-in user, the guest included. The handler
+logs nothing about config bodies. The
 `notifications_enabled` master toggle (default False) lets the UI enable
 or disable outbound Apprise dispatch without dropping the saved URL list.
 
 `notification_apprise_urls` is DEPRECATED as a delivery source — the
 dispatcher reads `notification_channels` rows. The field is still
-accepted/returned here for backward compatibility but is not used for
+returned here (redacted) for backward compatibility but is not used for
 dispatch; `notifications_enabled` remains the global
 master toggle. New URLs should be added as channels via /api/notifications.
 """
@@ -42,6 +43,7 @@ from arm_backend.identity.sources.registry import (
 from arm_backend.key_checks import check_online_key, makemkv_key_status
 from arm_backend.min_title_length import min_title_length_seconds
 from arm_backend.constants import CONFIG_SINGLETON_ID
+from arm_backend.notifications.url_composer import redact_apprise_url
 from arm_common import Config, Job, JobStatus, User
 from arm_common.config_metadata import CONFIG_FIELD_META
 from arm_common.enums import MissMediaType, MissTitlesKept, PreviouslyRippedAction
@@ -109,7 +111,8 @@ def _to_view(cfg: Config) -> ConfigView:
         transcode_enabled=effective_transcode_capable(settings) and cfg.transcode_enabled is not False,
         transcode_capable=effective_transcode_capable(settings),
         default_retention_policy=cfg.default_retention_policy,
-        notification_apprise_urls=list(cfg.notification_apprise_urls or []),
+        # Credentials live inside the URLs; the read shows only their scheme.
+        notification_apprise_urls=[redact_apprise_url(u) for u in cfg.notification_apprise_urls or []],
         notifications_enabled=cfg.notifications_enabled,
         movie_sources=list(movie_sources_setting(cfg)),
         music_sources=list(music_sources_setting(cfg)),
