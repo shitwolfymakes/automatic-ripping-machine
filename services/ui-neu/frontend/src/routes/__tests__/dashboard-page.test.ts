@@ -2,10 +2,12 @@
 // text `{...}` compiled to `(...) ?? ''`: the backend error's message (inside an
 // #if on the error), and the counts in the ACTIVE RIPS and TRANSCODING section
 // labels (array lengths, always numbers).
-import { describe, it, expect, vi, afterEach } from 'vitest';
+import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import { renderComponent, screen, cleanup, waitFor, fireEvent, within } from '$lib/testing/render';
 import DashboardPage from '../+page.svelte';
 import { createJob } from '$lib/__fixtures__/job';
+import { dashboard } from '$lib/stores/dashboard';
+import type { ResettablePollingStore } from '$lib/testing/resettable-polling-store';
 
 vi.mock('$lib/stores/auth', async () => {
 	const { derived, writable } = await import('svelte/store');
@@ -43,7 +45,7 @@ vi.mock('svelte/transition', () => ({
 }));
 
 vi.mock('$lib/api/dashboard', () => ({
-	fetchDashboard: vi.fn(() =>
+	fetchDashboardSnapshot: vi.fn(() =>
 		Promise.resolve({
 			db_available: true,
 			arm_online: true,
@@ -60,6 +62,18 @@ vi.mock('$lib/api/dashboard', () => ({
 		})
 	)
 }));
+
+// The page reads the layout's dashboard store; here it is a fresh store per
+// test (reset in beforeEach) that reads the mocked fetchDashboardSnapshot.
+vi.mock('$lib/stores/dashboard', async (importActual) => {
+	const { emptyDashboard } = await importActual<typeof import('$lib/stores/dashboard')>();
+	const { fetchDashboardSnapshot } = await import('$lib/api/dashboard');
+	type DashboardData = import('$lib/api/dashboard').DashboardData;
+	const { resettablePollingStore } = await import('$lib/testing/resettable-polling-store');
+	return {
+		dashboard: resettablePollingStore(() => fetchDashboardSnapshot() as Promise<DashboardData>, emptyDashboard)
+	};
+});
 
 vi.mock('$lib/api/jobs', () => ({
 	fetchJobs: vi.fn(() => Promise.resolve([COMPLETED_JOB])),
@@ -89,6 +103,7 @@ async function renderDashboardTable() {
 }
 
 describe('Dashboard Page', () => {
+	beforeEach(() => (dashboard as ResettablePollingStore<unknown>).reset());
 	afterEach(() => cleanup());
 
 	describe('rendering', () => {

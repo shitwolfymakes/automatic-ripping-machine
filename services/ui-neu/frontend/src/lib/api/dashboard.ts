@@ -96,20 +96,6 @@ function isActiveJob(job: JobView): boolean {
 
 const IN_PROGRESS_TRANSCODE_STATUSES = new Set(['queued', 'in_progress']);
 
-/** The dashboard with every failed read's fields filled with empty defaults. */
-export async function fetchDashboard(): Promise<DashboardData> {
-	const s = await fetchDashboardSnapshot();
-	return {
-		...s,
-		active_jobs: s.active_jobs ?? [],
-		drives_online: s.drives_online ?? 0,
-		drives: s.drives ?? {},
-		notification_count: s.notification_count ?? 0,
-		ripping_enabled: s.ripping_enabled ?? true,
-		review_wait_seconds: s.review_wait_seconds ?? 60
-	};
-}
-
 type DriveList = Awaited<ReturnType<typeof fetchDrives>>;
 
 function settledValue<T>(res: PromiseSettledResult<T>): T | null {
