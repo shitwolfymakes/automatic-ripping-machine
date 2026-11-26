@@ -200,7 +200,7 @@ describe('Job detail page (v3)', () => {
 	});
 
 	it('redirects to home on 404', async () => {
-		mockFetchJob.mockRejectedValueOnce(new Error('404 Not Found'));
+		mockFetchJob.mockRejectedValueOnce(new ApiError(404, 'unknown job_id: job_42', null));
 		renderComponent(Page);
 		await waitFor(() => {
 			expect(mockGoto).toHaveBeenCalledWith('/');

@@ -1,3 +1,8 @@
+// Open arms the coverage tool reports that are Svelte's, not the component's:
+// each text or attribute `{...}` below compiles to `(...) ?? ''`, and each sits
+// inside an #if on the same value. The track's year, the job's year, the
+// track's IMDb link, the attempt count (inside `attempts > 1`) and the failed
+// track's last error.
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderComponent, screen, cleanup, waitFor, fireEvent, within } from '$lib/testing/render';
 import JobTrackRowHarness from './JobTrackRowHarness.svelte';
@@ -36,6 +41,7 @@ interface Overrides {
 	tracksAreSeries?: boolean;
 	preview?: NamingPreviewItem;
 	editing?: boolean;
+	excludeError?: string | null;
 }
 
 function renderRow(track: TrackView, overrides: Overrides = {}) {
@@ -48,6 +54,7 @@ function renderRow(track: TrackView, overrides: Overrides = {}) {
 		ontoggleedit,
 		oncloseedit,
 		onexcludedchange,
+		excludeError: overrides.excludeError,
 		ontitleapplied
 	});
 }
@@ -180,17 +187,35 @@ describe('JobTrackRow', () => {
 			expect(ontoggleedit).not.toHaveBeenCalled();
 		});
 
-		it('calls ontoggleedit when an admin clicks the title cell', async () => {
+		it('gives an admin a title button that calls ontoggleedit and reports the edit state', async () => {
 			renderRow(pilot());
-			await fireEvent.click(cell('Title'));
+			const button = within(cell('Title')).getByRole('button', { name: 'Pilot (2008)' });
+			expect(button).toHaveAttribute('aria-expanded', 'false');
+			await fireEvent.click(button);
+			expect(ontoggleedit).toHaveBeenCalledTimes(1);
+			cleanup();
+			renderRow(pilot(), { editing: true });
+			expect(within(cell('Title')).getByRole('button', { name: 'Pilot (2008)' })).toHaveAttribute(
+				'aria-expanded',
+				'true'
+			);
+		});
+
+		it('opens the edit from the job title of an untitled track too', async () => {
+			renderRow(bare(), { job: { title: 'Show', year: 2001 } });
+			await fireEvent.click(within(cell('Title')).getByRole('button', { name: /^Show/ }));
 			expect(ontoggleedit).toHaveBeenCalledTimes(1);
 		});
 
-		it('calls nothing when a guest clicks the title cell', async () => {
+		it('gives a guest no title button, and a click on the cell calls nothing', async () => {
 			setRole('guest');
 			renderRow(pilot());
+			expect(within(cell('Title')).queryByRole('button')).not.toBeInTheDocument();
 			await fireEvent.click(cell('Title'));
 			expect(ontoggleedit).not.toHaveBeenCalled();
+			cleanup();
+			renderRow(bare());
+			expect(within(cell('Title')).queryByRole('button')).not.toBeInTheDocument();
 		});
 	});
 
@@ -303,6 +328,17 @@ describe('JobTrackRow', () => {
 			expect(other.checked).toBe(false);
 			await fireEvent.click(other);
 			expect(onexcludedchange).toHaveBeenLastCalledWith('trk_2', false);
+		});
+
+		it('shows why the last toggle failed under the checkbox', () => {
+			renderRow(pilot(), { excludeError: 'denied' });
+			expect(screen.getByRole('alert')).toHaveTextContent('denied');
+			expect(screen.getByRole('checkbox')).toBeInTheDocument();
+		});
+
+		it('shows no toggle error by default', () => {
+			renderRow(pilot());
+			expect(screen.queryByRole('alert')).not.toBeInTheDocument();
 		});
 
 		it('shows a non-admin Included or Excluded as text', () => {
