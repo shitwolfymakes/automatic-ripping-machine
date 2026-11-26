@@ -153,11 +153,12 @@ describe('JobTrackRow', () => {
 			expect(within(title).getByText('episode')).toBeInTheDocument();
 		});
 
-		it('swaps a broken track poster for the placeholder', async () => {
+		it('swaps a broken track poster for the poster fallback', async () => {
 			renderRow(pilot());
 			const img = cell('Title').querySelector('img[data-poster]') as HTMLImageElement;
 			await fireEvent.error(img);
-			expect(img.src).toContain('poster-placeholder.svg');
+			expect(cell('Title').querySelector('img[data-poster]')).toBeNull();
+			expect(cell('Title').querySelector('.poster-image-fallback.job-detail-track-poster')).not.toBeNull();
 		});
 
 		it('shows an untitled track under the job title and year', () => {
