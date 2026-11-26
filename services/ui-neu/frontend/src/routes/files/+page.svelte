@@ -1,12 +1,13 @@
 <script lang="ts">
 	import { plural } from '$lib/utils/plural';
 	import { errorMessage } from '$lib/utils/errors';
-	import { onMount } from 'svelte';
+	import { onDestroy, onMount } from 'svelte';
 	import { page } from '$app/stores';
 	import { renameFile, moveFile, deleteFile, createDirectory, fixPermissions } from '$lib/api/files';
 	import { FilesBrowser } from '$lib/stores/files-browser.svelte';
 	import { MovePicker } from '$lib/stores/move-picker.svelte';
 	import { OrphanFolders } from '$lib/stores/orphan-folders.svelte';
+	import { TimedFeedback } from '$lib/stores/timed-feedback.svelte';
 	import type { BulkFeedback } from '$lib/dashboard/bulk-delete-feedback';
 	import {
 		parseSelectionKey,
@@ -30,7 +31,8 @@
 
 	const browser = new FilesBrowser();
 	const movePicker = new MovePicker(browser);
-	let feedback = $state<{ type: 'success' | 'error'; message: string } | null>(null);
+	const feedback = new TimedFeedback(3000);
+	onDestroy(() => feedback.dispose());
 
 	// Delete confirmation (single item)
 	let deleteDialog = $state({ open: false, root: '', subpath: '', name: '' });
@@ -48,13 +50,8 @@
 	// Transcoder cleanup
 	let transcoderCleanupOpen = $state(false);
 
-	function clearFeedback() {
-		setTimeout(() => (feedback = null), 3000);
-	}
-
 	function showFeedback(next: BulkFeedback) {
-		feedback = next;
-		clearFeedback();
+		feedback.show(next.type, next.message);
 	}
 
 	async function runWithFeedback(action: () => Promise<void>, fallback: string) {
@@ -220,9 +217,9 @@
 	</div>
 
 	<!-- Feedback toast -->
-	{#if feedback}
-		<div class="alert files-page-feedback {feedback.type === 'success' ? 'alert-success' : 'alert-danger'}">
-			{feedback.message}
+	{#if feedback.current}
+		<div class="alert files-page-feedback {feedback.current.type === 'success' ? 'alert-success' : 'alert-danger'}">
+			{feedback.current.message}
 		</div>
 	{/if}
 

@@ -85,10 +85,8 @@ describe('withText', () => {
 		expect(withText({ title: null, body: null }, 'title', 'new')).toEqual({ title: 'new', body: null });
 	});
 
-	it('returns the template without its input overrides', () => {
-		// #539 tracks this: the overrides are dropped when a variable is inserted.
+	it('keeps the input overrides', () => {
 		const result = withText({ title: 't', body: 'b', inputs: { a: '1' } }, 'title', 'new');
-		expect(result).toEqual({ title: 'new', body: 'b' });
-		expect(result).not.toHaveProperty('inputs');
+		expect(result).toEqual({ title: 'new', body: 'b', inputs: { a: '1' } });
 	});
 });

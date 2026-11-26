@@ -80,11 +80,6 @@
 						</div>
 					{/each}
 				</div>
-				{#if themes.feedback}
-					<p class="mt-3 settings-page-feedback" data-error={themes.feedback.type !== 'success'}>
-						{themes.feedback.message}
-					</p>
-				{/if}
 			</div>
 		{/if}
 
@@ -160,13 +155,6 @@
 	}
 	.settings-page-toggle-label[data-on='true'] {
 		color: var(--color-primary-text);
-	}
-	.settings-page-feedback {
-		font-size: 0.875rem;
-		color: var(--color-text-muted);
-	}
-	.settings-page-feedback[data-error='true'] {
-		color: var(--color-danger);
 	}
 	/* the Themes tab's four cards are p-6 (1.5rem), not
 	   .panel's own p-4 (1rem) default. */
