@@ -17,7 +17,8 @@ export const emptyDashboard: DashboardData = {
 	makemkv_key_checked_at: null,
 	transcoder_online: true,
 	transcoder_stats: null,
-	active_transcodes: []
+	active_transcodes: [],
+	review_wait_seconds: 60
 };
 
 // GET /api/jobs answers a plain JobView[] page (the total rides in the

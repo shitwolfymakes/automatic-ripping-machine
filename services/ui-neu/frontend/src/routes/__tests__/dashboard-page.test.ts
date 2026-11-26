@@ -1,5 +1,9 @@
+// Open arms the coverage tool reports that are Svelte's, not the page's, each a
+// text `{...}` compiled to `(...) ?? ''`: the backend error's message (inside an
+// #if on the error), and the counts in the ACTIVE RIPS and TRANSCODING section
+// labels (array lengths, always numbers).
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
-import { renderComponent, screen, cleanup, waitFor, fireEvent } from '$lib/testing/render';
+import { renderComponent, screen, cleanup, waitFor, fireEvent, within } from '$lib/testing/render';
 import DashboardPage from '../+page.svelte';
 import { createJob } from '$lib/__fixtures__/job';
 import { dashboard } from '$lib/stores/dashboard';
@@ -84,9 +88,11 @@ vi.mock('$lib/api/logs', () => ({
 }));
 
 /** Render dashboard and wait for initial data to load */
+// The body (sections, idle panel, All Jobs) draws once the first dashboard
+// load lands.
 async function renderDashboard() {
 	renderComponent(DashboardPage);
-	await waitFor(() => expect(screen.getByText('Dashboard')).toBeInTheDocument());
+	await waitFor(() => expect(screen.getByText('All Jobs')).toBeInTheDocument());
 }
 
 /** Render dashboard, wait for jobs, then switch to table view */
@@ -199,12 +205,12 @@ describe('Dashboard Page', () => {
 		});
 
 		it('Delete selected in the bar bulk-deletes the checked jobs', async () => {
-			vi.spyOn(window, 'confirm').mockReturnValue(true);
 			const { bulkDeleteJobs } = await import('$lib/api/jobs');
 			await renderDashboardTable();
 			const [, rowCheckbox] = screen.getAllByRole('checkbox');
 			await fireEvent.click(rowCheckbox);
 			await fireEvent.click(await screen.findByText('Delete selected'));
+			await fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Delete' }));
 			await waitFor(() => expect(bulkDeleteJobs).toHaveBeenCalledWith({ job_ids: ['job_2'] }));
 		});
 

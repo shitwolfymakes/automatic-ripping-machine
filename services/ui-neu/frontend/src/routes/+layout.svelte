@@ -20,6 +20,7 @@
 	import LiveUpdatesBanner from '$lib/components/layout/LiveUpdatesBanner.svelte';
 	import SidebarStats from '$lib/components/layout/SidebarStats.svelte';
 	import MobileStatsPanel from '$lib/components/layout/MobileStatsPanel.svelte';
+	import PageReveal from '$lib/components/layout/PageReveal.svelte';
 	let { children } = $props();
 
 	let sidebarOpen = $state(false);
@@ -64,7 +65,7 @@
 		// `goto('/login')` because the root layout persists across navigations —
 		// so it would keep firing requests that 401, re-entering this handler
 		// many times per tick and re-navigating to /login on each (which steals
-		// focus from the login inputs). Fix: stop the poll loop the moment the
+		// focus from the login inputs). So stop the poll loop the moment the
 		// session is known stale, and guard the redirect so repeated 401s from
 		// in-flight requests don't pile up redundant navigations.
 		setUnauthorizedHandler(() => {
@@ -105,7 +106,7 @@
 		{@render children()}
 	</div>
 {:else}
-	<div class="flex h-screen overflow-hidden">
+	<div class="layout-shell-enter flex h-screen overflow-hidden">
 		<!-- Sidebar -->
 		<aside data-sidebar class="sidebar hidden lg:block">
 			<div class="flex h-full flex-col">
@@ -186,12 +187,12 @@
 			<!-- Page content -->
 			<main data-stats-bar={$uiPrefs.showStats || undefined} class="layout-main flex-1 overflow-y-auto p-4 lg:p-6">
 				<LiveUpdatesBanner />
-				{@render children()}
+				<PageReveal>{@render children()}</PageReveal>
 			</main>
 		</div>
 	</div>
 {/if}
-<!-- The setup walkthrough is a focused shell: no resource footer (setup spec §5.0). -->
+<!-- The setup walkthrough is a focused shell: no resource footer. -->
 {#if $uiPrefs.showStats && !isSetupPage}
 	<BottomStatsBar />
 {/if}
@@ -209,6 +210,17 @@
 {/if}
 
 <style>
+	/* The shell draws once per session (and again after signing in): fade it
+	   in rather than cutting from the blank page. The motion tokens drop to
+	   0ms under reduced motion. */
+	.layout-shell-enter {
+		animation: layout-shell-enter var(--motion-fast) var(--ease) backwards;
+	}
+	@keyframes layout-shell-enter {
+		from {
+			opacity: 0;
+		}
+	}
 	/* Sidebar shell: the one arrangement rule the block vocabulary doesn't
 	   cover (a nav host needs a fixed width and a border, .nav itself is
 	   just the link list). */
@@ -233,11 +245,9 @@
 	.layout-hr {
 		border-top: 1px solid var(--color-border);
 	}
-	/* original header icon buttons were p-2 (0.5rem/8px), not .btn-icon's
-	   default 0.375rem (6px) - that smaller value is right for the denser
-	   row icon buttons elsewhere (channel rows use p-1.5/6px), but shifts
-	   these four header buttons (sidebar toggle, quick actions, sign out,
-	   theme) ~2px narrower than the original. */
+	/* header icon buttons are 0.5rem/8px, not .btn-icon's default 0.375rem (6px) - that smaller value
+	   is right for the denser row icon buttons elsewhere (channel rows use 6px), but would make
+	   these four header buttons (sidebar toggle, quick actions, sign out, theme) ~2px narrower. */
 	.layout-header-icon {
 		padding: 0.5rem;
 	}

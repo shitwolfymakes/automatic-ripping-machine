@@ -196,6 +196,27 @@ describe('401 handling', () => {
 		await expect(apiFetch('/api/secure')).rejects.toThrow();
 		expect(on401).toHaveBeenCalledTimes(1);
 	});
+
+	it("throws the backend's detail for a 401", async () => {
+		mockFetch.mockResolvedValue(jsonResponse({ detail: 'token expired' }, false, 401, 'Unauthorized'));
+		await expect(apiFetch('/api/secure')).rejects.toMatchObject({ status: 401, message: 'token expired' });
+	});
+
+	it('falls back to the status text for a 401 without a detail', async () => {
+		mockFetch.mockResolvedValue(jsonResponse(null, false, 401, 'Unauthorized'));
+		await expect(apiFetch('/api/secure')).rejects.toMatchObject({ status: 401, message: 'API 401: Unauthorized' });
+	});
+
+	it('leaves the unauthorized handler alone for a request that checks credentials', async () => {
+		const on401 = vi.fn();
+		setUnauthorizedHandler(on401);
+		mockFetch.mockResolvedValue(jsonResponse({ detail: 'invalid credentials' }, false, 401, 'Unauthorized'));
+		await expect(post('/api/auth/login', { u: 1 }, { checksCredentials: true })).rejects.toMatchObject({
+			status: 401,
+			message: 'invalid credentials'
+		});
+		expect(on401).not.toHaveBeenCalled();
+	});
 });
 
 describe('verb helpers', () => {

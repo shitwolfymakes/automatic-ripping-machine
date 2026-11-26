@@ -13,7 +13,6 @@ export type TrackFilters = {
 
 /**
  * The positive whole numbers in a comma- or space-separated list.
- * Copied verbatim from the removed Vue UI.
  */
 export function parseIndexList(v: string): number[] {
 	return v
@@ -28,8 +27,7 @@ export function parseDuration(v: string): number | null {
 }
 
 /**
- * The `track_filters_json` a rip preset request sends. Mirrors the Vue
- * source: an object only for the custom selection, with its null and
+ * The `track_filters_json` a rip preset request sends. It is an * object only for the custom selection, with its null and
  * undefined keys dropped; null otherwise.
  */
 export function trackFiltersBody(selection: TrackSelection, filters: TrackFilters): TrackFilters | null {

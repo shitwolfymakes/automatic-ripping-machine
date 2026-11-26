@@ -1,3 +1,5 @@
+// Open arm the coverage tool reports that is Svelte's, not the component's:
+// `{scheme.author}` compiles to `(...) ?? ''` and sits inside an #if on it.
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import { get } from 'svelte/store';
 import type { Writable } from 'svelte/store';
@@ -117,13 +119,30 @@ describe('ThemesSettings user themes', () => {
 		expect(get(colorScheme)).toBe('mine');
 	});
 
-	it('deletes a user theme by its id and label', async () => {
+	it('asks through the confirm dialog, then deletes a user theme by its id and label', async () => {
 		setSchemes([userTheme('mine', 'Mine')]);
 		const themes = new UserThemes();
 		const spy = vi.spyOn(themes, 'deleteTheme').mockResolvedValue();
 		renderThemes(themes);
 		await fireEvent.click(screen.getByTitle('Delete'));
+		const dialog = screen.getByRole('dialog');
+		expect(within(dialog).getByText('Delete user theme')).toBeInTheDocument();
+		expect(within(dialog).getByText('Delete user theme "Mine"?')).toBeInTheDocument();
+		expect(spy).not.toHaveBeenCalled();
+		await fireEvent.click(within(dialog).getByRole('button', { name: 'Delete' }));
 		expect(spy).toHaveBeenCalledWith('mine', 'Mine');
+		expect(screen.queryByRole('dialog')).toBeNull();
+	});
+
+	it('does not delete when the confirm dialog is cancelled', async () => {
+		setSchemes([userTheme('mine', 'Mine')]);
+		const themes = new UserThemes();
+		const spy = vi.spyOn(themes, 'deleteTheme').mockResolvedValue();
+		renderThemes(themes);
+		await fireEvent.click(screen.getByTitle('Delete'));
+		await fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Cancel' }));
+		expect(screen.queryByRole('dialog')).toBeNull();
+		expect(spy).not.toHaveBeenCalled();
 	});
 });
 
@@ -132,38 +151,34 @@ describe('ThemesSettings feedback', () => {
 		setSchemes([userTheme('mine', 'Mine')]);
 		renderThemes();
 		expect(document.querySelector('.alert')).toBeNull();
-		expect(document.querySelector('.settings-page-feedback')).toBeNull();
 	});
 
-	it('shows a success feedback at the top and under the user themes', () => {
+	it('shows a success feedback once, as an alert at the top', () => {
 		setSchemes([userTheme('mine', 'Mine')]);
 		const themes = new UserThemes();
 		themes.feedback = { type: 'success', message: 'Theme "Mine" deleted' };
 		renderThemes(themes);
+		expect(screen.getAllByText('Theme "Mine" deleted')).toHaveLength(1);
 		const alert = document.querySelector('.alert') as HTMLElement;
 		expect(alert).toHaveClass('alert-success');
 		expect(alert).toHaveTextContent('Theme "Mine" deleted');
-		const line = document.querySelector('.settings-page-feedback') as HTMLElement;
-		expect(line).toHaveAttribute('data-error', 'false');
-		expect(line).toHaveTextContent('Theme "Mine" deleted');
 	});
 
-	it('shows an error feedback as a danger alert and an error line', () => {
+	it('shows an error feedback once, as a danger alert', () => {
 		setSchemes([userTheme('mine', 'Mine')]);
 		const themes = new UserThemes();
 		themes.feedback = { type: 'error', message: 'Delete failed' };
 		renderThemes(themes);
+		expect(screen.getAllByText('Delete failed')).toHaveLength(1);
 		expect(document.querySelector('.alert')).toHaveClass('alert-danger');
-		expect(document.querySelector('.settings-page-feedback')).toHaveAttribute('data-error', 'true');
 	});
 
-	it('shows only the top alert when there are no user themes', () => {
+	it('shows the alert when there are no user themes', () => {
 		setSchemes([builtin('default', 'Default')]);
 		const themes = new UserThemes();
 		themes.feedback = { type: 'error', message: 'Delete failed' };
 		renderThemes(themes);
 		expect(screen.getByText('Delete failed')).toBeInTheDocument();
-		expect(document.querySelector('.settings-page-feedback')).toBeNull();
 	});
 });
 

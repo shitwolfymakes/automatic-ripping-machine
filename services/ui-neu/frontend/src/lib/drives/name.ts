@@ -6,7 +6,7 @@
  * dialogs, log rows, ...). `driveNames` is the dashboard store's sticky
  * `drive_names: Record<driveId, string>` map (see `$lib/stores/dashboard`);
  * callers that don't have it yet (or whose drive isn't in it) fall back to
- * the raw id so the UI never renders a blank where an id used to be.
+ * the raw id so the UI never renders a blank where an id would be.
  */
 export function driveLabel(driveId: string | null | undefined, driveNames?: Record<string, string> | null): string {
 	if (!driveId) return '';

@@ -102,7 +102,7 @@ def test_source_size(tmp_path: Path) -> None:
 
 
 async def test_dd_failure_keeps_the_stderr_tail(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    """The decisive dd line comes last; a long stderr must keep its end, not its start (D-177)."""
+    """The decisive dd line comes last; a long stderr must keep its end, not its start."""
     src = tmp_path / "movie.iso"
     src.write_bytes(b"x")
     _patch_dd(monkeypatch, [], [], rc=1)

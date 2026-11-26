@@ -227,7 +227,7 @@ def test_delete_terminal_no_application_no_hub(signing_key: bytes) -> None:
 
 
 def test_delete_queued_task_releases_its_spawn_time_gpu_claim(signing_key: bytes) -> None:
-    """D-057: the GPU is claimed at spawn, while the task is still QUEUED."""
+    """The GPU is claimed at spawn, while the task is still QUEUED."""
     db = FakeSession()
     app, token = _make_app(signing_key, db)
     db.rows["transcode_tasks"] = [_task("txt_q", status=TranscodeTaskStatus.QUEUED)]
@@ -265,7 +265,7 @@ def test_stats_counts_tasks_and_gpus(signing_key: bytes) -> None:
 
 
 def test_stats_counts_queued_encode_tasks_apart_from_passthrough(signing_key: bytes) -> None:
-    """D-067: the Transcoder page's ripper-only branch shows how many encode
+    """The Transcoder page's ripper-only branch shows how many encode
     tasks are held; a queued passthrough is not one of them."""
     db = FakeSession()
     _seed_encode_and_passthrough_queue(db)
@@ -276,7 +276,7 @@ def test_stats_counts_queued_encode_tasks_apart_from_passthrough(signing_key: by
 
 
 async def test_queued_encode_count_does_not_query_per_task() -> None:
-    """D-067 follow-up: the Transcoder page polls this, so it reads each table
+    """The Transcoder page polls this, so it reads each table
     once rather than three queries per queued task."""
     from arm_backend.transcode_queue import count_queued_encode_tasks
 

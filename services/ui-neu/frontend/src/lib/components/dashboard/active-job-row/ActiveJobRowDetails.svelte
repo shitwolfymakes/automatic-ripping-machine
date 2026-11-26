@@ -8,24 +8,26 @@
 	import { jobPoster } from '$lib/match/poster';
 	import { effectiveJobStatus } from '$lib/jobs/status';
 	import { discTypeLabel, type VideoTypeConfig } from '$lib/jobs/type';
-	import { formatRipStage } from '$lib/jobs/status-format';
 
 	interface Props {
 		/** The job the panel describes. */
 		job: JobView;
 		/** The type pill's label and colours. */
 		typeConfig: VideoTypeConfig;
-		/** Tracks ripped so far. */
-		tracksRipped: number;
-		/** Tracks the disc holds in total; 0 hides the count. */
-		tracksTotal: number;
 		/** Whether the job is in progress, which gates the Progress cell. */
 		active: boolean;
-		/** The ripper's current stage, if it reported one. */
-		progressStage: string | null;
+		/** The ripper's current stage in words, if it reported one. */
+		stageWords: string | null;
 	}
 
-	let { job, typeConfig, tracksRipped, tracksTotal, active, progressStage }: Props = $props();
+	let { job, typeConfig, active, stageWords }: Props = $props();
+
+	// No tracks, or a total of 0, hides the count.
+	let tracksLabel = $derived(
+		job.rip_progress && job.rip_progress.tracks_total > 0
+			? `${job.rip_progress.tracks_done} / ${job.rip_progress.tracks_total} ripped`
+			: null
+	);
 </script>
 
 <div class="flex gap-4">
@@ -76,8 +78,8 @@
 					<td class="job-active-row-detail-value">{job.year || '-'}</td>
 					<td class="job-active-row-detail-label job-active-row-detail-label-2">Tracks</td>
 					<td class="job-active-row-detail-value">
-						{#if tracksTotal > 0}
-							{tracksRipped} / {tracksTotal} ripped
+						{#if tracksLabel}
+							{tracksLabel}
 						{:else}
 							-
 						{/if}
@@ -86,8 +88,8 @@
 				<tr>
 					<td class="job-active-row-detail-label">Progress</td>
 					<td class="job-active-row-detail-value" colspan="3">
-						{#if active && progressStage}
-							{formatRipStage(progressStage)}
+						{#if active && stageWords}
+							{stageWords}
 						{:else}
 							-
 						{/if}

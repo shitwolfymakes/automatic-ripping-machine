@@ -1,4 +1,4 @@
-"""TVDB v4 client: login/validate_key only (Tier-1 scope)."""
+"""TVDB v4 client: login/validate_key only."""
 
 import httpx
 import pytest

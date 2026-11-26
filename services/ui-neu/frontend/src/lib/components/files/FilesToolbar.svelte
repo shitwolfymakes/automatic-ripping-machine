@@ -118,15 +118,13 @@
 	.files-page-toolbar {
 		gap: 0.25rem;
 	}
-	/* original was rounded-lg p-2 (0.5rem all around), not .btn-icon's own
-	   0.375rem default - a real ~4px-per-side layout regression */
+	/* padding is 0.5rem all around, not .btn-icon's own 0.375rem default */
 	.files-page-toolbar-btn {
 		padding: 0.5rem;
 	}
-	/* original bulk-action buttons were px-3 py-1.5 text-xs (0.75rem/1rem),
-	   smaller than .btn's own default 1rem/0.5rem/text-sm - restated to
-	   match; the icon+label gap (gap-1.5) is close enough to .btn's own
-	   0.375rem default that no override is needed there */
+	/* bulk-action buttons are text-xs (0.75rem/1rem) with 0.375rem/0.75rem padding, smaller than
+	   .btn's own default 1rem/0.5rem/text-sm - restated here; the icon+label gap is close enough to
+	   .btn's own 0.375rem default that no override is needed there */
 	.files-page-bulk-btn {
 		padding: 0.375rem 0.75rem;
 		font-size: 0.75rem;
@@ -137,7 +135,7 @@
 		background: var(--color-danger);
 		color: var(--color-on-primary);
 	}
-	/* darkens on hover like the original's bg-red-600 -> hover:bg-red-700;
+	/* darkens on hover;
 	   no darker danger token exists, so filter substitutes for a literal
 	   colour (the lint bans raw colour keywords, even inside color-mix) */
 	.files-page-bulk-btn-danger:hover {

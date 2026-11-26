@@ -1,5 +1,6 @@
 <script lang="ts">
-	// Ported from the TrackFiltersEditor component of the removed Vue UI.
+	import FieldLabel from '../shared/FieldLabel.svelte';
+	import { FIELD_IDS } from '$lib/sessions/rip-preset-form';
 	// Model is the `track_filters_json` shape; all conditions are ANDed.
 	import { parseDuration, parseIndexList, type TrackFilters } from '$lib/jobs/track-filters';
 
@@ -26,8 +27,8 @@
 	<h4 class="track-filters-editor-title">Custom track filters</h4>
 	<p class="track-filters-editor-hint">All conditions are ANDed. Indices come from the rip log's MakeMKV title list.</p>
 
-	<label class="field track-filters-editor-field">
-		<span class="field-label">Min duration (seconds)</span>
+	<div class="field track-filters-editor-field">
+		<FieldLabel for="tf-min-duration" label="Min duration (seconds)" docsId={FIELD_IDS.min_duration} />
 		<input
 			id="tf-min-duration"
 			data-testid="tf-min-duration"
@@ -35,10 +36,10 @@
 			value={value.min_duration_seconds ?? ''}
 			oninput={(e) => onDuration('min_duration_seconds', e.currentTarget.value)}
 		/>
-	</label>
+	</div>
 
-	<label class="field track-filters-editor-field">
-		<span class="field-label">Max duration (seconds)</span>
+	<div class="field track-filters-editor-field">
+		<FieldLabel for="tf-max-duration" label="Max duration (seconds)" docsId={FIELD_IDS.max_duration} />
 		<input
 			id="tf-max-duration"
 			data-testid="tf-max-duration"
@@ -46,10 +47,10 @@
 			value={value.max_duration_seconds ?? ''}
 			oninput={(e) => onDuration('max_duration_seconds', e.currentTarget.value)}
 		/>
-	</label>
+	</div>
 
-	<label class="field track-filters-editor-field">
-		<span class="field-label">Title indices (allowlist)</span>
+	<div class="field track-filters-editor-field">
+		<FieldLabel for="tf-allowlist" label="Title indices (allowlist)" docsId={FIELD_IDS.title_allowlist} />
 		<input
 			id="tf-allowlist"
 			data-testid="tf-allowlist"
@@ -58,10 +59,10 @@
 			value={allowList}
 			oninput={(e) => onList('title_indices', e.currentTarget.value)}
 		/>
-	</label>
+	</div>
 
-	<label class="field track-filters-editor-field">
-		<span class="field-label">Title indices (blocklist)</span>
+	<div class="field track-filters-editor-field">
+		<FieldLabel for="tf-blocklist" label="Title indices (blocklist)" docsId={FIELD_IDS.title_blocklist} />
 		<input
 			id="tf-blocklist"
 			data-testid="tf-blocklist"
@@ -70,13 +71,12 @@
 			value={blockList}
 			oninput={(e) => onList('title_indices_exclude', e.currentTarget.value)}
 		/>
-	</label>
+	</div>
 </div>
 
 <style>
-	/* original: mt-2 rounded-lg border border-gray-200 bg-gray-50/50 p-4 -
-	   panel-section's own padding (1rem, matches) and background
-	   (primary-tint-1) are close, but the outer mt-2 spacing to this
+	/* panel-section's own padding (1rem) and background (primary-tint-1) fit, but the outer 0.5rem
+	   spacing to this
 	   component's own caller (RipPresetForm's .stack) needs restating since
 	   .stack's gap does not apply between a sibling and this component's own
 	   root margin. */

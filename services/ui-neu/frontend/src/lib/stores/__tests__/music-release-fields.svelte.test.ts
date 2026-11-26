@@ -75,7 +75,7 @@ describe('MusicReleaseFields.seed', () => {
 	});
 });
 
-describe('MusicReleaseFields.seed inside an effect (#593)', () => {
+describe('MusicReleaseFields.seed inside an effect', () => {
 	function runs(detail: MetadataReleaseDetail): { count: () => number; f: MusicReleaseFields; stop: () => void } {
 		const f = new MusicReleaseFields(job());
 		let n = 0;
@@ -89,15 +89,13 @@ describe('MusicReleaseFields.seed inside an effect (#593)', () => {
 		return { count: () => n, f, stop };
 	}
 
-	it('re-runs when disc total changes for a multi-disc release', () => {
+	it('does not re-run when disc total changes for a multi-disc release', () => {
 		const { count, f, stop } = runs(release({ disc_count: 3 }));
-		// Each blanking re-runs the effect, which refills the total from the
-		// release (the fill itself re-runs it once more).
-		const settled = count();
+		expect(f.discTotal).toBe('3');
 		f.discTotal = '';
 		flushSync();
-		expect(count()).toBeGreaterThan(settled);
-		expect(f.discTotal).toBe('3');
+		expect(count()).toBe(1);
+		expect(f.discTotal).toBe('');
 		stop();
 	});
 

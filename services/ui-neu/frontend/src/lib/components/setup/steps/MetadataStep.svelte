@@ -4,7 +4,7 @@
 	import SetupConfigFields from '../SetupConfigFields.svelte';
 	import type { StepCommitResult } from '../../../setup/steps';
 
-	// Step 5 (optional): identification keys, tested in place (setup spec §5.6).
+	// Step 5 (optional): identification keys, tested in place.
 	let { view }: { view: SetupView; setBlocked?: (reason: string | null) => void } = $props();
 	void view;
 	let fields: SetupConfigFields | undefined = $state();

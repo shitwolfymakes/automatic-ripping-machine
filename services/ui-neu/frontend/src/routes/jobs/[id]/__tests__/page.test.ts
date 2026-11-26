@@ -178,7 +178,7 @@ describe('Job detail page (v3)', () => {
 		await waitFor(() => {
 			expect(screen.getByText('Tracks (1)')).toBeInTheDocument();
 		});
-		// Source column was replaced by Kind + Filename; assert on the Kind header.
+		// The table has Kind + Filename columns; assert on the Kind header.
 		expect(screen.getByRole('columnheader', { name: 'Kind' })).toBeInTheDocument();
 	});
 
@@ -200,7 +200,7 @@ describe('Job detail page (v3)', () => {
 	});
 
 	it('redirects to home on 404', async () => {
-		mockFetchJob.mockRejectedValueOnce(new Error('404 Not Found'));
+		mockFetchJob.mockRejectedValueOnce(new ApiError(404, 'unknown job_id: job_42', null));
 		renderComponent(Page);
 		await waitFor(() => {
 			expect(mockGoto).toHaveBeenCalledWith('/');
@@ -415,7 +415,7 @@ describe('Job detail page (v3)', () => {
 		).not.toBeNull();
 	});
 
-	it('shows the encoder frame rate beside an in-progress transcode (D-248)', async () => {
+	it('shows the encoder frame rate beside an in-progress transcode', async () => {
 		mockFetchJob.mockResolvedValue({
 			job: createJob({ id: 'job_42', title: 'Test Movie', status: 'ripped' }),
 			tracks: [
@@ -611,7 +611,7 @@ describe('Job detail page (v3)', () => {
 		// The track's Transcode cell shows a dash (no transcode task yet).
 		// Scope to the Transcode <td> (data-label="Transcode") — other cells also
 		// render "-", so a global getByText('—') is ambiguous.
-		await waitFor(() => expect(screen.getByText('Done')).toBeInTheDocument());
+		await waitFor(() => expect(document.querySelector('td[data-label="Transcode"]')).not.toBeNull());
 		const transcodeCell = document.querySelector('td[data-label="Transcode"]');
 		expect(transcodeCell?.textContent?.trim()).toBe('-');
 	});

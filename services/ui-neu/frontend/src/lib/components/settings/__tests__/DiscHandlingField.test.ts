@@ -11,6 +11,14 @@ afterEach(() => {
 });
 
 describe('DiscHandlingField', () => {
+	it('links its title to the rip behaviour help section', () => {
+		renderComponent(DiscHandlingField, { props: { values: {} } });
+		expect(screen.getByRole('link', { name: 'Docs for When you insert a disc (opens in a new tab)' })).toHaveAttribute(
+			'href',
+			'/help/guide/configuring-arm#rip--transcode-behaviour'
+		);
+	});
+
 	it('maps the three options onto auto_rip_on_insert + hold_for_review', async () => {
 		const values: Record<string, unknown> = { auto_rip_on_insert: true, hold_for_review: false };
 		renderComponent(DiscHandlingField, { props: { values, context: { manual_wait_seconds: 45 } } });

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { renderComponent, screen, fireEvent, waitFor, cleanup } from '$lib/testing/render';
+import { renderComponent, screen, fireEvent, waitFor, cleanup, within } from '$lib/testing/render';
 import JobHeaderActions from '../JobHeaderActions.svelte';
 import { createJob, createJobDetail, createTrack } from '$lib/__fixtures__/job';
 import { JobDetail } from '$lib/stores/job-detail.svelte';
@@ -98,21 +98,19 @@ describe('JobHeaderActions', () => {
 	});
 
 	it('reloads the job after an action', async () => {
-		vi.stubGlobal('confirm', vi.fn().mockReturnValue(true));
 		vi.mocked(abandonJob).mockResolvedValue(undefined as never);
 		const { load } = render(createJob({ status: 'ripping' }));
 		await fireEvent.click(screen.getByRole('button', { name: 'Abandon' }));
+		await fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Abandon' }));
 		await waitFor(() => expect(load).toHaveBeenCalledTimes(1));
-		vi.unstubAllGlobals();
 	});
 
 	it('reports a delete', async () => {
-		vi.stubGlobal('confirm', vi.fn().mockReturnValue(true));
 		vi.mocked(deleteJob).mockResolvedValue(undefined as never);
 		const { ondelete } = render(createJob({ status: 'ripped' }));
 		await fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
+		await fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Delete' }));
 		await waitFor(() => expect(ondelete).toHaveBeenCalledTimes(1));
-		vi.unstubAllGlobals();
 	});
 
 	it('passes the hand-set track count to the media type switch confirmation', async () => {

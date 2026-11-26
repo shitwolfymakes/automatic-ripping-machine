@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-// The settings api uses the Tier A client helpers (get/post/patch). Mock them
+// The settings api uses the client helpers (get/post/patch). Mock them
 // to assert path/method/body without touching fetch.
 vi.mock('$lib/api/client', () => ({
 	get: vi.fn().mockResolvedValue({}),

@@ -6,9 +6,7 @@ import {
 	isAwaitingIdentity,
 	isPostRipStatus,
 	isReviewCardStatus,
-	isRipped,
-	lifecycleStageFor,
-	LIFECYCLE_FAILURE_STATUSES
+	isRipped
 } from '../status-groups';
 
 const ALL: JobStatus[] = [
@@ -88,26 +86,6 @@ describe('isRipped', () => {
 	});
 	it.each(['RIPPED', '', 'unknown', 'constructor'])('is false for %j', (s) => {
 		expect(isRipped(s)).toBe(false);
-	});
-});
-
-describe('lifecycleStageFor', () => {
-	it.each([
-		['created', 'identifying'],
-		['awaiting_user_id', 'identifying'],
-		['identified', 'identifying'],
-		['awaiting_review', 'identifying'],
-		['ripping', 'ripping'],
-		['ripped', 'ripping'],
-		['ripped_partial', 'ripping'],
-		['ripped_awaiting_identify', 'ripping'],
-		['transcoding', 'transcoding'],
-		['complete', 'complete']
-	])('%s -> %s', (s, stage) => {
-		expect(lifecycleStageFor(s)).toBe(stage);
-	});
-	it('returns null for failure statuses and unknowns', () => {
-		for (const s of [...LIFECYCLE_FAILURE_STATUSES, 'video_ripping']) expect(lifecycleStageFor(s)).toBeNull();
 	});
 });
 

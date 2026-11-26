@@ -8,7 +8,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
     UV_COMPILE_BYTECODE=1 \
     UV_PROJECT_ENVIRONMENT=/opt/venv
 
-# The backend no longer touches GPUs: GPU detection happens host-side at
+# The backend does not touch GPUs: GPU detection happens host-side at
 # install time and arrives via the `ARM_GPUS` env (see arm_backend/gpu_probe.py),
 # so no `nvidia-smi` / NVIDIA userspace is baked in here. The only container that
 # needs GPU access is the ephemeral transcoder, which the dispatcher grants

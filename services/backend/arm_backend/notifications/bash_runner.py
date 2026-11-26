@@ -1,7 +1,7 @@
 """Run a bash hook script as a subprocess.
 
-Port of upstream ARM v2's ``BASH_SCRIPT`` hook: the script gets the rendered
-title as ``$1`` and body as ``$2``. v3 adds ``ARM_*`` env vars, declared
+The ``BASH_SCRIPT`` hook: the script gets the rendered
+title as ``$1`` and body as ``$2``, plus ``ARM_*`` env vars, declared
 inputs as plain env vars, a timeout, and captured stdout/stderr so a failing
 hook is visible in the UI. The backend's own environment is never inherited.
 """

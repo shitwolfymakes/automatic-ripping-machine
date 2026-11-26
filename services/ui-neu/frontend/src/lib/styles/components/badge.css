@@ -1,21 +1,19 @@
 /* badge: a static label (status, count, BUILT-IN, RECOMMENDED).
    Modifiers: badge-status (colour from data-status), badge-danger,
    badge-warning, badge-success, badge-info, badge-sm, badge-imdb (the IMDb
-   external-link mark: the original was a fixed brand yellow/black pair,
+   external-link mark: a brand yellow/black pair,
    same in both modes; no yellow-gold token exists and the strict token
-   set forbids a literal brand colour, so this collapses onto the nearest
-   existing tone - warning (amber-500, close in hue to IMDb's saturated
+   set forbids a literal brand colour, so this uses the nearest existing tone - warning (amber-500, close in hue to IMDb's saturated
    yellow-gold) with on-frame-accent's mode-independent black for the text,
    the same pure-black role card-status accents use; recurs 3x across
-   DiscReviewWidget and jobs/[id]/+page.svelte, so it is a block per the
-   migration reference's own rule rather than 3 scoped duplicates).
+   DiscReviewWidget and jobs/[id]/+page.svelte, so it is a block rather than 3 scoped duplicates).
    State: [data-status] on badge-status. */
 @layer components {
 	.badge {
 		display: inline-flex;
 		align-items: center;
-		/* the originals carried gap-1.5 in their utility strings; a gap on a
-		   text-only badge is a no-op, so this only restores the icon/dot
+		/* a gap on a
+		   text-only badge is a no-op, so this only sets the icon/dot
 		   spacing where a badge has more than one child. */
 		gap: 0.375rem;
 		border-radius: 9999px;

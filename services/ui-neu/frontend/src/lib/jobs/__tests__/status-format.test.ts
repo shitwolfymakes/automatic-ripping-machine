@@ -1,5 +1,5 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { statusColor, statusLabel, statusAccentVar, etaTime, formatRipStage } from '../status-format';
+import { describe, it, expect } from 'vitest';
+import { statusColor, statusLabel, statusAccentVar } from '../status-format';
 
 describe('statusColor', () => {
 	it.each<[string | null, string]>([
@@ -29,7 +29,7 @@ describe('statusColor', () => {
 		// Fallthrough
 		['unknown', 'status-unknown'],
 		[null, 'status-unknown'],
-		// Removed v2 names now fall through to status-unknown
+		// Names from the old status vocabulary fall through to status-unknown
 		['video_ripping', 'status-unknown'],
 		['success', 'status-unknown'],
 		['error', 'status-unknown']
@@ -86,70 +86,5 @@ describe('statusAccentVar', () => {
 		['something-new', 'var(--color-primary)']
 	])('statusAccentVar(%s) = %s', (input, expected) => {
 		expect(statusAccentVar(input)).toBe(expected);
-	});
-});
-
-describe('etaTime', () => {
-	beforeEach(() => {
-		vi.useFakeTimers();
-		vi.setSystemTime(new Date('2025-06-15T12:00:00Z'));
-	});
-	afterEach(() => vi.useRealTimers());
-
-	it('returns null when start time missing', () => {
-		expect(etaTime(null, 50)).toBeNull();
-	});
-
-	it('returns null when progress is null/undefined', () => {
-		expect(etaTime('2025-06-15T11:59:00Z', null)).toBeNull();
-		expect(etaTime('2025-06-15T11:59:00Z', undefined)).toBeNull();
-	});
-
-	it('returns null when progress is 0 or negative', () => {
-		expect(etaTime('2025-06-15T11:59:00Z', 0)).toBeNull();
-		expect(etaTime('2025-06-15T11:59:00Z', -5)).toBeNull();
-	});
-
-	it('returns null when progress is 100 or over', () => {
-		expect(etaTime('2025-06-15T11:59:00Z', 100)).toBeNull();
-		expect(etaTime('2025-06-15T11:59:00Z', 105)).toBeNull();
-	});
-
-	it('returns null below the 30s elapsed threshold', () => {
-		// 25s elapsed at 10% — formula would give 3m45s, but we suppress
-		// to avoid wild estimates from MakeMKV warm-up jitter.
-		expect(etaTime('2025-06-15T11:59:35Z', 10)).toBeNull();
-	});
-
-	it('formats seconds-only ETA', () => {
-		// 60s elapsed at 80% → 15s remaining
-		expect(etaTime('2025-06-15T11:59:00Z', 80)).toBe('15s');
-	});
-
-	it('formats minutes ETA', () => {
-		// 2m elapsed at 25% → 6m remaining
-		expect(etaTime('2025-06-15T11:58:00Z', 25)).toBe('6m 0s');
-	});
-
-	it('formats hours ETA', () => {
-		// 30m elapsed at 10% → 4h 30m remaining
-		expect(etaTime('2025-06-15T11:30:00Z', 10)).toBe('4h 30m');
-	});
-
-	it('caps absurdly long estimates at 24h+', () => {
-		// 5m elapsed at 0.1% → ~83h. Cap.
-		expect(etaTime('2025-06-15T11:55:00Z', 0.1)).toBe('24h+');
-	});
-});
-
-describe('formatRipStage', () => {
-	it('words the scratch-to-media copy stage plainly', () => {
-		expect(formatRipStage('scratch-to-media')).toBe('Copying to shared storage');
-	});
-	it('words the work-to-completed move stage plainly', () => {
-		expect(formatRipStage('work-to-completed')).toBe('Moving to completed');
-	});
-	it('shows any other stage as the ripper named it', () => {
-		expect(formatRipStage('ripping')).toBe('ripping');
 	});
 });

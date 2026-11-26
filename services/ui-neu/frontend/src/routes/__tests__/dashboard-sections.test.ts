@@ -19,10 +19,9 @@ const h = vi.hoisted(() => ({
 	ripperListeners: [] as Array<(ids: Set<string>, types: Map<string, Set<string>>) => void>,
 	offRipperEvents: vi.fn(),
 	startRipperEvents: vi.fn(),
-	startWS: vi.fn(),
-	stopWS: vi.fn(),
-	reconcileSubscriptions: vi.fn(),
-	ripProgress: { value: {} as Record<string, unknown> }
+	wsStart: vi.fn(),
+	jobLiveWatch: vi.fn(() => () => {}),
+	live: {} as Record<string, unknown>
 }));
 
 vi.mock('$lib/stores/auth', async () => {
@@ -42,11 +41,18 @@ vi.mock('svelte/transition', () => ({
 	slide: () => ({ duration: 0 })
 }));
 
-vi.mock('$lib/stores/rips.svelte', () => ({
-	ripProgress: h.ripProgress,
-	startWS: h.startWS,
-	stopWS: h.stopWS,
-	reconcileSubscriptions: h.reconcileSubscriptions
+vi.mock('$lib/api/ws', async (importOriginal) => {
+	const actual = await importOriginal<typeof import('$lib/api/ws')>();
+	return { ...actual, wsClient: Object.assign(Object.create(actual.wsClient), { start: h.wsStart }) };
+});
+
+vi.mock('$lib/stores/job-live.svelte', () => ({
+	jobLive: {
+		watch: h.jobLiveWatch,
+		get: (id: string) => h.live[id] ?? { rip: null, transcode: null },
+		followTask: () => () => {},
+		task: () => null
+	}
 }));
 
 vi.mock('$lib/stores/ripper-events.svelte', () => ({
@@ -114,6 +120,7 @@ function dash(overrides: DashOverrides = {}) {
 		transcoder_online: true,
 		transcoder_stats: null,
 		active_transcodes: [],
+		review_wait_seconds: 60,
 		...overrides
 	};
 }
@@ -157,9 +164,12 @@ async function setRole(role: string | null) {
 	auth.__setRole(role);
 }
 
-async function renderPage() {
+// The body (sections, idle panel, All Jobs) draws once the first dashboard
+// load lands; wait for it unless the test holds that load open.
+async function renderPage({ untilBody = true } = {}) {
 	const view = renderComponent(DashboardPage);
 	await waitFor(() => expect(screen.getByText('Dashboard')).toBeInTheDocument());
+	if (untilBody) await waitFor(() => expect(screen.getByText('All Jobs')).toBeInTheDocument());
 	return view;
 }
 
@@ -186,7 +196,7 @@ beforeEach(() => {
 	vi.clearAllMocks();
 	(dashboard as ResettablePollingStore<unknown>).reset();
 	h.ripperListeners = [];
-	h.ripProgress.value = {};
+	h.live = {};
 	setDashboard(dash());
 	setJobs([listed('l1')]);
 	vi.mocked(bulkDeleteJobs).mockResolvedValue({ deleted_ids: [], skipped_non_terminal: [] });
@@ -201,6 +211,15 @@ afterEach(async () => {
 });
 
 describe('Dashboard sections', () => {
+	it('passes the configured countdown length to the review card', async () => {
+		const waitStart = new Date(Date.now() - 10_000).toISOString();
+		setDashboard(
+			dash({ review_wait_seconds: 300, active_jobs: [job('r1', 'awaiting_review', { wait_start_time: waitStart })] })
+		);
+		await renderPage();
+		await waitFor(() => expect(screen.getByText(/^4m 5\ds$/)).toBeInTheDocument());
+	});
+
 	describe('labels', () => {
 		it.each([
 			['one disc', 1, 'WAITING FOR REVIEW - 1 DISC'],
@@ -503,29 +522,32 @@ describe('Dashboard sections', () => {
 			expect(screen.queryByLabelText(/^(ISO file|Disc folder) /)).toBeNull();
 		});
 
-		it('passes the live rip progress to an active row', async () => {
-			h.ripProgress.value = {
+		it('renders an active row from the job-live store without progress props', async () => {
+			h.live = {
 				live_job: {
-					track_id: 't1',
-					progress_pct: 42,
-					eta_seconds: 600,
-					bytes_done: 1024 * 1024 * 512,
-					bytes_total: 1024 * 1024 * 1024,
-					rate_bps: 1024 * 1024
+					rip: {
+						pct: 42,
+						etaSeconds: 600,
+						bytesDone: 1024 * 1024 * 512,
+						bytesTotal: 1024 * 1024 * 1024,
+						rateBps: 1024 * 1024
+					},
+					transcode: null
 				}
 			};
 			setDashboard(dash({ active_jobs: [job('live_job', 'ripping'), job('quiet_job', 'ripping')] }));
 			await renderPage();
 			await waitFor(() => expect(screen.getByText('42%')).toBeInTheDocument());
 			expect(screen.getByText('10m left')).toBeInTheDocument();
-			expect(screen.getByText('512 MB of 1 GB · 1 MB/s')).toBeInTheDocument();
+			expect(screen.getByText('512 MB of 1 GB \u00b7 1 MB/s')).toBeInTheDocument();
 			expect(screen.getAllByText('42%')).toHaveLength(1);
 		});
 
-		it('subscribes the live progress to the ripping jobs only', async () => {
+		it('lets each row watch its own job instead of the page subscribing', async () => {
 			setDashboard(dash({ active_jobs: [job('r1', 'ripping'), job('c1', 'created')] }));
 			await renderPage();
-			await waitFor(() => expect(h.reconcileSubscriptions).toHaveBeenLastCalledWith(['r1']));
+			await waitFor(() => expect(h.jobLiveWatch).toHaveBeenCalledWith({ id: 'r1', status: 'ripping' }));
+			expect(h.jobLiveWatch).toHaveBeenCalledWith({ id: 'c1', status: 'created' });
 		});
 
 		it('lists preparing ISO rows with their file name', async () => {
@@ -543,19 +565,19 @@ describe('Dashboard sections', () => {
 			expect(screen.getByText(/Insert a disc to get started - 1 drive online/)).toBeInTheDocument();
 		});
 
-		it('waits for the dashboard load', async () => {
+		it('waits for the dashboard load, with All Jobs held back alongside it', async () => {
 			vi.mocked(fetchDashboardSnapshot).mockReturnValue(new Promise(() => {}));
-			await renderPage();
-			await waitFor(() => expect(screen.getByText('Listed l1')).toBeInTheDocument());
-			expect(screen.queryByText('No active rips or transcodes')).toBeNull();
-		});
-
-		it('waits for the jobs load', async () => {
-			vi.mocked(fetchJobsPage).mockReturnValue(new Promise(() => {}));
-			await renderPage();
-			await waitFor(() => expect(fetchDashboardSnapshot).toHaveBeenCalled());
+			await renderPage({ untilBody: false });
+			await waitFor(() => expect(fetchJobsPage).toHaveBeenCalled());
 			await new Promise((r) => setTimeout(r, 20));
 			expect(screen.queryByText('No active rips or transcodes')).toBeNull();
+			expect(screen.queryByText('All Jobs')).toBeNull();
+		});
+
+		it('does not wait for the jobs load', async () => {
+			vi.mocked(fetchJobsPage).mockReturnValue(new Promise(() => {}));
+			await renderPage();
+			await waitFor(() => expect(screen.getByText('No active rips or transcodes')).toBeInTheDocument());
 		});
 
 		it.each([
@@ -596,8 +618,9 @@ describe('Dashboard sections', () => {
 
 		it('hides the pause banner while the dashboard is still loading', async () => {
 			vi.mocked(fetchDashboardSnapshot).mockReturnValue(new Promise(() => {}));
-			await renderPage();
-			await waitFor(() => expect(screen.getByText('1 job')).toBeInTheDocument());
+			await renderPage({ untilBody: false });
+			await waitFor(() => expect(fetchJobsPage).toHaveBeenCalled());
+			await new Promise((r) => setTimeout(r, 20));
 			expect(screen.queryByText('Ripping Paused')).toBeNull();
 		});
 
@@ -847,21 +870,21 @@ describe('Dashboard All Jobs list', () => {
 		}
 
 		it('does nothing when the confirmation is cancelled', async () => {
-			const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
 			await selectBoth();
 			await fireEvent.click(screen.getByText('Delete selected'));
-			expect(confirmSpy).toHaveBeenCalledWith('Are you sure you want to delete 2 selected job(s)?');
+			expect(screen.getByRole('dialog')).toHaveTextContent('Are you sure you want to delete 2 selected job(s)?');
+			await fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Cancel' }));
 			expect(bulkDeleteJobs).not.toHaveBeenCalled();
 			expect(screen.getByTestId('jobs-selection-bar')).toBeInTheDocument();
 			expect(screen.queryByText(/^Deleted/)).toBeNull();
 		});
 
 		it('deletes the selected jobs, reports the count, clears the selection and reloads', async () => {
-			vi.spyOn(window, 'confirm').mockReturnValue(true);
 			vi.mocked(bulkDeleteJobs).mockResolvedValue({ deleted_ids: ['l1', 'l2'], skipped_non_terminal: [] });
 			await selectBoth();
 			const before = vi.mocked(fetchJobsPage).mock.calls.length;
 			await fireEvent.click(screen.getByText('Delete selected'));
+			await fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Delete' }));
 			await waitFor(() => expect(bulkDeleteJobs).toHaveBeenCalledWith({ job_ids: ['l1', 'l2'] }));
 			const feedback = await screen.findByText('Deleted 2 job(s)');
 			expect(feedback.closest('[data-tone]')).toHaveAttribute('data-tone', 'success');
@@ -870,60 +893,60 @@ describe('Dashboard All Jobs list', () => {
 		});
 
 		it('names the in-flight jobs the backend skipped', async () => {
-			vi.spyOn(window, 'confirm').mockReturnValue(true);
 			vi.mocked(bulkDeleteJobs).mockResolvedValue({ deleted_ids: ['l1'], skipped_non_terminal: ['l2'] });
 			await selectBoth();
 			await fireEvent.click(screen.getByText('Delete selected'));
+			await fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Delete' }));
 			const feedback = await screen.findByText('Deleted 1, skipped 1 in-flight job(s)');
 			expect(feedback.closest('[data-tone]')).toHaveAttribute('data-tone', 'error');
 		});
 
 		it('shows the message of an API Error and keeps the selection', async () => {
-			vi.spyOn(window, 'confirm').mockReturnValue(true);
 			vi.mocked(bulkDeleteJobs).mockRejectedValue(new Error('forbidden'));
 			await selectBoth();
 			await fireEvent.click(screen.getByText('Delete selected'));
+			await fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Delete' }));
 			const feedback = await screen.findByText('forbidden');
 			expect(feedback.closest('[data-tone]')).toHaveAttribute('data-tone', 'error');
 			expect(screen.getByTestId('jobs-selection-bar')).toBeInTheDocument();
 		});
 
 		it('shows a generic message when the rejection is not an Error', async () => {
-			vi.spyOn(window, 'confirm').mockReturnValue(true);
 			vi.mocked(bulkDeleteJobs).mockRejectedValue('nope');
 			await selectBoth();
 			await fireEvent.click(screen.getByText('Delete selected'));
+			await fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Delete' }));
 			expect(await screen.findByText('Bulk action failed')).toBeInTheDocument();
 		});
 
 		it('disables Delete selected while the request is in flight', async () => {
-			vi.spyOn(window, 'confirm').mockReturnValue(true);
 			const pending = deferred<{ deleted_ids: string[]; skipped_non_terminal: string[] }>();
 			vi.mocked(bulkDeleteJobs).mockReturnValue(pending.promise);
 			await selectBoth();
 			await fireEvent.click(screen.getByText('Delete selected'));
+			await fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Delete' }));
 			await waitFor(() => expect(screen.getByText('Delete selected')).toBeDisabled());
 			pending.resolve({ deleted_ids: ['l1', 'l2'], skipped_non_terminal: [] });
 			await screen.findByText('Deleted 2 job(s)');
 		});
 
 		it('Dismiss removes the feedback', async () => {
-			vi.spyOn(window, 'confirm').mockReturnValue(true);
 			vi.mocked(bulkDeleteJobs).mockResolvedValue({ deleted_ids: ['l1', 'l2'], skipped_non_terminal: [] });
 			await selectBoth();
 			await fireEvent.click(screen.getByText('Delete selected'));
+			await fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Delete' }));
 			await screen.findByText('Deleted 2 job(s)');
 			await fireEvent.click(screen.getByRole('button', { name: 'Dismiss' }));
 			expect(screen.queryByText('Deleted 2 job(s)')).toBeNull();
 		});
 
 		it('runs the Actions menu bulk delete by status', async () => {
-			const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
 			vi.mocked(bulkDeleteJobs).mockResolvedValue({ deleted_ids: [], skipped_non_terminal: [] });
 			await renderPage();
 			await fireEvent.click(screen.getByText(/Actions/));
 			await fireEvent.click(await screen.findByText('Delete All Failed'));
-			expect(confirmSpy).toHaveBeenCalledWith('Are you sure you want to delete all failed jobs?');
+			expect(screen.getByRole('dialog')).toHaveTextContent('Are you sure you want to delete all failed jobs?');
+			await fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Delete' }));
 			await waitFor(() => expect(bulkDeleteJobs).toHaveBeenCalledWith({ status: 'failed' }));
 			expect(await screen.findByText('Deleted 0 job(s)')).toBeInTheDocument();
 		});
@@ -941,9 +964,9 @@ describe('Dashboard All Jobs list', () => {
 });
 
 describe('Dashboard lifecycle', () => {
-	it('starts the WebSocket and ripper events on mount', async () => {
+	it('starts the WebSocket client and ripper events on mount', async () => {
 		await renderPage();
-		expect(h.startWS).toHaveBeenCalledTimes(1);
+		expect(h.wsStart).toHaveBeenCalledTimes(1);
 		expect(h.startRipperEvents).toHaveBeenCalledTimes(1);
 		expect(h.ripperListeners.length).toBeGreaterThan(0);
 	});
@@ -971,7 +994,6 @@ describe('Dashboard lifecycle', () => {
 
 		unmount();
 		expect(h.offRipperEvents).toHaveBeenCalledTimes(1);
-		expect(h.stopWS).toHaveBeenCalledTimes(1);
 		await vi.advanceTimersByTimeAsync(30000);
 		expect(fetchDashboardSnapshot).toHaveBeenCalledTimes(1);
 		expect(fetchJobsPage).toHaveBeenCalledTimes(2);
@@ -981,7 +1003,7 @@ describe('Dashboard lifecycle', () => {
 		const first = deferred<Awaited<ReturnType<typeof fetchDashboardSnapshot>>>();
 		vi.mocked(fetchDashboardSnapshot).mockReturnValueOnce(first.promise);
 		void dashboard.refresh();
-		await renderPage();
+		await renderPage({ untilBody: false });
 		expect(fetchDashboardSnapshot).toHaveBeenCalledTimes(1);
 		first.resolve(
 			dash({ active_jobs: [job('rev', 'awaiting_review')] }) as unknown as Awaited<

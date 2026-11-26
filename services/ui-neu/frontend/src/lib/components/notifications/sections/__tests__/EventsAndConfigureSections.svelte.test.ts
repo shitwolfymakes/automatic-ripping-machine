@@ -36,6 +36,7 @@ function appriseService(
 		id: 'discord',
 		name: 'Discord',
 		docs_url: '',
+		setup_url: '',
 		url_scheme: 'discord',
 		required_fields: over.required_fields ?? [],
 		advanced_fields: over.advanced_fields ?? []
@@ -84,6 +85,29 @@ describe('ConfigureSection', () => {
 		renderComponent(ConfigureSection, { props });
 		expect(screen.getByLabelText(/channel label/i)).toBeInTheDocument();
 		expect(screen.getByRole('switch', { name: /enabled/i })).toBeInTheDocument();
+	});
+
+	it('labels the channel label input through its field label, with no docs link', () => {
+		renderComponent(ConfigureSection, {
+			props: { type: 'webhook', name: '', enabled: true, config: {}, service: null }
+		});
+		const input = screen.getByLabelText('Channel Label');
+		expect(document.querySelector(`label[for="${input.id}"]`)).toHaveTextContent(/^Channel Label$/);
+		expect(document.querySelector('.field-label-required')).toHaveAttribute('aria-hidden', 'true');
+		expect(screen.queryByRole('link', { name: /^Docs for Channel Label/ })).toBeNull();
+	});
+
+	it('the Enabled switch turns the channel off', async () => {
+		const props = $state({
+			type: 'webhook' as const,
+			name: '',
+			enabled: true,
+			config: {} as Record<string, unknown>,
+			service: null
+		});
+		renderComponent(ConfigureSection, { props });
+		await fireEvent.click(screen.getByRole('switch', { name: 'Enabled' }));
+		expect(props.enabled).toBe(false);
 	});
 
 	it('renders webhook fields (URL) for webhook type', () => {
@@ -239,6 +263,57 @@ describe('ConfigureSection bash', () => {
 		expect(await screen.findByText(/arm\/scripts/)).toBeTruthy();
 	});
 
+	it('labels the script and timeout and links them to the bash hook scripts help', async () => {
+		vi.mocked(fetchScripts).mockResolvedValue([]);
+		renderComponent(ConfigureSection, { props: { type: 'bash', name: 'x', enabled: true, config: {}, service: null } });
+		await screen.findByText('No scripts found');
+		const script = screen.getByLabelText('Script');
+		const timeout = screen.getByLabelText('Timeout (seconds)');
+		expect(document.querySelector(`label[for="${script.id}"]`)).toHaveTextContent(/^Script$/);
+		expect(document.querySelector(`label[for="${timeout.id}"]`)).toHaveTextContent(/^Timeout$/);
+		expect(screen.getByText('(s)')).toBeInTheDocument();
+		expect(screen.getByRole('link', { name: 'Docs for Script (opens in a new tab)' })).toHaveAttribute(
+			'href',
+			'/help/guide/notification-scripts#where-scripts-live'
+		);
+		expect(screen.getByRole('link', { name: 'Docs for Timeout (opens in a new tab)' })).toHaveAttribute(
+			'href',
+			'/help/guide/notification-scripts#failures-and-timeouts'
+		);
+	});
+
+	it('writes a typed timeout into the config', async () => {
+		vi.mocked(fetchScripts).mockResolvedValue([]);
+		const props = $state({
+			type: 'bash' as const,
+			name: 'x',
+			enabled: true,
+			config: {} as Record<string, unknown>,
+			service: null
+		});
+		renderComponent(ConfigureSection, { props });
+		await fireEvent.input(screen.getByLabelText('Timeout (seconds)'), { target: { value: '45' } });
+		expect(props.config.timeout_seconds).toBe(45);
+	});
+
+	it('shows a failed script listing, and Refresh list lists again', async () => {
+		vi.mocked(fetchScripts).mockRejectedValueOnce(new Error('listing failed')).mockResolvedValueOnce([]);
+		renderComponent(ConfigureSection, { props: { type: 'bash', name: 'x', enabled: true, config: {}, service: null } });
+		expect(await screen.findByText('listing failed')).toBeTruthy();
+		await fireEvent.click(screen.getByRole('button', { name: 'Refresh list' }));
+		expect(await screen.findByText(/arm\/scripts/)).toBeTruthy();
+		expect(screen.queryByText('listing failed')).toBeNull();
+	});
+
+	it('says so when the chosen script declares no inputs', async () => {
+		vi.mocked(fetchScripts).mockResolvedValue([{ name: 'send-email.sh', executable: true, description: '' }]);
+		vi.mocked(fetchScript).mockResolvedValue({ ...info, inputs: [] } as never);
+		renderComponent(ConfigureSection, {
+			props: { type: 'bash', name: 'x', enabled: true, config: { script: 'send-email.sh' }, service: null }
+		});
+		expect(await screen.findByText(/This script declares no inputs/)).toBeTruthy();
+	});
+
 	it('keeps a stale script name selectable as missing and masks stored secrets', async () => {
 		vi.mocked(fetchScripts).mockResolvedValue([]);
 		vi.mocked(fetchScript).mockRejectedValue(new Error('404'));
@@ -255,5 +330,71 @@ describe('ConfigureSection bash', () => {
 		const select = screen.getByLabelText('Script') as HTMLSelectElement;
 		expect(select.value).toBe('gone.sh');
 		expect(select.options[1].textContent).toContain('missing');
+	});
+});
+
+describe('ConfigureSection docs links', () => {
+	afterEach(() => cleanup());
+
+	const fields = {
+		required_fields: [
+			{ key: 'webhook_id', label: 'Webhook ID', type: 'string' as const, private: true, required: true }
+		],
+		advanced_fields: [
+			{ key: 'thread', label: 'Thread ID', type: 'string' as const, private: false, required: false },
+			{ key: 'tts', label: 'Text To Speech', type: 'bool' as const, private: false, required: false }
+		]
+	};
+
+	it('links each field of a featured service to its own docs, with no service-wide link', () => {
+		renderComponent(ConfigureSection, {
+			props: { type: 'apprise' as const, name: '', enabled: true, config: {}, service: appriseService(fields) }
+		});
+		const ids = screen.getAllByRole('link', { name: /^Docs for/ }).map((a) => a.getAttribute('data-field-id'));
+		expect(ids).toEqual(['notify.discord.webhook_id', 'notify.discord.thread', 'notify.discord.tts']);
+		expect(screen.getByRole('link', { name: 'Docs for Webhook ID (opens in a new tab)' })).toHaveAttribute(
+			'href',
+			'https://appriseit.com/services/discord/#parameter-breakdown'
+		);
+		expect(screen.queryByRole('link', { name: 'Docs for Discord (opens in a new tab)' })).toBeNull();
+	});
+
+	it("gives any other service one link, to Apprise's setup page for it", () => {
+		const service = {
+			...appriseService(fields),
+			id: 'zulip',
+			name: 'Zulip',
+			setup_url: 'https://appriseit.com/services/zulip/'
+		};
+		renderComponent(ConfigureSection, {
+			props: { type: 'apprise' as const, name: '', enabled: true, config: {}, service }
+		});
+		const links = screen.getAllByRole('link', { name: /^Docs for/ });
+		expect(links).toHaveLength(1);
+		expect(links[0]).toHaveAccessibleName('Docs for Zulip (opens in a new tab)');
+		expect(links[0]).toHaveAttribute('href', 'https://appriseit.com/services/zulip/');
+		expect(links[0]).toHaveAttribute('target', '_blank');
+	});
+
+	it('shows no docs link on the webhook form', () => {
+		renderComponent(ConfigureSection, {
+			props: { type: 'webhook' as const, name: '', enabled: true, config: {}, service: null }
+		});
+		expect(screen.queryByRole('link')).toBeNull();
+	});
+
+	it('writes each Apprise field it renders, required, advanced text and advanced bool, into config', async () => {
+		const props = $state({
+			type: 'apprise' as const,
+			name: '',
+			enabled: true,
+			config: {} as Record<string, unknown>,
+			service: appriseService(fields)
+		});
+		renderComponent(ConfigureSection, { props });
+		await fireEvent.input(screen.getByLabelText('Webhook ID'), { target: { value: 'w1' } });
+		await fireEvent.input(screen.getByLabelText('Thread ID'), { target: { value: 't1' } });
+		await fireEvent.click(screen.getByLabelText('Text To Speech'));
+		expect(props.config).toEqual({ webhook_id: 'w1', thread: 't1', tts: true });
 	});
 });

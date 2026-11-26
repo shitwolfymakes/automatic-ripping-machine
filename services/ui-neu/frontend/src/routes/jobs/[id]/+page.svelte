@@ -18,9 +18,12 @@
 	import EpisodeMatchPanel from '$lib/components/episodes/EpisodeMatchPanel.svelte';
 	import IdentifyDialog from '$lib/components/jobs/IdentifyDialog.svelte';
 	import ApplySessionDialog from '$lib/components/jobs/ApplySessionDialog.svelte';
-	import JobLifecycle from '$lib/components/jobs/JobLifecycle.svelte';
+	import StageRail from '$lib/components/jobs/StageRail.svelte';
+	import LiveProgressLine from '$lib/components/jobs/LiveProgressLine.svelte';
+	import { railRipProgress } from '$lib/jobs/rip-progress';
+	import { jobLive } from '$lib/stores/job-live.svelte';
+	import { wsClient } from '$lib/api/ws';
 	import { identitySuggestionOf } from '$lib/jobs/review';
-	import { effectiveJobStatus, isPartialComplete } from '$lib/jobs/status';
 	import IdentitySuggestionBanner from '$lib/components/jobs/IdentitySuggestionBanner.svelte';
 	import { isLive } from '$lib/jobs/status-groups';
 	import { applyNote, identifyNote } from '$lib/jobs/action-notes';
@@ -31,8 +34,6 @@
 	import JobRawMetadata from '$lib/components/jobs/JobRawMetadata.svelte';
 	import JobLogPanel from '$lib/components/jobs/JobLogPanel.svelte';
 	import { EpisodeMatching, watchEpisodeMatching } from '$lib/stores/episode-matching.svelte';
-	import { reconcileSubscriptions, startWS } from '$lib/stores/rips.svelte';
-	import JobRipProgress from '$lib/components/jobs/JobRipProgress.svelte';
 	import { isAdmin } from '$lib/stores/auth';
 	import { dashboard } from '$lib/stores/dashboard';
 	import { JobDetail } from '$lib/stores/job-detail.svelte';
@@ -116,17 +117,9 @@
 		}
 	});
 
-	// Live rip progress for this job (the same ripper.progress feed the
-	// dashboard uses): subscribed only while the job is ripping.
-	let ripping = $derived(detail?.job.status === 'ripping');
-	$effect(() => {
-		const id = detail?.job.id;
-		reconcileSubscriptions(ripping && id ? [id] : []);
-	});
-
 	onMount(() => {
 		let stopped = false;
-		startWS();
+		wsClient.start();
 		fetchSessions()
 			.then((s) => (sessionNames = new Map(s.map((x) => [x.id, x.name]))))
 			.catch(() => {});
@@ -155,7 +148,6 @@
 		return () => {
 			stopped = true;
 			offRipperEvents();
-			reconcileSubscriptions([]);
 			matching.stop();
 		};
 	});
@@ -224,7 +216,7 @@
 				</div>
 
 				<!-- Panel toggle bar: poster override (manual poster_url_manual quick-edit).
-			     Disc identity now commits through the IdentifyDialog (resolve), not here. -->
+			     Disc identity commits through the IdentifyDialog (resolve), not here. -->
 				<JobPanelTabs {job} {jobDetail} {panels} />
 
 				<!-- Active panel content -->
@@ -259,11 +251,18 @@
 
 			<!-- Lifecycle widget: visual stage progression below header, above status bars -->
 			<div class="job-detail-lifecycle-card">
-				<JobLifecycle status={effectiveJobStatus(job)} sourceType={null} size="md" partial={isPartialComplete(job)} />
+				<StageRail job={{ ...job, rip_progress: railRipProgress(job, tracks) }} size="md" />
 			</div>
 
-			{#if ripping}
-				<JobRipProgress jobId={job.id} />
+			{#if job.status === 'ripping'}
+				{@const sample = jobLive.get(job.id).rip}
+				<!-- StageRail above holds the watch on this job, so the card only reads. -->
+				<section class="job-detail-lifecycle-card stack" data-testid="job-rip-progress">
+					<h2 class="job-detail-section-title">
+						{sample?.phase === 'verifying' ? 'Verifying ripped files' : 'Ripping'}
+					</h2>
+					<LiveProgressLine {sample} />
+				</section>
 			{/if}
 
 			<!-- Tracks -->
@@ -274,6 +273,7 @@
 					tracksAreSeries={jobDetail.tracksAreSeries}
 					previewByTrack={jobDetail.previewByTrack}
 					onexcludedchange={jobDetail.setExcluded}
+					excludeError={jobDetail.excludeError}
 					ontitleapplied={() => jobDetail.load()}
 				/>
 			{/if}
@@ -377,6 +377,12 @@
 	.job-detail-panel-content {
 		border-top: 1px solid var(--color-border);
 		padding: 1.25rem;
+	}
+	.job-detail-section-title {
+		font-size: 1.125rem;
+		line-height: 1.75rem;
+		font-weight: 600;
+		color: var(--color-text);
 	}
 	.job-detail-lifecycle-card {
 		border: 1px solid var(--color-border);

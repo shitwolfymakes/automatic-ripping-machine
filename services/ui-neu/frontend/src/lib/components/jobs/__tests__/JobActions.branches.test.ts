@@ -1,12 +1,13 @@
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import { tick } from 'svelte';
-import { renderComponent, screen, fireEvent, cleanup } from '$lib/testing/render';
+import { renderComponent, screen, fireEvent, cleanup, within } from '$lib/testing/render';
 import type { JobStatus, JobView } from '$lib/types/api.gen';
 import JobActions from '../JobActions.svelte';
 import { createJob } from '../../../__fixtures__/job';
 
 // Behaviour pins for JobActions, beside JobActions.test.ts, written before
-// its three handlers share one helper. Every branch is reachable from the
+// its three handlers share one helper. Abandon and Delete ask first through
+// the shared ConfirmDialog. Every branch is reachable from the
 // rendered component, so nothing is left unpinned.
 
 vi.mock('$lib/api/jobs', () => ({
@@ -19,11 +20,6 @@ import { abandonJob, deleteJob, ripAgain } from '$lib/api/jobs';
 const mockAbandon = vi.mocked(abandonJob);
 const mockDelete = vi.mocked(deleteJob);
 const mockRipAgain = vi.mocked(ripAgain);
-
-vi.stubGlobal(
-	'confirm',
-	vi.fn(() => true)
-);
 
 const ALL_STATUSES: JobStatus[] = [
 	'created',
@@ -109,6 +105,19 @@ const CASES: Case[] = [
 	}
 ];
 
+const dialog = () => screen.queryByRole('dialog');
+
+// Clicks the action's button and, for a destructive one, its dialog's
+// confirm button.
+async function runCase(c: Case) {
+	await fireEvent.click(btn(c.click));
+	await flush();
+	if (c.confirmText) {
+		await fireEvent.click(within(dialog()!).getByRole('button', { name: c.label }));
+		await flush();
+	}
+}
+
 describe('JobActions branches', () => {
 	beforeEach(() => {
 		vi.useFakeTimers();
@@ -117,7 +126,6 @@ describe('JobActions branches', () => {
 	afterEach(() => {
 		cleanup();
 		vi.clearAllMocks();
-		vi.mocked(confirm).mockReturnValue(true);
 		mockAbandon.mockImplementation(() => Promise.resolve(createJob()));
 		mockDelete.mockImplementation(() => Promise.resolve());
 		mockRipAgain.mockImplementation(() => Promise.resolve({ started_job_id: null, armed: true }));
@@ -130,10 +138,10 @@ describe('JobActions branches', () => {
 			await fireEvent.click(btn(c.click));
 			await flush();
 			if (c.confirmText) {
-				expect(confirm).toHaveBeenCalledTimes(1);
-				expect(confirm).toHaveBeenCalledWith(c.confirmText('Alien'));
+				expect(dialog()).toHaveTextContent(c.confirmText('Alien'));
+				expect(c.api).not.toHaveBeenCalled();
 			} else {
-				expect(confirm).not.toHaveBeenCalled();
+				expect(dialog()).toBeNull();
 			}
 		});
 
@@ -142,9 +150,9 @@ describe('JobActions branches', () => {
 			await fireEvent.click(btn(c.click));
 			await flush();
 			if (c.confirmText) {
-				expect(confirm).toHaveBeenCalledWith(c.confirmText('job_77'));
+				expect(dialog()).toHaveTextContent(c.confirmText('job_77'));
 			} else {
-				expect(confirm).not.toHaveBeenCalled();
+				expect(dialog()).toBeNull();
 			}
 		});
 
@@ -152,8 +160,7 @@ describe('JobActions branches', () => {
 			const pending = deferred<never>();
 			c.api.mockImplementationOnce(() => pending.promise as never);
 			renderComponent(JobActions, { props: { job: allButtonsJob() } });
-			await fireEvent.click(btn(c.click));
-			await flush();
+			await runCase(c);
 			expect(btn(c.busy)).toBeInTheDocument();
 			expect(allButtons()).toHaveLength(3);
 			expect(allButtons().every((b) => b.disabled)).toBe(true);
@@ -167,8 +174,7 @@ describe('JobActions branches', () => {
 		it('shows a success line and calls onaction once', async () => {
 			const onaction = vi.fn();
 			renderComponent(JobActions, { props: { job: allButtonsJob(), onaction } });
-			await fireEvent.click(btn(c.click));
-			await flush();
+			await runCase(c);
 			expect(feedbackEl()).toHaveTextContent(c.success);
 			expect(feedbackEl()).toHaveAttribute('data-tone', 'success');
 			expect(onaction).toHaveBeenCalledTimes(1);
@@ -177,8 +183,7 @@ describe('JobActions branches', () => {
 
 		it('succeeds without an onaction', async () => {
 			renderComponent(JobActions, { props: { job: allButtonsJob() } });
-			await fireEvent.click(btn(c.click));
-			await flush();
+			await runCase(c);
 			expect(feedbackEl()).toHaveAttribute('data-tone', 'success');
 			expect(feedbackEl()).toHaveTextContent(c.success);
 		});
@@ -187,8 +192,7 @@ describe('JobActions branches', () => {
 			const onaction = vi.fn();
 			c.api.mockRejectedValueOnce(new Error('boom'));
 			renderComponent(JobActions, { props: { job: allButtonsJob(), onaction } });
-			await fireEvent.click(btn(c.click));
-			await flush();
+			await runCase(c);
 			expect(feedbackEl()).toHaveTextContent('boom');
 			expect(feedbackEl()).toHaveAttribute('data-tone', 'error');
 			expect(onaction).not.toHaveBeenCalled();
@@ -200,8 +204,7 @@ describe('JobActions branches', () => {
 			const onaction = vi.fn();
 			c.api.mockRejectedValueOnce('nope');
 			renderComponent(JobActions, { props: { job: allButtonsJob(), onaction } });
-			await fireEvent.click(btn(c.click));
-			await flush();
+			await runCase(c);
 			expect(feedbackEl()).toHaveTextContent(c.fallback);
 			expect(feedbackEl()).toHaveAttribute('data-tone', 'error');
 			expect(onaction).not.toHaveBeenCalled();
@@ -210,8 +213,7 @@ describe('JobActions branches', () => {
 
 		it('clears a success line 3000 ms after it settles', async () => {
 			renderComponent(JobActions, { props: { job: allButtonsJob() } });
-			await fireEvent.click(btn(c.click));
-			await flush();
+			await runCase(c);
 			expect(feedbackEl()).not.toBeNull();
 			await vi.advanceTimersByTimeAsync(2999);
 			await tick();
@@ -224,8 +226,7 @@ describe('JobActions branches', () => {
 		it('clears an error line 3000 ms after it settles', async () => {
 			c.api.mockRejectedValueOnce(new Error('boom'));
 			renderComponent(JobActions, { props: { job: allButtonsJob() } });
-			await fireEvent.click(btn(c.click));
-			await flush();
+			await runCase(c);
 			expect(feedbackEl()).toHaveTextContent('boom');
 			await vi.advanceTimersByTimeAsync(2999);
 			await tick();
@@ -242,11 +243,9 @@ describe('JobActions branches', () => {
 			const pending = deferred<never>();
 			c.api.mockImplementationOnce(() => pending.promise as never);
 			renderComponent(JobActions, { props: { job: allButtonsJob() } });
-			await fireEvent.click(btn(other.click));
-			await flush();
+			await runCase(other);
 			expect(feedbackEl()).toHaveTextContent('earlier');
-			await fireEvent.click(btn(c.click));
-			await flush();
+			await runCase(c);
 			expect(feedbackEl()).toBeNull();
 			pending.resolve(undefined as never);
 			await flush();
@@ -255,10 +254,12 @@ describe('JobActions branches', () => {
 
 	describe.each(CASES.filter((c) => c.confirmText))('$name declined', (c) => {
 		it('sends nothing, keeps its label and shows no feedback', async () => {
-			vi.mocked(confirm).mockReturnValue(false);
 			renderComponent(JobActions, { props: { job: allButtonsJob() } });
 			await fireEvent.click(btn(c.click));
 			await flush();
+			await fireEvent.click(within(dialog()!).getByRole('button', { name: 'Cancel' }));
+			await flush();
+			expect(dialog()).toBeNull();
 			expect(c.api).not.toHaveBeenCalled();
 			expect(btn(c.label)).toBeInTheDocument();
 			expect(allButtons().every((b) => !b.disabled)).toBe(true);
@@ -286,8 +287,7 @@ describe('JobActions branches', () => {
 			const pending = deferred();
 			mockDelete.mockImplementationOnce(() => pending.promise);
 			renderComponent(JobActions, { props: { job: allButtonsJob(), ondelete, onaction } });
-			await fireEvent.click(btn('Delete'));
-			await flush();
+			await runCase(CASES[2]);
 			expect(btn('Deleting...')).toBeInTheDocument();
 			pending.resolve();
 			await flush();
@@ -304,8 +304,7 @@ describe('JobActions branches', () => {
 				throw new Error('ondelete failed');
 			});
 			renderComponent(JobActions, { props: { job: allButtonsJob(), ondelete, onaction } });
-			await fireEvent.click(btn('Delete'));
-			await flush();
+			await runCase(CASES[2]);
 			expect(feedbackEl()).toHaveTextContent('ondelete failed');
 			expect(feedbackEl()).toHaveAttribute('data-tone', 'error');
 			expect(onaction).not.toHaveBeenCalled();
@@ -314,11 +313,10 @@ describe('JobActions branches', () => {
 	});
 
 	describe('shared clear timer', () => {
-		it("lets an earlier action's timer clear a later action's line", async () => {
+		it("keeps a later action's line up for its own 3 seconds", async () => {
 			mockAbandon.mockRejectedValueOnce(new Error('first failed'));
 			renderComponent(JobActions, { props: { job: allButtonsJob() } });
-			await fireEvent.click(btn('Abandon'));
-			await flush();
+			await runCase(CASES[0]);
 			expect(feedbackEl()).toHaveTextContent('first failed');
 
 			await vi.advanceTimersByTimeAsync(2000);
@@ -326,12 +324,21 @@ describe('JobActions branches', () => {
 			await flush();
 			expect(feedbackEl()).toHaveTextContent('The next time this disc goes in, ARM rips it again');
 
-			await vi.advanceTimersByTimeAsync(999);
+			await vi.advanceTimersByTimeAsync(2999);
 			await tick();
-			expect(feedbackEl()).not.toBeNull();
+			expect(feedbackEl()).toHaveTextContent('The next time this disc goes in, ARM rips it again');
 			await vi.advanceTimersByTimeAsync(1);
 			await tick();
 			expect(feedbackEl()).toBeNull();
+		});
+
+		it('cancels the pending clear when it unmounts', async () => {
+			mockAbandon.mockRejectedValueOnce(new Error('first failed'));
+			const { unmount } = renderComponent(JobActions, { props: { job: allButtonsJob() } });
+			await fireEvent.click(btn('Abandon'));
+			await flush();
+			unmount();
+			expect(vi.getTimerCount()).toBe(0);
 		});
 	});
 

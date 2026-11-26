@@ -208,7 +208,7 @@ class _SpawnPass:
 
     async def _job_id_for(self, task: TranscodeTask) -> str | None:
         # Load the owning application once so the spawn log lines carry
-        # job_id for the per-job log view (Phase 12).
+        # job_id for the per-job log view.
         application = (
             await self._db.execute(
                 select(SessionApplication).where(col(SessionApplication.id) == task.session_application_id)
@@ -701,8 +701,8 @@ class TranscodeDispatcher:
         self, gpus: list[Gpu], preset: TranscodePreset, codec: str, invalid: dict[str, list[SettingIssue]]
     ) -> list[Gpu]:
         """Drop the devices the preset's HandBrake settings rule out: the
-        ffmpeg VAAPI engine whenever it has settings, schema or not (M4), and
-        the families the claim-time check found invalid (R1; `invalid` is
+        ffmpeg VAAPI engine whenever it has settings, schema or not, and
+        the families the claim-time check found invalid (`invalid` is
         empty without a loaded schema)."""
         return exclude_invalid_families(exclude_ffmpeg_engine(gpus, preset), codec, invalid)
 

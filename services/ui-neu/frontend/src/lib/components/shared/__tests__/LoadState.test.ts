@@ -1,3 +1,6 @@
+// Open arm the coverage tool reports that is Svelte's, not the component's:
+// the error text `{error!.message}` compiles to `(...) ?? ''`, and an Error's
+// message is always a string.
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import { renderComponent, screen, cleanup } from '$lib/testing/render';
 import { createRawSnippet } from 'svelte';
@@ -26,11 +29,51 @@ describe('LoadState', () => {
 				ready: valueSnippet()
 			}
 		});
-		// Before minDelay the skeleton is in flow (space reserved) but hidden.
+		// Before minDelay (300ms) the skeleton is in flow (space reserved) but hidden.
 		expect(screen.getByText('LOADING').closest('[aria-hidden="true"]')).not.toBeNull();
-		await vi.advanceTimersByTimeAsync(200);
+		await vi.advanceTimersByTimeAsync(299);
+		expect(screen.getByText('LOADING').closest('[aria-hidden="true"]')).not.toBeNull();
+		await vi.advanceTimersByTimeAsync(1);
 		expect(screen.getByText('LOADING').closest('[aria-hidden="true"]')).toBeNull();
 		vi.useRealTimers();
+	});
+
+	it('waits rather than showing the skeleton before a load has started', () => {
+		renderComponent(LoadState, {
+			props: { data: null, loading: false, loadingSlot: textSnippet('LOADING'), ready: valueSnippet() }
+		});
+		expect(screen.getByText('LOADING').closest('[aria-hidden="true"]')).not.toBeNull();
+	});
+
+	it('keeps a shown skeleton up for the minimum time once the data lands', async () => {
+		vi.useFakeTimers();
+		const props = {
+			data: null as number[] | null,
+			loading: true,
+			loadingSlot: textSnippet('LOADING'),
+			ready: valueSnippet()
+		};
+		const { rerender } = renderComponent(LoadState, { props });
+		await vi.advanceTimersByTimeAsync(300);
+		await rerender({ ...props, data: [1], loading: false });
+		expect(screen.getByText('LOADING')).toBeInTheDocument();
+		expect(screen.queryByText(/^ready:/)).toBeNull();
+		await vi.advanceTimersByTimeAsync(300);
+		expect(screen.getByText(/^ready:/)).toBeInTheDocument();
+		vi.useRealTimers();
+	});
+
+	it('swaps straight to the data with minDelay=0 (no hold)', async () => {
+		const props = {
+			data: null as number[] | null,
+			loading: true,
+			minDelay: 0,
+			loadingSlot: textSnippet('LOADING'),
+			ready: valueSnippet()
+		};
+		const { rerender } = renderComponent(LoadState, { props });
+		await rerender({ ...props, data: [1], loading: false });
+		expect(screen.getByText(/^ready:/)).toBeInTheDocument();
 	});
 
 	it('renders the ready snippet when loading=false and data is non-empty', () => {

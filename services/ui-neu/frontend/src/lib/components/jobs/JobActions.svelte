@@ -3,6 +3,9 @@
 	import type { JobView } from '$lib/types/api.gen';
 	import { abandonJob, deleteJob, ripAgain } from '$lib/api/jobs';
 	import { isRipped } from '$lib/jobs/status-groups';
+	import { onDestroy } from 'svelte';
+	import { TimedFeedback } from '$lib/stores/timed-feedback.svelte';
+	import ConfirmDialog from '$lib/components/shared/ConfirmDialog.svelte';
 
 	interface Props {
 		job: JobView;
@@ -14,17 +17,16 @@
 	let { job, onaction, ondelete, compact = false }: Props = $props();
 
 	let loading = $state<string | null>(null);
-	let feedback = $state<{ type: 'success' | 'error'; message: string } | null>(null);
+	const feedback = new TimedFeedback(3000);
+	onDestroy(() => feedback.dispose());
+	// The destructive action waiting on its confirm dialog, if any.
+	let confirming = $state<'abandon' | 'delete' | null>(null);
 
 	let canAbandon = $derived(job.actions.can_abandon);
 	let canDelete = $derived(job.actions.can_delete);
 	// A ripped disc that the previously-ripped setting would hold or reject
 	// on its next insert: let it through (or start the copy already held).
 	let canRipAgain = $derived(isRipped(job.status));
-
-	function clearFeedback() {
-		setTimeout(() => (feedback = null), 3000);
-	}
 
 	function jobLabel(): string {
 		return job.title || job.id;
@@ -35,22 +37,20 @@
 	// when the action handed off and shows no line (a delete with ondelete).
 	async function runAction(name: string, failed: string, act: () => Promise<string | null>): Promise<void> {
 		loading = name;
-		feedback = null;
+		feedback.clear();
 		try {
 			const message = await act();
 			if (message === null) return;
-			feedback = { type: 'success', message };
+			feedback.show('success', message);
 			onaction?.();
 		} catch (e) {
-			feedback = { type: 'error', message: errorMessage(e, failed) };
+			feedback.show('error', errorMessage(e, failed));
 		} finally {
 			loading = null;
-			clearFeedback();
 		}
 	}
 
-	async function handleAbandon() {
-		if (!confirm(`Abandon job "${jobLabel()}"?`)) return;
+	async function abandon() {
 		await runAction('abandon', 'Failed to abandon', async () => {
 			await abandonJob(job.id);
 			return 'Job abandoned';
@@ -66,8 +66,7 @@
 		});
 	}
 
-	async function handleDelete() {
-		if (!confirm(`Delete job "${jobLabel()}"? This cannot be undone.`)) return;
+	async function remove() {
 		await runAction('delete', 'Failed to delete', async () => {
 			await deleteJob(job.id);
 			if (ondelete) {
@@ -76,6 +75,27 @@
 			}
 			return 'Job deleted';
 		});
+	}
+
+	// The confirm dialog's wording and the action it runs, per action.
+	const CONFIRMS = {
+		abandon: {
+			title: 'Abandon job',
+			message: (label: string) => `Abandon job "${label}"?`,
+			confirmLabel: 'Abandon',
+			run: abandon
+		},
+		delete: {
+			title: 'Delete job',
+			message: (label: string) => `Delete job "${label}"? This cannot be undone.`,
+			confirmLabel: 'Delete',
+			run: remove
+		}
+	};
+
+	function confirmPending(kind: 'abandon' | 'delete') {
+		confirming = null;
+		CONFIRMS[kind].run();
 	}
 </script>
 
@@ -94,7 +114,7 @@
 		{/if}
 		{#if canAbandon}
 			<button
-				onclick={handleAbandon}
+				onclick={() => (confirming = 'abandon')}
 				disabled={loading !== null}
 				data-compact={compact}
 				class="job-actions-pill job-actions-pill-warning"
@@ -104,7 +124,7 @@
 		{/if}
 		{#if canDelete}
 			<button
-				onclick={handleDelete}
+				onclick={() => (confirming = 'delete')}
 				disabled={loading !== null}
 				data-compact={compact}
 				class="job-actions-pill job-actions-pill-danger"
@@ -112,20 +132,32 @@
 				{loading === 'delete' ? 'Deleting...' : 'Delete'}
 			</button>
 		{/if}
-		{#if feedback}
-			<span class="job-actions-feedback" data-tone={feedback.type}>
-				{feedback.message}
+		{#if feedback.current}
+			<span class="job-actions-feedback" data-tone={feedback.current.type}>
+				{feedback.current.message}
 			</span>
 		{/if}
 	</div>
+{/if}
+
+{#if confirming}
+	{@const kind = confirming}
+	<ConfirmDialog
+		open
+		title={CONFIRMS[kind].title}
+		message={CONFIRMS[kind].message(jobLabel())}
+		confirmLabel={CONFIRMS[kind].confirmLabel}
+		variant="danger"
+		onconfirm={() => confirmPending(kind)}
+		oncancel={() => (confirming = null)}
+	/>
 {/if}
 
 <style>
 	.job-actions-row {
 		gap: 0.375rem;
 	}
-	/* the original was a filled soft pill (rounded-full, bg-*-100/text-*-700),
-	   not .btn's outlined default nor .btn-danger/.btn-warning's outlined tone
+	/* a filled soft pill (rounded-full), not .btn's outlined default nor .btn-danger/.btn-warning's outlined tone
 	   look */
 	.job-actions-pill {
 		border: 0;
@@ -137,8 +169,8 @@
 		cursor: pointer;
 		transition: background-color var(--motion-fast) var(--ease);
 	}
-	/* compact: original was rounded px-2 py-0.5 (not rounded-full px-3 py-1.5);
-	   Tailwind's unprefixed `rounded` is 0.25rem, matching neither radius token exactly */
+	/* compact: a 0.25rem radius with px-2 py-0.5 (not rounded-full px-3 py-1.5); 0.25rem matches
+	   neither radius token exactly */
 	.job-actions-pill[data-compact='true'] {
 		border-radius: 0.25rem;
 		padding: 0.125rem 0.5rem;
@@ -162,7 +194,7 @@
 	.job-actions-pill-warning:hover {
 		background: color-mix(in srgb, var(--color-warning-soft) 70%, var(--color-warning));
 	}
-	/* the original also carried ring-1 ring-red-200 (a box-shadow ring, not
+	/* also carries a danger ring (a box-shadow ring, not
 	   .btn's real border - same 30%-mix treatment as DiscReviewWidget's
 	   Cancel button) */
 	.job-actions-pill-danger {

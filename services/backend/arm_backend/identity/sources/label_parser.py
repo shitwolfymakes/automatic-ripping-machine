@@ -1,6 +1,6 @@
 """Parse an ISO volume label into a cleaned search title and its season / disc markers.
 
-Ported from neu arm/ripper/arm_matcher.py parse_label. Only trailing markers
+Only trailing markers
 count, and each needs an explicit S / D / P / DISC / SEASON prefix, so movie
 titles that end in a number (APOLLO_13, BLADE_RUNNER_2049) yield no hint.
 PART is deliberately not a disc marker: PART_2 is usually title content.
@@ -33,7 +33,7 @@ _DISC_RE = re.compile(r"[\s-](P|D|DISC)[\s-]?(\d+)(?:[\s-]OF[\s-]?(\d+))?$", re.
 _SEASON_KEYWORD_RE = re.compile(r"[\s-]SEASON[\s-]?(\d+)$", re.IGNORECASE)
 _SEASON_RE = re.compile(r"[\s-]S(\d+)$", re.IGNORECASE)
 # Bounded space run: an unbounded ` *` before SKU backtracks polynomially (ReDoS).
-# `\d*\b` (rather than the old bare `\w*`) requires SKU to be its own token,
+# `\d*\b` (rather than a bare `\w*`) requires SKU to be its own token,
 # optionally followed by digits — "SKU1234" still strips, but "Skull" (which
 # begins with the same three letters) is left alone.
 _SKU_RE = re.compile(r" {0,4}\bSKU\d*\b", re.IGNORECASE)

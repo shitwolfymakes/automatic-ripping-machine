@@ -3,7 +3,7 @@
 // open arms that are Svelte's: `{$statsError}` and `{taskActions.error}` each
 // compile to `(...) ?? ''`, and both sit inside an #if on the same value.
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { renderComponent, screen, cleanup, waitFor, fireEvent } from '$lib/testing/render';
+import { renderComponent, screen, cleanup, waitFor, fireEvent, within } from '$lib/testing/render';
 import TranscoderPage from '../+page.svelte';
 import { setTranscoderEnabled, setTranscodeRuntimeEnabled } from '$lib/stores/config';
 import {
@@ -204,7 +204,7 @@ describe('Transcoder Page', () => {
 		});
 	});
 
-	describe('done task duration (D-202)', () => {
+	describe('done task duration', () => {
 		const doneTask = {
 			id: 't-3',
 			session_application_id: 'sap_3',
@@ -234,7 +234,7 @@ describe('Transcoder Page', () => {
 		});
 	});
 
-	describe('action failures (D-195)', () => {
+	describe('action failures', () => {
 		afterEach(() => vi.restoreAllMocks());
 
 		it('shows a failed retry in the feedback banner and refreshes the list', async () => {
@@ -249,21 +249,26 @@ describe('Transcoder Page', () => {
 			expect(screen.queryByText('task is in status=queued, not failed')).not.toBeInTheDocument();
 		});
 
-		it('shows a failed delete in the feedback banner', async () => {
-			vi.spyOn(window, 'confirm').mockReturnValue(true);
+		it('asks through the confirm dialog, then shows a failed delete in the feedback banner', async () => {
 			vi.mocked(deleteTranscoderJob).mockRejectedValueOnce(new Error('transcode dispatcher unavailable'));
 			renderComponent(TranscoderPage);
 			await waitFor(() => expect(screen.getAllByText('Delete').length).toBeGreaterThan(0));
 			await fireEvent.click(screen.getAllByText('Delete')[0]);
+			const dialog = screen.getByRole('dialog');
+			expect(within(dialog).getByText('Delete transcode task')).toBeInTheDocument();
+			expect(within(dialog).getByText('Delete this transcode task?')).toBeInTheDocument();
+			await fireEvent.click(within(dialog).getByRole('button', { name: 'Delete' }));
+			expect(screen.queryByRole('dialog')).toBeNull();
 			await waitFor(() => expect(screen.getByText('transcode dispatcher unavailable')).toBeInTheDocument());
 		});
 
-		it('does not call delete when the confirm is declined', async () => {
-			vi.spyOn(window, 'confirm').mockReturnValue(false);
+		it('does not call delete when the confirm dialog is cancelled', async () => {
 			vi.mocked(deleteTranscoderJob).mockClear();
 			renderComponent(TranscoderPage);
 			await waitFor(() => expect(screen.getAllByText('Delete').length).toBeGreaterThan(0));
 			await fireEvent.click(screen.getAllByText('Delete')[0]);
+			await fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Cancel' }));
+			expect(screen.queryByRole('dialog')).toBeNull();
 			expect(deleteTranscoderJob).not.toHaveBeenCalled();
 		});
 	});
@@ -343,7 +348,7 @@ it('renders per-GPU inventory rows with status and a manage link', async () => {
 	expect(screen.getByText('Manage GPUs in Settings')).toHaveAttribute('href', '/settings#transcoding');
 });
 
-it('reloads the per-GPU rows on transcode events so they track claims (D-058)', async () => {
+it('reloads the per-GPU rows on transcode events so they track claims', async () => {
 	cleanup();
 	renderComponent(TranscoderPage);
 	await waitFor(() => expect(screen.getByTestId('gpu-rows').textContent).toContain('busy'));

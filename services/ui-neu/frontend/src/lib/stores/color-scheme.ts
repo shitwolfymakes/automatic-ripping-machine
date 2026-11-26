@@ -4,6 +4,7 @@ import { fetchThemes, type ThemeMeta } from '$lib/api/themes';
 import { COLOR_SCHEMES, DEFAULT_SCHEME, type ColorScheme } from '$lib/themes/builtin-schemes';
 import { applySchemeToDocument, applyTokensForCurrentMode } from '$lib/themes/apply-scheme';
 import { fetchThemeCss, cacheThemeCss, cachedThemeCss } from '$lib/themes/theme-css';
+import { readStorage, writeStorage } from '$lib/utils/safe-storage';
 
 /** Writable store of all available schemes (built-in + API-loaded) */
 export const allSchemes = writable<ColorScheme[]>([...COLOR_SCHEMES]);
@@ -13,7 +14,7 @@ const inFlight = new Map<string, Promise<void>>();
 
 function getInitialScheme(): string {
 	if (!browser) return DEFAULT_SCHEME.id;
-	return localStorage.getItem('colorScheme') ?? DEFAULT_SCHEME.id;
+	return readStorage('colorScheme') ?? DEFAULT_SCHEME.id;
 }
 
 function applyScheme(id: string) {
@@ -144,7 +145,7 @@ export async function loadThemeCss(id: string): Promise<void> {
 
 if (browser) {
 	colorScheme.subscribe(async (id) => {
-		localStorage.setItem('colorScheme', id);
+		writeStorage('colorScheme', id);
 		// Apply tokens synchronously so there's no flash of default-blue
 		// between page load and API response.  loadThemeCss will re-apply
 		// with custom CSS once the fetch completes.

@@ -10,7 +10,7 @@
 	import ApplySessionCollisions from './apply-session/ApplySessionCollisions.svelte';
 	import ApplySessionRecipe from './apply-session/ApplySessionRecipe.svelte';
 	import { collisionsFromApplyError } from '$lib/sessions/apply-collisions';
-	import { isPassthroughSession, presetToolMap, sessionsForDisc } from '$lib/sessions/sessions';
+	import { isPassthroughSession, presetToolMap, sessionsForJob } from '$lib/sessions/sessions';
 	import type {
 		ApplySessionResponse,
 		CollisionInfo,
@@ -50,7 +50,7 @@
 	const presetToolById = $derived(presetToolMap(transcodePresets));
 
 	const filteredSessions = $derived.by(() => {
-		const byMediaType = sessionsForDisc(sessions, job.disc_type);
+		const byMediaType = sessionsForJob(sessions, job);
 		// Encode sessions can only be applied while transcoding is running;
 		// when it's disabled, only passthrough-compatible sessions are offered
 		// - but only once transcodePresets has loaded (presetsLoading), since a
@@ -82,7 +82,7 @@
 		// recipe preview and (when transcoding is runtime-disabled) gate the
 		// passthrough filter on filteredSessions. Fire both fetches
 		// CONCURRENTLY (not sessions-then-presets) and let each update its own
-		// state independently as it settles - sessions no longer waits on a
+		// state independently as it settles - sessions do not wait on a
 		// sequential presets round-trip, and a preset-list failure still only
 		// degrades the recipe preview (names fall back to ids) rather than
 		// breaking the dialog.

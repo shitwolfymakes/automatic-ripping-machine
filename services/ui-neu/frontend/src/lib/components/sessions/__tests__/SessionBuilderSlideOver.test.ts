@@ -64,8 +64,8 @@ it('Save in the footer submits the form', async () => {
 	const onsaved = vi.fn();
 	renderComponent(SessionBuilderSlideOver, { props: props({ onsaved }) });
 	await fireEvent.input(screen.getByLabelText(/session name/i), { target: { value: 'Mine' } });
-	await fireEvent.change(screen.getByLabelText(/rip preset/i), { target: { value: 'r1' } });
-	await fireEvent.input(screen.getByLabelText(/output path/i), { target: { value: 'm/{title}.{ext}' } });
+	await fireEvent.change(screen.getByLabelText(/^rip preset/i), { target: { value: 'r1' } });
+	await fireEvent.input(screen.getByLabelText(/^output path/i), { target: { value: 'm/{title}.{ext}' } });
 	await fireEvent.click(screen.getByRole('button', { name: 'Save' }));
 	await waitFor(() => expect(onsaved).toHaveBeenCalledWith(saved));
 });

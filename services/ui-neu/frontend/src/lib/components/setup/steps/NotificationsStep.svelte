@@ -4,7 +4,7 @@
 	import ChannelQuickAdd from '$lib/components/notifications/ChannelQuickAdd.svelte';
 	import type { StepCommitResult } from '../../../setup/steps';
 
-	// Step 8 (optional): one phone or chat channel (setup spec §5.9). Continue
+	// Step 8 (optional): one phone or chat channel. Continue
 	// with nothing picked is the same as Skip.
 	let { view }: { view: SetupView; setBlocked?: (reason: string | null) => void } = $props();
 	void view;
