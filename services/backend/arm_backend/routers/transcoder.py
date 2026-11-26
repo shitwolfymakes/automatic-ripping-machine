@@ -31,10 +31,10 @@ from arm_backend import transcode_task_events
 from arm_backend.auth import require_service_token
 from arm_backend.db import get_session
 from arm_backend.gpu_claim import release_gpu_for_task
-from arm_backend.log_safely import log_safely
-from arm_backend.metadata.poster import cover_art_urls
 from arm_backend.handbrake_schema_runner import HandbrakeSchemaRunner
 from arm_backend.handbrake_schema_store import SchemaStore, get_schema_store
+from arm_backend.log_safely import log_safely
+from arm_backend.metadata.poster import cover_art_urls
 from arm_backend.preset_views import preset_view
 from arm_backend.routers._deps import get_hub, get_schema_runner
 from arm_backend.routers.images import ImageUnavailable, fetch_allowed_image

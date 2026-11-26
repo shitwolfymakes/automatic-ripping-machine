@@ -74,7 +74,7 @@ def test_not_identified_message_carries_the_reason() -> None:
 
 
 def test_not_identified_message_for_a_placeholder_rip() -> None:
-    msg = job_events.not_identified_message("tmdb", "no match for MY_DISC", waiting=False)
+    msg = job_events.not_identified_message("tmdb", "no match for MY_DISC", job_events.MISS_RIPS_UNIDENTIFIED)
     assert msg == "not identified: TMDB: no match for MY_DISC; ripping as unidentified"
 
 
@@ -131,7 +131,7 @@ def test_log_not_identified_emits_the_event(job_log: LineCapture) -> None:
 
 
 def test_log_not_identified_for_a_placeholder_rip(job_log: LineCapture) -> None:
-    job_events.log_not_identified(_job(), "tmdb", "no match for MY_DISC", waiting=False)
+    job_events.log_not_identified(_job(), "tmdb", "no match for MY_DISC", job_events.MISS_RIPS_UNIDENTIFIED)
     [line] = job_log.lines(event="identify.missed")
     assert line["msg"].endswith("ripping as unidentified")
 

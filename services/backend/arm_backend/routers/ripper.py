@@ -611,7 +611,7 @@ async def rip_start(
             begins_rip = job.status == JobStatus.IDENTIFIED
             await _ensure_ripping(session, job)
             if begins_rip:
-                await _announce_rip(session, hub, stage_runner, job, preset_id, existing)
+                await _announce_rip(session, hub, stage_runner, job, preset_id, kept_tracks(existing))
             return await _rip_start_response(session, job, preset_id, existing, min_length_seconds)
 
         _require_startable(job)
@@ -621,15 +621,16 @@ async def rip_start(
         await _begin_rip(session, job, new_tracks)
 
         refreshed = await _job_tracks(session, job.id)
+        kept = kept_tracks(refreshed)
         logger.debug(
             "rip-start preset=%s tracks=%d",
             preset_id,
-            len(kept_tracks(refreshed)),
+            len(kept),
         )
 
         # Without the review hold, identify creates no Track rows, so the stage
         # it scheduled saw nothing to match. The tracks appear here.
-        await _announce_rip(session, hub, stage_runner, job, preset_id, refreshed)
+        await _announce_rip(session, hub, stage_runner, job, preset_id, kept)
 
         return await _rip_start_response(session, job, preset_id, refreshed, min_length_seconds)
 
@@ -960,10 +961,7 @@ async def rip_complete(
             )
 
         tracks = (await session.execute(select(Track).where(col(Track.job_id) == job.id))).scalars().all()
-
-        done = sum(1 for t in tracks if t.status == TrackStatus.DONE)
-        failed = sum(1 for t in tracks if t.status == TrackStatus.FAILED)
-        total = len(tracks)
+        done, failed, total = rip_outcome_counts(tracks)
 
         job.status = _finished_status(job, done=done, failed=failed, total=total)
         if job.status == JobStatus.FAILED:

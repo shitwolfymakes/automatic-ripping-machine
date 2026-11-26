@@ -106,13 +106,13 @@ async def _persist_miss_tracks(db: AsyncSession, job: Job, scan: ScanResult, tit
     await _persist_tracks(db, job, lambda preset: select_tracks_on_miss(job.id, scan, preset, titles_kept))
 
 
-def _miss_outcome(job: Job) -> str:
+def _video_miss_outcome(job: Job) -> str:
     """What happens next to a missed video disc, as its status says."""
     if job.status != JobStatus.AWAITING_REVIEW:
-        return "it rips now"
+        return job_events.MISS_RIPS_UNIDENTIFIED
     if job.wait_start_time is None:
-        return "it waits for review"
-    return "it rips when the review countdown ends"
+        return job_events.MISS_WAITS_FOR_REVIEW
+    return job_events.MISS_RIPS_AFTER_COUNTDOWN
 
 
 def _video_miss_title(scan: ScanResult, miss_title: str | None) -> str | None:
@@ -564,11 +564,14 @@ class IdentifyFlow:
         else:
             job.status = JobStatus.IDENTIFIED
             job.metadata_json = with_flags(job.metadata_json, unidentified=True, **diagnostic)
-        self._log_miss(job, waiting=cfg.block_on_miss)
+        self._log_miss(
+            job,
+            job_events.MISS_WAITS_FOR_IDENTIFICATION if cfg.block_on_miss else job_events.MISS_RIPS_UNIDENTIFIED,
+        )
 
-    def _log_miss(self, job: Job, *, waiting: bool) -> None:
+    def _log_miss(self, job: Job, outcome: str) -> None:
         provider, reason = job_events.miss_cause(self.attempts[-1] if self.attempts else None)
-        job_events.log_not_identified(job, provider, reason, waiting=waiting)
+        job_events.log_not_identified(job, provider, reason, outcome)
 
     async def _park_video_miss(self, job: Job, cfg: Config, scan: ScanResult) -> None:
         # A DVD or Blu-ray that missed keeps its titles listed for review. The
@@ -578,7 +581,7 @@ class IdentifyFlow:
         job.media_type = MediaType(cfg.miss_media_type)
         await _persist_miss_tracks(self.session, job, scan, cfg.miss_titles_kept)
         self._set_video_miss_status(job, cfg)
-        logger.info("identify job_id=%s: no match for %r; %s", job.id, job.title, _miss_outcome(job))
+        self._log_miss(job, _video_miss_outcome(job))
 
     def _set_video_miss_status(self, job: Job, cfg: Config) -> None:
         # block_on_miss parks with no countdown (the ripper treats a null

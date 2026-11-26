@@ -794,12 +794,6 @@ def test_register_without_a_runner_is_a_no_op_refresh() -> None:
     assert r.status_code == 200, r.text
 
 
-# --- schema_hash guard and refresh -------------------------------------------
-
-_SETTINGS = {"common": {"PictureWidth": 1280}}
-_PREDATES = "transcode image predates HandBrake settings; rebuild or pull it"
-
-
 # --- job-log milestones ----------------------------------------------------
 
 

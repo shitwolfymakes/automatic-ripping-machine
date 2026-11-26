@@ -103,7 +103,9 @@ async def test_resume_logs_rip_started_with_resumed_true(monkeypatch, caplog) ->
     monkeypatch.setattr(JobController, "_execute_rip", _noop)
     c = JobController(_Client(), "drv_test", device_path="/dev/sr0")  # type: ignore[arg-type]
     with caplog.at_level(logging.INFO, logger="arm_ripper.job_controller"):
-        await c.resume_inflight_job(_job(), "/dev/sr0")
+        task = await c.resume_inflight_job(_job(), "/dev/sr0")
+        assert task is not None
+        await task  # the rip runs in its own task
     (record,) = [r for r in caplog.records if getattr(r, "event", None) == "rip.started"]
     assert record.fields["resumed"] is True
     assert record.fields["disc_type"] == "dvd"

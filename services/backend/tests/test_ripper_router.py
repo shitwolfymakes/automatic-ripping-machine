@@ -956,18 +956,19 @@ async def test_resolve_on_a_parked_miss_keeps_every_track_and_its_title() -> Non
 @pytest.mark.parametrize(
     ("block_on_miss", "hold_for_review", "outcome"),
     [
-        (True, False, "it waits for review"),
-        (False, True, "it rips when the review countdown ends"),
-        (False, False, "it rips now"),
+        (True, False, "waiting for review"),
+        (False, True, "ripping when the review countdown ends"),
+        (False, False, "ripping as unidentified"),
     ],
 )
 def test_identify_video_miss_logs_what_happens_next(
-    caplog: pytest.LogCaptureFixture, block_on_miss: bool, hold_for_review: bool, outcome: str
+    job_log: LineCapture, block_on_miss: bool, hold_for_review: bool, outcome: str
 ) -> None:
     db = _miss_db(block_on_miss=block_on_miss, hold_for_review=hold_for_review)
-    with caplog.at_level(logging.INFO, logger="arm_backend.identify_flow"):
-        out = _identify(_make_app(db, dispatcher=_Dispatcher(None)), _four_title_scan())
-    assert f"identify job_id={out['id']}: no match for 'MY DISC'; {outcome}" in caplog.messages
+    out = _identify(_make_app(db, dispatcher=_Dispatcher(None)), _four_title_scan())
+    [missed] = job_log.lines(event="identify.missed")
+    assert missed["job_id"] == out["id"]
+    assert missed["msg"].endswith(f"; {outcome}")
 
 
 def test_identify_repost_on_held_disc_leaves_tracks_and_claims_alone(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -1131,6 +1132,9 @@ def test_identify_timeout_records_diagnostic(job_log: LineCapture, disc_type: st
     assert r.status_code == 200
     assert r.json()["status"] == status
     assert r.json()["metadata_json"]["flags"]["dispatch_timeout"] is True
+    [timeout] = job_log.lines(logger_prefix="arm_backend.identify_flow", level="info")
+    assert timeout["msg"] == "identify dispatch_timeout"
+    assert timeout["job_id"] == r.json()["id"]
     [timeout] = job_log.lines(logger_prefix="arm_backend.identify_flow", level="info")
     assert timeout["msg"] == "identify dispatch_timeout"
     assert timeout["job_id"] == r.json()["id"]
@@ -2222,7 +2226,7 @@ def test_rip_start_main_feature_stores_every_dvd_title_with_the_rest_excluded(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
     preset = _selection_preset(TrackSelection.MAIN_FEATURE)
-    with caplog.at_level(logging.INFO, logger=ripper_router.logger.name):
+    with caplog.at_level(logging.DEBUG, logger=ripper_router.logger.name):
         r, db, hub = _rip_start_with(preset, _titled_scan({1: 600, 2: 300, 3: 7200}))
     assert r.status_code == 200, r.text
     assert _excluded_by_index(db.rows["tracks"]) == {1: True, 2: True, 3: False}
@@ -4338,6 +4342,54 @@ def test_identify_single_fuzzy_cd_hit_is_applied_with_music_auto_apply_on() -> N
     assert out["metadata_json"].get("identity_suggestion") is None
 
 
+# --- rip-start carries the scan's minimum title length (#647) ---------------
+
+
+def _floor_of(db: FakeSession, endpoint: str = "rip-start") -> Any:
+    with TestClient(_make_app(db)) as client:
+        r = client.post(f"/api/ripper/jobs/job_01JZXR7K3M5Q8N4VWA00000001/{endpoint}", headers=_OWNER_HEADERS)
+    assert r.status_code == 200, r.text
+    return r.json()["min_title_length_seconds"]
+
+
+def test_rip_start_returns_the_minimum_the_scan_listed_titles_with() -> None:
+    db = FakeSession()
+    db.rows["drives"] = [_drive()]
+    db.rows["config"] = [_config()]
+    db.rows["config"][0].min_title_length_seconds = 300
+    scan = {**_scan_dict(), "min_title_length_seconds": 60}
+    db.rows["jobs"] = [_job(status=JobStatus.RIPPING, meta={"scan_result": scan})]
+    db.rows["tracks"] = [_track("trk_1", status=TrackStatus.QUEUED)]
+    assert _floor_of(db) == 60
+
+
+def test_rip_start_falls_back_to_the_configured_minimum_for_an_older_scan() -> None:
+    db = FakeSession()
+    db.rows["drives"] = [_drive()]
+    db.rows["config"] = [_config()]
+    db.rows["config"][0].min_title_length_seconds = 90
+    db.rows["jobs"] = [_job(status=JobStatus.RIPPING, meta={"scan_result": _scan_dict()})]
+    db.rows["tracks"] = [_track("trk_1", status=TrackStatus.QUEUED)]
+    assert _floor_of(db) == 90
+
+
+def test_rip_start_without_a_config_row_uses_the_env_seed() -> None:
+    db = FakeSession()
+    db.rows["drives"] = [_drive()]
+    db.rows["jobs"] = [_job(status=JobStatus.RIPPING)]
+    db.rows["tracks"] = [_track("trk_1", status=TrackStatus.QUEUED)]
+    assert _floor_of(db) == 120
+
+
+def test_resume_returns_the_minimum_the_scan_listed_titles_with() -> None:
+    db = FakeSession()
+    db.rows["drives"] = [_drive()]
+    scan = {**_scan_dict(), "min_title_length_seconds": 45}
+    db.rows["jobs"] = [_job(status=JobStatus.RIPPING, meta={"scan_result": scan})]
+    db.rows["tracks"] = [_track("trk_1", status=TrackStatus.QUEUED)]
+    assert _floor_of(db, "resume") == 45
+
+
 # --- job log context ----------------------------------------------------------
 
 _JOB_ID = "job_01JZXR7K3M5Q8N4VWA00000001"
@@ -4579,51 +4631,3 @@ def test_rip_complete_survives_a_failing_milestone_log(monkeypatch: pytest.Monke
     assert r.status_code == 200 and r.json()["status"] == "ripped"
     assert any(e["event_type"] == "rip.completed" for e in hub.events)
     assert job_log.lines(level="error")[-1]["msg"] == "could not log the rip.completed milestone"
-
-
-# --- rip-start carries the scan's minimum title length (#647) ---------------
-
-
-def _floor_of(db: FakeSession, endpoint: str = "rip-start") -> Any:
-    with TestClient(_make_app(db)) as client:
-        r = client.post(f"/api/ripper/jobs/job_01JZXR7K3M5Q8N4VWA00000001/{endpoint}", headers=_OWNER_HEADERS)
-    assert r.status_code == 200, r.text
-    return r.json()["min_title_length_seconds"]
-
-
-def test_rip_start_returns_the_minimum_the_scan_listed_titles_with() -> None:
-    db = FakeSession()
-    db.rows["drives"] = [_drive()]
-    db.rows["config"] = [_config()]
-    db.rows["config"][0].min_title_length_seconds = 300
-    scan = {**_scan_dict(), "min_title_length_seconds": 60}
-    db.rows["jobs"] = [_job(status=JobStatus.RIPPING, meta={"scan_result": scan})]
-    db.rows["tracks"] = [_track("trk_1", status=TrackStatus.QUEUED)]
-    assert _floor_of(db) == 60
-
-
-def test_rip_start_falls_back_to_the_configured_minimum_for_an_older_scan() -> None:
-    db = FakeSession()
-    db.rows["drives"] = [_drive()]
-    db.rows["config"] = [_config()]
-    db.rows["config"][0].min_title_length_seconds = 90
-    db.rows["jobs"] = [_job(status=JobStatus.RIPPING, meta={"scan_result": _scan_dict()})]
-    db.rows["tracks"] = [_track("trk_1", status=TrackStatus.QUEUED)]
-    assert _floor_of(db) == 90
-
-
-def test_rip_start_without_a_config_row_uses_the_env_seed() -> None:
-    db = FakeSession()
-    db.rows["drives"] = [_drive()]
-    db.rows["jobs"] = [_job(status=JobStatus.RIPPING)]
-    db.rows["tracks"] = [_track("trk_1", status=TrackStatus.QUEUED)]
-    assert _floor_of(db) == 120
-
-
-def test_resume_returns_the_minimum_the_scan_listed_titles_with() -> None:
-    db = FakeSession()
-    db.rows["drives"] = [_drive()]
-    scan = {**_scan_dict(), "min_title_length_seconds": 45}
-    db.rows["jobs"] = [_job(status=JobStatus.RIPPING, meta={"scan_result": scan})]
-    db.rows["tracks"] = [_track("trk_1", status=TrackStatus.QUEUED)]
-    assert _floor_of(db, "resume") == 45

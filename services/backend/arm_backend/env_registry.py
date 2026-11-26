@@ -85,6 +85,8 @@ ENV_REGISTRY: dict[str, EnvVarMeta] = {
         "ARM_RIPPER_NOT_READY_REARM_POLLS",
         "ARM_RIPPER_OPTICAL_SR_MAX",
         "ARM_RIPPER_OPTICAL_SG_MAX",
+        "ARM_RESUME_MODE",
+        "ARM_RESUME_PER_TITLE_MAX_REMAINING_PCT",
     ),
     **_group(
         "Transcode",
