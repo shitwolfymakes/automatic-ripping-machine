@@ -1,4 +1,4 @@
-"""TitleHasher: hashing ripped titles while the rip continues (D-125)."""
+"""TitleHasher: hashing ripped titles while the rip continues."""
 
 from __future__ import annotations
 
@@ -27,7 +27,7 @@ def test_transfer_rate_is_none_for_a_negative_elapsed() -> None:
 
 
 async def test_cancel_stops_the_hashing_thread_mid_file(tmp_path: Path, monkeypatch) -> None:
-    """D-125 follow-up: cancelling the task cannot stop asyncio.to_thread, so
+    """Cancelling the task cannot stop asyncio.to_thread, so
     the thread itself must stop reading; a wiped raw dir's file must not be
     read to the end at full disk bandwidth."""
     monkeypatch.setattr(hashing, "_CHUNK", 1)

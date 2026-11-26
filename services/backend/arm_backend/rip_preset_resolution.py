@@ -35,7 +35,7 @@ class RipPresetUnavailable(Exception):
 async def load_routed_session(db: AsyncSession, job: Job) -> Session | None:
     """Resolve + load the job's ROUTED session row in one shot.
 
-    Fix 75-8: the single query rip-start (and resume) needs — every other
+    The single query rip-start (and resume) needs — every other
     resolver in this module is now a pure derivation over the `Session |
     None` this returns, so a request thread only ever pays for one
     `resolve_routed_session_id` call and one `Session` SELECT, instead of
@@ -82,12 +82,10 @@ def min_length_override_from_session(sess: Session | None) -> int | None:
 async def resolve_rip_preset_id_for_job(db: AsyncSession, job: Job) -> str:
     """The one place that decides WHICH rip preset governs a job's rip.
 
-    Today: the built-in default for the disc type. G-01 (gap analysis §5.2)
-    extends this to prefer the routed session's rip preset. Every chooser —
-    rip-start, resume, the review-gate track persist — MUST resolve through
+    Every chooser — rip-start, resume, the review-gate track persist — MUST resolve through
     here so a held disc and an unattended one rip the same track set.
 
-    G-01: the ROUTED session's rip preset wins — the disc-type default is
+    The ROUTED session's rip preset wins — the disc-type default is
     the fallback for jobs no session routes to (auto-rips on drives without
     a default). A routed id whose Session row is gone (deleted between
     trigger and rip) also falls back rather than failing the rip.
@@ -100,7 +98,7 @@ async def resolve_rip_preset_id_for_job(db: AsyncSession, job: Job) -> str:
 
     Single-caller convenience wrapper over `load_routed_session` +
     `rip_preset_id_from_session` — rip-start/resume call those two
-    directly so one request only resolves the routed session once (Fix 75-8).
+    directly so one request only resolves the routed session once.
     """
     sess = await load_routed_session(db, job)
     return rip_preset_id_from_session(sess, job.disc_type)

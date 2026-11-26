@@ -112,7 +112,7 @@ function deferred<T>() {
 
 async function harness() {
 	vi.resetModules();
-	const utils = await import('$lib/test-utils');
+	const utils = await import('$lib/testing/render');
 	const Page = (await import('../+page.svelte')).default;
 	const api = await import('$lib/api/transcoder');
 	const gpus = await import('$lib/api/gpus');
@@ -193,8 +193,8 @@ describe('formatDuration through the worker pool', () => {
 		h.renderComponent(h.Page);
 		await h.waitFor(() => expect(document.querySelectorAll('.transcoder-page-worker-card')).toHaveLength(2));
 		const text = document.body.textContent ?? '';
-		expect(text).toMatch(/50%\s*·\s*30s since heartbeat/);
-		expect(text).toMatch(/50%\s*·\s*1m 30s since heartbeat/);
+		expect(text).toMatch(/50%\s*\|\s*30s since heartbeat/);
+		expect(text).toMatch(/50%\s*\|\s*1m 30s since heartbeat/);
 	});
 
 	it('omits "since heartbeat" when the heartbeat is unparsable', async () => {
@@ -457,6 +457,26 @@ describe('jobs polling', () => {
 		await vi.advanceTimersByTimeAsync(20000);
 		expect(h.fetchJobs.mock.calls).toHaveLength(settled);
 	});
+
+	it('loads the jobs once more when the queue goes idle, so a finished task shows its final state', async () => {
+		vi.useFakeTimers();
+		const h = await setup();
+		h.fetchStats.mockResolvedValue(makeStats({ tasks_by_status: { in_progress: 1 }, total_tasks: 1 }));
+		h.fetchJobs.mockResolvedValue([makeTask({ status: 'in_progress' })]);
+		h.renderComponent(h.Page);
+		await vi.advanceTimersByTimeAsync(200);
+		const beforeIdle = h.fetchJobs.mock.calls.length;
+
+		// The task finishes, and the next stats poll lands before the next jobs poll.
+		h.fetchJobs.mockResolvedValue([makeTask({ status: 'done' })]);
+		h.fetchStats.mockResolvedValue(makeStats({ tasks_by_status: { done: 1 }, total_tasks: 1 }));
+		await h.refreshStats();
+		await vi.advanceTimersByTimeAsync(0);
+		expect(h.fetchJobs).toHaveBeenCalledTimes(beforeIdle + 1);
+		expect(h.fetchJobs).toHaveBeenLastCalledWith({ status: undefined });
+		await vi.advanceTimersByTimeAsync(20000);
+		expect(h.fetchJobs).toHaveBeenCalledTimes(beforeIdle + 1);
+	});
 });
 
 describe('switching tabs', () => {
@@ -485,10 +505,7 @@ describe('switching tabs', () => {
 		second.resolve([makeTask({ id: 't-q', output_path: '/media/q.mkv' })]);
 	});
 
-	// #537: the jobs request is not tied to the tab that issued it, so a slow
-	// response for the first tab lands under whichever tab is active when it
-	// arrives. Pinned as today's behaviour, not as the intended one.
-	it('stores a late response from the previous tab under the new tab and shows it there (#537)', async () => {
+	it('drops a late response from the previous tab, keeping the new tab and its cache', async () => {
 		const h = await setup();
 		const allRequest = deferred<TranscodeTaskView[]>();
 		h.fetchJobs.mockReturnValueOnce(allRequest.promise);
@@ -500,16 +517,18 @@ describe('switching tabs', () => {
 		await h.screen.findByText('queued-task.mkv');
 
 		allRequest.resolve([makeTask({ id: 't-a', output_path: '/media/all-task.mkv' })]);
-		await h.screen.findByText('all-task.mkv');
-		expect(h.screen.getByRole('button', { name: 'Queued' })).toHaveAttribute('data-selected', 'true');
+		await allRequest.promise;
+		await new Promise((r) => setTimeout(r, 0));
+		expect(h.screen.queryByText('all-task.mkv')).not.toBeInTheDocument();
+		expect(h.screen.getByText('queued-task.mkv')).toBeInTheDocument();
 
-		// The cache now holds that response under the Queued tab: revisiting
-		// Queued paints it with no skeleton.
+		// The Queued cache still holds the Queued response: revisiting Queued
+		// paints it with no skeleton.
 		const revisit = deferred<TranscodeTaskView[]>();
 		h.fetchJobs.mockReturnValueOnce(revisit.promise);
 		await h.fireEvent.click(h.screen.getByRole('button', { name: 'Queued' }));
 		expect(isSkeletonShown()).toBe(false);
-		expect(h.screen.getByText('all-task.mkv')).toBeInTheDocument();
+		expect(h.screen.getByText('queued-task.mkv')).toBeInTheDocument();
 		revisit.resolve([]);
 	});
 });

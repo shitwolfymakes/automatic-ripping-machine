@@ -22,7 +22,7 @@ def user_dir(tmp_path, monkeypatch):
 
 
 def test_no_builtins_only_user_themes(user_dir):
-    # The backend no longer serves built-in themes — an empty user dir yields none.
+    # The backend does not serve built-in themes — an empty user dir yields none.
     assert theme_service.get_all_themes() == []
 
 

@@ -1,4 +1,4 @@
-"""Detect optical drives on the backend's host without privilege (spec §2).
+"""Detect optical drives on the backend's host without privilege.
 
 Everything here reads sysfs and the udev by-id symlink directory — no
 device node is ever opened, so the backend needs no cgroup rule and
@@ -6,7 +6,7 @@ cannot touch a drive. Verified: an unprivileged container with only a
 read-only /dev/disk bind enumerates name, major:minor, vendor/model, the
 sg pairing and the by-id link, and gets ENOENT on open().
 
-Identity (spec §1):
+Identity:
   * by_id_name — the udev /dev/disk/by-id link whose target is this node.
     Unique and stable across replug and srN renumbering.
   * sysfs_port — the device's sysfs path cut before the first hostN

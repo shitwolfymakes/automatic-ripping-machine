@@ -25,10 +25,6 @@ export function fetchChannels(): Promise<Channel[]> {
 	return apiFetch<Channel[]>('/api/notifications/channels');
 }
 
-export function fetchChannel(id: number): Promise<Channel> {
-	return apiFetch<Channel>(`/api/notifications/channels/${id}`);
-}
-
 export function createChannel(body: ChannelCreate): Promise<Channel> {
 	return apiFetch<Channel>('/api/notifications/channels', {
 		method: 'POST',

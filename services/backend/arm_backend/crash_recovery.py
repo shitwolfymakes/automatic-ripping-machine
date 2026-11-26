@@ -1,9 +1,11 @@
-"""Phase 9 — crash recovery.
+"""Crash recovery.
 
-`reset_job_for_recovery` resets a single RIPPING job's non-queued tracks
+`reset_job_for_recovery` resets a single RIPPING job's unsettled tracks
 back to `queued` (incrementing `attempts`) and stamps `resumed_from_crash`
-on the job. Idempotent: a track already at `queued` is left alone, so
-re-running the helper neither inflates `attempts` nor double-stamps.
+on the job. A `done` track whose file is still on disk at its recorded size
+stays `done`: the resumed rip skips it instead of ripping it again.
+Idempotent: a track already at `queued` is left alone, so re-running the
+helper neither inflates `attempts` nor double-stamps.
 
 `sweep_in_flight_jobs` finds every job with `status='ripping'` and feeds
 each through `reset_job_for_recovery`. Used both at backend startup
@@ -17,7 +19,9 @@ extra `attempts++`. Cosmetic only — the rip still completes normally.
 
 from __future__ import annotations
 
+import asyncio
 import logging
+import os
 from collections.abc import Callable
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -29,13 +33,29 @@ from arm_common.models import Track
 logger = logging.getLogger("arm_backend.crash_recovery")
 
 
+def _finished_file_intact(track: Track) -> bool:
+    """Whether a DONE track's file is on disk at the size the rip recorded.
+
+    MakeMKV writes a title's final size only when it closes the file, so a
+    matching size tells a finished file from one a crash cut short. Runs in a
+    thread: the raw folder may be on NFS, where a stat can block.
+    """
+    if track.output_path is None or track.size_bytes is None:
+        return False
+    try:
+        return os.stat(track.output_path).st_size == track.size_bytes
+    except OSError:
+        return False
+
+
 async def reset_job_for_recovery(db: AsyncSession, job: Job) -> int:
     """Reset one job for crash recovery. Caller commits.
 
     - Set `job.resumed_from_crash = True` (no-op if already true).
-    - For every track on the job whose status is not QUEUED, set status
-      to QUEUED and increment `attempts`. Tracks already QUEUED are left
-      alone (idempotent re-runs do not inflate counters).
+    - For every track on the job that is not QUEUED, and is not a DONE
+      track whose file is intact, set status to QUEUED and increment
+      `attempts`. Tracks already QUEUED are left alone (idempotent re-runs
+      do not inflate counters).
 
     Returns the number of tracks touched.
     """
@@ -44,6 +64,8 @@ async def reset_job_for_recovery(db: AsyncSession, job: Job) -> int:
     touched = 0
     for track in all_tracks:
         if track.status == TrackStatus.QUEUED:
+            continue
+        if track.status == TrackStatus.DONE and await asyncio.to_thread(_finished_file_intact, track):
             continue
         track.status = TrackStatus.QUEUED
         track.attempts = (track.attempts or 0) + 1

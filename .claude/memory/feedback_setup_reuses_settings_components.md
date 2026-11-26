@@ -15,4 +15,4 @@ The first-run setup walkthrough (and any other secondary surface that edits sett
 - When the setup design improves a visual, change the shared component and let Settings adopt it.
 - Setup-only code is shell, stepper, footer, checklist and step glue.
 
-Spec: `../arm-ai/arm-v3/docs/superpowers/specs/2026-10-01-first-run-setup-design.md` §7. Related: [[feedback_standard_ui_patterns]].
+Related: [[feedback_standard_ui_patterns]].

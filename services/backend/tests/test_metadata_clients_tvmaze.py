@@ -1,4 +1,4 @@
-"""TVmaze title-search client (PR 2b). respx-mocked; no network."""
+"""TVmaze title-search client. respx-mocked; no network."""
 
 import os
 

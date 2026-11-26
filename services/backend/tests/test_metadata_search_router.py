@@ -463,7 +463,7 @@ def test_music_release_detail_ok(signing_key: bytes) -> None:
     assert body["title"] == "The Dark Side of the Moon"
     assert body["year"] == 1973
     assert body["artist"] == "Pink Floyd"
-    # M5 fix: the detail view must carry the track listing get_release fetched.
+    # The detail view must carry the track listing get_release fetched.
     assert len(body["tracks"]) > 0
     assert body["tracks"][0]["title"] == "Speak to Me"
     assert body["tracks"][0]["position"] == 1
@@ -711,7 +711,7 @@ def test_omdb_candidates_carry_imdb_without_tmdb_kind(signing_key: bytes) -> Non
 
 
 def test_search_provider_literal_matches_registry() -> None:
-    """One spelling of the movie/TV source ids (spec S-8): the OpenAPI enum
+    """One spelling of the movie/TV source ids: the OpenAPI enum
     and the registry cannot drift apart."""
     from typing import get_args
 
@@ -971,7 +971,7 @@ def test_music_search_needs_no_config_row(signing_key: bytes) -> None:
 
 @respx.mock
 def test_tv_search_uses_omdb_when_it_is_the_chosen_provider(signing_key: bytes) -> None:
-    """D-7 keeps OMDb off the automatic TV order, but the job page's TV search
+    """The automatic TV order leaves OMDb off, but the job page's TV search
     select offers it, so choosing it must reach OMDb `type=series` rather than
     silently falling back to the ranked list's first entry."""
     omdb = respx.get("https://www.omdbapi.com/").mock(

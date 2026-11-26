@@ -111,7 +111,7 @@ def test_0038_downgrade_restores_codec_and_hw_preference() -> None:
 
 
 def test_0038_matches_the_models() -> None:
-    """Model and migration parity for the columns this revision touches."""
+    """Model and migration agreement for the columns this revision touches."""
     columns = TranscodePreset.__table__.columns
     assert "codec" not in columns
     assert "hw_preference" not in columns

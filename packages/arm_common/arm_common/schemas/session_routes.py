@@ -1,4 +1,4 @@
-"""Session-routing wire schemas (gap analysis G-02/G-17).
+"""Session-routing wire schemas.
 
 `SessionRouteView` projects a `SessionRoute` row; `SessionRouteUpsert` is the
 PUT body, keyed by `(media_type, disc_type)` — `disc_type=None` is the

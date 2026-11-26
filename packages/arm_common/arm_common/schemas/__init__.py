@@ -34,6 +34,7 @@ from arm_common.schemas.files import (
     MoveRequest,
     RenameRequest,
 )
+from arm_common.schemas.handbrake import HandbrakeSchemaSlimView, HandbrakeSettings, IssueCode, SettingIssue
 from arm_common.schemas.identity import (
     ClaimStatus,
     IdentityClaims,
@@ -102,6 +103,8 @@ from arm_common.schemas.jobs import (
     ResolveRequest,
     ResolveResponse,
     RipProgressSummary,
+    DEFAULT_RESUME_PER_TITLE_MAX_REMAINING_PCT,
+    ResumePolicy,
     RipStartResponse,
     TrackEditRequest,
     TrackView,
@@ -242,6 +245,10 @@ from arm_common.schemas.ws import (
 )
 
 __all__ = [
+    "HandbrakeSchemaSlimView",
+    "HandbrakeSettings",
+    "IssueCode",
+    "SettingIssue",
     "AbandonJobRequest",
     "AppriseChannelConfig",
     "BdDiscMeta",
@@ -381,6 +388,8 @@ __all__ = [
     "RipPresetUpdateRequest",
     "RipPresetView",
     "RipProgressSummary",
+    "DEFAULT_RESUME_PER_TITLE_MAX_REMAINING_PCT",
+    "ResumePolicy",
     "RipStartResponse",
     "ScanResult",
     "ScanTitle",

@@ -27,7 +27,7 @@ async def reconcile_enrolled_rippers(
     None — after logging — when the daemon itself cannot be listed; boot
     must not fail because docker is down.
 
-    The virtual-drive sweep runs FIRST (spec 6.2): a finished ISO rip's drive
+    The virtual-drive sweep runs FIRST: a finished ISO rip's drive
     is retired before the enrolled list is loaded, so its container is never
     recreated and the ISO never ripped twice. `hub` carries the sweep's
     `rip.failed` for a job whose ripper died while the backend was down."""

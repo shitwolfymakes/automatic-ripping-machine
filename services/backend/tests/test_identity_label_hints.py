@@ -77,7 +77,7 @@ def test_parse_label_sku_requires_word_boundary() -> None:
     the same three letters as SKU ("Skull") — only a standalone SKU token
     (optionally followed by digits) is a code to strip."""
     assert parse_label("Kong: Skull Island").title == "kong: skull island"
-    # The original SKU-code-stripping behaviour must still work.
+    # Plain SKU-code stripping must still work.
     assert parse_label("MOVIE_16X9_SKU1234") == LabelHints("movie", None, None, None)
 
 
@@ -118,7 +118,7 @@ def test_label_source_claims_job_fields_present_only() -> None:
 def test_label_source_miss_when_nothing_parsed() -> None:
     """No season/disc marker parsed -> no fields at all, not even a title:
     a marker-less label title is a worse search candidate than the
-    dispatcher's own normalized-volume-label pass (fix round 1, item 2)."""
+    dispatcher's own normalized-volume-label pass."""
     claims = LABEL.run(_ctx("APOLLO_13"))
     assert claims.status == "ok"
     assert claims.job.model_dump(exclude_unset=True) == {}

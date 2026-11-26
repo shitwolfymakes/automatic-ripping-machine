@@ -193,7 +193,7 @@ class _Stage:
 def test_changing_identity_sources_re_resolves_live_jobs(
     signing_key: bytes, monkeypatch: pytest.MonkeyPatch, key: str
 ) -> None:
-    """D-097: the resolver reads the source settings only when it runs, so a
+    """The resolver reads the source settings only when it runs, so a
     change re-runs it (and the episode stage) for live jobs and for ripped
     jobs no session has been applied to yet; finished work is left alone."""
     db = FakeSession()
@@ -268,7 +268,7 @@ def test_a_failing_re_resolve_never_fails_the_patch(signing_key: bytes, monkeypa
     ],
 )
 def test_not_null_int_settings_refuse_null_with_400(signing_key: bytes, body: dict, detail: str) -> None:
-    """D-096: an emptied number input sends null; for a NOT NULL column that
+    """An emptied number input sends null; for a NOT NULL column that
     is a 400 the form can show, never an IntegrityError 500 on commit."""
     db = FakeSession()
     _seed(db)
@@ -294,7 +294,7 @@ def test_not_null_int_settings_refuse_null_with_400(signing_key: bytes, body: di
     ],
 )
 def test_not_null_bool_settings_refuse_null_with_400(signing_key: bytes, key: str) -> None:
-    """D-164: a JSON null for a NOT NULL toggle is a 400, not a 500 on commit."""
+    """A JSON null for a NOT NULL toggle is a 400, not a 500 on commit."""
     db = FakeSession()
     _seed(db)
     before = getattr(_row(db), key)
@@ -307,7 +307,7 @@ def test_not_null_bool_settings_refuse_null_with_400(signing_key: bytes, key: st
 
 
 def test_null_still_clears_a_nullable_setting(signing_key: bytes) -> None:
-    """The D-164 guard only covers NOT NULL columns; a secret still clears."""
+    """The NOT NULL guard only covers NOT NULL columns; a secret still clears."""
     db = FakeSession()
     _seed(db)
     _row(db).tmdb_api_key = "old"

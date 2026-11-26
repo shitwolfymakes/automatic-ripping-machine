@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { renderComponent, screen, fireEvent, cleanup, waitFor, within } from '$lib/test-utils';
+import { renderComponent, screen, fireEvent, cleanup, waitFor, within } from '$lib/testing/render';
 import SchemaConfigForm from '../SchemaConfigForm.svelte';
 import type { SettingsGroup, KeyCheckResponse } from '$lib/types/api.gen';
 

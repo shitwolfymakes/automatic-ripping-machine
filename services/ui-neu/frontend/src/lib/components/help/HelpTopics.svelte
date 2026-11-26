@@ -1,5 +1,5 @@
 <script lang="ts">
-	import type { DocsNavSection } from '$lib/docs/api';
+	import type { DocsNavSection } from '$lib/help/api';
 
 	interface Props {
 		nav: DocsNavSection[];

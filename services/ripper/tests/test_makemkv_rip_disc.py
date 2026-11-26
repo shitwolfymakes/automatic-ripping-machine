@@ -358,8 +358,7 @@ async def test_rip_disc_pre_save_phase_prgv_is_silently_dropped(monkeypatch, tmp
 async def test_rip_disc_per_title_progress_takes_precedence_over_disc(monkeypatch, tmp_path):
     """When a per-title "Saving title #N" PRGT has identified the
     in-flight title, PRGV drives `on_title_progress` (per-op channel)
-    and the disc-level callback stays silent — the per-title
-    behaviour established in v2 is preserved unchanged."""
+    and the disc-level callback stays silent."""
     _stub_subprocess(
         monkeypatch,
         [
@@ -739,7 +738,7 @@ class _HangingProc(_FakeProc):
 
 
 async def test_rip_disc_stop_kills_makemkvcon_and_reports_the_lost_drive(monkeypatch, tmp_path):
-    """D-133: once the caller sets `stop` (the drive dropped off the bus),
+    """Once the caller sets `stop` (the drive dropped off the bus),
     makemkvcon is killed at once instead of failing title after title."""
     proc = _HangingProc()
 
@@ -1020,7 +1019,7 @@ async def test_exit_error_nonzero_without_stderr_reports_the_exit_code(stderr):
 
 
 def test_mkv_all_command_for_a_device(tmp_path):
-    assert makemkv_rip._mkv_all_command("/dev/sr0", tmp_path, 120) == [
+    assert makemkv_rip._mkv_command("/dev/sr0", tmp_path, 120, None) == [
         "makemkvcon",
         "mkv",
         "--robot",
@@ -1035,7 +1034,7 @@ def test_mkv_all_command_for_a_device(tmp_path):
 def test_mkv_all_command_for_an_iso_file(tmp_path):
     iso = tmp_path / "movie.iso"
     iso.write_bytes(b"")
-    assert makemkv_rip._mkv_all_command(str(iso), tmp_path, 300) == [
+    assert makemkv_rip._mkv_command(str(iso), tmp_path, 300, None) == [
         "makemkvcon",
         "mkv",
         "--robot",
@@ -1048,9 +1047,15 @@ def test_mkv_all_command_for_an_iso_file(tmp_path):
 
 
 def test_mkv_all_command_has_all_exactly_once_right_before_the_output_dir(tmp_path):
-    cmd = makemkv_rip._mkv_all_command("/dev/sr0", tmp_path, 120)
+    cmd = makemkv_rip._mkv_command("/dev/sr0", tmp_path, 120, None)
     assert cmd.count("all") == 1
     assert cmd[-2:] == ["all", str(tmp_path)]
+
+
+def test_mkv_command_for_one_title_names_it_in_place_of_all(tmp_path):
+    cmd = makemkv_rip._mkv_command("/dev/sr0", tmp_path, 120, 7)
+    assert "all" not in cmd
+    assert cmd[-2:] == ["7", str(tmp_path)]
 
 
 def _pending_state(**titles: tuple[bool, bool]) -> makemkv_stream.ParserState:

@@ -97,7 +97,7 @@ describe('tokens.css', () => {
 	it('defines the class-driven dark variant', () => {
 		expect(css).toContain('@variant dark (&:where(.dark, .dark *));');
 	});
-	it('carries none of the migration-window legacy aliases (removed in Task 13)', () => {
+	it('carries none of the removed legacy aliases', () => {
 		for (const alias of [
 			'--color-primary-dark:',
 			'--color-primary-light-bg:',

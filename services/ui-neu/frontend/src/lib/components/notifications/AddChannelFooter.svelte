@@ -1,7 +1,7 @@
 <script lang="ts">
 	// The add-channel form's footer: whether the channel is ready to
 	// save, and the Cancel, Send test and Save buttons.
-	import Glyph from '$lib/components/Glyph.svelte';
+	import Glyph from '$lib/components/shared/Glyph.svelte';
 
 	interface Props {
 		/** Every required field is filled in. */

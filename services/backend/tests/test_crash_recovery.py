@@ -1,7 +1,8 @@
-"""Phase 9 — direct tests on `reset_job_for_recovery` and `sweep_in_flight_jobs`."""
+"""Direct tests on `reset_job_for_recovery` and `sweep_in_flight_jobs`."""
 
 from __future__ import annotations
 
+from pathlib import Path
 
 import pytest
 
@@ -75,21 +76,77 @@ async def test_reset_idempotent_on_already_queued_tracks() -> None:
     assert job.resumed_from_crash is True
 
 
+def _finished_file(tmp_path: Path, name: str, size: int) -> str:
+    path = tmp_path / name
+    path.write_bytes(b"x" * size)
+    return str(path)
+
+
 @pytest.mark.asyncio
-async def test_reset_handles_done_and_failed_tracks() -> None:
+async def test_reset_keeps_a_done_track_whose_file_is_at_its_recorded_size(tmp_path: Path) -> None:
     db = FakeSession()
     job = _make_job()
     db.rows["jobs"] = [job]
     done = _make_track(track_id="trk_1", job_id=job.id, status=TrackStatus.DONE, attempts=1)
-    failed = _make_track(track_id="trk_2", job_id=job.id, status=TrackStatus.FAILED, attempts=2)
-    queued = _make_track(track_id="trk_3", job_id=job.id, status=TrackStatus.QUEUED, attempts=0)
-    db.rows["tracks"] = [done, failed, queued]
+    done.output_path = _finished_file(tmp_path, "title_t00.mkv", 16)
+    done.size_bytes = 16
+    db.rows["tracks"] = [done]
+
+    touched = await reset_job_for_recovery(db, job)  # type: ignore[arg-type]
+
+    assert touched == 0
+    assert done.status == TrackStatus.DONE
+    assert done.attempts == 1
+    assert job.resumed_from_crash is True
+
+
+@pytest.mark.asyncio
+async def test_reset_requeues_a_done_track_whose_file_is_short(tmp_path: Path) -> None:
+    db = FakeSession()
+    job = _make_job()
+    db.rows["jobs"] = [job]
+    done = _make_track(track_id="trk_1", job_id=job.id, status=TrackStatus.DONE, attempts=1)
+    done.output_path = _finished_file(tmp_path, "title_t00.mkv", 8)
+    done.size_bytes = 16
+    db.rows["tracks"] = [done]
+
+    touched = await reset_job_for_recovery(db, job)  # type: ignore[arg-type]
+
+    assert touched == 1
+    assert done.status == TrackStatus.QUEUED
+    assert done.attempts == 2
+
+
+@pytest.mark.asyncio
+async def test_reset_requeues_a_done_track_whose_file_is_missing_or_unrecorded(tmp_path: Path) -> None:
+    db = FakeSession()
+    job = _make_job()
+    db.rows["jobs"] = [job]
+    missing = _make_track(track_id="trk_1", job_id=job.id, status=TrackStatus.DONE, attempts=1)
+    missing.output_path = str(tmp_path / "gone.mkv")
+    missing.size_bytes = 16
+    unrecorded = _make_track(track_id="trk_2", job_id=job.id, status=TrackStatus.DONE, attempts=1)
+    db.rows["tracks"] = [missing, unrecorded]
 
     touched = await reset_job_for_recovery(db, job)  # type: ignore[arg-type]
 
     assert touched == 2
-    assert done.status == TrackStatus.QUEUED
-    assert done.attempts == 2
+    assert missing.status == TrackStatus.QUEUED
+    assert unrecorded.status == TrackStatus.QUEUED
+
+
+@pytest.mark.asyncio
+async def test_reset_requeues_failed_tracks() -> None:
+    db = FakeSession()
+    job = _make_job()
+    db.rows["jobs"] = [job]
+    failed = _make_track(track_id="trk_2", job_id=job.id, status=TrackStatus.FAILED, attempts=2)
+    queued = _make_track(track_id="trk_3", job_id=job.id, status=TrackStatus.QUEUED, attempts=0)
+    db.rows["tracks"] = [failed, queued]
+
+    touched = await reset_job_for_recovery(db, job)  # type: ignore[arg-type]
+
+    assert touched == 1
     assert failed.status == TrackStatus.QUEUED
     assert failed.attempts == 3
     assert queued.attempts == 0
