@@ -1,14 +1,15 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import type { SetupRestart } from '$lib/stores/setupRestart.svelte';
-	import SystemHealth from '$lib/components/settings/SystemHealth.svelte';
+	import type { SetupRestart } from '$lib/stores/setup-restart.svelte';
+	import SystemHealth from '$lib/components/shared/SystemHealth.svelte';
+	import FeedbackAlert from '$lib/components/shared/FeedbackAlert.svelte';
 	import EnvironmentSection from '$lib/components/settings/EnvironmentSection.svelte';
 	import ContainersSection from '$lib/components/settings/ContainersSection.svelte';
 	import CopyReportButton from '$lib/components/settings/CopyReportButton.svelte';
 	import { fetchSystemDiagnostics, fetchSystemEnvironment } from '$lib/api/system';
 	import { fetchDiagnostics } from '$lib/api/diagnostics';
 	import { ApiError } from '$lib/api/client';
-	import { buildDeploymentReport } from '$lib/utils/deployment-report';
+	import { buildDeploymentReport } from '$lib/settings/deployment-report';
 	import type {
 		DiagnosticsServiceView,
 		SystemDiagnosticsResponse,
@@ -90,7 +91,8 @@
 			<EnvironmentSection groups={[{ name: 'Logging', vars: [] }]} {logLevels} {logError} />
 		{/if}
 
-		<!-- First-run walkthrough re-entry (setup spec 5.11) -->
+		<!-- First-run walkthrough re-entry -->
+		<FeedbackAlert feedback={setup.feedback.current} />
 		<section class="panel settings-page-setup-again" data-testid="run-setup-again">
 			<div>
 				<h3 class="settings-page-section-title">Setup walkthrough</h3>

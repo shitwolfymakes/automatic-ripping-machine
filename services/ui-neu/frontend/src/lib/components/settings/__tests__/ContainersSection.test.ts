@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from 'vitest';
-import { renderComponent, screen, cleanup } from '$lib/test-utils';
+import { renderComponent, screen, cleanup } from '$lib/testing/render';
 import ContainersSection from '../ContainersSection.svelte';
 import type { ContainerView } from '$lib/types/api.gen';
 

@@ -1,4 +1,4 @@
-"""GET /api/metadata/details (match picker spec 3.4)."""
+"""GET /api/metadata/details."""
 
 from __future__ import annotations
 

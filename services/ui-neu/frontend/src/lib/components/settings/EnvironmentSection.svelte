@@ -1,6 +1,6 @@
 <script lang="ts">
 	import type { DiagnosticsServiceView, EnvGroupView } from '$lib/types/api.gen';
-	import { settingsTabFor } from '$lib/utils/settings-sections';
+	import { settingsTabFor } from '$lib/settings/sections';
 
 	interface Props {
 		groups: EnvGroupView[];

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { renderComponent, screen, fireEvent, cleanup } from '$lib/test-utils';
+import { renderComponent, screen, fireEvent, cleanup } from '$lib/testing/render';
 import Layout from '../+layout.svelte';
 import { createRawSnippet } from 'svelte';
 
@@ -18,7 +18,8 @@ vi.mock('$lib/api/auth', () => ({
 }));
 
 vi.mock('$app/navigation', () => ({
-	goto: vi.fn()
+	goto: vi.fn(),
+	onNavigate: vi.fn()
 }));
 
 vi.mock('$lib/stores/auth', async () => {
@@ -39,7 +40,7 @@ vi.mock('$lib/stores/theme', async () => {
 	return { theme: writable('dark'), toggleTheme: vi.fn() };
 });
 
-vi.mock('$lib/stores/colorScheme', async () => {
+vi.mock('$lib/stores/color-scheme', async () => {
 	const { writable } = await import('svelte/store');
 	return {
 		colorScheme: writable('default'),
@@ -55,7 +56,7 @@ vi.mock('$lib/stores/dashboard', async () => {
 		arm_online: true,
 		active_jobs: [],
 		drives_online: 1,
-		drive_names: {},
+		drives: {},
 		notification_count: 0,
 		ripping_enabled: true,
 		makemkv_key_valid: true,

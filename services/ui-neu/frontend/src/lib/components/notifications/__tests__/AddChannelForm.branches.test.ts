@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { renderComponent, screen, fireEvent, waitFor, within, cleanup } from '$lib/test-utils';
+import { renderComponent, screen, fireEvent, waitFor, within, cleanup } from '$lib/testing/render';
 import AddChannelForm from '../AddChannelForm.svelte';
-import type { AddChannelBody } from '../channelActions';
+import type { AddChannelBody } from '../../../notifications/channel-actions';
 import type { Catalog } from '$lib/types/notifications';
 import type { EventTypeInfo } from '$lib/api/channels';
 
@@ -28,6 +28,7 @@ const catalog: Catalog = {
 			id: 'discord',
 			name: 'Discord',
 			docs_url: '',
+			setup_url: '',
 			url_scheme: 'discord',
 			required_fields: [{ key: 'webhook_id', label: 'Webhook ID', type: 'string', private: false, required: true }],
 			advanced_fields: []
@@ -36,6 +37,7 @@ const catalog: Catalog = {
 			id: 'slack',
 			name: 'Slack',
 			docs_url: '',
+			setup_url: '',
 			url_scheme: 'slack',
 			required_fields: [],
 			advanced_fields: []

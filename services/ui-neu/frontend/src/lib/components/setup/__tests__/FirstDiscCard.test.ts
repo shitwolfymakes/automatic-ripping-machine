@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
-import { renderComponent, screen, cleanup, within, waitFor } from '$lib/test-utils';
+import { renderComponent, screen, cleanup, within, waitFor } from '$lib/testing/render';
 import type { DriveView } from '$lib/types/api.gen';
 import type { WSEnvelope } from '$lib/api/ws';
 import FirstDiscCard from '../FirstDiscCard.svelte';

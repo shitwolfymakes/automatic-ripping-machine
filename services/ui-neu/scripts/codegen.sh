@@ -6,8 +6,7 @@ set -euo pipefail
 
 REPO_ROOT="$(git rev-parse --show-toplevel)"
 
-# v3 owns the contract: generate from the Backend's committed OpenAPI snapshot,
-# NOT the old BFF app.
+# Generate from the Backend's committed OpenAPI snapshot, not from a running app.
 V3_SNAPSHOT="$REPO_ROOT/services/ui-neu/openapi.snapshot.json"
 if [ ! -f "$V3_SNAPSHOT" ]; then
     echo "v3 OpenAPI snapshot not found at $V3_SNAPSHOT" >&2

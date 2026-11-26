@@ -1,11 +1,11 @@
 <script lang="ts">
 	import type { JobView } from '$lib/types/api.gen';
-	import StatusBadge from '$lib/components/StatusBadge.svelte';
-	import PosterImage from '$lib/components/PosterImage.svelte';
-	import { effectiveJobStatus } from '$lib/utils/job-status';
-	import { driveLabel } from '$lib/utils/drive-name';
-	import { jobPoster } from '$lib/utils/poster';
-	import { discKindLabel, discPosition, jobTypeConfig, shortJobId } from '$lib/utils/log-list';
+	import StatusBadge from '$lib/components/shared/StatusBadge.svelte';
+	import PosterImage from '$lib/components/shared/PosterImage.svelte';
+	import { effectiveJobStatus } from '$lib/jobs/status';
+	import { driveLabel } from '$lib/drives/name';
+	import { jobPoster } from '$lib/match/poster';
+	import { discKindLabel, discPosition, jobTypeConfig, shortJobId } from '$lib/logs/list';
 	import { calendarTimeAgo, formatShortDateTime } from '$lib/utils/format';
 	import { dashboard } from '$lib/stores/dashboard';
 
@@ -18,7 +18,7 @@
 	let { job, logAt }: Props = $props();
 
 	const type = $derived(jobTypeConfig(job));
-	const drive = $derived(driveLabel(job.drive_id, $dashboard.drive_names));
+	const drive = $derived(driveLabel(job.drive_id, $dashboard.drives));
 </script>
 
 <tr class="table-row">
@@ -41,7 +41,7 @@
 	<td class="table-cell" data-label="Type">
 		<span class="logs-panel-chips">
 			<span class="logs-panel-chip" style:--jt-bg={type.badgeBg} style:--jt-text={type.badgeText}>{type.label}</span>
-			<span class="logs-panel-chip logs-panel-chip-neutral">{discKindLabel(job, $dashboard.drive_source_kinds)}</span>
+			<span class="logs-panel-chip logs-panel-chip-neutral">{discKindLabel(job, $dashboard.drives)}</span>
 		</span>
 	</td>
 	<td class="table-cell logs-panel-nowrap" data-label="Disc">{discPosition(job)}</td>

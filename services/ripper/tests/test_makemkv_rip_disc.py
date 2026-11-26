@@ -358,8 +358,7 @@ async def test_rip_disc_pre_save_phase_prgv_is_silently_dropped(monkeypatch, tmp
 async def test_rip_disc_per_title_progress_takes_precedence_over_disc(monkeypatch, tmp_path):
     """When a per-title "Saving title #N" PRGT has identified the
     in-flight title, PRGV drives `on_title_progress` (per-op channel)
-    and the disc-level callback stays silent — the per-title
-    behaviour established in v2 is preserved unchanged."""
+    and the disc-level callback stays silent."""
     _stub_subprocess(
         monkeypatch,
         [
@@ -739,7 +738,7 @@ class _HangingProc(_FakeProc):
 
 
 async def test_rip_disc_stop_kills_makemkvcon_and_reports_the_lost_drive(monkeypatch, tmp_path):
-    """D-133: once the caller sets `stop` (the drive dropped off the bus),
+    """Once the caller sets `stop` (the drive dropped off the bus),
     makemkvcon is killed at once instead of failing title after title."""
     proc = _HangingProc()
 

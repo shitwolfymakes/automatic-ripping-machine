@@ -1,9 +1,9 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import type { DriveView } from '$lib/types/api.gen';
-	import Glyph from '$lib/components/Glyph.svelte';
+	import Glyph from '$lib/components/shared/Glyph.svelte';
 	import { wsClient, type WSEnvelope } from '$lib/api/ws';
-	import { driveTitle } from '$lib/utils/drives';
+	import { driveTitle } from '$lib/drives/drives';
 
 	// The "Insert a disc to try it" card: what the watched drive is doing. It
 	// watches the ripper events itself to learn when a rip starts on that drive.

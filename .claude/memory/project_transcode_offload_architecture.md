@@ -51,8 +51,7 @@ contract). Owner chose A; the neu transcoder on the box was spun down (retained 
 
 ## Approach A — BUILT (code complete 2026-06-30, Task #91)
 Branch **feat/tier25-remote-transcode-offload** (off feat/tier24-probe-race; worktree
-`.claude/worktrees/tier25-remote-transcode`). Spec + plan in
-`../arm-ai/arm-v3/docs/superpowers/{specs,plans}/2026-06-30-remote-nvenc-transcode-offload*`.
+`.claude/worktrees/tier25-remote-transcode`).
 Final opus whole-branch review = READY TO MERGE (0 Crit/0 Imp); full suite 1631 passed.
 
 Commits: 308b8053 (2 settings) → f22935b2 (`_build_docker_client(docker_host)` remote

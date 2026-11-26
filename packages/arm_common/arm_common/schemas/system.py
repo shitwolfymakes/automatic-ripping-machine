@@ -28,7 +28,7 @@ class PathStatus(BaseModel):
     exists: bool
     writable: bool
     # Host-side bind source (ARM_HOST_*_PATH) and the backend's effective ids,
-    # so the UI can print the exact `chown` fix (setup spec §6.3).
+    # so the UI can print the exact `chown` fix.
     host_path: str | None = None
     uid: int | None = None
     gid: int | None = None
@@ -49,6 +49,12 @@ class StatsResponse(BaseModel):
 
 class SystemVersionResponse(BaseModel):
     version: str
+    # None until a background check against the release feed has succeeded.
+    latest_version: str | None = None
+    update_available: bool | None = None
+    release_url: str | None = None
+    # The project's GitHub page; always set by the Backend so the UI can link to it.
+    repo_url: str | None = None
 
 
 class MemoryInfo(BaseModel):

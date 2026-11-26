@@ -1,6 +1,6 @@
 """Settings page metadata + read-only infra values. The settings UI fetches
 the schema (how to render) here and the values from /api/config; infra values
-(read-only, non-secret env settings) come from /api/settings/infra (Task 4)."""
+(read-only, non-secret env settings) come from /api/settings/infra."""
 
 from collections import OrderedDict
 

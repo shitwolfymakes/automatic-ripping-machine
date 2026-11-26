@@ -1,7 +1,7 @@
 import { describe, it, expect, afterEach } from 'vitest';
-import { renderComponent, screen, cleanup, fireEvent } from '$lib/test-utils';
+import { renderComponent, screen, cleanup, fireEvent } from '$lib/testing/render';
 import EnvironmentSection from '../EnvironmentSection.svelte';
-import { tabFromHash } from '$lib/utils/settings-tabs';
+import { tabFromHash } from '$lib/settings/tabs';
 import type { EnvGroupView } from '$lib/types/api.gen';
 
 // Branches not forced here: the `?? ''` fallbacks Svelte compiles around

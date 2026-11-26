@@ -148,7 +148,7 @@
           "ripper"
         ],
         "summary": "Get Ripper Config",
-        "description": "Subset of the global Config the ripper reads on each disc insert to\ndecide whether to fire its scan/identify/rip pipeline. Cheap enough to\npoll per-insert; avoids the WS-event invalidation dance for a single\nboolean.\n\n`drive_id` resolves auto-rip per drive: a non-null Drive.drive_mode\noverrides the global Config.auto_rip_on_insert default; NULL follows it\n(setup spec 2026-10-01 D1). Rippers that omit it get the global value.",
+        "description": "Subset of the global Config the ripper reads on each disc insert to\ndecide whether to fire its scan/identify/rip pipeline. Cheap enough to\npoll per-insert; avoids the WS-event invalidation dance for a single\nboolean.\n\n`drive_id` resolves auto-rip per drive: a non-null Drive.drive_mode\noverrides the global Config.auto_rip_on_insert default; NULL follows it\nRippers that omit it get the global value.",
         "operationId": "get_ripper_config_api_ripper_config_get",
         "security": [
           {
@@ -283,7 +283,7 @@
           "ripper"
         ],
         "summary": "Get Drive",
-        "description": "This ripper's own row. Port-identity rippers read `device_path` from\nit while their drive is absent \u2014 the scanner keeps that current by port\n(spec \u00a72), and the ripper cannot see a renumbering by itself without a\nby-id link. Returns the table model: the ripper validates it as `Drive`.",
+        "description": "This ripper's own row. Port-identity rippers read `device_path` from\nit while their drive is absent \u2014 the scanner keeps that current by port\nand the ripper cannot see a renumbering by itself without a\nby-id link. Returns the table model: the ripper validates it as `Drive`.",
         "operationId": "get_drive_api_ripper_drives__drive_id__get",
         "security": [
           {
@@ -502,7 +502,7 @@
           "ripper"
         ],
         "summary": "Register",
-        "description": "A ripper container announcing itself for the row the backend spawned\nit for (ARM_DRIVE_ID). Keyed on the id \u2014 hostname is written as the\nownership token every X-ARM-Hostname check compares, never used to look\nthe row up. Identity is checked, never rewritten: a by-id mismatch means\nthe container is bound to a different physical drive than the row, so\nthe row goes ERROR and the container is left running for diagnosis\n(spec \u00a71, \u00a73).",
+        "description": "A ripper container announcing itself for the row the backend spawned\nit for (ARM_DRIVE_ID). Keyed on the id \u2014 hostname is written as the\nownership token every X-ARM-Hostname check compares, never used to look\nthe row up. Identity is checked, never rewritten: a by-id mismatch means\nthe container is bound to a different physical drive than the row, so\nthe row goes ERROR and the container is left running for diagnosis.",
         "operationId": "register_api_ripper_register_post",
         "requestBody": {
           "content": {
@@ -705,7 +705,7 @@
           "ripper"
         ],
         "summary": "Resume",
-        "description": "Phase 9 \u2014 per-job crash-recovery reset for the 'only ripper crashed'\ncase. Idempotent: re-running on an already-reset job is a no-op.\nReturns the same shape as `rip-start` so the ripper's existing flow\ncontinues unchanged.",
+        "description": "Per-job crash-recovery reset for the 'only ripper crashed'\ncase. Idempotent: re-running on an already-reset job is a no-op.\nReturns the same shape as `rip-start` so the ripper's existing flow\ncontinues unchanged.",
         "operationId": "resume_api_ripper_jobs__job_id__resume_post",
         "security": [
           {
@@ -769,7 +769,7 @@
           "ripper"
         ],
         "summary": "Get In Flight Job",
-        "description": "Phase 9 \u2014 boot-probe lookup. Returns the single RIPPING job assigned\nto this drive, if any. 404 if the drive is unknown or no in-flight job\nexists. Multiple matches (data-model violation) log + return the first.",
+        "description": "Boot-probe lookup. Returns the single RIPPING job assigned\nto this drive, if any. 404 if the drive is unknown or no in-flight job\nexists. Multiple matches (data-model violation) log + return the first.",
         "operationId": "get_in_flight_job_api_ripper_drives__drive_id__in_flight_job_get",
         "security": [
           {
@@ -865,7 +865,7 @@
           "ripper"
         ],
         "summary": "Get Held Job",
-        "description": "Boot-probe lookup for a disc held in AWAITING_REVIEW (timed review gate).\n\nReturns the held job plus `paused` (true when the disc should survive a ripper\nreboot as a hold \u2014 global `ripping_paused`, or a per-job pause once that\nlands). The ripper uses `paused` to choose re-park vs. abandon on restart\n(timed-review-gate spec \u00a76.3). 404 when the drive is unknown or no held job\nexists. Distinct from `/in-flight-job` (RIPPING-only) so the two recovery\npaths stay separate.",
+        "description": "Boot-probe lookup for a disc held in AWAITING_REVIEW (timed review gate).\n\nReturns the held job plus `paused` (true when the disc should survive a ripper\nreboot as a hold: global `ripping_paused`, or the per-job `manual_pause` set by\nreview-pause). The ripper uses `paused` to choose re-park vs. abandon on restart.\n404 when the drive is unknown or no held job\nexists. Distinct from `/in-flight-job` (RIPPING-only) so the two recovery\npaths stay separate.",
         "operationId": "get_held_job_api_ripper_drives__drive_id__held_job_get",
         "security": [
           {
@@ -913,7 +913,7 @@
           "ripper"
         ],
         "summary": "Recovery Abandon",
-        "description": "Service-token abandon for ripper reboot recovery (timed review gate \u00a76.3).\n\nA held disc that was only COUNTING DOWN (not paused) when the ripper restarted\nis abandoned here so the drive frees; the seated disc then re-fires the\nripper's InsertDetector and re-enters review with a fresh countdown. Only\nAWAITING_REVIEW is abandonable via this path (the operator-facing\n`/jobs/{id}/abandon` covers the rest); no WS job.abandoned is emitted because\nthe ripper is the caller and has no active task to cancel.",
+        "description": "Service-token abandon for ripper reboot recovery (timed review gate).\n\nA held disc that was only COUNTING DOWN (not paused) when the ripper restarted\nis abandoned here so the drive frees; the seated disc then re-fires the\nripper's InsertDetector and re-enters review with a fresh countdown. Only\nAWAITING_REVIEW is abandonable via this path (the operator-facing\n`/jobs/{id}/abandon` covers the rest); no WS job.abandoned is emitted because\nthe ripper is the caller and has no active task to cancel.",
         "operationId": "recovery_abandon_api_ripper_jobs__job_id__recovery_abandon_post",
         "security": [
           {
@@ -1462,7 +1462,7 @@
           "jobs"
         ],
         "summary": "Abandon Job",
-        "description": "Move a non-terminal job to `abandoned` and tell the ripper to clean up.\n\nTwo cases the ripper handles via the `job.abandoned` WS command:\n  * AWAITING_USER_ID \u2014 the ripper is parked in `_await_resolution`;\n    the waiter polls, sees the non-IDENTIFIED status, exits cleanly.\n  * RIPPING \u2014 the ripper has an active scan/identify/rip pipeline. The\n    WS handler cancels the asyncio task, which kills the makemkvcon\n    subprocess so file handles release on `/raw/<id>/`.\n\n`delete_raw` is plumbed in the WS payload because only the ripper has\n`/raw` mounted; doing the rmtree here would silently no-op (and used to,\npre-fix). Even when there's no active task, the ripper still runs the\nrmtree against any orphaned partial-rip directory.",
+        "description": "Move a non-terminal job to `abandoned` and tell the ripper to clean up.\n\nTwo cases the ripper handles via the `job.abandoned` WS command:\n  * AWAITING_USER_ID \u2014 the ripper is parked in `_await_resolution`;\n    the waiter polls, sees the non-IDENTIFIED status, exits cleanly.\n  * RIPPING \u2014 the ripper has an active scan/identify/rip pipeline. The\n    WS handler cancels the asyncio task, which kills the makemkvcon\n    subprocess so file handles release on `/raw/<id>/`.\n\n`delete_raw` is plumbed in the WS payload because only the ripper has\n`/raw` mounted; doing the rmtree here would silently no-op. Even when there's no active task, the ripper still runs the\nrmtree against any orphaned partial-rip directory.",
         "operationId": "abandon_job_api_jobs__job_id__abandon_post",
         "security": [
           {
@@ -1528,7 +1528,7 @@
           "jobs"
         ],
         "summary": "Rip Start Review",
-        "description": "Operator Start for a disc held in the timed review gate (spec \u00a75.2).\n\nTransitions AWAITING_REVIEW -> RIPPING here (the backend owns the transition;\nrip-start then tolerates already-RIPPING) and emits the `rip.start` WS command\nso the parked ripper unblocks. Operator-initiated, so JWT-authed on the jobs\nrouter \u2014 NOT the ripper's service-token rip-start path. Pre-flight: at least\none kept (non-excluded) track, else 422 (don't let it fail deep in the ripper).",
+        "description": "Operator Start for a disc held in the timed review gate.\n\nTransitions AWAITING_REVIEW -> RIPPING here (the backend owns the transition;\nrip-start then tolerates already-RIPPING) and emits the `rip.start` WS command\nso the parked ripper unblocks. Operator-initiated, so JWT-authed on the jobs\nrouter \u2014 NOT the ripper's service-token rip-start path. Pre-flight: at least\none kept (non-excluded) track, else 422 (don't let it fail deep in the ripper).",
         "operationId": "rip_start_review_api_jobs__job_id__rip_start_review_post",
         "security": [
           {
@@ -1626,7 +1626,7 @@
           "jobs"
         ],
         "summary": "Review Pause",
-        "description": "Pause/resume ONE held disc's review countdown (per-job pause, spec \u00a711).\n\n`?paused=true` freezes this disc's auto-start countdown (waits indefinitely\nfor Start) while other discs keep counting; `?paused=false` resumes with a\nFRESH countdown (new wait_start_time) so it doesn't auto-rip instantly on a\nlong-paused disc. Only valid for AWAITING_REVIEW. Emits a WS command so the\nparked ripper re-evaluates the countdown on its next poll.",
+        "description": "Pause/resume ONE held disc's review countdown (per-job pause).\n\n`?paused=true` freezes this disc's auto-start countdown (waits indefinitely\nfor Start) while other discs keep counting; `?paused=false` resumes with a\nFRESH countdown (new wait_start_time) so it doesn't auto-rip instantly on a\nlong-paused disc. Only valid for AWAITING_REVIEW. Emits a WS command so the\nparked ripper re-evaluates the countdown on its next poll.",
         "operationId": "review_pause_api_jobs__job_id__review_pause_post",
         "security": [
           {
@@ -1790,7 +1790,7 @@
           "jobs"
         ],
         "summary": "Accept Identity Suggestion",
-        "description": "Confirm the confident match identify held because the media type's\nauto-apply switch was off (identification-sources spec D-10).\n\nApplies the stored hit exactly as identify would have, then hands the\njob to the resolve path (provenance, fan-out, `identify.resolved`, the\nepisode stage). The status is settled first: a held disc is released to\nrip when the review gate is off, or gets the gate's countdown when it is\non; a pause keeps it held with no countdown until un-pause stamps one;\na ripped placeholder follows resolve's promote rule. A job also held as\npreviously ripped keeps that hold untouched (status, no countdown).",
+        "description": "Confirm the confident match identify held because the media type's\nauto-apply switch was off.\n\nApplies the stored hit exactly as identify would have, then hands the\njob to the resolve path (provenance, fan-out, `identify.resolved`, the\nepisode stage). The status is settled first: a held disc is released to\nrip when the review gate is off, or gets the gate's countdown when it is\non; a pause keeps it held with no countdown until un-pause stamps one;\na ripped placeholder follows resolve's promote rule. A job also held as\npreviously ripped keeps that hold untouched (status, no countdown).",
         "operationId": "accept_identity_suggestion_api_jobs__job_id__identity_accept_post",
         "security": [
           {
@@ -2318,7 +2318,7 @@
           "drives"
         ],
         "summary": "Rescan Drives",
-        "description": "Run the host drive scan now (spec \u00a72) and report the reconciled table.\nAlso keeps the heartbeat-freshness counts behind the UI's online/stale\nbadge; only enrolled drives are counted, since a detected or ignored\ndrive has no ripper to heartbeat. `force` = Force Rescan: the prune window\nis zero, so absent detected rows are removed immediately; enrolled and\nignored rows are untouched.",
+        "description": "Run the host drive scan now and report the reconciled table.\nAlso keeps the heartbeat-freshness counts behind the UI's online/stale\nbadge; only enrolled drives are counted, since a detected or ignored\ndrive has no ripper to heartbeat. `force` = Force Rescan: the prune window\nis zero, so absent detected rows are removed immediately; enrolled and\nignored rows are untouched.",
         "operationId": "rescan_drives_api_drives_rescan_post",
         "security": [
           {
@@ -2465,7 +2465,7 @@
           "drives"
         ],
         "summary": "Enroll Drive",
-        "description": "detected|ignored -> enrolled (spec \u00a71): the operator says \"this is\nARM's\". Creates (or adopts) the ripper container (spec \u00a73). A docker\nfailure reverts the row and surfaces the error in `last_error` + the\nresponse.\n\nSerialized per-drive (see `_drive_lock`): a second enroll/unenroll on the\nsame drive_id while this one is still running its docker call waits for\nit to finish and commit, instead of reading + clobbering a stale row.",
+        "description": "detected|ignored -> enrolled: the operator says \"this is\nARM's\". Creates (or adopts) the ripper container. A docker\nfailure reverts the row and surfaces the error in `last_error` + the\nresponse.\n\nSerialized per-drive (see `_drive_lock`): a second enroll/unenroll on the\nsame drive_id while this one is still running its docker call waits for\nit to finish and commit, instead of reading + clobbering a stale row.",
         "operationId": "enroll_drive_api_drives__drive_id__enroll_post",
         "security": [
           {
@@ -2608,7 +2608,7 @@
           "drives"
         ],
         "summary": "Unenroll Drive",
-        "description": "enrolled -> detected (still plugged in) or gone (row deleted). Refused\nmid-rip. Stops (or removes) the ripper container (spec \u00a73) before the\nlifecycle changes; a docker failure leaves the row `enrolled`.\n\nSerialized per-drive (see `_drive_lock`) for the same reason as enroll.",
+        "description": "enrolled -> detected (still plugged in) or gone (row deleted). Refused\nmid-rip. Stops (or removes) the ripper container before the\nlifecycle changes; a docker failure leaves the row `enrolled`.\n\nSerialized per-drive (see `_drive_lock`) for the same reason as enroll.",
         "operationId": "unenroll_drive_api_drives__drive_id__unenroll_post",
         "security": [
           {
@@ -3527,6 +3527,41 @@
         }
       }
     },
+    "/api/transcode-presets/import/parse": {
+      "post": {
+        "tags": [
+          "transcode-presets"
+        ],
+        "summary": "Parse Handbrake Export",
+        "description": "Turn a HandBrake GUI export into preset proposals. Stores nothing.",
+        "operationId": "parse_handbrake_export_api_transcode_presets_import_parse_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {}
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImportParseResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ]
+      }
+    },
     "/api/transcode-presets": {
       "get": {
         "tags": [
@@ -3554,8 +3589,10 @@
                   "type": "null"
                 }
               ],
+              "description": "Only the presets that fit a session of this media type: a movie or TV preset fits either, every other type only its own.",
               "title": "Media Type"
-            }
+            },
+            "description": "Only the presets that fit a session of this media type: a movie or TV preset fits either, every other type only its own."
           }
         ],
         "responses": {
@@ -4657,6 +4694,137 @@
             "UserJWT": []
           },
           {}
+        ]
+      }
+    },
+    "/api/handbrake-schema": {
+      "get": {
+        "tags": [
+          "handbrake-schema"
+        ],
+        "summary": "Get Slim View",
+        "operationId": "get_slim_view_api_handbrake_schema_get",
+        "security": [
+          {
+            "UserJWT": []
+          },
+          {}
+        ],
+        "parameters": [
+          {
+            "name": "if-none-match",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "If-None-Match"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HandbrakeSchemaSlimView"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/handbrake-schema/builtin/{name}": {
+      "get": {
+        "tags": [
+          "handbrake-schema"
+        ],
+        "summary": "Get Builtin",
+        "operationId": "get_builtin_api_handbrake_schema_builtin__name__get",
+        "security": [
+          {
+            "UserJWT": []
+          },
+          {}
+        ],
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Name"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Get Builtin Api Handbrake Schema Builtin  Name  Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/handbrake-schema/refresh": {
+      "post": {
+        "tags": [
+          "handbrake-schema"
+        ],
+        "summary": "Refresh",
+        "operationId": "refresh_api_handbrake_schema_refresh_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HandbrakeSchemaRefreshResult"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "UserJWT": []
+          }
         ]
       }
     },
@@ -8327,6 +8495,10 @@
             "type": "string",
             "title": "Docs Url"
           },
+          "setup_url": {
+            "type": "string",
+            "title": "Setup Url"
+          },
           "url_scheme": {
             "type": "string",
             "title": "Url Scheme"
@@ -8351,6 +8523,7 @@
           "id",
           "name",
           "docs_url",
+          "setup_url",
           "url_scheme",
           "required_fields",
           "advanced_fields"
@@ -11555,6 +11728,184 @@
         "type": "object",
         "title": "HTTPValidationError"
       },
+      "HandbrakeSchemaRefreshResult": {
+        "properties": {
+          "ok": {
+            "type": "boolean",
+            "title": "Ok"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          }
+        },
+        "type": "object",
+        "required": [
+          "ok"
+        ],
+        "title": "HandbrakeSchemaRefreshResult"
+      },
+      "HandbrakeSchemaSlimView": {
+        "properties": {
+          "handbrake_tag": {
+            "type": "string",
+            "title": "Handbrake Tag"
+          },
+          "preset_version": {
+            "type": "string",
+            "title": "Preset Version"
+          },
+          "content_hash": {
+            "type": "string",
+            "title": "Content Hash"
+          },
+          "keys": {
+            "items": {
+              "$ref": "#/components/schemas/SlimKey"
+            },
+            "type": "array",
+            "title": "Keys"
+          },
+          "audio_item_keys": {
+            "items": {
+              "$ref": "#/components/schemas/SlimKey"
+            },
+            "type": "array",
+            "title": "Audio Item Keys"
+          },
+          "families": {
+            "items": {
+              "$ref": "#/components/schemas/SlimFamily"
+            },
+            "type": "array",
+            "title": "Families"
+          },
+          "lists": {
+            "additionalProperties": {
+              "items": {},
+              "type": "array"
+            },
+            "type": "object",
+            "title": "Lists"
+          },
+          "audio_mixdowns_by_encoder": {
+            "additionalProperties": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "type": "object",
+            "title": "Audio Mixdowns By Encoder"
+          },
+          "filters": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/SlimFilter"
+            },
+            "type": "object",
+            "title": "Filters"
+          },
+          "builtin_names": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Builtin Names"
+          },
+          "static_enums": {
+            "additionalProperties": {
+              "items": {},
+              "type": "array"
+            },
+            "type": "object",
+            "title": "Static Enums"
+          },
+          "source_extras": {
+            "additionalProperties": {
+              "items": {},
+              "type": "array"
+            },
+            "type": "object",
+            "title": "Source Extras"
+          },
+          "selector_filter_aliases": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Selector Filter Aliases"
+          },
+          "arm_owned_keys": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Arm Owned Keys"
+          },
+          "encoder_specific_keys": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Encoder Specific Keys"
+          },
+          "hidden_keys": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Hidden Keys"
+          }
+        },
+        "type": "object",
+        "required": [
+          "handbrake_tag",
+          "preset_version",
+          "content_hash",
+          "keys",
+          "audio_item_keys",
+          "families",
+          "lists",
+          "audio_mixdowns_by_encoder",
+          "filters",
+          "builtin_names",
+          "static_enums",
+          "source_extras",
+          "selector_filter_aliases",
+          "arm_owned_keys",
+          "encoder_specific_keys",
+          "hidden_keys"
+        ],
+        "title": "HandbrakeSchemaSlimView",
+        "description": "What the UI needs to render the settings sidebar; no built-in preset values."
+      },
+      "HandbrakeSettings": {
+        "properties": {
+          "common": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Common"
+          },
+          "encoders": {
+            "additionalProperties": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "object",
+            "title": "Encoders"
+          }
+        },
+        "type": "object",
+        "title": "HandbrakeSettings",
+        "description": "Settings every encoder shares (``common``) plus one block per encoder family (``encoders``)."
+      },
       "HardwareCaps": {
         "properties": {
           "cpu_count": {
@@ -11583,7 +11934,7 @@
           "cpu_count"
         ],
         "title": "HardwareCaps",
-        "description": "Self-reported transcoder capabilities. Phase 7 (CPU-only) ignores these;\nPhase 7b consumes them for GPU dispatch + `gpus` row writes."
+        "description": "Self-reported transcoder capabilities. The Backend does not dispatch on\nthese; GPU eligibility comes from the probed `gpus` rows."
       },
       "HealthResponse": {
         "properties": {
@@ -11676,7 +12027,7 @@
           "paused"
         ],
         "title": "HeldJobView",
-        "description": "Boot-probe payload for a disc held in AWAITING_REVIEW (timed review gate).\n\n`paused` is true when the held disc should survive a ripper reboot as a hold\n(global `ripping_paused` on \u2014 or, once it lands, a per-job pause). The ripper\nuses it to choose re-park (paused) vs. abandon-and-self-heal (counting down)\non restart. See the timed-review-gate spec \u00a76.3."
+        "description": "Boot-probe payload for a disc held in AWAITING_REVIEW (timed review gate).\n\n`paused` is true when the held disc should survive a ripper reboot as a hold\n(global `ripping_paused`, or the per-job `manual_pause` set by review-pause).\nThe ripper uses it to choose re-park (paused) vs. abandon-and-self-heal\n(counting down) on restart."
       },
       "IdentificationMode": {
         "type": "string",
@@ -11920,7 +12271,7 @@
           "suggested_at"
         ],
         "title": "IdentitySuggestion",
-        "description": "A confident online match identify did not apply because the media\ntype's \"Apply confident matches\" switch is off (identification-sources\nspec D-10). The job keeps its miss title and the `unidentified` flag and\nwaits in AWAITING_REVIEW with no countdown until the operator accepts\nit (POST /api/jobs/{id}/identity/accept) or identifies the disc another\nway (any resolve clears this section)."
+        "description": "A confident online match identify did not apply because the media\ntype's \"Apply confident matches\" switch is off. The job keeps its miss title and the `unidentified` flag and\nwaits in AWAITING_REVIEW with no countdown until the operator accepts\nit (POST /api/jobs/{id}/identity/accept) or identifies the disc another\nway (any resolve clears this section)."
       },
       "IdentityView": {
         "properties": {
@@ -11949,6 +12300,159 @@
         "type": "object",
         "title": "IdentityView",
         "description": "`GET /api/jobs/{id}/identity` response."
+      },
+      "ImportParseResponse": {
+        "properties": {
+          "handbrake_version": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Handbrake Version"
+          },
+          "presets": {
+            "items": {
+              "$ref": "#/components/schemas/ImportedPresetView"
+            },
+            "type": "array",
+            "title": "Presets"
+          }
+        },
+        "type": "object",
+        "required": [
+          "handbrake_version",
+          "presets"
+        ],
+        "title": "ImportParseResponse"
+      },
+      "ImportProposal": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "container": {
+            "$ref": "#/components/schemas/ContainerFormat"
+          },
+          "encoder": {
+            "type": "string",
+            "title": "Encoder"
+          },
+          "handbrake_settings": {
+            "$ref": "#/components/schemas/HandbrakeSettings"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "container",
+          "encoder",
+          "handbrake_settings"
+        ],
+        "title": "ImportProposal",
+        "description": "The preset an import would create from one HandBrake export entry."
+      },
+      "ImportedPresetView": {
+        "properties": {
+          "path": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Path"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "proposal": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ImportProposal"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "source_encoder": {
+            "type": "string",
+            "title": "Source Encoder"
+          },
+          "dropped_keys": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Dropped Keys"
+          },
+          "not_imported": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Not Imported"
+          },
+          "copied_depth_to": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Copied Depth To"
+          },
+          "eight_bit_only": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Eight Bit Only"
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Warnings"
+          },
+          "issues": {
+            "items": {
+              "$ref": "#/components/schemas/SettingIssue"
+            },
+            "type": "array",
+            "title": "Issues"
+          },
+          "importable": {
+            "type": "boolean",
+            "title": "Importable"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          }
+        },
+        "type": "object",
+        "required": [
+          "path",
+          "name",
+          "proposal",
+          "source_encoder",
+          "dropped_keys",
+          "not_imported",
+          "copied_depth_to",
+          "eight_bit_only",
+          "warnings",
+          "issues",
+          "importable"
+        ],
+        "title": "ImportedPresetView",
+        "description": "One export entry as the review step shows it: the proposal plus everything the import changed."
       },
       "InAppChannelConfig": {
         "properties": {
@@ -13163,13 +13667,13 @@
           "looks_episodic": {
             "type": "boolean",
             "title": "Looks Episodic",
-            "description": "The stored scan looks like a TV disc (several same-length episode\ntitles, no feature): the title search defaults to TV (spec 3.3).",
+            "description": "The stored scan looks like a TV disc (several same-length episode\ntitles, no feature): the title search defaults to TV.",
             "readOnly": true
           },
           "has_series": {
             "type": "boolean",
             "title": "Has Series",
-            "description": "A TV show is known: a TMDb id of kind tv, a TVDB or TVmaze id, or a\nshow id some episode source resolved (spec 3.4). False means the\nMatch Episodes tab asks for the series first.",
+            "description": "A TV show is known: a TMDb id of kind tv, a TVDB or TVmaze id, or a\nshow id some episode source resolved. False means the\nMatch Episodes tab asks for the series first.",
             "readOnly": true
           },
           "episodes_unsure": {
@@ -15237,6 +15741,17 @@
           },
           "hw_caps": {
             "$ref": "#/components/schemas/HardwareCaps"
+          },
+          "schema_hash": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Schema Hash"
           }
         },
         "type": "object",
@@ -15428,7 +15943,7 @@
           "provider"
         ],
         "title": "ResolveMatch",
-        "description": "A search result the operator picked (match picker spec 3.6). Its\npresence makes `external_ids` replace the stored show ids wholesale."
+        "description": "A search result the operator picked (from the match picker). Its\npresence makes `external_ids` replace the stored show ids wholesale."
       },
       "ResolveRequest": {
         "properties": {
@@ -16581,6 +17096,51 @@
         ],
         "title": "SessionView"
       },
+      "SettingIssue": {
+        "properties": {
+          "key": {
+            "type": "string",
+            "title": "Key"
+          },
+          "encoder": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Encoder"
+          },
+          "code": {
+            "type": "string",
+            "enum": [
+              "unknown_key",
+              "not_allowed_here",
+              "wrong_type",
+              "not_in_list",
+              "out_of_range",
+              "encoder_not_reachable",
+              "engine_ignores_settings",
+              "not_supported_by_encoder"
+            ],
+            "title": "Code"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          }
+        },
+        "type": "object",
+        "required": [
+          "key",
+          "code",
+          "message"
+        ],
+        "title": "SettingIssue",
+        "description": "One reason a setting is rejected. ``encoder`` names the block it sits in; None for ``common``."
+      },
       "SettingsGroup": {
         "properties": {
           "name": {
@@ -16648,7 +17208,7 @@
           "finish"
         ],
         "title": "SetupStep",
-        "description": "First-run setup walkthrough steps, in walkthrough order (setup spec 2026-10-01).\n\nStored as VARCHAR keys inside Config.setup_progress JSON, validated in the app."
+        "description": "First-run setup walkthrough steps, in walkthrough order.\n\nStored as VARCHAR keys inside Config.setup_progress JSON, validated in the app."
       },
       "SetupStepProgress": {
         "properties": {
@@ -16742,6 +17302,263 @@
           "checklist_dismissed"
         ],
         "title": "SetupView"
+      },
+      "SlimFamily": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "codec_id": {
+            "type": "integer",
+            "title": "Codec Id"
+          },
+          "multipass": {
+            "type": "boolean",
+            "title": "Multipass"
+          },
+          "turbo": {
+            "type": "boolean",
+            "title": "Turbo"
+          },
+          "rate_controls": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "title": "Rate Controls"
+          },
+          "variants": {
+            "items": {
+              "$ref": "#/components/schemas/SlimVariant"
+            },
+            "type": "array",
+            "title": "Variants"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "codec_id",
+          "multipass",
+          "turbo",
+          "rate_controls",
+          "variants"
+        ],
+        "title": "SlimFamily"
+      },
+      "SlimFilter": {
+        "properties": {
+          "presets": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Presets"
+          },
+          "tunes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Tunes"
+          }
+        },
+        "type": "object",
+        "required": [
+          "presets",
+          "tunes"
+        ],
+        "title": "SlimFilter"
+      },
+      "SlimKey": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "type": {
+            "type": "string",
+            "title": "Type"
+          },
+          "default": {
+            "title": "Default"
+          },
+          "tab": {
+            "type": "string",
+            "title": "Tab"
+          },
+          "group": {
+            "type": "string",
+            "title": "Group"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SlimSource"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "limits": {
+            "anyOf": [
+              {
+                "prefixItems": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ],
+                "type": "array",
+                "maxItems": 2,
+                "minItems": 2
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Limits"
+          },
+          "known": {
+            "type": "boolean",
+            "title": "Known"
+          },
+          "option_labels": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Option Labels"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "type",
+          "default",
+          "tab",
+          "group",
+          "label",
+          "source",
+          "limits",
+          "known"
+        ],
+        "title": "SlimKey"
+      },
+      "SlimQuality": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "low": {
+            "type": "number",
+            "title": "Low"
+          },
+          "high": {
+            "type": "number",
+            "title": "High"
+          },
+          "step": {
+            "type": "number",
+            "title": "Step"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "low",
+          "high",
+          "step"
+        ],
+        "title": "SlimQuality"
+      },
+      "SlimSource": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "title": "Kind"
+          },
+          "ref": {
+            "type": "string",
+            "title": "Ref"
+          }
+        },
+        "type": "object",
+        "required": [
+          "kind",
+          "ref"
+        ],
+        "title": "SlimSource"
+      },
+      "SlimVariant": {
+        "properties": {
+          "encoder": {
+            "type": "string",
+            "title": "Encoder"
+          },
+          "depth": {
+            "type": "integer",
+            "title": "Depth"
+          },
+          "presets": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Presets"
+          },
+          "tunes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Tunes"
+          },
+          "profiles": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Profiles"
+          },
+          "levels": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Levels"
+          },
+          "quality": {
+            "$ref": "#/components/schemas/SlimQuality"
+          }
+        },
+        "type": "object",
+        "required": [
+          "encoder",
+          "depth",
+          "presets",
+          "tunes",
+          "profiles",
+          "levels",
+          "quality"
+        ],
+        "title": "SlimVariant"
       },
       "SourceClaims": {
         "properties": {
@@ -17106,6 +17923,50 @@
           "version": {
             "type": "string",
             "title": "Version"
+          },
+          "latest_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latest Version"
+          },
+          "update_available": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Update Available"
+          },
+          "release_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Release Url"
+          },
+          "repo_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Repo Url"
           }
         },
         "type": "object",
@@ -17559,7 +18420,7 @@
           "other"
         ],
         "title": "TrackRole",
-        "description": "What one title on a disc is. Set by identity sources via the resolver\n(arm_backend.identity) or by the operator; replaces the old free-text\nrole and the per-track video_type."
+        "description": "What one title on a disc is. Set by identity sources via the resolver\n(arm_backend.identity) or by the operator."
       },
       "TrackSelection": {
         "type": "string",
@@ -17966,17 +18827,15 @@
             ],
             "title": "Preset Ref"
           },
-          "preset_json": {
+          "handbrake_settings": {
             "anyOf": [
               {
-                "additionalProperties": true,
-                "type": "object"
+                "$ref": "#/components/schemas/HandbrakeSettings"
               },
               {
                 "type": "null"
               }
-            ],
-            "title": "Preset Json"
+            ]
           },
           "container": {
             "$ref": "#/components/schemas/ContainerFormat"
@@ -18043,17 +18902,15 @@
             ],
             "title": "Preset Ref"
           },
-          "preset_json": {
+          "handbrake_settings": {
             "anyOf": [
               {
-                "additionalProperties": true,
-                "type": "object"
+                "$ref": "#/components/schemas/HandbrakeSettings"
               },
               {
                 "type": "null"
               }
-            ],
-            "title": "Preset Json"
+            ]
           },
           "container": {
             "anyOf": [
@@ -18123,17 +18980,30 @@
             ],
             "title": "Preset Ref"
           },
-          "preset_json": {
+          "handbrake_settings": {
             "anyOf": [
               {
-                "additionalProperties": true,
-                "type": "object"
+                "$ref": "#/components/schemas/HandbrakeSettings"
               },
               {
                 "type": "null"
               }
-            ],
-            "title": "Preset Json"
+            ]
+          },
+          "issues": {
+            "items": {
+              "$ref": "#/components/schemas/SettingIssue"
+            },
+            "type": "array",
+            "title": "Issues"
+          },
+          "host_notes": {
+            "items": {
+              "type": "string",
+              "const": "encodes_on_cpu_here"
+            },
+            "type": "array",
+            "title": "Host Notes"
           },
           "container": {
             "$ref": "#/components/schemas/ContainerFormat"
@@ -18197,7 +19067,7 @@
           "is_builtin",
           "tool",
           "preset_ref",
-          "preset_json",
+          "handbrake_settings",
           "container",
           "encoder",
           "extra_args",
@@ -18588,7 +19458,7 @@
           "guest"
         ],
         "title": "UserRole",
-        "description": "Fixed two-account model (spec 2026-07-12-basic-user-management-design).\n\nADMIN \u2014 the single writer; the only account that can hold a session.\nGUEST \u2014 read-everything/write-nothing; acquired by having no token at all\n        rather than by logging in, and gated by the `disabled` flag on its\n        row.\n\nStored as VARCHAR via `enum_column`, never a Postgres CREATE TYPE."
+        "description": "Fixed two-account model.\n\nADMIN \u2014 the single writer; the only account that can hold a session.\nGUEST \u2014 read-everything/write-nothing; acquired by having no token at all\n        rather than by logging in, and gated by the `disabled` flag on its\n        row.\n\nStored as VARCHAR via `enum_column`, never a Postgres CREATE TYPE."
       },
       "UserView": {
         "properties": {

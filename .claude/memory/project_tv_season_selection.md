@@ -7,8 +7,6 @@ metadata:
 
 Since 2026-10-24 the TV season selection work is wolfy draft PR #402
 (`feat/tv-season-selection`, stacked on `feat/home-episode-match`, #379).
-Design `docs/superpowers/specs/2026-10-23-tv-season-selection-design.md`,
-plan `docs/superpowers/plans/2026-10-23-tv-season-selection.md`.
 
 Shipped: uncapped hint-ordered season scan with `hold_reasons`; episode-shaped
 anchor and nominal rule; siblings by show id; operator-placed tracks as
@@ -29,8 +27,7 @@ it, and identify on a virtual drive reuses its newest non-terminal job
 Kolchak job survived two backend restarts; the first restart (before the
 dedupe fix) left a duplicate parked job the owner retires by hand.
 
-2026-10-25, second wave (design
-`docs/superpowers/specs/2026-10-25-episode-match-no-accept-design.md`): no
+2026-10-25, second wave: no
 accept step. A held result is applied as a guess (resolver ranks clean over
 held, `identity_claims.unsure`, `JobView.episodes_unsure`); the ripper holds
 the review countdown while it is a guess; the panel's only controls are Fix

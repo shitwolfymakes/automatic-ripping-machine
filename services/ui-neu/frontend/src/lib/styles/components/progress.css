@@ -11,7 +11,7 @@
 	.progress {
 		width: 100%;
 	}
-	/* height is 0.625rem (the original h-2.5), not 0.5rem: the bar reads
+	/* height is 0.625rem (h-2.5), not 0.5rem: the bar reads
 	   thinner at 8px and the difference shows on every meter in every scheme. */
 	.progress-track {
 		position: relative;

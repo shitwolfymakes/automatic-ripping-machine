@@ -24,7 +24,7 @@ PrincipalKind = Literal["ripper", "transcoder"]
 class ServicePrincipal:
     kind: PrincipalKind
     hostname: str  # ripper: drive hostname; transcoder: container hostname
-    task_id: str | None = None  # transcoder only (Phase 7)
+    task_id: str | None = None  # transcoder only
 
 
 @dataclass(frozen=True)

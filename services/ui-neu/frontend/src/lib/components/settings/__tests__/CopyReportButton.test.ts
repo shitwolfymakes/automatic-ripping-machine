@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { renderComponent, screen, cleanup, fireEvent, waitFor } from '$lib/test-utils';
+import { renderComponent, screen, cleanup, fireEvent, waitFor } from '$lib/testing/render';
 import CopyReportButton from '../CopyReportButton.svelte';
 import { toasts } from '$lib/stores/toast.svelte';
 

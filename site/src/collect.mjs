@@ -7,7 +7,7 @@ import { join, posix, sep } from 'node:path';
 
 const toPosix = (p) => p.split(sep).join('/');
 
-// Must match the app's id rule (services/ui-neu/frontend/src/lib/docs/api.ts).
+// Must match the app's id rule (services/ui-neu/frontend/src/lib/help/api.ts).
 const ID_RE = /^[a-z0-9_-]+\/[a-z0-9_-]+$/;
 const ID_PREFIX = { user: 'guide', dev: 'dev' };
 
