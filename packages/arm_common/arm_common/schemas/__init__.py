@@ -34,6 +34,7 @@ from arm_common.schemas.files import (
     MoveRequest,
     RenameRequest,
 )
+from arm_common.schemas.handbrake import HandbrakeSchemaSlimView, HandbrakeSettings, IssueCode, SettingIssue
 from arm_common.schemas.identity import (
     ClaimStatus,
     IdentityClaims,
@@ -242,6 +243,10 @@ from arm_common.schemas.ws import (
 )
 
 __all__ = [
+    "HandbrakeSchemaSlimView",
+    "HandbrakeSettings",
+    "IssueCode",
+    "SettingIssue",
     "AbandonJobRequest",
     "AppriseChannelConfig",
     "BdDiscMeta",

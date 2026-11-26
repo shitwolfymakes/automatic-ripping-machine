@@ -30,7 +30,7 @@ def _dead() -> SSHException:
 
 
 def test_is_transport_death_detects_direct_eof_error() -> None:
-    """Fix 76-9: paramiko commonly surfaces a dead transport as a raw
+    """Paramiko commonly surfaces a dead transport as a raw
     EOFError (not just SSHException/ConnectionResetError/BrokenPipeError)."""
     assert is_transport_death(EOFError("EOF"))
 

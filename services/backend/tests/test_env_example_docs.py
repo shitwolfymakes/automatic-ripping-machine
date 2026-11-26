@@ -1,4 +1,4 @@
-"""Discovery contract (settings audit Tier-2): every operator-relevant backend
+"""Discovery contract every operator-relevant backend
 env key must be documented in .env.example. Required secrets (compose-set) are
 exempt; container-internal paths are documented as a COMMENTED advanced block,
 so they ARE present (commented) in .env.example. Keep the allowlists honest: a

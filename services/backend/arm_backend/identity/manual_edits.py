@@ -80,8 +80,8 @@ async def _emit_track_updates(
 ) -> None:
     # De-duplicated, stable order: the tracks the request itself edited,
     # followed by any sibling the resolver also changed (e.g. a claim that
-    # was never applied until this PATCH ran the resolver) -- fixing PR 1's
-    # parked finding that resolver-only changes never got a track.updated.
+    # was never applied until this PATCH ran the resolver) -- resolver-only
+    # changes still need a track.updated.
     for tid in list(dict.fromkeys([*edited_track_ids, *sorted(resolver_track_ids)])):
         await hub.emit(
             topic="ripper.events",

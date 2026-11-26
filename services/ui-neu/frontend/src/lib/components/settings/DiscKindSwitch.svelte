@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { DISC_KIND_LABELS, DISC_KINDS, type DiscKind } from '$lib/utils/identity-card';
+	import { DISC_KIND_LABELS, DISC_KINDS, type DiscKind } from '$lib/jobs/identity-card';
 
 	// The Identity card's Preview control, a segmented radiogroup choosing the
 	// disc kind the preview shows.

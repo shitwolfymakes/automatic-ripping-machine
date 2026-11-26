@@ -1,4 +1,4 @@
-"""Phase 11 — pure-function tests for `format_event`."""
+"""Pure-function tests for `format_event`."""
 
 from __future__ import annotations
 
@@ -140,7 +140,7 @@ def test_synthetic_test_message_unknown_type() -> None:
     assert "totally.unknown.event" in body
 
 
-# --- event_context + interpolation (Task 2) -------------------------------
+# --- event_context + interpolation -------------------------------
 from arm_backend.notification_format import (  # noqa: E402
     TemplateRenderError,
     event_context,

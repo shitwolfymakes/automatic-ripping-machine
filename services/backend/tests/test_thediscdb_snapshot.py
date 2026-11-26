@@ -100,7 +100,7 @@ def test_build_failure_removes_temp_file_and_keeps_live_index(tmp_path: Path, mo
 
 
 def test_overlapping_builds_use_distinct_temp_files(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    # D-159: two builds into the same dest must not share a temp path.
+    # Two builds into the same dest must not share a temp path.
     seen: list[Path] = []
     real_write = thediscdb_index._write_index
 
@@ -227,7 +227,7 @@ async def test_refresh_http_failure_propagates_and_keeps_index_absent(tmp_path: 
 
 
 async def test_concurrent_refreshes_are_serialised(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """D-159: a second refresh is refused at once instead of building alongside
+    """A second refresh is refused at once instead of building alongside
     the first, or queueing behind it."""
     active = 0
     peak = 0

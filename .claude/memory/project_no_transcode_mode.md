@@ -6,8 +6,7 @@ metadata:
 ---
 
 Shipped 2026-09-25 as wolfy **#85** (`feat/no-transcode-mode`, draft, stacked on
-`feat/gpu-inventory-alignment` at stack end; migration **0037**). Spec/plan in
-`../arm-ai/arm-v3/docs/superpowers/{specs,plans}/2026-09-25-no-transcode-mode*`.
+`feat/gpu-inventory-alignment` at stack end; migration **0037**).
 
 Design (owner-approved, do not relitigate):
 - Two layers: env `ARM_TRANSCODE_CAPABLE` (deployment fact; `setup-dev.sh

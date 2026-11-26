@@ -1,4 +1,4 @@
-"""`consume_progress` carries ffmpeg's `fps=` line onto the percent tick (D-248)."""
+"""`consume_progress` carries ffmpeg's `fps=` line onto the percent tick."""
 
 from __future__ import annotations
 

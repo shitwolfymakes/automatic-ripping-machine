@@ -1,6 +1,6 @@
 """Regression floor for the episode matcher over the TheDiscDB corpus: no
 scenario may lose correct placements against the numbers measured after the
-season-selection work, on the seven series the design doc's table covers."""
+season-selection work, on the seven series in `SEVEN`."""
 
 from __future__ import annotations
 

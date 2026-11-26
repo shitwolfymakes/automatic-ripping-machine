@@ -80,8 +80,8 @@ def _db_factory(db: FakeSession) -> Any:
 
 def _app_with_one_task(status: TranscodeTaskStatus, *, passthrough: bool = False, **task_kwargs: Any) -> FakeSession:
     """One session_application + one task. Defaults to an ENCODE task (a real
-    HANDBRAKE preset resolves via the session), matching the pre-Task-6
-    container-spawn tests. `passthrough=True` gives the session no
+    HANDBRAKE preset resolves via the session), the container-spawn
+    path. `passthrough=True` gives the session no
     transcode_preset_id, so `is_passthrough_preset` routes the task through
     `execute_passthrough_task` instead of the container-spawn path.
     """
@@ -268,7 +268,7 @@ async def test_spawn_remote_without_backend_url_warns_and_falls_back(
 ) -> None:
     # A remote docker host with no routable backend URL is a misconfig: the
     # spawned container falls back to the in-network arm-backend:8443 which it
-    # cannot resolve. We keep the fallback (spec-compliant) but warn loudly.
+    # cannot resolve. We keep the fallback but warn loudly.
     db = _app_with_one_task(TranscodeTaskStatus.QUEUED)
     db.rows["transcode_tasks"][0].created_at = datetime.now(UTC)
     docker = MagicMock()
@@ -402,8 +402,8 @@ async def test_spawn_caps_at_max_parallel() -> None:
 
 
 async def test_spawn_holds_encode_when_host_paths_unset() -> None:
-    # No-transcode-mode contract: unset ARM_HOST_*_PATH no longer disables the
-    # whole dispatcher tick; it just holds ENCODE tasks (which need the
+    # No-transcode-mode contract: unset ARM_HOST_*_PATH does not disable the
+    # whole dispatcher tick; it only holds ENCODE tasks (which need the
     # container volume mounts) in QUEUED for a later tick.
     db = _app_with_one_task(TranscodeTaskStatus.QUEUED, created_at=datetime.now(UTC))
     docker = MagicMock()
@@ -471,7 +471,7 @@ async def test_spawn_continues_after_one_failure() -> None:
 
 
 async def test_spawn_pending_runs_spawn_container_via_to_thread(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Fix 76-4: `_spawn_container` does a blocking docker call (and, on the
+    """`_spawn_container` does a blocking docker call (and, on the
     SSH-rebuild path, a blocking TCP+SSH handshake that can take tens of
     seconds against a black-holed host) — it must run off the event loop via
     `asyncio.to_thread`, not synchronously inline in `spawn_pending`. Pin the
@@ -580,7 +580,7 @@ async def test_spawn_no_retry_without_factory() -> None:
 async def test_spawn_factory_returns_none_keeps_old_client(
     caplog: pytest.LogCaptureFixture, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """I2: `docker_factory.build_docker_client` returns None on any factory
+    """`docker_factory.build_docker_client` returns None on any factory
     failure, not an exception. Assigning `self._docker = None` would make
     every LATER spawn raise AttributeError instead of following the
     transport-death path — permanently wedging the dispatcher. The old
@@ -621,7 +621,7 @@ async def test_spawn_factory_returns_none_keeps_old_client(
 
 
 async def test_spawn_successful_rebuild_closes_old_client(monkeypatch: pytest.MonkeyPatch) -> None:
-    """I2: when the factory returns a working client, the old (dead) client
+    """When the factory returns a working client, the old (dead) client
     is best-effort closed so its resources (e.g. the SSH transport) don't
     leak (here at once; in production after RETIRED_CLIENT_CLOSE_DELAY_SECONDS)."""
     monkeypatch.setattr(docker_client_mod, "RETIRED_CLIENT_CLOSE_DELAY_SECONDS", 0.0)
@@ -701,7 +701,7 @@ async def test_probe_without_factory_reports_dead_transport() -> None:
 async def test_spawn_pending_recovers_when_the_probe_gate_hits_a_dead_transport() -> None:
     """The wedge seen on a live host: the spawn gate probes first, the dead
     client fails `ping`, every encode task is held, and `containers.run` (the
-    only place that used to rebuild) is never reached. The probe's own
+    only other place that rebuilds) is never reached. The probe's own
     recovery must let the same tick spawn on the fresh client."""
     db = _app_with_one_task(TranscodeTaskStatus.QUEUED)
     db.rows["transcode_tasks"][0].created_at = datetime.now(UTC)
@@ -1840,7 +1840,7 @@ async def test_cancel_running_emits_ws_then_docker_stop_fallback_then_deletes(
 
 
 async def test_cancel_running_releases_the_tasks_gpu(monkeypatch: pytest.MonkeyPatch) -> None:
-    """D-057: a docker-stopped transcoder never calls /fail; the delete must
+    """A docker-stopped transcoder never calls /fail; the delete must
     free its GPU, not leave it BUSY with a nulled claim."""
     db = _app_with_one_task(TranscodeTaskStatus.IN_PROGRESS, claimed_by="host", attempts=1)
     db.rows["gpus"] = [
@@ -1869,7 +1869,7 @@ async def test_cancel_running_releases_the_tasks_gpu(monkeypatch: pytest.MonkeyP
 
 
 async def test_cancel_running_stops_an_in_process_passthrough_copy(monkeypatch: pytest.MonkeyPatch) -> None:
-    """D-066: an in-process passthrough has no container; cancel_running
+    """An in-process passthrough has no container; cancel_running
     sets its copy's cancel event."""
     import threading
 

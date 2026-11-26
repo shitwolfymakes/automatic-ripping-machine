@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { renderComponent, screen, cleanup, waitFor, within } from '$lib/test-utils';
+import { renderComponent, screen, cleanup, waitFor, within } from '$lib/testing/render';
 import type { ConfigView, DriveView, GpuView, NotificationChannelView, SetupView } from '$lib/types/api.gen';
 import type { WSEnvelope } from '$lib/api/ws';
 

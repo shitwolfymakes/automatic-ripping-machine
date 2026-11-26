@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
 	import type { ConfigView, DriveView, GpuView, SetupView } from '$lib/types/api.gen';
-	import Glyph from '$lib/components/Glyph.svelte';
+	import Glyph from '$lib/components/shared/Glyph.svelte';
 	import FinishSummary from '../FinishSummary.svelte';
 	import FirstDiscCard from '../FirstDiscCard.svelte';
 	import { fetchDrives } from '$lib/api/drives';
@@ -10,10 +10,10 @@
 	import { fetchChannels } from '$lib/api/channels';
 	import { createPollingStore } from '$lib/stores/polling';
 	import { transcoderEnabled } from '$lib/stores/config';
-	import { setupSummaries } from '$lib/utils/setup-summaries';
-	import type { StepCommitResult } from '../steps';
+	import { setupSummaries } from '$lib/settings/setup-summaries';
+	import type { StepCommitResult } from '../../../setup/steps';
 
-	// Step 9: the first disc, the summary, and the certificate (setup spec §5.10).
+	// Step 9: the first disc, the summary, and the certificate.
 	let { view }: { view: SetupView; setBlocked?: (reason: string | null) => void } = $props();
 
 	const drives = createPollingStore(fetchDrives, [] as DriveView[], 3000);

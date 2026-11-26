@@ -3,7 +3,7 @@
 	// source on screen and its standing, and how many tracks are placed.
 	// The panel's action buttons pass in as `actions`.
 	import type { Snippet } from 'svelte';
-	import type { PanelState } from './episodeModel';
+	import type { PanelState } from '../../episodes/episode-model';
 
 	interface Props {
 		view: PanelState;

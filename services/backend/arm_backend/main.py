@@ -18,6 +18,8 @@ from arm_backend.crash_recovery import sweep_in_flight_jobs
 from arm_backend.db import SessionLocal
 from arm_backend.gpu_inventory import refresh_gpu_inventory
 from arm_backend.gpu_probe_runner import GpuProbeRunner
+from arm_backend.handbrake_schema_runner import HandbrakeSchemaRunner
+from arm_backend.handbrake_schema_store import SchemaStore
 from arm_backend.identity.stage_runner import EpisodeStageRunner
 from arm_backend import image_cache
 from arm_backend.disk_refresh import DiskRefresher
@@ -31,11 +33,13 @@ from arm_backend.notifications.apprise_notifier import RealAppriseNotifier
 from arm_backend.notifications.bash_listener import BashListener
 from arm_backend.notifications.inbox_listener import InboxListener
 from arm_backend.virtual_drive_lifecycle import run_virtual_drive_watchdog
+from arm_backend import release_check
 from arm_backend.ripper_manager import RipperManager
 from arm_backend.ripper_reconcile import reconcile_enrolled_rippers
 from arm_backend.routers import (
     gpus as gpus_router,
     encoders as encoders_router,
+    handbrake_schema as handbrake_schema_router,
     auth,
     config as config_router,
     diagnostics,
@@ -130,6 +134,7 @@ class _BackendServices:
     order and `stop` runs their shutdown steps in order."""
 
     _thediscdb_refresh_task: asyncio.Task[None]
+    _release_check_task: asyncio.Task[None]
     _dispatcher_task: asyncio.Task[None]
     _iso_watchdog_task: asyncio.Task[None] | None
     _notification_task: asyncio.Task[None]
@@ -161,11 +166,13 @@ class _BackendServices:
 
         self._start_thediscdb()
 
+        self._start_release_check()
+
         # GPU inventory — seed the gpus table from ARM_GPUS only when empty
         # (DB-authoritative thereafter). Runs before the dispatcher starts.
         await refresh_gpu_inventory(self._app.state.ws_hub)
 
-        # Phase 9 — reset every RIPPING job's tracks to queued and stamp
+        # Reset every RIPPING job's tracks to queued and stamp
         # resumed_from_crash. Idempotent across boots; no-op when nothing crashed.
         await _startup_sweep(
             lambda: sweep_in_flight_jobs(SessionLocal),
@@ -183,6 +190,7 @@ class _BackendServices:
             "startup episode-stage sweep failed: %s",
         )
 
+        await self._load_handbrake_schema_store()
         self._transcode_dispatcher = self._build_transcode_dispatcher()
         # One-shot sweeps run in every mode (they are DB/file-side, not
         # docker-side): a ripper-only deployment still needs orphaned
@@ -200,6 +208,7 @@ class _BackendServices:
         )
         self._start_transcode_dispatcher()
         gpu_probe_runner = self._start_gpu_probe_runner()
+        handbrake_schema_runner = self._start_handbrake_schema_runner()
 
         await self._start_ripper_manager()
 
@@ -213,6 +222,7 @@ class _BackendServices:
 
         self._shutdown_steps = [
             ("thediscdb refresh", self._stop_thediscdb_refresh),
+            ("release check", self._stop_release_check),
             ("disk refresher", self._stop_disk_refresher),
             ("log tailer", self._stop_log_tailer),
             ("drive scanner", self._stop_drive_scanner),
@@ -221,6 +231,7 @@ class _BackendServices:
             # Cancels the boot pass and any re-probe, waiting briefly so each
             # cancelled probe removes its container.
             ("gpu probe runner", gpu_probe_runner.shutdown),
+            ("handbrake schema runner", handbrake_schema_runner.shutdown),
             ("transcode dispatcher", self._stop_transcode_dispatcher),
             ("episode stage runner", self._app.state.episode_stage.shutdown),
             ("metadata dispatcher", self._app.state.dispatcher.aclose),
@@ -233,7 +244,7 @@ class _BackendServices:
         self._app.state.started_at = datetime.now(UTC)
         self._app.state.dispatcher = MetadataDispatcher(http)
         self._app.state.ws_hub = WSHub()
-        # Background episode stage (spec 5, 6.2, 6.3, 9; plan Task 8): runs off the
+        # Background episode stage runs off the
         # request path, triggered by identify/resolve/PATCH (routers) and the
         # startup sweep below. One SourceHttp per source id lives on the runner
         # for its whole lifetime (rate limit / cache / backoff state, and TVDB's
@@ -247,10 +258,16 @@ class _BackendServices:
         self._app.state.thediscdb = SnapshotStore(Path(settings.ARM_THEDISCDB_PATH))
         self._thediscdb_refresh_task = asyncio.create_task(thediscdb_refresh_loop(self._app))
 
+    def _start_release_check(self) -> None:
+        """Start the six-hourly latest-release check the version endpoint reads."""
+        self._release_check_task = asyncio.create_task(
+            release_check.release_check_loop(self._app.state.http, release_check.release_repo())
+        )
+
     def _build_transcode_dispatcher(self) -> TranscodeDispatcher:
         """Build the transcode dispatcher, with a docker client only when this
         deployment can transcode."""
-        # No-transcode-mode: the dispatcher now always runs, even for a
+        # No-transcode-mode: the dispatcher always runs, even for a
         # ripper-only deployment (ARM_TRANSCODE_CAPABLE=false, no remote docker
         # host), since it still needs it for passthrough tasks and the
         # stale-claim/orphan sweeps. Docker itself stays optional: `capable`
@@ -278,6 +295,7 @@ class _BackendServices:
             docker_client=docker_client,
             hub=self._app.state.ws_hub,
             docker_client_factory=_make_docker_client if capable else None,
+            schema_store=self._app.state.handbrake_schema_store,
         )
 
     def _start_transcode_dispatcher(self) -> None:
@@ -286,6 +304,23 @@ class _BackendServices:
         self._dispatcher_task = asyncio.create_task(self._transcode_dispatcher.run())
         self._app.state.transcode_dispatcher = self._transcode_dispatcher
         set_active_dispatcher(self._transcode_dispatcher)
+
+    async def _load_handbrake_schema_store(self) -> None:
+        """Publish the schema store with the newest stored dump loaded, so claim and register have a schema
+        before the boot run finishes."""
+        store = SchemaStore()
+        async with SessionLocal() as db:
+            await store.load_latest(db)
+        self._app.state.handbrake_schema_store = store
+
+    def _start_handbrake_schema_runner(self) -> HandbrakeSchemaRunner:
+        """Start the boot dump of the transcode image's HandBrake schema; returns the runner for shutdown."""
+        runner = HandbrakeSchemaRunner(
+            settings, SessionLocal, self._transcode_dispatcher, self._app.state.handbrake_schema_store
+        )
+        self._app.state.handbrake_schema_runner = runner
+        runner.start_boot_run()
+        return runner
 
     def _start_gpu_probe_runner(self) -> GpuProbeRunner:
         """Start the boot pass of per-device GPU probes; returns the runner for
@@ -302,7 +337,7 @@ class _BackendServices:
     async def _start_ripper_manager(self) -> None:
         """Reconcile the enrolled rippers on the local docker daemon and start
         the ISO watchdog."""
-        # Drive lifecycle Plan 3 — ripper manager (spec §3). Always the LOCAL
+        # Ripper manager. Always the LOCAL
         # daemon and always its OWN client: the drives are plugged into this
         # host, whatever ARM_TRANSCODE_DOCKER_HOST says about transcoders, and a
         # client isn't safe to share across two independent docker-py callers
@@ -321,7 +356,7 @@ class _BackendServices:
             else:
                 # The reconcile runs the virtual-drive (ISO) sweep first, so a
                 # finished ISO rip is retired before the enrolled list is loaded
-                # and never respawned (spec 6.2). The hub exists by now.
+                # and never respawned. The hub exists by now.
                 try:
                     await reconcile_enrolled_rippers(ripper_manager, SessionLocal, hub=self._app.state.ws_hub)
                 except Exception as exc:
@@ -335,7 +370,7 @@ class _BackendServices:
     def _start_notifications(self) -> None:
         """Start the outbound notification dispatcher (Apprise, bash hooks and
         the inbox)."""
-        # Phase 11 - outbound notifications (Apprise + bash hooks). Off out of the box;
+        # Outbound notifications (Apprise + bash hooks). Off out of the box;
         # the dispatcher polls but no-ops until the user enables notifications in
         # the UI and saves at least one valid Apprise URL.
         notifier = RealAppriseNotifier(settings.ARM_NOTIFY_IMAGE_URL)
@@ -357,14 +392,13 @@ class _BackendServices:
     def _start_log_tailer(self) -> None:
         """Start the singleton tail of the job logs onto their WebSocket
         topics."""
-        # Phase 12 — singleton tail of `/logs/*.log` → `logs.{job_id}` WS topic.
+        # Singleton tail of `/logs/*.log` → `logs.{job_id}` WS topic.
         self._log_tailer = LogTailer(self._app.state.ws_hub)
         self._log_tailer_task = asyncio.create_task(self._log_tailer.run())
         self._app.state.log_tailer = self._log_tailer
 
     def _start_drive_scanner(self) -> None:
         """Start the periodic host drive scan."""
-        # Drive lifecycle Plan 2 — periodic host drive scan (spec §2).
         self._drive_scanner = DriveScanner(
             SessionLocal, sysfs_root=Path(settings.ARM_SYSFS_ROOT), disk_root=Path(settings.ARM_HOST_DISK_ROOT)
         )
@@ -387,7 +421,14 @@ class _BackendServices:
         self._thediscdb_refresh_task.cancel()
         try:
             await asyncio.wait_for(self._thediscdb_refresh_task, timeout=10.0)
-        except TimeoutError, asyncio.CancelledError:  # pragma: no cover, cancellation is the expected path
+        except TimeoutError, asyncio.CancelledError:  # cancellation is the expected path
+            pass
+
+    async def _stop_release_check(self) -> None:
+        self._release_check_task.cancel()
+        try:
+            await asyncio.wait_for(self._release_check_task, timeout=10.0)
+        except TimeoutError, asyncio.CancelledError:  # cancellation is the expected path
             pass
 
     async def _stop_disk_refresher(self) -> None:
@@ -477,6 +518,7 @@ app.include_router(transcoder.router)
 app.include_router(transcodes.router)
 app.include_router(gpus_router.router)
 app.include_router(encoders_router.router)
+app.include_router(handbrake_schema_router.router)
 app.include_router(config_router.router)
 app.include_router(diagnostics.router)
 app.include_router(metadata_router.router)
