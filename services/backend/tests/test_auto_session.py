@@ -1,4 +1,4 @@
-"""Phase 8: direct tests for `apply_session_internal` covering both source values."""
+"""Direct tests for `apply_session_internal` covering both source values."""
 
 from __future__ import annotations
 
@@ -326,7 +326,7 @@ async def test_unknown_session_raises(tmp_path: Path) -> None:
 
 @pytest.mark.asyncio
 async def test_fan_out_skips_on_media_mismatch(tmp_path: Path) -> None:
-    """G-04: a session routed/applied against a job whose identified
+    """A session routed/applied against a job whose identified
     media_type disagrees (e.g. a movie session on a music CD job) must not
     fan out any tasks — it's a first-class skip, not an empty-fan-out that
     later gets orphan-swept as a fake crash."""
@@ -358,7 +358,7 @@ async def test_fan_out_skips_on_media_mismatch(tmp_path: Path) -> None:
 
 @pytest.mark.asyncio
 async def test_fan_out_proceeds_for_tv_session_on_movie_job(tmp_path: Path) -> None:
-    """C1: movie and tv are the same track kind (VIDEO_TITLE) — compatible,
+    """Movie and tv are the same track kind (VIDEO_TITLE) — compatible,
     not a mismatch."""
     _set_media_root(tmp_path)
     db = FakeSession()
@@ -383,7 +383,7 @@ async def test_fan_out_proceeds_for_tv_session_on_movie_job(tmp_path: Path) -> N
 
 @pytest.mark.asyncio
 async def test_fan_out_proceeds_for_iso_session_on_movie_job(tmp_path: Path) -> None:
-    """C1: an iso/data session consumes a dump of any video disc — no
+    """An iso/data session consumes a dump of any video disc — no
     identified job is ever `iso`, so this must not dead-end as a mismatch."""
     _set_media_root(tmp_path)
     db = FakeSession()
@@ -567,7 +567,7 @@ async def test_backup_session_applied_before_the_rip_still_parks(tmp_path: Path)
 
 
 def test_media_mismatch_detail_survives_raw_string_media_type() -> None:
-    """M2: a forward-compat row can load `media_type` as a raw `str` instead
+    """A forward-compat row can load `media_type` as a raw `str` instead
     of a `MediaType` member. `media_mismatch_detail` must render it via
     `enum_value_str`, not `.value`, or a stray string yields an
     AttributeError 500 instead of the intended 422."""
@@ -637,7 +637,7 @@ async def _manual_apply(db: FakeSession, job: Job) -> Any:
 async def test_repeat_manual_park_returns_the_parked_row(
     tmp_path: Path, job_status: JobStatus, skipped_reason: str | None
 ) -> None:
-    """D-141: a second manual apply of the same session before the rip (or
+    """A second manual apply of the same session before the rip (or
     before identify) returns the already-parked row instead of parking a
     duplicate that the drain would later leave stuck on `collisions`."""
     _set_media_root(tmp_path)
@@ -657,7 +657,7 @@ async def test_repeat_manual_park_returns_the_parked_row(
 
 @pytest.mark.asyncio
 async def test_auto_lookup_tolerates_duplicate_rows(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """D-141: rows parked as duplicates before the fix must not make the auto
+    """Duplicate parked rows must not make the auto
     idempotency lookup raise MultipleResultsFound; it takes the first."""
     from sqlalchemy.exc import MultipleResultsFound
 

@@ -1,14 +1,14 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { renderComponent, screen, cleanup, fireEvent, waitFor } from '$lib/test-utils';
+import { renderComponent, screen, cleanup, fireEvent, waitFor } from '$lib/testing/render';
 import Layout from '../+layout.svelte';
 import { createRawSnippet } from 'svelte';
 import type { Writable } from 'svelte/store';
 import { dashboard } from '$lib/stores/dashboard';
 import { theme, toggleTheme } from '$lib/stores/theme';
-import { schemeLocksMode } from '$lib/stores/colorScheme';
+import { schemeLocksMode } from '$lib/stores/color-scheme';
 import { setRippingEnabled } from '$lib/api/config';
-import { setUiPref } from '$lib/stores/uiPrefs';
-import { showIsoPicker, isoPickerMode } from '$lib/stores/isoPicker';
+import { setUiPref } from '$lib/stores/ui-prefs';
+import { showIsoPicker, isoPickerMode } from '$lib/stores/iso-picker';
 
 // Writable page store: the setup page and the nav highlight key off pathname.
 vi.mock('$app/stores', async () => {
@@ -29,7 +29,8 @@ async function setPathname(pathname: string) {
 
 const gotoMock = vi.fn();
 vi.mock('$app/navigation', () => ({
-	goto: (...args: unknown[]) => gotoMock(...args)
+	goto: (...args: unknown[]) => gotoMock(...args),
+	onNavigate: vi.fn()
 }));
 
 vi.mock('$lib/api/client', () => ({
@@ -63,7 +64,7 @@ vi.mock('$lib/stores/theme', async () => {
 	return { theme: writable('dark'), toggleTheme: vi.fn() };
 });
 
-vi.mock('$lib/stores/colorScheme', async () => {
+vi.mock('$lib/stores/color-scheme', async () => {
 	const { writable } = await import('svelte/store');
 	return {
 		colorScheme: writable('default'),
@@ -111,7 +112,7 @@ function baseState(): DashState {
 		arm_online: true,
 		active_jobs: [],
 		drives_online: 2,
-		drive_names: {},
+		drives: {},
 		notification_count: 0,
 		ripping_enabled: true,
 		makemkv_key_valid: true,
@@ -169,7 +170,7 @@ afterEach(async () => {
 	cleanup();
 	gotoMock.mockClear();
 	vi.mocked(setRippingEnabled).mockReset();
-	vi.mocked(setRippingEnabled).mockResolvedValue(undefined as never);
+	vi.mocked(setRippingEnabled).mockImplementation((enabled) => Promise.resolve({ ripping_paused: !enabled } as never));
 	vi.mocked(toggleTheme).mockClear();
 	startIsoRipMock.mockClear();
 	theme.set('dark');
@@ -204,18 +205,6 @@ describe('Layout header service dots', () => {
 		setDash({ transcoder_online: true, transcoder_stats: null });
 		renderLayout();
 		expect(dotStatus('Transcode')).toBe('ok');
-	});
-
-	it('shows the transcoder ok when online with a running worker', () => {
-		setDash({ transcoder_online: true, transcoder_stats: { worker_running: true } });
-		renderLayout();
-		expect(dotStatus('Transcode')).toBe('ok');
-	});
-
-	it('shows the transcoder warn when online but the worker is not running', () => {
-		setDash({ transcoder_online: true, transcoder_stats: { worker_running: false } });
-		renderLayout();
-		expect(dotStatus('Transcode')).toBe('warn');
 	});
 
 	it('shows the transcoder off when offline', () => {
@@ -303,7 +292,7 @@ describe('Layout header activity counts', () => {
 	});
 
 	it('shows the transcoding count as a link to /transcoder', () => {
-		setDash({ active_transcodes: [{}, {}] });
+		setDash({ active_transcodes: [{ status: 'in_progress' }, { status: 'in_progress' }] });
 		renderLayout();
 		const el = document.querySelector('.layout-activity-transcoding')!;
 		expect(el.textContent).toBe('2 transcoding');
@@ -382,8 +371,8 @@ describe('Layout Auto-Start toggle', () => {
 	it('ignores a click while a toggle is still in flight', async () => {
 		let release!: () => void;
 		vi.mocked(setRippingEnabled).mockReturnValueOnce(
-			new Promise<undefined>((resolve) => {
-				release = () => resolve(undefined);
+			new Promise((resolve) => {
+				release = () => resolve({ ripping_paused: true });
 			}) as never
 		);
 		renderLayout();

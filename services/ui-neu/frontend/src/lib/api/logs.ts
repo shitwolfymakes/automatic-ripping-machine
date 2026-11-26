@@ -4,8 +4,7 @@ import { ApiError, apiFetch, getToken, notifyUnauthorized } from './client';
 // v3 logs are JOB-ID scoped. The screen browses jobs (GET /api/jobs) and views
 // one job's aggregated log via GET /api/logs/{job_id} (NDJSON; every line tagged
 // with that job_id, incl. transcode). The bug-report zip is GET /api/logs/{job_id}.zip.
-// One-shot snapshot read (no live follow). The old filename-based browser had no
-// v3 equivalent and was removed.
+// One-shot snapshot read (no live follow).
 
 export interface LogEntry {
 	timestamp?: string | null;

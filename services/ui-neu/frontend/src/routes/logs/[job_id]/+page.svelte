@@ -1,10 +1,10 @@
 <script lang="ts">
-	import Glyph from '$lib/components/Glyph.svelte';
+	import Glyph from '$lib/components/shared/Glyph.svelte';
 	import { onDestroy } from 'svelte';
 	import { page } from '$app/stores';
 	import { jobLogDownloadUrl } from '$lib/api/logs';
-	import { createJobLog } from '$lib/stores/jobLog.svelte';
-	import LogView from '$lib/components/LogView.svelte';
+	import { createJobLog } from '$lib/stores/job-log.svelte';
+	import LogView from '$lib/components/logs/LogView.svelte';
 
 	const DEFAULT_LIMIT = 1000;
 
@@ -53,7 +53,7 @@
 	<div class="cluster panel-section log-detail-page-actions">
 		<span class="eyebrow">Actions</span>
 		<div class="cluster">
-			<button onclick={() => log.load()} class="btn log-detail-page-action-btn"> Refresh </button>
+			<button type="button" onclick={() => log.load()} class="btn log-detail-page-action-btn"> Refresh </button>
 			<a href={jobLogDownloadUrl(jobId)} class="btn log-detail-page-action-btn" aria-disabled={entries.length === 0}>
 				Download .zip
 			</a>
@@ -83,7 +83,7 @@
 		line-height: 1rem;
 		color: var(--color-on-warning-soft);
 	}
-	/* original was px-3 py-2 (0.75rem/0.5rem), not .btn's default 0.5rem
+	/* padding is 0.75rem/0.5rem, not .btn's default 0.5rem
 	   1rem; text-sm matches .btn's own bundled font-size/line-height so no
 	   size modifier is needed, just the padding restated */
 	.log-detail-page-action-btn {

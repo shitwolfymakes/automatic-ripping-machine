@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
-import { renderComponent, screen, fireEvent, cleanup, waitFor } from '$lib/test-utils';
+import { renderComponent, screen, fireEvent, cleanup, waitFor } from '$lib/testing/render';
 import MakemkvKeyField from '../MakemkvKeyField.svelte';
 import type { ConfigFieldMeta } from '$lib/types/api.gen';
 
@@ -41,6 +41,14 @@ afterEach(() => {
 });
 
 describe('MakemkvKeyField', () => {
+	it("links the field title to the MakeMKV help page's key section", () => {
+		renderComponent(MakemkvKeyField, { props: { field, value: null } });
+		expect(screen.getByRole('link', { name: 'Docs for MakeMKV key (opens in a new tab)' })).toHaveAttribute(
+			'href',
+			'/help/guide/makemkv#how-the-key-works'
+		);
+	});
+
 	it('defaults to the beta key and says a drive will check it', async () => {
 		renderComponent(MakemkvKeyField, { props: { field, value: null } });
 		expect(screen.getByRole('radio', { name: /free beta key/i })).toBeChecked();

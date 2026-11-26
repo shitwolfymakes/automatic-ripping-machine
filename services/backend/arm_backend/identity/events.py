@@ -26,9 +26,9 @@ async def emit_identity_resolved(
     resolver changed.
 
     Shared by the episode stage's apply path (`apply_outcomes_and_emit`) and
-    the identity router's pin-clear (Task 9 F3), so every caller that runs
+    the identity router's pin-clear, so every caller that runs
     the resolver and wants to tell the UI about it reports identically —
-    spec 7 requires `job.identity_updated` whenever the resolver changes
+    `job.identity_updated` is emitted whenever the resolver changes
     anything, not just when the episode stage supplied new outcomes."""
     await hub.emit(
         topic="ripper.events",

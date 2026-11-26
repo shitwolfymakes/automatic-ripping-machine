@@ -24,10 +24,10 @@ def test_registry_entries_are_well_formed():
 
 
 # musicbrainz_user_agent is intentionally absent from CONFIG_FIELD_META (the UI
-# no longer renders it — the backend now hardcodes MUSICBRAINZ_USER_AGENT next to
+# does not render it — the backend hardcodes MUSICBRAINZ_USER_AGENT next to
 # its use). It stays on ConfigUpdateRequest/ConfigView because dropping it would
-# be a wire (OpenAPI) change, out of scope for this pass; the field is simply
-# dormant. See packages/arm_common/arm_common/config_metadata.py.
+# be a wire (OpenAPI) change; the field is simply dormant.
+# See packages/arm_common/arm_common/config_metadata.py.
 _DORMANT_EDITABLE_FIELDS = {"musicbrainz_user_agent"}
 
 
@@ -176,7 +176,7 @@ def test_drive_defaults_optical() -> None:
     assert d.source_path is None
 
 
-# --- First-run setup walkthrough tags (setup spec 2026-10-01 §7.2) ---
+# --- First-run setup walkthrough tags ---
 
 
 def test_setup_step_tags_are_valid_steps() -> None:

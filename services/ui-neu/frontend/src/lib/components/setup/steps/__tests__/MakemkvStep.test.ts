@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { renderComponent, cleanup } from '$lib/test-utils';
+import { renderComponent, cleanup } from '$lib/testing/render';
 import type { ConfigView, SetupView } from '$lib/types/api.gen';
 import { stubState } from './fixtures/setup-config-fields-stub';
 
@@ -15,7 +15,7 @@ type Step = { commit(): Promise<string | false> };
 
 afterEach(() => cleanup());
 
-describe('MakemkvStep (D-109)', () => {
+describe('MakemkvStep', () => {
 	it('records attention when the key was rejected after the step opened', async () => {
 		stubState.atMount = cfg(null);
 		stubState.afterSave = cfg(false);

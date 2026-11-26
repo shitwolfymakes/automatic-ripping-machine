@@ -163,7 +163,7 @@ def _no_rename(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_copy_fallback_goes_through_inprogress_then_renames(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """D-066: the cross-mount copy never exposes a partial file at the final path."""
+    """The cross-mount copy never exposes a partial file at the final path."""
     src = tmp_path / "raw" / "t0.mkv"
     src.parent.mkdir()
     src.write_bytes(b"v" * 10)
@@ -211,7 +211,7 @@ def test_copy_fallback_keeps_the_source_when_the_post_copy_unlink_fails(
 def test_cancelled_copy_removes_the_partial_and_keeps_the_source(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """D-066: a cancel stops the copy at the next chunk; nothing lands in
+    """A cancel stops the copy at the next chunk; nothing lands in
     /media and the raw source is not consumed."""
     src = tmp_path / "raw" / "t0.mkv"
     src.parent.mkdir()
@@ -256,7 +256,7 @@ def test_cancelled_tree_copy_removes_the_partial_tree(tmp_path: Path, monkeypatc
 def test_copy_reports_progress_and_hints_at_a_shared_filesystem(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
 ) -> None:
-    """D-127: the copy reports every chunk, and a copy between two mounts of
+    """The copy reports every chunk, and a copy between two mounts of
     one filesystem logs the single-parent-mount hint."""
     src = tmp_path / "raw" / "t0.mkv"
     src.parent.mkdir()
@@ -305,8 +305,8 @@ def _record_durability_ops(monkeypatch: pytest.MonkeyPatch) -> list[tuple[str, s
 def test_atomic_output_fsyncs_file_then_renames_then_fsyncs_dir(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """D-179: a directory fsync before the rename made nothing durable and
-    the data file was never fsynced at all."""
+    """The data file is fsynced, and the directory is fsynced after the rename
+    (a directory fsync before it makes nothing durable)."""
     ops = _record_durability_ops(monkeypatch)
     final = tmp_path / "movies" / "Iron Man.mkv"
     with atomic_output(final) as tmp:
@@ -330,7 +330,7 @@ def test_copy_fallback_fsyncs_before_the_rename(tmp_path: Path, monkeypatch: pyt
 def test_move_tree_fsyncs_each_file_before_the_source_goes_then_the_directories(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """D-247: the cross-filesystem copy of a backup tree was never fsynced."""
+    """The cross-filesystem copy of a backup tree is fsynced."""
     src = _backup_tree(tmp_path / "raw" / "backup")
     dst = tmp_path / "media" / "T"
     _no_rename(monkeypatch)

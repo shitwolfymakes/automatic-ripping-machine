@@ -18,3 +18,11 @@ def test_register_request_requires_drive_id() -> None:
 
 def test_register_request_has_no_serial_field() -> None:
     assert "serial" not in RegisterRequest.model_fields
+
+
+def test_transcoder_register_request_schema_hash_is_optional() -> None:
+    from arm_common.schemas import RegisterTranscoderRequest
+
+    base = {"task_id": "txt_1", "hostname": "h", "hw_caps": {"cpu_count": 4}}
+    assert RegisterTranscoderRequest.model_validate(base).schema_hash is None
+    assert RegisterTranscoderRequest.model_validate({**base, "schema_hash": "abc"}).schema_hash == "abc"

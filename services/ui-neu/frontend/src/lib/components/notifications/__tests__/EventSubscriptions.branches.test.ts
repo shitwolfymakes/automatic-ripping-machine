@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from 'vitest';
-import { renderComponent, screen, fireEvent, cleanup, waitFor } from '$lib/test-utils';
+import { renderComponent, screen, fireEvent, cleanup, waitFor } from '$lib/testing/render';
 import { createSubscriber } from 'svelte/reactivity';
 import type { ChannelTemplate } from '$lib/types/notifications';
 import type { EventTypeInfo, ScriptInput } from '$lib/api/channels';
@@ -210,10 +210,11 @@ describe('EventSubscriptions branches', () => {
 			expect(props.templates['rip.completed'].inputs).toBeNull();
 		});
 
-		it('a required input label ends with " *" and an optional one does not', () => {
+		it('a required input is marked with "*" outside its label and an optional one is not', () => {
 			renderComponent(EventSubscriptions, { props: makeProps(['rip.completed'], {}, [recipient, subject]) });
-			expect(screen.getByText('Recipient *')).toBeTruthy();
+			expect(screen.getByText('Recipient')).toBeTruthy();
 			expect(screen.getByText('Subject')).toBeTruthy();
+			expect(screen.getAllByText('*')).toHaveLength(1);
 		});
 
 		it('the help line mentions inheriting hook values only when there are inputs', () => {
@@ -319,14 +320,13 @@ describe('EventSubscriptions branches', () => {
 			expect(props.templates['rip.completed']).toEqual({ title: '{job_title}', body: 'B' });
 		});
 
-		// #539 tracks this: the insert rebuilds the template from title and body only.
-		it('an insert drops the input overrides of the event template', async () => {
+		it('an insert keeps the input overrides of the event template', async () => {
 			const props = makeProps(['rip.completed'], {}, [recipient]);
 			renderComponent(EventSubscriptions, { props });
 			await fireEvent.input(screen.getByLabelText('rip.completed Recipient'), { target: { value: 'a@x' } });
 			expect(props.templates['rip.completed'].inputs).toEqual({ TO: 'a@x' });
 			await fireEvent.click(screen.getByRole('button', { name: 'Insert {job_title}' }));
-			expect(props.templates['rip.completed']).not.toHaveProperty('inputs');
+			expect(props.templates['rip.completed'].inputs).toEqual({ TO: 'a@x' });
 			expect(props.templates['rip.completed'].title).toBe('{job_title}');
 		});
 	});

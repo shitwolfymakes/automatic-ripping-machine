@@ -14,7 +14,7 @@ def selected_encoder() -> EncoderSpec | None:
     if encoder_id:
         spec = get_encoder(encoder_id)
         return None if spec.kind == "preset" else spec
-    # Legacy contract (one release): an older backend sends only vendor + codec.
+    # Older contract: a backend that sends only vendor + codec, no encoder id.
     vendor, codec = os.environ.get("ARM_GPU_VENDOR"), os.environ.get("ARM_GPU_CODEC")
     if not vendor or not codec:
         return None

@@ -1,6 +1,6 @@
 <script lang="ts">
 	import type { ConfigFieldMeta } from '$lib/types/api.gen';
-	import { previewRows, type DiscKind } from '$lib/utils/identity-card';
+	import { previewRows, type DiscKind } from '$lib/jobs/identity-card';
 
 	// Settings › Identification › Identity: what ARM does for one disc kind,
 	// derived live from the form's values (the disc kind is the card's view state).

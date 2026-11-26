@@ -20,7 +20,7 @@ test('banned fixture reports every category', () => {
 
 test('flyout position directives are allowlisted', () => {
 	const src = '<div style:top="{y}px" style:left="{x}px" style:max-height="{h}px"></div>';
-	assert.deepEqual(lintSource(src, 'src/lib/components/Flyout.svelte'), []);
+	assert.deepEqual(lintSource(src, 'src/lib/components/shared/Flyout.svelte'), []);
 	assert.equal(lintSource(src, 'src/lib/components/Other.svelte').length, 3);
 });
 
