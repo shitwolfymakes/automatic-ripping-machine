@@ -1,7 +1,10 @@
+// Open arm the coverage tool reports that is Svelte's, not the page's: the
+// `<title>` text `{detail?.job.title || 'Job Detail'}` compiles to
+// `(...) ?? ''`, and the expression is always a string.
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
-import { renderComponent, screen, cleanup, waitFor, fireEvent } from '$lib/test-utils';
+import { renderComponent, screen, cleanup, waitFor, fireEvent } from '$lib/testing/render';
 import JobDetailPage from '../[id]/+page.svelte';
-import { createJob, createTrack } from '$lib/components/__fixtures__/job';
+import { createJob, createTrack } from '$lib/__fixtures__/job';
 import type { JobView, JobDetailView, SessionView, ApplySessionResponse } from '$lib/types/api.gen';
 
 vi.mock('$app/stores', async () => {
@@ -106,7 +109,7 @@ describe('Job Detail Page', () => {
 
 		it('renders tracks table', async () => {
 			renderComponent(JobDetailPage);
-			// Source column was replaced by Kind + Filename; assert on the Kind header.
+			// The table has Kind + Filename columns; assert on the Kind header.
 			await waitFor(() => {
 				expect(screen.getByRole('columnheader', { name: 'Kind' })).toBeInTheDocument();
 			});
@@ -171,7 +174,8 @@ describe('Job Detail Page', () => {
 		it('redirects to home on 404', async () => {
 			const { fetchJob } = await import('$lib/api/jobs');
 			const { goto } = await import('$app/navigation');
-			vi.mocked(fetchJob).mockRejectedValueOnce(new Error('404 Not Found'));
+			const { ApiError } = await import('$lib/api/client');
+			vi.mocked(fetchJob).mockRejectedValueOnce(new ApiError(404, 'unknown job_id: job_1', null));
 
 			renderComponent(JobDetailPage);
 			await waitFor(() => {
@@ -297,7 +301,7 @@ describe('Job Detail Page', () => {
 
 	describe('refresh', () => {
 		beforeEach(async () => {
-			const { stopRipperEvents } = await import('$lib/stores/ripperEvents.svelte');
+			const { stopRipperEvents } = await import('$lib/stores/ripper-events.svelte');
 			stopRipperEvents();
 		});
 		afterEach(() => vi.useRealTimers());

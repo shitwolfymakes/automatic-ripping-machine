@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { renderComponent, screen, cleanup, waitFor, fireEvent } from '$lib/test-utils';
+import { renderComponent, screen, cleanup, waitFor, fireEvent } from '$lib/testing/render';
 import SettingsPage from '../+page.svelte';
 import { fetchSettings } from '$lib/api/settings';
 import { fetchDrives, fetchDriveDiagnostic } from '$lib/api/drives';
@@ -7,7 +7,7 @@ import { fetchGpus } from '$lib/api/gpus';
 import { get } from 'svelte/store';
 import { setTranscoderEnabled, setTranscodeRuntimeEnabled, transcodeRuntimeEnabled } from '$lib/stores/config';
 import type { DriveView } from '$lib/types/api.gen';
-import { IDENTITY_METAS, IDENTITY_DEFAULTS } from '$lib/utils/__tests__/fixtures/identity-metas';
+import { IDENTITY_METAS, IDENTITY_DEFAULTS } from '$lib/__fixtures__/identity-metas';
 
 function drive(over: Partial<DriveView> = {}): DriveView {
 	return {
@@ -50,10 +50,9 @@ function withConfig(patch: Record<string, unknown>) {
 	} as never);
 }
 
-// New schema-driven config shape. The page reads `settings.config` (values),
+// The schema-driven config shape. The page reads `settings.config` (values),
 // `settings.schema.groups` (structure → tabs + fields), and `settings.infra`
-// (System read-only values). The dead v2 ARM_* blob / abcde / transcoder-config
-// / systemInfo surface is gone.
+// (System read-only values).
 const mockSchema = {
 	groups: [
 		{
@@ -145,16 +144,6 @@ const mockSchema = {
 					enum_values: null
 				},
 				{
-					key: 'auto_transcode_on_idle',
-					group: 'Transcoding',
-					tier: 'operator',
-					label: 'Auto-transcode on idle',
-					help: '',
-					type: 'bool',
-					editable: true,
-					enum_values: null
-				},
-				{
 					key: 'max_parallel_transcodes',
 					group: 'Transcoding',
 					tier: 'operator',
@@ -163,6 +152,31 @@ const mockSchema = {
 					type: 'int',
 					editable: true,
 					enum_values: null
+				}
+			]
+		},
+		{
+			name: 'Defaults',
+			fields: [
+				{
+					key: 'auto_transcode_on_idle',
+					group: 'Defaults',
+					tier: 'operator',
+					label: 'Apply these defaults automatically after each rip',
+					help: '',
+					type: 'bool',
+					editable: true,
+					enum_values: null
+				},
+				{
+					key: 'miss_media_type',
+					group: 'Defaults',
+					tier: 'operator',
+					label: 'Treat unidentified video discs as',
+					help: '',
+					type: 'enum',
+					editable: true,
+					enum_values: ['movie', 'tv']
 				}
 			]
 		},
@@ -210,6 +224,7 @@ const mockConfig = {
 	transcode_enabled: true,
 	transcode_capable: true,
 	auto_transcode_on_idle: false,
+	miss_media_type: 'movie',
 	max_parallel_transcodes: 2,
 	notifications_enabled: false
 };
@@ -251,20 +266,20 @@ vi.mock('$lib/api/sessions', () => ({
 	previewTemplate: vi.fn()
 }));
 
-vi.mock('$lib/api/sessionRoutes', () => ({
+vi.mock('$lib/api/session-routes', () => ({
 	fetchSessionRoutes: vi.fn(() => Promise.resolve([])),
 	upsertSessionRoute: vi.fn(),
 	deleteSessionRoute: vi.fn()
 }));
 
-vi.mock('$lib/api/ripPresets', () => ({
+vi.mock('$lib/api/rip-presets', () => ({
 	fetchRipPresets: vi.fn(() => Promise.resolve([])),
 	createRipPreset: vi.fn(),
 	updateRipPreset: vi.fn(),
 	deleteRipPreset: vi.fn()
 }));
 
-vi.mock('$lib/api/transcodePresets', () => ({
+vi.mock('$lib/api/transcode-presets', () => ({
 	fetchTranscodePresets: vi.fn(() => Promise.resolve([])),
 	createTranscodePreset: vi.fn(),
 	updateTranscodePreset: vi.fn(),
@@ -287,7 +302,7 @@ vi.mock('$lib/stores/theme', async () => {
 	return { theme: writable('dark'), toggleTheme: vi.fn() };
 });
 
-vi.mock('$lib/stores/colorScheme', async () => {
+vi.mock('$lib/stores/color-scheme', async () => {
 	const { writable } = await import('svelte/store');
 	return {
 		colorScheme: writable('default'),
@@ -328,6 +343,7 @@ vi.mock('$lib/api/channels', () => ({
 					id: 'discord',
 					name: 'Discord',
 					docs_url: '',
+					setup_url: '',
 					url_scheme: 'discord',
 					required_fields: [],
 					advanced_fields: []
@@ -396,14 +412,16 @@ describe('Settings Page', () => {
 		setTranscodeRuntimeEnabled(true);
 	});
 
-	// Render the page and wait for the tab bar to settle. Identification is the
-	// default tab; its config form renders the provider <select> once settings
-	// load, which is the readiness signal. ("Identification" text appears in both
-	// the tab button and the form heading, so it isn't a unique signal.)
+	// Render the page and wait for the tab bar to settle. API Keys is the
+	// default tab, but every config-group tab is in the DOM (the inactive ones
+	// hidden), so the Identification form's provider <select> appearing once
+	// settings load is still the readiness signal. ("Identification" text
+	// appears in both the tab button and the form heading, so it isn't a
+	// unique signal.)
 	async function renderAndWait() {
 		renderComponent(SettingsPage);
 		await waitFor(() => {
-			expect(screen.getByRole('combobox', { name: /search movies with/i })).toBeInTheDocument();
+			expect(screen.getByRole('combobox', { name: /search movies with/i, hidden: true })).toBeInTheDocument();
 		});
 	}
 
@@ -466,7 +484,7 @@ describe('Settings Page', () => {
 				Element.prototype.scrollIntoView = scrollIntoView;
 				renderComponent(SettingsPage);
 				await waitFor(() => {
-					expect(screen.getByLabelText(/tmdb api key/i)).toHaveFocus();
+					expect(screen.getByLabelText(/^tmdb api key$/i)).toHaveFocus();
 				});
 				expect(screen.getByRole('tab', { name: 'API Keys' })).toHaveAttribute('aria-selected', 'true');
 				expect(scrollIntoView).toHaveBeenCalled();
@@ -503,14 +521,16 @@ describe('Settings Page', () => {
 				transcoder_config: null
 			} as never);
 			renderComponent(SettingsPage);
-			await waitFor(() => expect(screen.getByLabelText(/makemkv key/i)).toHaveFocus());
+			await waitFor(() => expect(screen.getByLabelText(/^makemkv key$/i)).toHaveFocus());
 			const headings = screen.getAllByRole('heading', { level: 3 }).map((h) => h.textContent);
 			expect(headings.slice(0, 2)).toEqual(['MakeMKV', 'API keys']);
 		});
 
-		it('renders the Identification config tab with the provider select', async () => {
+		it('opens on the API Keys tab, with the Identification form and its provider select one tab over', async () => {
 			await renderAndWait();
-			// Identification is the default tab — its SchemaConfigForm renders the enum field.
+			expect(screen.getByRole('tab', { name: 'API Keys' })).toHaveAttribute('aria-selected', 'true');
+			expect(screen.queryByRole('combobox', { name: /search movies with/i })).toBeNull();
+			await fireEvent.click(screen.getByRole('tab', { name: 'Identification' }));
 			expect(screen.getByRole('combobox', { name: /search movies with/i })).toBeInTheDocument();
 		});
 
@@ -607,7 +627,7 @@ describe('Settings Page', () => {
 		});
 
 		it('shows "Locked by theme" when schemeLocksMode is true', async () => {
-			const { schemeLocksMode } = await import('$lib/stores/colorScheme');
+			const { schemeLocksMode } = await import('$lib/stores/color-scheme');
 			const { writable } = await import('svelte/store');
 			const locked = writable(true);
 			Object.assign(schemeLocksMode, { set: locked.set, subscribe: locked.subscribe, update: locked.update });
@@ -827,11 +847,12 @@ describe('Settings Page', () => {
 		it('an unsaved Identity edit survives a trip to the Keys tab and back', async () => {
 			withIdentitySchema();
 			await renderAndWait();
+			await fireEvent.click(tab('Identification'));
 			await fireEvent.click(useTvdb());
 			expect(useTvdb().checked).toBe(true);
 			await fireEvent.click(tab('API Keys'));
 			expect(tab('API Keys')).toHaveAttribute('aria-selected', 'true');
-			expect(screen.getByLabelText(/tvdb api key/i)).toBeVisible();
+			expect(screen.getByLabelText(/^tvdb api key$/i)).toBeVisible();
 			await fireEvent.click(tab('Identification'));
 			expect(tab('Identification')).toHaveAttribute('aria-selected', 'true');
 			expect(useTvdb().checked).toBe(true);
@@ -842,9 +863,10 @@ describe('Settings Page', () => {
 			vi.mocked(saveArmConfig).mockClear();
 			withIdentitySchema();
 			await renderAndWait();
+			await fireEvent.click(tab('Identification'));
 			expect(tvdbChip()).toBeInTheDocument();
 			await fireEvent.click(tab('API Keys'));
-			await fireEvent.input(screen.getByLabelText(/tvdb api key/i), { target: { value: 'k-123' } });
+			await fireEvent.input(screen.getByLabelText(/^tvdb api key$/i), { target: { value: 'k-123' } });
 			await fireEvent.click(screen.getByRole('button', { name: /^save/i }));
 			await waitFor(() => expect(vi.mocked(saveArmConfig)).toHaveBeenCalledWith({ tvdb_api_key: 'k-123' }));
 			await fireEvent.click(tab('Identification'));
@@ -857,14 +879,48 @@ describe('Settings Page', () => {
 			vi.mocked(saveArmConfig).mockClear();
 			withIdentitySchema();
 			await renderAndWait();
+			await fireEvent.click(tab('Identification'));
 			await fireEvent.click(useTvdb());
 			await fireEvent.click(tab('API Keys'));
-			await fireEvent.input(screen.getByLabelText(/tvdb api key/i), { target: { value: 'k-123' } });
+			await fireEvent.input(screen.getByLabelText(/^tvdb api key$/i), { target: { value: 'k-123' } });
 			await fireEvent.click(screen.getByRole('button', { name: /^save/i }));
 			await waitFor(() => expect(vi.mocked(saveArmConfig)).toHaveBeenCalledWith({ tvdb_api_key: 'k-123' }));
 			await fireEvent.click(tab('Identification'));
 			await waitFor(() => expect(tvdbChip()).not.toBeInTheDocument());
 			expect(useTvdb().checked).toBe(true);
+		});
+	});
+
+	describe('Sessions tab Defaults view', () => {
+		it('saves auto-apply as soon as its switch flips, and keeps the value across a view switch', async () => {
+			const { saveArmConfig } = await import('$lib/api/settings');
+			vi.mocked(saveArmConfig).mockClear();
+			setTranscoderEnabled(true);
+			await renderAndOpenTab('Sessions');
+			await fireEvent.click(await screen.findByRole('tab', { name: 'Defaults' }));
+			const toggle = await screen.findByRole('switch', { name: /apply these defaults/i });
+			expect(toggle).toHaveAttribute('aria-checked', 'false');
+			await fireEvent.click(toggle);
+			await waitFor(() => expect(vi.mocked(saveArmConfig)).toHaveBeenCalledWith({ auto_transcode_on_idle: true }));
+			await fireEvent.click(screen.getByRole('tab', { name: /^sessions \d/i }));
+			await fireEvent.click(screen.getByRole('tab', { name: 'Defaults' }));
+			expect(await screen.findByRole('switch', { name: /apply these defaults/i })).toHaveAttribute(
+				'aria-checked',
+				'true'
+			);
+		});
+	});
+
+	describe('Sessions tab Defaults select', () => {
+		it('saves an enum default as soon as it changes', async () => {
+			const { saveArmConfig } = await import('$lib/api/settings');
+			vi.mocked(saveArmConfig).mockClear();
+			setTranscoderEnabled(true);
+			await renderAndOpenTab('Sessions');
+			await fireEvent.click(await screen.findByRole('tab', { name: 'Defaults' }));
+			const select = await screen.findByRole('combobox', { name: /treat unidentified video discs as/i });
+			await fireEvent.change(select, { target: { value: 'tv' } });
+			await waitFor(() => expect(vi.mocked(saveArmConfig)).toHaveBeenCalledWith({ miss_media_type: 'tv' }));
 		});
 	});
 
@@ -875,14 +931,19 @@ describe('Settings Page', () => {
 			expect(screen.getByRole('tab', { name: 'Transcoding' })).toBeInTheDocument();
 		});
 
-		it('capable: renders the schema-driven transcode_enabled + auto_transcode_on_idle toggles and the GPU card', async () => {
+		it('capable: opens with the supported pill and the toggle, with the GPU card after the fields', async () => {
 			setTranscoderEnabled(true);
 			await renderAndOpenTab('Transcoding');
 			await waitFor(() => {
 				expect(screen.getByRole('checkbox', { name: /enable transcoding/i })).toBeInTheDocument();
 			});
-			expect(screen.getByRole('checkbox', { name: /enable transcoding/i })).not.toBeDisabled();
-			expect(screen.getByRole('checkbox', { name: /auto-transcode on idle/i })).toBeInTheDocument();
+			const toggle = screen.getByRole('checkbox', { name: /enable transcoding/i });
+			expect(toggle).not.toBeDisabled();
+			const pill = screen.getByTestId('transcode-capability');
+			expect(pill).toHaveTextContent('Transcoding supported');
+			expect(pill.compareDocumentPosition(toggle) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+			// Auto-apply lives on Settings > Sessions > Defaults now.
+			expect(screen.queryByRole('checkbox', { name: /apply these defaults/i })).not.toBeInTheDocument();
 			await waitFor(() => {
 				expect(screen.getByTestId('gpus-card')).toBeInTheDocument();
 			});
@@ -892,16 +953,11 @@ describe('Settings Page', () => {
 			expect(
 				screen.getByTestId('gpus-card').compareDocumentPosition(save) & Node.DOCUMENT_POSITION_FOLLOWING
 			).toBeTruthy();
-			// transcode_capable is a non-editable bool (an infra fact, not a
-			// setting) - it must render read-only, not as a clickable checkbox
-			// that silently no-ops on save.
-			expect(screen.queryByRole('checkbox', { name: /transcode capable/i })).not.toBeInTheDocument();
-			const capableField = screen.getByTestId('setting-transcode_capable');
-			expect(capableField).toHaveTextContent('Transcode capable');
-			expect(capableField).toHaveTextContent('True');
+			// transcode_capable shows as the pill, never as a field row.
+			expect(screen.queryByTestId('setting-transcode_capable')).not.toBeInTheDocument();
 		});
 
-		it('not capable: shows only a locked transcode_enabled toggle with a hint, hides auto_transcode_on_idle and the GPU card', async () => {
+		it('not capable: shows the unsupported pill and a locked transcode_enabled toggle with a hint, hides the GPU card', async () => {
 			vi.mocked(fetchGpus).mockClear();
 			setTranscoderEnabled(false);
 			await renderAndOpenTab('Transcoding');
@@ -915,7 +971,7 @@ describe('Settings Page', () => {
 			const locked = screen.getByRole('switch', { name: 'Enable transcoding' });
 			expect(locked).toBeDisabled();
 			expect(locked).toHaveAttribute('aria-checked', 'false');
-			expect(screen.queryByRole('checkbox', { name: /auto-transcode on idle/i })).not.toBeInTheDocument();
+			expect(screen.getByTestId('transcode-capability')).toHaveTextContent('Transcoding unsupported');
 			expect(screen.queryByTestId('gpus-card')).not.toBeInTheDocument();
 			expect(fetchGpus).not.toHaveBeenCalled();
 		});
@@ -947,9 +1003,11 @@ describe('Settings Page', () => {
 			setTranscoderEnabled(true);
 			setTranscodeRuntimeEnabled(false);
 			await renderAndOpenTab('Transcoding');
-			await fireEvent.click(await screen.findByRole('checkbox', { name: /auto-transcode on idle/i }));
+			await fireEvent.input(await screen.findByRole('spinbutton', { name: /max parallel transcodes/i }), {
+				target: { value: '3' }
+			});
 			await fireEvent.click(screen.getByRole('button', { name: /^save/i }));
-			await waitFor(() => expect(vi.mocked(saveArmConfig)).toHaveBeenCalledWith({ auto_transcode_on_idle: true }));
+			await waitFor(() => expect(vi.mocked(saveArmConfig)).toHaveBeenCalledWith({ max_parallel_transcodes: 3 }));
 			expect(get(transcodeRuntimeEnabled)).toBe(false);
 		});
 	});

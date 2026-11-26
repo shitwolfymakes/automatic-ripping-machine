@@ -1,4 +1,4 @@
-"""Rip from ISO: the virtual-drive lifecycle (spec 6.2).
+"""Rip from ISO: the virtual-drive lifecycle.
 
 A virtual drive is created `enrolled` with a one-shot ripper container
 (restart policy "no") and becomes `retired` once that rip ends. The ripper

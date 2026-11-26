@@ -2,21 +2,21 @@ import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import type { Mock } from 'vitest';
 import { get } from 'svelte/store';
 import type { Writable } from 'svelte/store';
-import { renderComponent, screen, cleanup, waitFor, fireEvent, within } from '$lib/test-utils';
+import { renderComponent, screen, cleanup, waitFor, fireEvent, within } from '$lib/testing/render';
 import SettingsPage from '../+page.svelte';
 import { goto } from '$app/navigation';
 import { fetchSettings, saveArmConfig } from '$lib/api/settings';
 import { fetchDrives, fetchDriveDiagnostic, rescanDrives, updateDrive, enrollDrive } from '$lib/api/drives';
 import { fetchSessions } from '$lib/api/sessions';
-import { fetchTranscodePresets } from '$lib/api/transcodePresets';
-import { fetchSessionRoutes } from '$lib/api/sessionRoutes';
+import { fetchTranscodePresets } from '$lib/api/transcode-presets';
+import { fetchSessionRoutes } from '$lib/api/session-routes';
 import { fetchUsers } from '$lib/api/users';
 import { deleteTheme } from '$lib/api/themes';
 import { restartSetup } from '$lib/api/setup';
 import { fetchImageCacheStats, clearImageCache } from '$lib/api/maintenance';
 import { setTranscoderEnabled, setTranscodeRuntimeEnabled } from '$lib/stores/config';
 import { theme } from '$lib/stores/theme';
-import { colorScheme, allSchemes, schemeLocksMode, loadThemesFromApi } from '$lib/stores/colorScheme';
+import { colorScheme, allSchemes, schemeLocksMode, loadThemesFromApi } from '$lib/stores/color-scheme';
 import type { DriveView } from '$lib/types/api.gen';
 
 // --- Fixtures (copied from settings-page.test.ts) ---
@@ -86,15 +86,25 @@ const mockSchema = {
 			fields: [field('auto_rip_on_insert', 'Ripping', { label: 'Auto-rip on insert', type: 'bool' })]
 		},
 		{
-			name: 'Transcoding',
+			name: 'Defaults',
 			fields: [
-				field('transcode_enabled', 'Transcoding', { label: 'Enable transcoding', type: 'bool' }),
-				field('auto_transcode_on_idle', 'Transcoding', { label: 'Auto-transcode on idle', type: 'bool' })
+				field('auto_transcode_on_idle', 'Defaults', {
+					label: 'Apply these defaults automatically after each rip',
+					type: 'bool'
+				})
 			]
 		},
 		{
+			name: 'Transcoding',
+			fields: [field('transcode_enabled', 'Transcoding', { label: 'Enable transcoding', type: 'bool' })]
+		},
+		{
 			name: 'Notifications',
-			fields: [field('notifications_enabled', 'Notifications', { label: 'Enable notifications', type: 'bool' })]
+			fields: [
+				field('notifications_enabled', 'Notifications', { label: 'Enable notifications', type: 'bool' }),
+				// A schema field the Notifications tab has no control for.
+				field('notifications_unrendered', 'Notifications', { label: 'Unrendered', type: 'bool' })
+			]
 		},
 		{
 			name: 'System',
@@ -172,20 +182,20 @@ vi.mock('$lib/api/sessions', () => ({
 	previewTemplate: vi.fn()
 }));
 
-vi.mock('$lib/api/sessionRoutes', () => ({
+vi.mock('$lib/api/session-routes', () => ({
 	fetchSessionRoutes: vi.fn(() => Promise.resolve([])),
 	upsertSessionRoute: vi.fn(),
 	deleteSessionRoute: vi.fn()
 }));
 
-vi.mock('$lib/api/ripPresets', () => ({
+vi.mock('$lib/api/rip-presets', () => ({
 	fetchRipPresets: vi.fn(() => Promise.resolve([])),
 	createRipPreset: vi.fn(),
 	updateRipPreset: vi.fn(),
 	deleteRipPreset: vi.fn()
 }));
 
-vi.mock('$lib/api/transcodePresets', () => ({
+vi.mock('$lib/api/transcode-presets', () => ({
 	fetchTranscodePresets: vi.fn(() => Promise.resolve([])),
 	createTranscodePreset: vi.fn(),
 	updateTranscodePreset: vi.fn(),
@@ -233,7 +243,7 @@ vi.mock('$lib/stores/theme', async () => {
 	return { theme: writable('dark'), toggleTheme: vi.fn() };
 });
 
-vi.mock('$lib/stores/colorScheme', async () => {
+vi.mock('$lib/stores/color-scheme', async () => {
 	const { writable } = await import('svelte/store');
 	return {
 		colorScheme: writable('default'),
@@ -465,22 +475,22 @@ describe('Settings page sections', () => {
 		it('an external hash with a field part sets the pending field and lands on its tab', async () => {
 			await renderReady();
 			window.location.hash = '#Keys/tmdb_api_key';
-			await waitFor(() => expect(screen.getByLabelText(/tmdb api key/i)).toHaveFocus());
+			await waitFor(() => expect(screen.getByLabelText(/^tmdb api key$/i)).toHaveFocus());
 			expect(tab('API Keys')).toHaveAttribute('aria-selected', 'true');
 		});
 
-		it('falls back to Identification for an unknown hash', async () => {
+		it('falls back to the first tab, API Keys, for an unknown hash', async () => {
 			window.location.hash = '#bogus';
 			await renderReady();
-			expect(tab('Identification')).toHaveAttribute('aria-selected', 'true');
+			expect(tab('API Keys')).toHaveAttribute('aria-selected', 'true');
 		});
 
-		it('falls back to Identification when an external hash change names an unknown tab', async () => {
+		it('falls back to the first tab, API Keys, when an external hash change names an unknown tab', async () => {
 			await renderReady();
 			await fireEvent.click(tab('Themes'));
 			await settle();
 			window.location.hash = '#bogus';
-			await waitFor(() => expect(tab('Identification')).toHaveAttribute('aria-selected', 'true'));
+			await waitFor(() => expect(tab('API Keys')).toHaveAttribute('aria-selected', 'true'));
 		});
 
 		it('maps the legacy #appearance and #Metadata hashes to Themes and Identification', async () => {
@@ -511,7 +521,7 @@ describe('Settings page sections', () => {
 			vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
 			window.location.hash = '#Identification/tmdb_api_key';
 			renderComponent(SettingsPage);
-			await waitFor(() => expect(screen.getByLabelText(/tmdb api key/i)).toHaveFocus());
+			await waitFor(() => expect(screen.getByLabelText(/^tmdb api key$/i)).toHaveFocus());
 			expect(tab('API Keys')).toHaveAttribute('aria-selected', 'true');
 			expect(Element.prototype.scrollIntoView).toHaveBeenCalledWith({ block: 'center' });
 			const el = screen.getByTestId('setting-tmdb_api_key');
@@ -522,10 +532,18 @@ describe('Settings page sections', () => {
 			expect(el).not.toHaveClass('settings-field-highlight');
 		});
 
+		it('opens the Sessions tab on its Defaults view for the auto-apply field, even from an old Transcoding link', async () => {
+			window.location.hash = '#transcoding/auto_transcode_on_idle';
+			renderComponent(SettingsPage);
+			await waitFor(() => expect(screen.getByRole('switch', { name: /apply these defaults/i })).toHaveFocus());
+			expect(screen.getByRole('tab', { name: 'Defaults' })).toHaveAttribute('aria-selected', 'true');
+			expect(screen.getByTestId('setting-auto_transcode_on_idle')).toHaveClass('settings-field-highlight');
+		});
+
 		it('decodes a URL-encoded field key', async () => {
 			window.location.hash = '#Keys/tmdb%5Fapi%5Fkey';
 			renderComponent(SettingsPage);
-			await waitFor(() => expect(screen.getByLabelText(/tmdb api key/i)).toHaveFocus());
+			await waitFor(() => expect(screen.getByLabelText(/^tmdb api key$/i)).toHaveFocus());
 		});
 
 		it('a key no group owns does nothing and is not retried on a later tab click', async () => {
@@ -548,8 +566,14 @@ describe('Settings page sections', () => {
 			expect(Element.prototype.scrollIntoView).not.toHaveBeenCalled();
 		});
 
+		it('focuses the notifications switch for a link to it', async () => {
+			window.location.hash = '#notifications/notifications_enabled';
+			renderComponent(SettingsPage);
+			await waitFor(() => expect(screen.getByRole('switch', { name: 'Enable notifications' })).toHaveFocus());
+		});
+
 		it('a field that never renders lands on its tab once and is not pulled back by a later tab click', async () => {
-			window.location.hash = '#Keys/notifications_enabled';
+			window.location.hash = '#Keys/notifications_unrendered';
 			await renderReady();
 			await waitFor(() => expect(tab('Notifications')).toHaveAttribute('aria-selected', 'true'));
 			expect(Element.prototype.scrollIntoView).not.toHaveBeenCalled();
@@ -617,10 +641,11 @@ describe('Settings page sections', () => {
 	});
 
 	describe('Sessions and Users tabs', () => {
-		it('renders the Sessions tab with the session routes card', async () => {
+		it('renders the Sessions tab without the old routing card below the list', async () => {
 			await openTab('Sessions');
-			await waitFor(() => expect(fetchSessionRoutes).toHaveBeenCalled());
 			expect(tab('Sessions')).toHaveAttribute('aria-selected', 'true');
+			expect(screen.queryByText('Session Routing')).not.toBeInTheDocument();
+			expect(fetchSessionRoutes).not.toHaveBeenCalled();
 		});
 
 		it('renders the Users tab with its heading and the users card', async () => {
@@ -648,28 +673,14 @@ describe('Settings page sections', () => {
 			expect(setupAgain()).not.toBeDisabled();
 		});
 
-		// Pins today's behaviour: a failed restart escapes the click handler as
-		// an unhandled rejection and shows no error (#588). The test swaps in
-		// its own listener so vitest does not fail the run on it, and puts
-		// vitest's back afterwards.
-		it('the button comes back after a failed restart, which does not navigate', async () => {
-			const rejections: unknown[] = [];
-			const previous = process.listeners('unhandledRejection');
-			process.removeAllListeners('unhandledRejection');
-			process.on('unhandledRejection', (r) => rejections.push(r));
-			try {
-				vi.mocked(restartSetup).mockRejectedValueOnce(new Error('restart failed'));
-				await openTab('System');
-				await fireEvent.click(setupAgain());
-				await waitFor(() => expect(rejections).toHaveLength(1));
-				expect((rejections[0] as Error).message).toBe('restart failed');
-				expect(goto).not.toHaveBeenCalled();
-				expect(setupAgain()).toHaveTextContent('Run setup again');
-				expect(setupAgain()).not.toBeDisabled();
-			} finally {
-				process.removeAllListeners('unhandledRejection');
-				previous.forEach((l) => process.on('unhandledRejection', l));
-			}
+		it('a failed restart shows its error, does not navigate, and the button comes back', async () => {
+			vi.mocked(restartSetup).mockRejectedValueOnce(new Error('restart failed'));
+			await openTab('System');
+			await fireEvent.click(setupAgain());
+			expect(await screen.findByText('restart failed')).toHaveClass('alert-danger');
+			expect(goto).not.toHaveBeenCalled();
+			expect(setupAgain()).toHaveTextContent('Run setup again');
+			expect(setupAgain()).not.toBeDisabled();
 		});
 
 		it('lists the read-only configuration rows from the config value', async () => {
@@ -831,7 +842,6 @@ describe('Settings page sections', () => {
 
 		beforeEach(() => {
 			writableOf<unknown[]>(allSchemes).set(schemes);
-			vi.spyOn(window, 'confirm').mockReturnValue(true);
 		});
 
 		it('lists the built-in swatches with their descriptions and selects one on click', async () => {
@@ -859,27 +869,27 @@ describe('Settings page sections', () => {
 			expect(screen.queryAllByTitle('Delete')).toHaveLength(0);
 		});
 
-		it('does nothing when the delete confirm is declined', async () => {
-			vi.mocked(window.confirm).mockReturnValue(false);
+		it('does nothing when the delete confirm is cancelled', async () => {
 			await openTab('Themes');
 			await fireEvent.click(deleteButtons()[0]);
-			expect(window.confirm).toHaveBeenCalledWith('Delete user theme "Mine"?');
+			expect(screen.getByRole('dialog')).toHaveTextContent('Delete user theme "Mine"?');
+			await fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Cancel' }));
 			expect(deleteTheme).not.toHaveBeenCalled();
 			expect(loadThemesFromApi).not.toHaveBeenCalled();
 			expect(screen.queryByText(/deleted/)).toBeNull();
 		});
 
 		// The feedback shows twice, at the top and under the user themes (#541).
-		it('a delete reloads the themes and shows its success feedback in both places', async () => {
+		it('a delete reloads the themes and shows its success feedback once', async () => {
 			writableOf<string>(colorScheme).set('red');
 			await openTab('Themes');
 			await fireEvent.click(deleteButtons()[0]);
+			await fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Delete' }));
 			await waitFor(() => expect(deleteTheme).toHaveBeenCalledWith('mine'));
 			expect(loadThemesFromApi).toHaveBeenCalledTimes(1);
 			const feedback = await screen.findAllByText('Theme "Mine" deleted');
-			expect(feedback).toHaveLength(2);
+			expect(feedback).toHaveLength(1);
 			expect(feedback[0]).toHaveClass('alert-success');
-			expect(feedback[1]).toHaveAttribute('data-error', 'false');
 			expect(get(colorScheme)).toBe('red');
 		});
 
@@ -887,19 +897,20 @@ describe('Settings page sections', () => {
 			writableOf<string>(colorScheme).set('solo');
 			await openTab('Themes');
 			await fireEvent.click(deleteButtons()[1]);
+			await fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Delete' }));
 			await waitFor(() => expect(deleteTheme).toHaveBeenCalledWith('solo'));
 			await screen.findAllByText('Theme "Solo" deleted');
 			expect(get(colorScheme)).toBe('blue');
 		});
 
-		it('a failed delete shows the Error message in both places', async () => {
+		it('a failed delete shows the Error message once', async () => {
 			vi.mocked(deleteTheme).mockRejectedValueOnce(new Error('in use'));
 			await openTab('Themes');
 			await fireEvent.click(deleteButtons()[0]);
+			await fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Delete' }));
 			const feedback = await screen.findAllByText('in use');
-			expect(feedback).toHaveLength(2);
+			expect(feedback).toHaveLength(1);
 			expect(feedback[0]).toHaveClass('alert-danger');
-			expect(feedback[1]).toHaveAttribute('data-error', 'true');
 			expect(loadThemesFromApi).not.toHaveBeenCalled();
 		});
 
@@ -907,7 +918,8 @@ describe('Settings page sections', () => {
 			vi.mocked(deleteTheme).mockRejectedValueOnce('nope');
 			await openTab('Themes');
 			await fireEvent.click(deleteButtons()[0]);
-			expect(await screen.findAllByText('Delete failed')).toHaveLength(2);
+			await fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Delete' }));
+			expect(await screen.findAllByText('Delete failed')).toHaveLength(1);
 		});
 
 		it('shows dark mode on', async () => {
@@ -1014,6 +1026,59 @@ describe('Settings page sections', () => {
 			vi.mocked(fetchDrives).mockResolvedValue([drive({ display_name: 'Main Drive' })]);
 			await openTab('Drives');
 			expect(await screen.findByText('Main Drive')).toBeInTheDocument();
+			expect(lastPoller().start).toHaveBeenCalledTimes(1);
+		});
+
+		it('polls and rescans only while the Drives tab is open, rescanning on the first visit only', async () => {
+			await renderReady();
+			expect(rescanDrives).not.toHaveBeenCalled();
+			expect(lastPoller().start).not.toHaveBeenCalled();
+
+			await fireEvent.click(tab('Drives'));
+			await waitFor(() => expect(lastPoller().start).toHaveBeenCalledTimes(1));
+			expect(rescanDrives).toHaveBeenCalledTimes(1);
+
+			await fireEvent.click(tab('System'));
+			expect(lastPoller().stop).toHaveBeenCalledTimes(1);
+
+			await fireEvent.click(tab('Drives'));
+			await waitFor(() => expect(lastPoller().start).toHaveBeenCalledTimes(2));
+			expect(rescanDrives).toHaveBeenCalledTimes(1);
+		});
+
+		it('does not start polling when the tab closes before the first rescan returns', async () => {
+			const rescan = deferred<never>();
+			vi.mocked(rescanDrives).mockReturnValueOnce(rescan.promise);
+			await renderReady();
+			await fireEvent.click(tab('Drives'));
+			await fireEvent.click(tab('System'));
+			expect(lastPoller().stop).toHaveBeenCalledTimes(1);
+			rescan.resolve(undefined as never);
+			await settle();
+			expect(lastPoller().start).not.toHaveBeenCalled();
+		});
+
+		it('does not start polling when Settings unmounts before the first rescan returns', async () => {
+			const rescan = deferred<never>();
+			vi.mocked(rescanDrives).mockReturnValueOnce(rescan.promise);
+			renderComponent(SettingsPage);
+			await fireEvent.click(await screen.findByRole('tab', { name: 'Drives' }));
+			cleanup();
+			rescan.resolve(undefined as never);
+			await settle();
+			expect(lastPoller().start).not.toHaveBeenCalled();
+		});
+
+		it('starts once when the tab reopens before the first rescan returns', async () => {
+			const rescan = deferred<never>();
+			vi.mocked(rescanDrives).mockReturnValueOnce(rescan.promise);
+			await renderReady();
+			await fireEvent.click(tab('Drives'));
+			await fireEvent.click(tab('System'));
+			await fireEvent.click(tab('Drives'));
+			expect(lastPoller().start).toHaveBeenCalledTimes(1);
+			rescan.resolve(undefined as never);
+			await settle();
 			expect(lastPoller().start).toHaveBeenCalledTimes(1);
 		});
 

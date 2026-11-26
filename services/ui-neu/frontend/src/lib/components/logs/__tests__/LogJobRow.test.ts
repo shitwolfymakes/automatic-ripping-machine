@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { renderComponent, screen, cleanup, within } from '$lib/test-utils';
+import { renderComponent, screen, cleanup, within } from '$lib/testing/render';
 import LogJobRowHarness from './LogJobRowHarness.svelte';
 
 const NOW = new Date('2026-06-15T12:00:00Z');
@@ -9,8 +9,10 @@ vi.mock('$lib/stores/dashboard', async () => {
 	const { readable } = await import('svelte/store');
 	return {
 		dashboard: readable({
-			drive_names: { drv_1: 'Front Drive' },
-			drive_source_kinds: { drv_iso: 'iso' }
+			drives: {
+				drv_1: { name: 'Front Drive', kind: 'optical', source: null, retired: false },
+				drv_iso: { name: 'a.iso', kind: 'virtual', source: 'iso', retired: true }
+			}
 		})
 	};
 });
@@ -79,7 +81,7 @@ describe('LogJobRow', () => {
 	});
 
 	it('shows the disc position', () => {
-		expect(within(renderRow()).getByText('S1 · Disc 1/4')).toBeInTheDocument();
+		expect(within(renderRow()).getByText('S1 | Disc 1/4')).toBeInTheDocument();
 	});
 
 	it('shows a named drive with a tooltip', () => {

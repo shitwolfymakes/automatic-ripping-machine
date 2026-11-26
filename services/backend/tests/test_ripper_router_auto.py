@@ -1,7 +1,7 @@
-"""Phase 8: rip-complete auto-session hook (`maybe_auto_apply_session`).
+"""Rip-complete auto-session hook (`maybe_auto_apply_session`).
 
 Tests the hook in isolation — the surrounding rip-complete route is unchanged
-from Phase 3 and already exercised through the higher-level integration paths.
+and already exercised through the higher-level integration paths.
 """
 
 from __future__ import annotations
@@ -340,7 +340,7 @@ async def test_after_rip_drains_session_parked_on_held_disc_exactly_once(tmp_pat
 
 @pytest.mark.asyncio
 async def test_after_rip_strict_token_surfaces_as_parked_failure_not_exception(tmp_path: Path) -> None:
-    """Spec section 4: a still-strict required token (`{year}`, job year None)
+    """A still-strict required token (`{year}`, job year None)
     cannot be checked pre-rip (the apply parks), so it surfaces at drain time.
     At rip-complete the drain reports a `template` outcome with the error
     detail and the application stays WAITING_IDENTIFY; nothing raises and no
@@ -380,7 +380,7 @@ async def test_after_rip_strict_token_surfaces_as_parked_failure_not_exception(t
 
 @pytest.mark.asyncio
 async def test_after_rip_promoted_parked_application_suppresses_drive_default(tmp_path: Path) -> None:
-    """Fix 75-4: a parked application Y (explicit, applied before rip-start)
+    """A parked application Y (explicit, applied before rip-start)
     that the drain successfully promotes to queued IS the operator's choice
     winning -- the drive default X must NOT also auto-apply, even though
     auto_transcode_on_idle is on. Before the fix, after_rip always ran
@@ -444,3 +444,112 @@ async def test_after_rip_promoted_parked_application_suppresses_drive_default(tm
     queued_events = [e for e in hub.events if e["event_type"] == "session.queued"]
     assert len(queued_events) == 1
     assert queued_events[0]["payload"]["session_id"] == "ses_y"
+
+
+async def _rip_to_completion(db: FakeSession, job: Job, hub: CapturingHub) -> None:
+    from arm_backend.routers.ripper import rip_complete
+    from arm_common.schemas import JobCompleteRequest
+
+    await rip_complete(JobCompleteRequest(), job=job, session=db, hub=hub)  # type: ignore[arg-type]
+
+
+@pytest.mark.asyncio
+async def test_miss_released_by_start_auto_applies_after_the_rip(tmp_path: Path) -> None:
+    """Start counts a parked miss as matched: once it rips, auto-apply
+    queues the routed session."""
+    from arm_backend.routers.jobs import _start_held_job
+
+    _set_media_root(tmp_path)
+    db = FakeSession()
+    job = _seed(db, job_status=JobStatus.AWAITING_REVIEW)
+    job.metadata_json = {"flags": {"unidentified": True}}
+    job.resumed_from_crash = False
+    hub = CapturingHub()
+
+    await _start_held_job(db, hub, job)  # type: ignore[arg-type]
+    await _rip_to_completion(db, job, hub)
+
+    assert job.status == JobStatus.RIPPED
+    apps = [r for r in db.added if isinstance(r, SessionApplication)]
+    assert [a.session_id for a in apps] == ["ses_x"]
+
+
+@pytest.mark.asyncio
+async def test_miss_released_by_countdown_waits_for_a_match(tmp_path: Path) -> None:
+    """A miss the countdown released rips still unidentified: rip-complete
+    finishes it ripped but queues nothing unattended."""
+    _set_media_root(tmp_path)
+    db = FakeSession()
+    job = _seed(db, job_status=JobStatus.RIPPING)
+    job.metadata_json = {"flags": {"unidentified": True}}
+    job.resumed_from_crash = False
+    hub = CapturingHub()
+
+    await _rip_to_completion(db, job, hub)
+
+    assert job.status == JobStatus.RIPPED
+    assert not [r for r in db.added if isinstance(r, SessionApplication)]
+
+
+def _second_session(db: FakeSession, session_id: str) -> None:
+    db.rows["sessions"].append(
+        Session(
+            id=session_id,
+            name="Hand picked",
+            media_type=MediaType.MOVIE,
+            is_builtin=False,
+            rip_preset_id="rpr_x",
+            transcode_preset_id="tpr_x",
+            output_path_template="{title} ({year})/hand/{title} - {transcode_slug}.{ext}",
+        )
+    )
+
+
+@pytest.mark.asyncio
+async def test_resolve_after_a_hand_apply_does_not_auto_apply_the_routed_session(tmp_path: Path) -> None:
+    """A session applied by hand to a ripped, still unidentified disc is the
+    operator's choice: identifying the disc later runs the after-rip step,
+    but auto-apply adds no routed session next to it."""
+    from arm_backend.identity.resolve_service import resolve_identity
+    from arm_common.schemas import ResolveRequest
+
+    _set_media_root(tmp_path)
+    db = FakeSession()
+    job = _seed(db)
+    job.metadata_json = {"flags": {"unidentified": True}}
+    job.resumed_from_crash = False
+    _second_session(db, "ses_hand")
+    hub = CapturingHub()
+
+    await apply_session_internal(  # type: ignore[arg-type]
+        db, job=job, session_id="ses_hand", overwrite=False, created_by_user_id=None, source="manual", hub=hub
+    )
+    await resolve_identity(db, job, ResolveRequest(title="Iron Man", year=2008), hub=hub, stage_runner=None)  # type: ignore[arg-type]
+
+    apps = [r for r in db.added if isinstance(r, SessionApplication)]
+    assert [a.session_id for a in apps] == ["ses_hand"]
+
+
+@pytest.mark.asyncio
+async def test_auto_apply_ignores_a_cancelled_application(tmp_path: Path) -> None:
+    """A cancelled application is no longer the operator's choice for the
+    job, so the routed session still auto-applies."""
+    _set_media_root(tmp_path)
+    db = FakeSession()
+    job = _seed(db)
+    _second_session(db, "ses_hand")
+    db.rows["session_applications"] = [
+        SessionApplication(
+            id="sap_cancelled",
+            session_id="ses_hand",
+            job_id=job.id,
+            status=SessionApplicationStatus.CANCELLED,
+            overwrite=False,
+        )
+    ]
+    hub = CapturingHub()
+
+    await maybe_auto_apply_session(db, job, hub)  # type: ignore[arg-type]
+
+    apps = [r for r in db.added if isinstance(r, SessionApplication)]
+    assert [a.session_id for a in apps] == ["ses_x"]

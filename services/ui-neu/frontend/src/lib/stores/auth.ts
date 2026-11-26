@@ -1,17 +1,14 @@
 import { writable, derived } from 'svelte/store';
 import { getToken, setToken, clearToken } from '$lib/api/client';
 import type { LoginResult } from '$lib/api/auth';
+import { readStorage, removeStorage, writeStorage } from '$lib/utils/safe-storage';
 
 // Seeded from the persisted session at module load, not in initAuth(): the
 // layout's guest guard (`isGuest && /settings -> goto('/')`) runs on first
 // render, before onMount, so a store that starts "unauthenticated" bounces a
 // logged-in operator to the dashboard on every hard refresh of /settings.
 export function persistedRole(): string | null {
-	try {
-		return localStorage.getItem('arm_role');
-	} catch {
-		return null;
-	}
+	return readStorage('arm_role');
 }
 function persistedToken(): boolean {
 	try {
@@ -49,11 +46,7 @@ export function applyLogin(result: LoginResult): void {
 	_isAuthenticated.set(true);
 	_passwordMustChange.set(result.password_must_change);
 	_role.set(result.role);
-	try {
-		localStorage.setItem('arm_role', result.role);
-	} catch {
-		/* ignore */
-	}
+	writeStorage('arm_role', result.role);
 }
 
 // Local-only logout: drop the token + reset state together. This is the ONLY
@@ -65,11 +58,7 @@ export function logoutLocal(): void {
 	_isAuthenticated.set(false);
 	_passwordMustChange.set(false);
 	_role.set(null);
-	try {
-		localStorage.removeItem('arm_role');
-	} catch {
-		/* ignore */
-	}
+	removeStorage('arm_role');
 }
 
 export function clearPasswordMustChange(): void {

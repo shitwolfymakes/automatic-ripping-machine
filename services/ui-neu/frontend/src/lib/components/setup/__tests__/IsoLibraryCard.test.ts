@@ -1,6 +1,6 @@
 import { describe, it, expect, afterEach } from 'vitest';
-import { renderComponent, screen, cleanup } from '$lib/test-utils';
-import type { IsoStatus } from '$lib/utils/setup-drives';
+import { renderComponent, screen, cleanup } from '$lib/testing/render';
+import type { IsoStatus } from '$lib/drives/setup-drives';
 import IsoLibraryCard from '../IsoLibraryCard.svelte';
 
 function renderCard(iso: IsoStatus) {

@@ -1,4 +1,4 @@
-"""First-run setup walkthrough against the real booted app (setup spec 2026-10-01):
+"""First-run setup walkthrough against the real booted app:
 public status, the must-change gate's read-only setup GETs, the password step,
 progress, completion."""
 

@@ -88,8 +88,10 @@ def _effective_identity(job: Job, track: Track) -> tuple[str, int | None, int | 
     """Return the track's effective (title, year, season), falling back to the job's."""
     # Per-track identity overrides job-level (null = inherit). Multi-title discs
     # set these; a movie's single track leaves them null and inherits job identity.
+    # A track with its own title is its own identity: its year is its own too
+    # (none when unset), never the disc's.
     eff_title = track.title or job.title or ""
-    eff_year = track.year if track.year is not None else job.year
+    eff_year = track.year if track.title else job.year
     eff_season = track.season if track.season is not None else job.season
     return eff_title, eff_year, eff_season
 
@@ -104,6 +106,16 @@ def _episode_label(track: Track) -> str:
     return f"{track.episode_number:02d}"
 
 
+def _track_number(track: Track) -> int:
+    """The track's number in a file name: video titles count from 1, other kinds keep their index."""
+    return track.index + 1 if track.kind == TrackKind.VIDEO_TITLE else track.index
+
+
+def _track_label(track: Track, number: int) -> str:
+    """`Track NN` for a track with no title of its own, empty for a track that names itself."""
+    return "" if track.title else f"Track {number:02d}"
+
+
 def _build_track_ctx(
     job: Job,
     track: Track,
@@ -111,10 +123,10 @@ def _build_track_ctx(
 ) -> dict[str, str]:
     """Build the per-track template context using real (not synthetic) job/track data."""
     metadata: dict[str, object] = job.metadata_json or {}
-    track_index_padded = f"{track.index:02d}"
+    track_number = _track_number(track)
 
-    # Music naming reads the typed `music` section (§3.4); the bare
-    # top-level keys are the pre-0032 fallback.
+    # Music naming reads the typed `music` section; the bare
+    # top-level keys are the fallback for older rows.
     raw_music = metadata.get("music")
     music_meta: dict[str, Any] = raw_music if isinstance(raw_music, dict) else {}
 
@@ -133,7 +145,7 @@ def _build_track_ctx(
         "year": str(eff_year) if eff_year is not None else "",
         "show": sanitize_path_component(job.title or ""),
         # Per-track season (set by a disc map or episode match) wins over the
-        # job-level season; the metadata.get() fallback remains for pre-G-14 rows.
+        # job-level season; the metadata.get() fallback remains for rows without a per-track season.
         # Ints are zero-padded to match the S{NN}D{NN} convention (docs/developers/architecture/02 § TV).
         "season": sanitize_path_component(
             f"{eff_season:02d}" if eff_season is not None else str(metadata.get("season") or "")
@@ -141,7 +153,9 @@ def _build_track_ctx(
         "disc": sanitize_path_component(
             f"{job.disc_number:02d}" if job.disc_number is not None else str(metadata.get("disc") or "")
         ),
-        "track": track_index_padded,
+        "track": f"{track_number:02d}",
+        "track_label": _track_label(track, track_number),
+        "edition": sanitize_path_component(track.edition or ""),
         "episode": episode,
         "episode_title": sanitize_path_component(track.episode_name or ""),
         "duration_human": _format_duration_human(track.expected_duration_seconds or track.duration_seconds),
@@ -164,9 +178,9 @@ _EXT = re.compile(r"\.[A-Za-z0-9]+$")
 
 
 def _episode_tokens_required(job: Job, track: Track, session: Session) -> bool:
-    """Episode tokens must resolve for episode titles (and, as before, for
+    """Episode tokens must resolve for episode titles (and for
     titles of unknown role on a TV disc); a bonus film or extra on a TV disc
-    renders them empty instead of failing the whole apply (spec 5).
+    renders them empty instead of failing the whole apply.
 
     An unidentified job (`job.media_type is None`) can still be applied to a
     TV session (`auto_session.py` allows and documents this); for a

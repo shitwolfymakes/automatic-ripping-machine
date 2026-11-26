@@ -253,7 +253,7 @@ def test_update_404(signing_key: bytes) -> None:
 
 
 def test_update_builtin_is_read_only(signing_key: bytes) -> None:
-    # `name` included: the seeder re-syncs it on every boot (D-146).
+    # `name` included: the seeder re-syncs it on every boot.
     db = FakeSession()
     app, token = _make_app(signing_key, db)
     db.rows["rip_presets"] = [_preset("rpr_b", name="builtin", is_builtin=True)]

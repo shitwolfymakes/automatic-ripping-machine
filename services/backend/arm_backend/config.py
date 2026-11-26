@@ -63,7 +63,7 @@ class Settings(BaseSettings):
             return [s.strip() for s in v.split(",") if s.strip()]
         return v
 
-    # --- Phase 7: transcode dispatcher --------------------------------------
+    # --- Transcode dispatcher -----------------------------------------------
     # How many transcode containers may run in parallel. A 1080p HandBrake
     # transcode pegs every CPU core, so the default is conservative; bump it
     # on a many-core host. Counted live against `transcode_tasks WHERE status
@@ -125,7 +125,7 @@ class Settings(BaseSettings):
     # "Rip from ISO" is not configured.
     ARM_HOST_ISO_LIBRARY_PATH: str = ""
 
-    # Drive scanner roots (spec §2). /sys is the container's own sysfs mount
+    # Drive scanner roots. /sys is the container's own sysfs mount
     # (host-wide); /host-disk is the read-only bind of the host's /dev/disk —
     # symlink directories only, never device nodes.
     ARM_SYSFS_ROOT: str = "/sys"
@@ -168,7 +168,7 @@ class Settings(BaseSettings):
     # gates whether that toggle may be switched on at all.
     ARM_TRANSCODE_CAPABLE: bool = True
 
-    # --- Drive lifecycle Plan 3: ripper manager (spec §3) --------------------
+    # --- Ripper manager ------------------------------------------------------
     # Image for the durable per-drive ripper containers the backend creates on
     # enroll. Defaults like ARM_TRANSCODE_IMAGE: built locally by compose (the
     # arm-ripper service is deploy.replicas:0 — built, never run).
@@ -196,7 +196,7 @@ class Settings(BaseSettings):
     # and this must name the local one. Empty = same as ARM_HOST_CERTS_PATH.
     ARM_RIPPER_CERTS_PATH: str = ""
 
-    # --- Phase 7b: GPU inventory --------------------------------------------
+    # --- GPU inventory ------------------------------------------------------
     # JSON array of GPUs detected host-side at install time (`armctl install` /
     # `devtools/setup-dev.sh`, both via deploy/lib/detect.sh, enumerate /dev/dri
     # + nvidia-smi and write this). The backend
@@ -215,7 +215,7 @@ class Settings(BaseSettings):
     # hosts alike. Set only to force a specific gid (exotic device perms).
     ARM_RENDER_GID: str = ""
 
-    # --- Tier-3 air-gap: external metadata API base URLs --------------------
+    # --- Air-gap: external metadata API base URLs ---------------------------
     # Default to the public endpoints; override to point at a mirror/proxy for
     # air-gapped or regional deployments. No trailing-slash normalization — set
     # them exactly as the client expects (matching the former module literals).
@@ -226,7 +226,7 @@ class Settings(BaseSettings):
     ARM_MUSICBRAINZ_BASE_URL: str = "https://musicbrainz.org/ws/2"
     ARM_ARMSERVER_BASE_URL: str = "https://1337server.pythonanywhere.com/api/v1/"
 
-    # Tier-3: additional hostnames the image-proxy allowlist accepts, on TOP of
+    # Additional hostnames the image-proxy allowlist accepts, on TOP of
     # the built-in set (never replacing it — the allowlist is an SSRF guard).
     # Comma-separated bare hostnames (no scheme/path). Empty => built-ins only.
     ARM_EXTRA_IMAGE_HOSTS: Annotated[list[str], NoDecode] = []
@@ -238,14 +238,14 @@ class Settings(BaseSettings):
             return [s.strip() for s in v.split(",") if s.strip()]
         return v
 
-    # --- Tier-4: image-proxy disk-cache caps -------------------------------
+    # --- Image-proxy disk-cache caps ---------------------------------------
     # Homelab vs large installs differ; safe defaults match the former
     # hardcoded constants in image_cache.py.
     ARM_IMAGE_CACHE_MAX_ENTRIES: int = 1000
     ARM_IMAGE_CACHE_MAX_BYTES: int = 2 * 1024 * 1024  # 2 MB
     ARM_IMAGE_CACHE_TTL_SECONDS: int = 7 * 24 * 3600  # 7 days
 
-    # --- Tier-4: log query/zip caps ----------------------------------------
+    # --- Log query/zip caps ------------------------------------------------
     # Multi-drive deployments outgrow the defaults; safe defaults match the
     # former hardcoded constants in routers/logs.py.
     ARM_LOG_PER_FILE_DEFAULT: int = 1000

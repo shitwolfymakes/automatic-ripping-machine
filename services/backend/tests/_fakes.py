@@ -6,7 +6,7 @@ sometimes `select(Model.id, Model.field)` with `.all()`. This fake keys rows by
 the SQLAlchemy `Select` AST. It also evaluates `.is_(None)` / `.is_not(None)`
 (and `== False` style boolean constants), `.limit(n)`, and `func.count()` with
 an optional `group_by(...)`, so routes can push those filters into SQL instead
-of scanning whole tables in Python (D-168).
+of scanning whole tables in Python.
 """
 
 from __future__ import annotations
@@ -198,13 +198,13 @@ class FakeSession:
         self.flushed = 0
         self.commit_raises: Exception | None = None
         # `expire_all()` is a no-op here (this fake has no identity map to
-        # expire), but a real AsyncSession's IS meaningful (Task 9 F1): a
+        # expire), but a real AsyncSession's IS meaningful: a
         # test that can't model the staleness itself can still assert this
         # was called, and ordered before the fresh re-select, via
         # `expire_all_calls` / `call_log`.
         self.expire_all_calls = 0
         self.call_log: list[str] = []
-        # Tables selected `FOR UPDATE`, in order (M2: routers lock the job row
+        # Tables selected `FOR UPDATE`, in order (routers lock the job row
         # before its tracks). The fake takes no real lock.
         self.locked: list[str] = []
 

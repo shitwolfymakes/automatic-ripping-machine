@@ -1,4 +1,4 @@
-"""Provider payload -> IdentityFacts (match picker spec 3.2). Pure; no I/O."""
+"""Provider payload -> IdentityFacts. Pure; no I/O."""
 
 import os
 

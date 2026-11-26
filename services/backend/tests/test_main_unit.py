@@ -82,7 +82,7 @@ def test_build_docker_client_default_purpose_is_transcode_dispatcher(
 def test_build_docker_client_purpose_is_used_in_the_warning(
     monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
 ) -> None:
-    """C2: the warning names whichever docker-backed feature failed to
+    """The warning names whichever docker-backed feature failed to
     build a client, not always "transcode dispatcher"."""
 
     def _raise() -> object:
@@ -190,7 +190,7 @@ async def test_refresh_gpu_inventory_respects_existing_rows(monkeypatch: pytest.
 
 
 async def test_refresh_gpu_inventory_releases_orphaned_claims(monkeypatch: pytest.MonkeyPatch) -> None:
-    """D-057: with seed-once inventory a BUSY row whose claim was nulled by a
+    """With seed-once inventory a BUSY row whose claim was nulled by a
     task delete, or whose task finished, is freed at boot. A QUEUED or
     IN_PROGRESS claimant may still be running and keeps its GPU."""
     from arm_common import Gpu, GpuStatus, TranscodeTask, TranscodeTaskStatus
