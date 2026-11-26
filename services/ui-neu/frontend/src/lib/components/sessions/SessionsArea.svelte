@@ -1,26 +1,26 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { createSessionsData, type JoinedSession } from './sessionsData.svelte';
-	import { copyName, isRipPreset, ripPresetCopy, transcodePresetCopy } from './sessionPresets';
+	import { createSessionsData, type JoinedSession } from '../../stores/sessions-data.svelte';
+	import { copyName, isRipPreset, ripPresetCopy, transcodePresetCopy } from '../../sessions/session-presets';
 	import SessionsHub from './SessionsHub.svelte';
 	import PresetLibrary from './PresetLibrary.svelte';
 	import RoutingMatrix from './RoutingMatrix.svelte';
 	import SessionBuilderSlideOver from './SessionBuilderSlideOver.svelte';
 	import RipPresetSidebar from './RipPresetSidebar.svelte';
 	import PresetSidebar from '$lib/components/handbrake/PresetSidebar.svelte';
-	import type { SidebarMode } from '$lib/handbrake/sidebarModel';
-	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
+	import type { SidebarMode } from '$lib/handbrake/display';
+	import ConfirmDialog from '$lib/components/shared/ConfirmDialog.svelte';
 	import { deleteSession, cloneSession } from '$lib/api/sessions';
-	import { createRipPreset, deleteRipPreset } from '$lib/api/ripPresets';
-	import { createTranscodePreset, deleteTranscodePreset } from '$lib/api/transcodePresets';
+	import { createRipPreset, deleteRipPreset } from '$lib/api/rip-presets';
+	import { createTranscodePreset, deleteTranscodePreset } from '$lib/api/transcode-presets';
 	import { addToast } from '$lib/stores/toast.svelte';
+	import { errorMessage } from '$lib/utils/errors';
 	import { transcoderEnabled } from '$lib/stores/config';
 	import {
 		activePresetKey,
 		activeSessionKey,
 		deletePresetMessage,
 		deleteSessionMessage,
-		errorMessage,
 		isCreatingRipPreset,
 		isCreatingTranscodePreset,
 		isRipSidebarReadOnly,
@@ -33,8 +33,8 @@
 		passthroughTranscodePresets,
 		type EditorState,
 		type View
-	} from './sessionsAreaModel';
-	import { countByMediaType } from '$lib/utils/sessions';
+	} from '../../sessions/sessions-area-model';
+	import { countByMediaType } from '$lib/sessions/sessions';
 	import type { RipPresetView, SessionView, TranscodePresetView } from '$lib/types/api.gen';
 
 	const data = createSessionsData();
@@ -96,7 +96,7 @@
 			await data.load();
 			return true;
 		} catch (e) {
-			addToast({ tone: 'error', title: failTitle, body: errorMessage(e) });
+			addToast({ tone: 'error', title: failTitle, body: errorMessage(e, 'Unknown error') });
 			return false;
 		}
 	}

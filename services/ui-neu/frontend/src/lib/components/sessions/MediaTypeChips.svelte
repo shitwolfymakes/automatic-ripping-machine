@@ -2,7 +2,7 @@
 	// The TYPE filter's chips: All and each media type, each with its
 	// count. The pressed chip is the selected type; pressing one selects it.
 	import type { MediaType } from '$lib/types/api.gen';
-	import { VIDEO_GROUP_LABEL } from '$lib/utils/preset-labels';
+	import { VIDEO_GROUP_LABEL } from '$lib/sessions/preset-labels';
 
 	interface Props {
 		/** The count for All and each media type. A type left out shows 0. */

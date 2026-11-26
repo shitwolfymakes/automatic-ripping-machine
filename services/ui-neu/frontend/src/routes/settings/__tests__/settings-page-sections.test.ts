@@ -2,21 +2,21 @@ import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import type { Mock } from 'vitest';
 import { get } from 'svelte/store';
 import type { Writable } from 'svelte/store';
-import { renderComponent, screen, cleanup, waitFor, fireEvent, within } from '$lib/test-utils';
+import { renderComponent, screen, cleanup, waitFor, fireEvent, within } from '$lib/testing/render';
 import SettingsPage from '../+page.svelte';
 import { goto } from '$app/navigation';
 import { fetchSettings, saveArmConfig } from '$lib/api/settings';
 import { fetchDrives, fetchDriveDiagnostic, rescanDrives, updateDrive, enrollDrive } from '$lib/api/drives';
 import { fetchSessions } from '$lib/api/sessions';
-import { fetchTranscodePresets } from '$lib/api/transcodePresets';
-import { fetchSessionRoutes } from '$lib/api/sessionRoutes';
+import { fetchTranscodePresets } from '$lib/api/transcode-presets';
+import { fetchSessionRoutes } from '$lib/api/session-routes';
 import { fetchUsers } from '$lib/api/users';
 import { deleteTheme } from '$lib/api/themes';
 import { restartSetup } from '$lib/api/setup';
 import { fetchImageCacheStats, clearImageCache } from '$lib/api/maintenance';
 import { setTranscoderEnabled, setTranscodeRuntimeEnabled } from '$lib/stores/config';
 import { theme } from '$lib/stores/theme';
-import { colorScheme, allSchemes, schemeLocksMode, loadThemesFromApi } from '$lib/stores/colorScheme';
+import { colorScheme, allSchemes, schemeLocksMode, loadThemesFromApi } from '$lib/stores/color-scheme';
 import type { DriveView } from '$lib/types/api.gen';
 
 // --- Fixtures (copied from settings-page.test.ts) ---
@@ -174,20 +174,20 @@ vi.mock('$lib/api/sessions', () => ({
 	previewTemplate: vi.fn()
 }));
 
-vi.mock('$lib/api/sessionRoutes', () => ({
+vi.mock('$lib/api/session-routes', () => ({
 	fetchSessionRoutes: vi.fn(() => Promise.resolve([])),
 	upsertSessionRoute: vi.fn(),
 	deleteSessionRoute: vi.fn()
 }));
 
-vi.mock('$lib/api/ripPresets', () => ({
+vi.mock('$lib/api/rip-presets', () => ({
 	fetchRipPresets: vi.fn(() => Promise.resolve([])),
 	createRipPreset: vi.fn(),
 	updateRipPreset: vi.fn(),
 	deleteRipPreset: vi.fn()
 }));
 
-vi.mock('$lib/api/transcodePresets', () => ({
+vi.mock('$lib/api/transcode-presets', () => ({
 	fetchTranscodePresets: vi.fn(() => Promise.resolve([])),
 	createTranscodePreset: vi.fn(),
 	updateTranscodePreset: vi.fn(),
@@ -235,7 +235,7 @@ vi.mock('$lib/stores/theme', async () => {
 	return { theme: writable('dark'), toggleTheme: vi.fn() };
 });
 
-vi.mock('$lib/stores/colorScheme', async () => {
+vi.mock('$lib/stores/color-scheme', async () => {
 	const { writable } = await import('svelte/store');
 	return {
 		colorScheme: writable('default'),

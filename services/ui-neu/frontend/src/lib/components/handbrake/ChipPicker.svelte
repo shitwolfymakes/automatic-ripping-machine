@@ -4,7 +4,7 @@
 	// choice label; a value no choice carries shows raw), free text otherwise.
 	// Emits the whole new list.
 	import { canonicalValue, choiceLabel, findChoice, unchosenChoices, type Choice } from '$lib/handbrake/languages';
-	import type { invalidAttrs } from '$lib/utils/formValidation';
+	import type { invalidAttrs } from '$lib/ui/form-validation';
 	interface Props {
 		id: string;
 		values: string[];

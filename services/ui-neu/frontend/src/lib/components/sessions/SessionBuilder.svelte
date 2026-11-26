@@ -1,11 +1,12 @@
 <script lang="ts">
+	import { errorMessage } from '$lib/utils/errors';
 	import type { MediaType, SessionView, RipPresetView, TranscodePresetView } from '$lib/types/api.gen';
-	import { transcodePresetFits } from '$lib/utils/sessions';
-	import type { JoinedSession } from './sessionsData.svelte';
+	import { transcodePresetFits } from '$lib/sessions/sessions';
+	import type { JoinedSession } from '../../stores/sessions-data.svelte';
 	import { createSession, updateSession } from '$lib/api/sessions';
-	import type { EditorStatus } from '$lib/components/editorStatus';
+	import type { EditorStatus } from '$lib/ui/editor-status';
 	import OutputPathField from './OutputPathField.svelte';
-	import { errorId, focusFirstInvalid, invalidAttrs } from '$lib/utils/formValidation';
+	import { errorId, focusFirstInvalid, invalidAttrs } from '$lib/ui/form-validation';
 	import {
 		SESSION_FIELDS,
 		SESSION_FIELD_ORDER,
@@ -14,7 +15,7 @@
 		sessionUpdate,
 		sessionCreate,
 		type SessionForm
-	} from './sessionForm';
+	} from '../../sessions/session-form';
 
 	interface Props {
 		session?: JoinedSession | null;
@@ -139,7 +140,7 @@
 				: await createSession(sessionCreate(form));
 			onsaved(result);
 		} catch (err) {
-			submitError = err instanceof Error ? err.message : 'Failed to save session';
+			submitError = errorMessage(err, 'Failed to save session');
 		} finally {
 			submitting = false;
 		}

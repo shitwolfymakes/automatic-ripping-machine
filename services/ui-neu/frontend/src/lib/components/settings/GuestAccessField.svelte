@@ -1,5 +1,6 @@
 <script lang="ts">
-	import Toggle from '$lib/components/notifications/Toggle.svelte';
+	import { errorMessage } from '$lib/utils/errors';
+	import Toggle from '$lib/components/shared/Toggle.svelte';
 	import { setUserDisabled } from '$lib/api/users';
 	import type { UserView } from '$lib/types/api.gen';
 
@@ -23,7 +24,7 @@
 			await setUserDisabled(user.id, !next);
 			onsaved?.(next);
 		} catch (e) {
-			const message = e instanceof Error ? e.message : 'Failed to update guest access';
+			const message = errorMessage(e, 'Failed to update guest access');
 			onerror?.(message);
 		} finally {
 			saving = false;

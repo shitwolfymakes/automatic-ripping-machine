@@ -1,5 +1,5 @@
 import { it, expect, vi, afterEach } from 'vitest';
-import { renderComponent, screen, fireEvent, cleanup, waitFor, within } from '$lib/test-utils';
+import { renderComponent, screen, fireEvent, cleanup, waitFor, within } from '$lib/testing/render';
 vi.mock('$lib/api/sessions', () => ({
 	createSession: vi.fn(),
 	updateSession: vi.fn(),

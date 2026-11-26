@@ -1,8 +1,9 @@
 <script lang="ts">
+	import { plural } from '$lib/utils/plural';
 	import { untrack, type Snippet } from 'svelte';
 	import type { MetadataCandidate } from '$lib/types/api.gen';
-	import { candidateKey, mergeCandidate } from '$lib/utils/match';
-	import { MatchDetailsCache } from './matchDetails.svelte';
+	import { candidateKey, mergeCandidate } from '$lib/match/match';
+	import { MatchDetailsCache } from '../../stores/match-details.svelte';
 	import MatchResultRow from './MatchResultRow.svelte';
 	import MatchDetailPane from './MatchDetailPane.svelte';
 
@@ -53,7 +54,7 @@
 
 <div class="match-picker">
 	<div class="match-picker-head">
-		<span class="match-picker-count">{results.length} {results.length === 1 ? 'RESULT' : 'RESULTS'}</span>
+		<span class="match-picker-count">{results.length} {plural(results.length, 'RESULT', 'RESULTS')}</span>
 		<span class="match-picker-query">"{query}"{year ? ` · ${year}` : ''} · {providerLabel}</span>
 		<button type="button" class="match-picker-close" onclick={onclose}>Close</button>
 	</div>

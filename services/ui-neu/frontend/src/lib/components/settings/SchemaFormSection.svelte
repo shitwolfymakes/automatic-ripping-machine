@@ -4,7 +4,7 @@
 	// fields, note and advanced fields. The form draws each field's row.
 	import type { Snippet } from 'svelte';
 	import type { ConfigFieldMeta } from '$lib/types/api.gen';
-	import type { SectionFieldGroups } from '$lib/utils/settings-sections';
+	import type { SectionFieldGroups } from '$lib/settings/sections';
 
 	interface Props {
 		/** The section, with its fields split into their layout buckets. */

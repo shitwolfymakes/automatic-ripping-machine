@@ -1,10 +1,10 @@
 <script lang="ts">
-	import Glyph from '$lib/components/Glyph.svelte';
+	import Glyph from '$lib/components/shared/Glyph.svelte';
 	import { onDestroy } from 'svelte';
 	import { page } from '$app/stores';
 	import { jobLogDownloadUrl } from '$lib/api/logs';
-	import { createJobLog } from '$lib/stores/jobLog.svelte';
-	import LogView from '$lib/components/LogView.svelte';
+	import { createJobLog } from '$lib/stores/job-log.svelte';
+	import LogView from '$lib/components/logs/LogView.svelte';
 
 	const DEFAULT_LIMIT = 1000;
 

@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { uiPrefs, setUiPref } from '$lib/stores/uiPrefs';
+	import { uiPrefs, setUiPref } from '$lib/stores/ui-prefs';
 </script>
 
 <div class="flex flex-col gap-6">

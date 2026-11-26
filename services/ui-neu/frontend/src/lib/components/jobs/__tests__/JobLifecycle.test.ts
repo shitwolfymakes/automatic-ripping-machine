@@ -1,0 +1,88 @@
+import { describe, it, expect, afterEach } from 'vitest';
+import { renderComponent, screen, cleanup } from '$lib/testing/render';
+import JobLifecycle from '../JobLifecycle.svelte';
+
+describe('JobLifecycle', () => {
+	afterEach(() => cleanup());
+
+	describe('size=md', () => {
+		it('renders 5 stages for disc rip with stage labels', () => {
+			renderComponent(JobLifecycle, {
+				props: { status: 'ripping', sourceType: 'disc' }
+			});
+			expect(screen.getByText('Waiting')).toBeInTheDocument();
+			expect(screen.getByText('Identifying')).toBeInTheDocument();
+			expect(screen.getByText('Ripping')).toBeInTheDocument();
+			expect(screen.getByText('Transcoding')).toBeInTheDocument();
+			expect(screen.getByText('Complete')).toBeInTheDocument();
+		});
+
+		it('renders the same 5 stages for folder imports', () => {
+			// folder_ripper still drives a MakeMKV remux pass, so folder imports
+			// share the disc 5-stage lifecycle.
+			renderComponent(JobLifecycle, {
+				props: { status: 'ripping', sourceType: 'folder' }
+			});
+			expect(screen.getByText('Waiting')).toBeInTheDocument();
+			expect(screen.getByText('Identifying')).toBeInTheDocument();
+			expect(screen.getByText('Ripping')).toBeInTheDocument();
+			expect(screen.getByText('Transcoding')).toBeInTheDocument();
+			expect(screen.getByText('Complete')).toBeInTheDocument();
+		});
+
+		it('marks the active stage with pulse animation class', () => {
+			const { container } = renderComponent(JobLifecycle, {
+				props: { status: 'transcoding', sourceType: 'disc' }
+			});
+			const pulsing = container.querySelectorAll('.job-lifecycle-bar[data-state="active"]');
+			// Exactly one stage should be actively pulsing
+			expect(pulsing.length).toBe(1);
+		});
+
+		it('does not pulse on terminal failure', () => {
+			const { container } = renderComponent(JobLifecycle, {
+				props: { status: 'failed', sourceType: 'disc' }
+			});
+			const pulsing = container.querySelectorAll('.job-lifecycle-bar[data-state="active"]');
+			expect(pulsing.length).toBe(0);
+		});
+
+		it('does not pulse on complete', () => {
+			const { container } = renderComponent(JobLifecycle, {
+				props: { status: 'complete', sourceType: 'disc' }
+			});
+			const pulsing = container.querySelectorAll('.job-lifecycle-bar[data-state="active"]');
+			expect(pulsing.length).toBe(0);
+		});
+	});
+
+	describe('size=sm', () => {
+		it('renders without text labels for compact display', () => {
+			renderComponent(JobLifecycle, {
+				props: { status: 'transcoding', sourceType: 'disc', size: 'sm' }
+			});
+			// No stage labels in DOM in sm mode - they live on the title attribute only
+			expect(screen.queryByText('Transcoding')).toBeNull();
+			expect(screen.queryByText('Waiting')).toBeNull();
+		});
+
+		it('exposes lifecycle as accessible aria-label', () => {
+			renderComponent(JobLifecycle, {
+				props: { status: 'transcoding', sourceType: 'disc', size: 'sm' }
+			});
+			const widget = screen.getByRole('img', { name: 'Job lifecycle' });
+			expect(widget).toBeInTheDocument();
+			// Title attr carries the per-stage state for hover tooltip
+			expect(widget.getAttribute('title')).toContain('Transcoding: active');
+		});
+
+		it('renders the same number of segments as nodes', () => {
+			const { container } = renderComponent(JobLifecycle, {
+				props: { status: 'transcoding', sourceType: 'disc', size: 'sm' }
+			});
+			// 5 segments for disc rip
+			const segments = container.querySelectorAll('.job-lifecycle-seg');
+			expect(segments.length).toBe(5);
+		});
+	});
+});

@@ -2,7 +2,7 @@
 	import { tick } from 'svelte';
 	import type { ChannelTemplate } from '$lib/types/notifications';
 	import type { EventTypeInfo, ScriptInput } from '$lib/api/channels';
-	import { withInput, spliceToken, withText, type TemplateField } from './eventTemplates';
+	import { withInput, spliceToken, withText, type TemplateField } from '../../notifications/event-templates';
 
 	let {
 		selected = $bindable(),

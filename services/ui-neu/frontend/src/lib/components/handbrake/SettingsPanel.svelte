@@ -11,23 +11,22 @@
 		SettingIssue
 	} from '$lib/types/api.gen';
 	import { fieldOptions, groupsForTab, type TabId } from '$lib/handbrake/fields';
-	import { ALL_ENCODERS_LINE, perEncoderLine } from '$lib/handbrake/encoderCards';
+	import { ALL_ENCODERS_LINE, perEncoderLine } from '$lib/handbrake/encoder-cards';
 	import { visibleTab, type TabVisible, type VisibleInput } from '$lib/handbrake/filter';
-	import { changedCount, changedLabel } from '$lib/handbrake/groupSummary';
-	import { settingsPanelView } from '$lib/handbrake/panelView';
-	import { resetBlock, resetCommon, setBlock, setCommon } from '$lib/handbrake/settingsEdit';
+	import { changedCount, changedLabel } from '$lib/handbrake/group-summary';
+	import { settingsPanelView } from '$lib/handbrake/panel-view';
+	import { resetBlock, resetCommon, setBlock, setCommon } from '$lib/handbrake/settings-edit';
+	import { AMD_NOTE, issuesFor } from '$lib/handbrake/display';
 	import {
-		AMD_NOTE,
 		audioListValue,
 		blockOf,
 		commonOf,
 		inheritedDepth,
 		inheritedValue,
-		issuesFor,
 		panelContext,
-		type BaseValues,
-		type FilterState
-	} from '$lib/handbrake/sidebarModel';
+		type BaseValues
+	} from '$lib/handbrake/base-values';
+	import type { FilterState } from '$lib/handbrake/visibility';
 	import SettingsTabs from './SettingsTabs.svelte';
 	import TunableField from './TunableField.svelte';
 	import EncoderBlockCard from './EncoderBlockCard.svelte';

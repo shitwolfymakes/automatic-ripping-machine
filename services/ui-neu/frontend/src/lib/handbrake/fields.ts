@@ -3,7 +3,7 @@
 
 import type { HandbrakeSchemaSlimView, SlimKey } from '$lib/types/api.gen';
 
-export type FieldKind = 'checkbox' | 'select' | 'number' | 'text' | 'chips' | 'audio-list' | 'rotate' | 'pad-color';
+type FieldKind = 'checkbox' | 'select' | 'number' | 'text' | 'chips' | 'audio-list' | 'rotate' | 'pad-color';
 export type TabId = 'summary' | 'dimensions' | 'filters' | 'video' | 'audio' | 'subtitles' | 'chapters';
 
 export const TABS: readonly { id: TabId; label: string }[] = [
@@ -91,7 +91,7 @@ export function groupsForTab(keys: SlimKey[]): { group: string; keys: SlimKey[] 
 	return [...groups].map(([group, members]) => ({ group, keys: members }));
 }
 
-export interface FieldViewOption {
+interface FieldViewOption {
 	value: string;
 	label: string;
 	selected: boolean;
@@ -99,7 +99,7 @@ export interface FieldViewOption {
 	raw: string | number;
 }
 
-export interface FieldView {
+interface FieldView {
 	kind: FieldKind;
 	shown: unknown;
 	inputValue: string;
@@ -112,7 +112,7 @@ export interface FieldView {
 	stored: boolean;
 }
 
-export interface FieldViewInput {
+interface FieldViewInput {
 	value: unknown;
 	inherited: unknown;
 	stored: boolean;

@@ -5,11 +5,12 @@
 	// The body renders through children, handed the current filter, which the owner can bind and clear.
 	import type { Snippet } from 'svelte';
 	import type { HandbrakeSchemaSlimView, HandbrakeSettings, SettingIssue } from '$lib/types/api.gen';
-	import Glyph from '$lib/components/Glyph.svelte';
+	import Glyph from '$lib/components/shared/Glyph.svelte';
 	import { TABS, type TabId } from '$lib/handbrake/fields';
 	import { firstTabWithMatch, tabVisibleCounts, type VisibleInput } from '$lib/handbrake/filter';
-	import { issueTarget, placedIssues } from '$lib/handbrake/issuePlacement';
-	import type { BaseValues, FilterState } from '$lib/handbrake/sidebarModel';
+	import { issueTarget, placedIssues } from '$lib/handbrake/issue-placement';
+	import type { BaseValues } from '$lib/handbrake/base-values';
+	import type { FilterState } from '$lib/handbrake/visibility';
 
 	interface Props {
 		schema: HandbrakeSchemaSlimView;

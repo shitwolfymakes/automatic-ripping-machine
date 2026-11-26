@@ -1,11 +1,11 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import type { DiscRouteSummary, SetupView } from '$lib/types/api.gen';
-	import RecipeStrip from '$lib/components/sessions/RecipeStrip.svelte';
+	import RecipeStrip from '$lib/components/setup/RecipeStrip.svelte';
 	import { fetchDiscRoutes } from '$lib/api/setup';
-	import { discKindLabel, exampleMovie, routeCells } from '$lib/utils/disc-routes';
+	import { discKindLabel, exampleMovie, routeCells } from '$lib/sessions/disc-routes';
 	import SetupConfigFields from '../SetupConfigFields.svelte';
-	import type { StepCommitResult } from '../steps';
+	import type { StepCommitResult } from '../../../setup/steps';
 
 	// Step 6: the global "when you insert a disc" default (the disc_handling
 	// widget) and, read-only, what each kind of disc gets (setup spec §5.7).

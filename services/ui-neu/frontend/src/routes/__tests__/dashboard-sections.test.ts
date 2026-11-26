@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
-import { renderComponent, screen, cleanup, waitFor, fireEvent, within } from '$lib/test-utils';
+import { renderComponent, screen, cleanup, waitFor, fireEvent, within } from '$lib/testing/render';
 import DashboardPage from '../+page.svelte';
-import { createJob } from '$lib/components/__fixtures__/job';
+import { createJob } from '$lib/__fixtures__/job';
 import { fetchDashboard } from '$lib/api/dashboard';
 import { fetchJobsPage, bulkDeleteJobs, abandonJob, deleteJob } from '$lib/api/jobs';
 import { setTranscoderEnabled } from '$lib/stores/config';
@@ -42,7 +42,7 @@ vi.mock('$lib/stores/rips.svelte', () => ({
 	reconcileSubscriptions: h.reconcileSubscriptions
 }));
 
-vi.mock('$lib/stores/ripperEvents.svelte', () => ({
+vi.mock('$lib/stores/ripper-events.svelte', () => ({
 	startRipperEvents: h.startRipperEvents,
 	// The review cards register listeners of their own besides the page's.
 	onRipperEvent: (cb: (ids: Set<string>, types: Map<string, Set<string>>) => void) => {

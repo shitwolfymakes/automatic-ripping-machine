@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { renderComponent, screen, fireEvent, cleanup } from '$lib/test-utils';
+import { renderComponent, screen, fireEvent, cleanup } from '$lib/testing/render';
 import SessionsHub from '../SessionsHub.svelte';
 
 // Branch pins for SessionsHub, beside SessionsHub.svelte.test.ts. No branch

@@ -1,5 +1,5 @@
 <script lang="ts">
-	import type { ChannelStatus } from './channelHelpers';
+	import type { ChannelStatus } from '../../notifications/channel-helpers';
 
 	let { status }: { status: ChannelStatus } = $props();
 </script>

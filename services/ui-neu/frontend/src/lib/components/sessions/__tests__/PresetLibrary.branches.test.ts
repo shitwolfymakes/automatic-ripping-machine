@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { renderComponent, screen, fireEvent, cleanup, within } from '$lib/test-utils';
+import { renderComponent, screen, fireEvent, cleanup, within } from '$lib/testing/render';
 import PresetLibrary from '../PresetLibrary.svelte';
 
 // Branch pins for PresetLibrary, beside PresetLibrary.svelte.test.ts. No

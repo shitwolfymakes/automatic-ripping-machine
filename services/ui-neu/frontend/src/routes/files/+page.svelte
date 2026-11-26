@@ -1,29 +1,31 @@
 <script lang="ts">
+	import { plural } from '$lib/utils/plural';
+	import { errorMessage } from '$lib/utils/errors';
 	import { onMount } from 'svelte';
 	import { page } from '$app/stores';
 	import { renameFile, moveFile, deleteFile, createDirectory, fixPermissions } from '$lib/api/files';
-	import { FilesBrowser } from '$lib/stores/filesBrowser.svelte';
-	import { MovePicker } from '$lib/stores/movePicker.svelte';
-	import { OrphanFolders } from '$lib/stores/orphanFolders.svelte';
-	import type { BulkFeedback } from '$lib/utils/bulk-delete-feedback';
+	import { FilesBrowser } from '$lib/stores/files-browser.svelte';
+	import { MovePicker } from '$lib/stores/move-picker.svelte';
+	import { OrphanFolders } from '$lib/stores/orphan-folders.svelte';
+	import type { BulkFeedback } from '$lib/dashboard/bulk-delete-feedback';
 	import {
 		parseSelectionKey,
 		orderForDelete,
 		bulkResultFeedback,
 		cleanupFeedback,
 		fixedPermissionsMessage
-	} from '$lib/utils/files';
+	} from '$lib/files/files';
 	import { cleanupTranscoder } from '$lib/api/maintenance';
-	import BreadcrumbNav from '$lib/components/BreadcrumbNav.svelte';
-	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
-	import FileRow from '$lib/components/FileRow.svelte';
-	import FilesTable from '$lib/components/FilesTable.svelte';
-	import FilesToolbar from '$lib/components/FilesToolbar.svelte';
-	import FileMoveDialog from '$lib/components/FileMoveDialog.svelte';
-	import LoadState from '$lib/components/LoadState.svelte';
-	import OrphanFoldersModal from '$lib/components/OrphanFoldersModal.svelte';
+	import BreadcrumbNav from '$lib/components/files/BreadcrumbNav.svelte';
+	import ConfirmDialog from '$lib/components/shared/ConfirmDialog.svelte';
+	import FileRow from '$lib/components/files/FileRow.svelte';
+	import FilesTable from '$lib/components/files/FilesTable.svelte';
+	import FilesToolbar from '$lib/components/files/FilesToolbar.svelte';
+	import FileMoveDialog from '$lib/components/files/FileMoveDialog.svelte';
+	import LoadState from '$lib/components/shared/LoadState.svelte';
+	import OrphanFoldersModal from '$lib/components/files/OrphanFoldersModal.svelte';
 	import { features } from '$lib/features';
-	import NewFolderRow from '$lib/components/NewFolderRow.svelte';
+	import NewFolderRow from '$lib/components/files/NewFolderRow.svelte';
 
 	const browser = new FilesBrowser();
 	const movePicker = new MovePicker(browser);
@@ -58,7 +60,7 @@
 		try {
 			await action();
 		} catch (e) {
-			showFeedback({ type: 'error', message: e instanceof Error ? e.message : fallback });
+			showFeedback({ type: 'error', message: errorMessage(e, fallback) });
 		}
 	}
 
@@ -362,7 +364,7 @@
 <!-- Bulk delete confirmation -->
 <ConfirmDialog
 	open={bulkDeleteOpen}
-	title="Delete {browser.selectedKeys.size} item{browser.selectedKeys.size !== 1 ? 's' : ''}"
+	title="Delete {browser.selectedKeys.size} {plural(browser.selectedKeys.size, 'item')}"
 	message="This will permanently delete {browser.selectedKeys.size} selected item{browser.selectedKeys.size !== 1
 		? 's'
 		: ''}, including all contents of any folders. This cannot be undone."
