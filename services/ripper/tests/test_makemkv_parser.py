@@ -6,6 +6,7 @@ from arm_ripper.scan.makemkv_info import (
     _TINFO_FIELDS,
     _InfoParser,
     _split_robot_line,
+    _parse_segment_map,
     _scan_title,
     _to_int,
     parse_makemkvcon_info,
@@ -27,7 +28,7 @@ def test_parses_dvd_with_two_titles():
     assert feature.duration_seconds == 2 * 3600 + 16 * 60 + 17
     assert feature.chapter_count == 32
     assert feature.size_bytes == 7340032000
-    assert feature.source_file == "title00.mkv"
+    assert feature.source_file is None  # the fixture only has TINFO 27, the output name
 
     extra = titles[1]
     assert extra.index == 1
@@ -143,8 +144,26 @@ def test_unknown_tinfo_code_changes_nothing():
 
 
 def test_all_tinfo_fields_populate_the_title():
-    lines = ['TINFO:3,9,0,"1:02:03"', 'TINFO:3,8,0,"12"', 'TINFO:3,11,0,"2048"', 'TINFO:3,27,0,"title03.mkv"']
-    expected = ScanTitle(index=3, duration_seconds=3723, chapter_count=12, size_bytes=2048, source_file="title03.mkv")
+    lines = [
+        'TINFO:3,9,0,"1:02:03"',
+        'TINFO:3,8,0,"12"',
+        'TINFO:3,11,0,"2048"',
+        'TINFO:3,16,0,"00003.mpls"',
+        'TINFO:3,25,0,"2"',
+        'TINFO:3,26,0,"41,40"',
+        'TINFO:3,27,0,"title_t03.mkv"',
+        'TINFO:3,49,0,"FPL_MainFeature"',
+    ]
+    expected = ScanTitle(
+        index=3,
+        duration_seconds=3723,
+        chapter_count=12,
+        size_bytes=2048,
+        source_file="00003.mpls",
+        segment_count=2,
+        segment_map=[41, 40],
+        comment="FPL_MainFeature",
+    )
     assert parse_makemkvcon_info(lines) == (None, [expected], None)
 
 
@@ -170,8 +189,8 @@ def test_empty_first_label_lets_a_later_one_win():
 
 
 def test_commas_inside_quotes_are_rejoined():
-    lines = ['CINFO:2,0,"Hello, World"', 'TINFO:0,9,0,"0:00:05"', 'TINFO:0,27,0,"a,b.mkv"']
-    expected = ScanTitle(index=0, duration_seconds=5, source_file="a,b.mkv")
+    lines = ['CINFO:2,0,"Hello, World"', 'TINFO:0,9,0,"0:00:05"', 'TINFO:0,26,0,"7,8,9"']
+    expected = ScanTitle(index=0, duration_seconds=5, segment_map=[7, 8, 9])
     assert parse_makemkvcon_info(lines) == ("Hello,World", [expected], None)
 
 
@@ -211,7 +230,7 @@ def test_to_int_parses_ints_and_returns_none_otherwise():
 
 
 def test_tinfo_fields_covers_exactly_the_known_codes():
-    assert set(_TINFO_FIELDS) == {8, 9, 11, 27}
+    assert set(_TINFO_FIELDS) == {8, 9, 11, 16, 25, 26, 49}
 
 
 def test_later_unparseable_chapter_count_keeps_the_earlier_valid_one():
@@ -233,15 +252,33 @@ def test_scan_title_builds_the_exact_scan_title_from_a_full_entry():
         "duration_seconds": 60,
         "chapter_count": 4,
         "size_bytes": 2048,
-        "source_file": "title02.mkv",
+        "source_file": "00002.mpls",
+        "segment_count": 1,
+        "segment_map": [12],
+        "comment": "SF_Trailer",
     }
     assert _scan_title(2, entry) == ScanTitle(
-        index=2, duration_seconds=60, chapter_count=4, size_bytes=2048, source_file="title02.mkv"
+        index=2,
+        duration_seconds=60,
+        chapter_count=4,
+        size_bytes=2048,
+        source_file="00002.mpls",
+        segment_count=1,
+        segment_map=[12],
+        comment="SF_Trailer",
     )
 
 
 def test_scan_title_maps_wrongly_typed_optional_values_to_none():
-    entry: dict[str, object] = {"duration_seconds": 60, "chapter_count": "4", "size_bytes": "2048", "source_file": 7}
+    entry: dict[str, object] = {
+        "duration_seconds": 60,
+        "chapter_count": "4",
+        "size_bytes": "2048",
+        "source_file": 7,
+        "segment_count": "1",
+        "segment_map": "12",
+        "comment": 3,
+    }
     assert _scan_title(1, entry) == ScanTitle(index=1, duration_seconds=60)
 
 
@@ -277,9 +314,9 @@ def test_on_cinfo_with_non_int_code_changes_nothing():
 
 def test_on_tinfo_fills_the_entry_via_the_table():
     parser = _InfoParser()
-    parser.on_tinfo(["3", "27", "0", '"title03.mkv"'])
+    parser.on_tinfo(["3", "16", "0", '"00003.mpls"'])
     parser.on_tinfo(["3", "8", "0", '"12"'])
-    assert parser.titles == {3: {"source_file": "title03.mkv", "chapter_count": 12}}
+    assert parser.titles == {3: {"source_file": "00003.mpls", "chapter_count": 12}}
 
 
 def test_on_tinfo_with_non_int_index_or_code_changes_nothing():
@@ -315,3 +352,53 @@ def test_scan_titles_sorts_by_index_and_drops_titles_without_duration():
         ScanTitle(index=0, duration_seconds=10),
         ScanTitle(index=2, duration_seconds=30),
     ]
+
+
+def test_output_file_name_is_not_read_as_the_source_file():
+    # TINFO 27 is MakeMKV's output file name; the source playlist is TINFO 16.
+    lines = ['TINFO:0,9,0,"0:10:00"', 'TINFO:0,27,0,"Movie_t00.mkv"']
+    _, titles, _ = parse_makemkvcon_info(lines)
+    assert titles == [ScanTitle(index=0, duration_seconds=600)]
+
+
+def test_parse_segment_map_reads_clip_lists_and_ranges():
+    assert _parse_segment_map("508,501,503") == [508, 501, 503]
+    assert _parse_segment_map("1-3,7") == [1, 2, 3, 7]
+    assert _parse_segment_map("262") == [262]
+
+
+def test_parse_segment_map_rejects_anything_else():
+    assert _parse_segment_map("") is None
+    assert _parse_segment_map("1,x") is None
+    assert _parse_segment_map("5-3") is None
+    assert _parse_segment_map("1,,2") is None
+
+
+def test_parses_blu_ray_with_decoy_playlists():
+    """A real Blu-ray scan (title names made generic): 299 decoy playlists
+    with the feature's runtime and clips, each in a different order."""
+    lines = (FIXTURES / "makemkvcon_bd_decoy_playlists.txt").read_text().splitlines()
+    volume_label, titles, disc_type = parse_makemkvcon_info(lines)
+
+    assert volume_label == "Movie with decoys"
+    assert disc_type == DiscType.BLURAY
+    assert len(titles) == 309
+
+    feature = titles[0]
+    assert feature.source_file == "00202.mpls"
+    assert feature.duration_seconds == 6072
+    assert feature.segment_count == 20
+    assert feature.segment_map is not None
+    assert feature.segment_map[:3] == [508, 501, 503]
+    assert feature.comment == "FPL_MainFeature"
+
+    with_disclaimer = titles[2]
+    assert with_disclaimer.comment == "Copy Disclaimer Playlist"
+    assert set(with_disclaimer.segment_map or []) - set(feature.segment_map) == {2173}
+
+    decoys = [t for t in titles if t.duration_seconds == feature.duration_seconds]
+    assert len(decoys) == 299
+    assert all(t.segment_count == len(t.segment_map or []) for t in titles)
+    assert {frozenset(t.segment_map or []) for t in decoys} == {frozenset(feature.segment_map)}
+    assert len({tuple(t.segment_map or []) for t in decoys}) == 299
+    assert [t.index for t in decoys if t.comment] == [0]

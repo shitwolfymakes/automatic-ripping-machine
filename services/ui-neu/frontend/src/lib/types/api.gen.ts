@@ -4756,6 +4756,18 @@ export type ScanTitle = {
      * Source File
      */
     source_file?: string | null;
+    /**
+     * Segment Count
+     */
+    segment_count?: number | null;
+    /**
+     * Segment Map
+     */
+    segment_map?: Array<number> | null;
+    /**
+     * Comment
+     */
+    comment?: string | null;
 };
 
 /**
