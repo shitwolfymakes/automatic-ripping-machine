@@ -102,6 +102,9 @@ jobs:
       # ARM_ENTRYPOINT_SOURCE_ONLY seam — no docker, no root, <1s.
       - name: Entrypoint render-access suite
         run: bash services/_common/test-entrypoint-render.sh
+      # Same seam: MakeMKV home ownership after a PUID/PGID remap.
+      - name: Entrypoint MakeMKV-home suite
+        run: bash services/_common/test-entrypoint-makemkv-home.sh
 
   test-python:
     name: test (python — pytest)
