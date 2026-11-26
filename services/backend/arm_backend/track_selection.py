@@ -1,4 +1,4 @@
-from arm_common import TrackStatus, DiscType, OutputMode, RipPreset, Track, TrackKind, TrackSelection
+from arm_common import MissTitlesKept, TrackStatus, DiscType, OutputMode, RipPreset, Track, TrackKind, TrackSelection
 from arm_common.schemas import ScanResult, ScanTitle, TrackFilters
 
 MAIN_FEATURE_MIN_SECONDS = 45 * 60
@@ -156,10 +156,27 @@ def select_tracks_for_review(job_id: str, scan: ScanResult, rip_preset: RipPrese
         return whole
 
     kept_refs = {t.source_ref for t in select_tracks(job_id, scan, rip_preset)}
-    is_cd = scan.disc_type == DiscType.CD
-    rows: list[Track] = []
-    for title in scan.titles:
-        track = _audio_track(job_id, title) if is_cd else _video_track(job_id, title)
-        track.excluded = str(title.index) not in kept_refs
-        rows.append(track)
+    rows = _title_tracks(job_id, scan)
+    for track in rows:
+        track.excluded = track.source_ref not in kept_refs
     return rows
+
+
+def _title_tracks(job_id: str, scan: ScanResult) -> list[Track]:
+    """One Track per scanned title: audio for a CD, video otherwise."""
+    make_track = _audio_track if scan.disc_type == DiscType.CD else _video_track
+    return [make_track(job_id, title) for title in scan.titles]
+
+
+def select_tracks_on_miss(
+    job_id: str, scan: ScanResult, rip_preset: RipPreset, titles_kept: MissTitlesKept
+) -> list[Track]:
+    """Tracks for a disc that missed identification. `ALL` keeps every scanned
+    title; `PRESET` keeps what the preset would, as the review gate does. A
+    preset that takes the disc whole yields its single whole-disc track either way."""
+    if titles_kept == MissTitlesKept.PRESET:
+        return select_tracks_for_review(job_id, scan, rip_preset)
+    whole = _whole_disc_tracks(job_id, scan, rip_preset)
+    if whole is not None:
+        return whole
+    return _title_tracks(job_id, scan)

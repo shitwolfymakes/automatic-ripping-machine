@@ -90,8 +90,10 @@ def _effective_identity(job: Job, track: Track) -> tuple[str, int | None, int | 
     """Return the track's effective (title, year, season), falling back to the job's."""
     # Per-track identity overrides job-level (null = inherit). Multi-title discs
     # set these; a movie's single track leaves them null and inherits job identity.
+    # A track with its own title is its own identity: its year is its own too
+    # (none when unset), never the disc's.
     eff_title = track.title or job.title or ""
-    eff_year = track.year if track.year is not None else job.year
+    eff_year = track.year if track.title else job.year
     eff_season = track.season if track.season is not None else job.season
     return eff_title, eff_year, eff_season
 
@@ -106,6 +108,16 @@ def _episode_label(track: Track) -> str:
     return f"{track.episode_number:02d}"
 
 
+def _track_number(track: Track) -> int:
+    """The track's number in a file name: video titles count from 1, other kinds keep their index."""
+    return track.index + 1 if track.kind == TrackKind.VIDEO_TITLE else track.index
+
+
+def _track_label(track: Track, number: int) -> str:
+    """`Track NN` for a track with no title of its own, empty for a track that names itself."""
+    return "" if track.title else f"Track {number:02d}"
+
+
 def _build_track_ctx(
     job: Job,
     track: Track,
@@ -113,7 +125,7 @@ def _build_track_ctx(
 ) -> dict[str, str]:
     """Build the per-track template context using real (not synthetic) job/track data."""
     metadata: dict[str, object] = job.metadata_json or {}
-    track_index_padded = f"{track.index:02d}"
+    track_number = _track_number(track)
 
     # Music naming reads the typed `music` section; the bare
     # top-level keys are the fallback for older rows.
@@ -143,7 +155,9 @@ def _build_track_ctx(
         "disc": sanitize_path_component(
             f"{job.disc_number:02d}" if job.disc_number is not None else str(metadata.get("disc") or "")
         ),
-        "track": track_index_padded,
+        "track": f"{track_number:02d}",
+        "track_label": _track_label(track, track_number),
+        "edition": sanitize_path_component(track.edition or ""),
         "episode": episode,
         "episode_title": sanitize_path_component(track.episode_name or ""),
         "duration_human": _format_duration_human(track.expected_duration_seconds or track.duration_seconds),

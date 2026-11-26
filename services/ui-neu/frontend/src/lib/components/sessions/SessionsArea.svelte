@@ -36,19 +36,26 @@
 	} from '../../sessions/sessions-area-model';
 	import { countByMediaType } from '$lib/sessions/sessions';
 	import AutoSaveToggle from '$lib/components/settings/AutoSaveToggle.svelte';
+	import AutoSaveSelect from '$lib/components/settings/AutoSaveSelect.svelte';
 	import type { RipPresetView, SessionView, SettingsGroup, TranscodePresetView } from '$lib/types/api.gen';
 
 	interface Props {
-		/** The Defaults settings group (auto-apply), shown above the matrix on a transcode-capable deployment. */
+		/** The Defaults settings group (auto-apply and the unidentified-disc choices), shown above the matrix on a transcode-capable deployment. */
 		defaultsGroup?: SettingsGroup;
 		config?: Record<string, unknown>;
-		/** Saves an on/off Defaults setting as soon as its switch flips. */
-		ontoggle?: (key: string, next: boolean) => void;
+		/** Saves a Defaults setting as soon as its switch or select changes. */
+		onsave?: (key: string, value: unknown) => void;
 		/** The view to open on (a deep link to a Defaults field opens Defaults). */
 		initialView?: View;
 	}
 
-	let { defaultsGroup, config = {}, ontoggle, initialView = 'sessions' }: Props = $props();
+	let { defaultsGroup, config = {}, onsave, initialView = 'sessions' }: Props = $props();
+
+	// Auto-apply queues transcodes, so a ripper-only deployment hides it; the
+	// other Defaults shape ripping and always show.
+	const visibleDefaults = $derived(
+		(defaultsGroup?.fields ?? []).filter((f) => $transcoderEnabled || f.key !== 'auto_transcode_on_idle')
+	);
 
 	const data = createSessionsData();
 
@@ -325,16 +332,27 @@
 	{:else if view === 'routing'}
 		<RoutingMatrix>
 			{#snippet beforeMatrix()}
-				{#if $transcoderEnabled && defaultsGroup}
+				{#if visibleDefaults.length > 0}
 					<div class="panel stack stack-sm" data-testid="defaults-auto-apply">
-						{#each defaultsGroup.fields as field (field.key)}
-							<AutoSaveToggle
-								key={field.key}
-								label={field.label}
-								help={field.help}
-								checked={Boolean(config[field.key])}
-								ontoggle={(next) => ontoggle?.(field.key, next)}
-							/>
+						{#each visibleDefaults as field (field.key)}
+							{#if field.type === 'enum'}
+								<AutoSaveSelect
+									key={field.key}
+									label={field.label}
+									help={field.help}
+									value={String(config[field.key] ?? '')}
+									options={(field.enum_values ?? []).map((v) => ({ value: v, label: field.enum_labels?.[v] ?? v }))}
+									onchange={(value) => onsave?.(field.key, value)}
+								/>
+							{:else}
+								<AutoSaveToggle
+									key={field.key}
+									label={field.label}
+									help={field.help}
+									checked={Boolean(config[field.key])}
+									ontoggle={(next) => onsave?.(field.key, next)}
+								/>
+							{/if}
 						{/each}
 					</div>
 				{/if}

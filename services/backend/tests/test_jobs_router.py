@@ -385,6 +385,22 @@ def test_rip_start_review_transitions_to_ripping_and_emits(signing_key: bytes) -
     assert "rip.start" in types and "rip.started" in types
 
 
+def test_rip_start_review_clears_the_unidentified_flag(signing_key: bytes) -> None:
+    """Start on a parked miss counts the disc as matched and releases it: the
+    `unidentified` flag (both spellings) and the blocked-miss marker go, the
+    other flags stay."""
+    db = FakeSession()
+    app, token = _make_app(signing_key, db, _Hub())
+    meta = {"unidentified": True, "flags": {"unidentified": True, "blocked_miss": True, "dispatch_timeout": True}}
+    db.rows["jobs"] = [_job(status=JobStatus.AWAITING_REVIEW, meta=meta)]
+    db.rows["tracks"] = [_track("trk_01JZXR7K3M5Q8N4VWA0000T01", status=TrackStatus.QUEUED)]
+    with TestClient(app) as client:
+        r = client.post("/api/jobs/job_01JZXR7K3M5Q8N4VWA00000001/rip-start-review", headers=_auth(token))
+    assert r.status_code == 200, r.text
+    stored = db.rows["jobs"][0].metadata_json
+    assert stored == {"flags": {"dispatch_timeout": True}}
+
+
 def test_rip_start_review_wrong_status_409(signing_key: bytes) -> None:
     db = FakeSession()
     app, token = _make_app(signing_key, db)
@@ -1559,6 +1575,42 @@ def test_patch_revert_hands_field_back_to_disc_map(signing_key: bytes) -> None:
     track = db.rows["tracks"][0]
     assert track.episode_name == "Pilot"
     assert track.identity_provenance == {"episode_name": "thediscdb"}
+
+
+def test_patch_track_edition_is_stored_as_a_manual_proposal(signing_key: bytes) -> None:
+    db = FakeSession()
+    _seed_job_with_track(db)
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as c:
+        r = c.patch(
+            f"/api/jobs/{_JOB_ID_A}",
+            json={"tracks": [{"track_id": _TRK_ID_A, "edition": "Director's Cut"}]},
+            headers=_auth(token),
+        )
+    assert r.status_code == 200, r.text
+    track = db.rows["tracks"][0]
+    assert track.edition == "Director's Cut"
+    assert track.identity_provenance == {"edition": "manual"}
+
+
+def test_patch_revert_drops_the_manual_edition(signing_key: bytes) -> None:
+    db = FakeSession()
+    _seed_job_with_track(db)
+    db.rows["jobs"][0].metadata_json = {
+        "identity_claims": {"sources": {"manual": {"tracks": {"0": {"edition": "Extended"}}}}}
+    }
+    track = db.rows["tracks"][0]
+    track.edition = "Extended"
+    track.identity_provenance = {"edition": "manual"}
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as c:
+        r = c.patch(
+            f"/api/jobs/{_JOB_ID_A}",
+            json={"tracks": [{"track_id": _TRK_ID_A, "revert_fields": ["edition"]}]},
+            headers=_auth(token),
+        )
+    assert r.status_code == 200, r.text
+    assert db.rows["tracks"][0].edition is None
 
 
 def test_patch_revert_with_no_other_proposer_resets_to_default(signing_key: bytes) -> None:

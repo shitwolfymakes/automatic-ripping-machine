@@ -204,6 +204,57 @@ describe('TrackTitleSearch', () => {
 		});
 	});
 
+	describe('Set by hand', () => {
+		it('opens the edit fields with no search and saves title, year and edition without imdb or poster', async () => {
+			renderComponent(TrackTitleSearch, {
+				props: { jobId: 'job_3', track: createTrack({ id: 'trk_5', title: null, source_ref: 'title_02.mkv' }) }
+			});
+			expect(screen.queryByText('Apply')).not.toBeInTheDocument();
+			await fireEvent.click(screen.getByRole('button', { name: 'Set by hand' }));
+			expect(mockSearchMetadata).not.toHaveBeenCalled();
+			await fireEvent.input(screen.getByLabelText('Title'), { target: { value: ' The Mole People ' } });
+			await fireEvent.input(screen.getByLabelText('Year'), { target: { value: '1956' } });
+			await fireEvent.input(screen.getByLabelText('Edition'), { target: { value: " Director's Cut " } });
+			await fireEvent.click(screen.getByText('Apply'));
+			await waitFor(() => {
+				expect(mockUpdateTrack).toHaveBeenCalledWith('job_3', 'trk_5', {
+					title: 'The Mole People',
+					year: 1956,
+					role: 'main',
+					poster_url: undefined,
+					edition: "Director's Cut"
+				});
+			});
+		});
+
+		it('starts from the search fields and the track kind', async () => {
+			renderComponent(TrackTitleSearch, {
+				props: { jobId: 'job_3', track: createTrack({ title: 'Show', year: 2001, role: 'episode' }) }
+			});
+			await fireEvent.click(screen.getByRole('button', { name: 'Set by hand' }));
+			expect(screen.getByLabelText('Title')).toHaveValue('Show');
+			expect(screen.getByLabelText('Year')).toHaveValue('2001');
+			expect(screen.getByLabelText('Type')).toHaveValue('series');
+			expect(screen.getByLabelText('Edition')).toHaveValue('');
+		});
+
+		it('Back closes the form', async () => {
+			renderComponent(TrackTitleSearch, { props: { jobId: 'job_3', track: createTrack() } });
+			await fireEvent.click(screen.getByRole('button', { name: 'Set by hand' }));
+			await fireEvent.click(screen.getByText('Back'));
+			expect(screen.queryByText('Apply')).not.toBeInTheDocument();
+		});
+
+		it('a search closes the form', async () => {
+			mockSearchMetadata.mockResolvedValue({ candidates: [createCandidate({ title: 'Found' })] });
+			renderComponent(TrackTitleSearch, { props: { jobId: 'job_3', track: createTrack() } });
+			await fireEvent.click(screen.getByRole('button', { name: 'Set by hand' }));
+			await fireEvent.click(screen.getByRole('button', { name: 'Search' }));
+			await waitFor(() => expect(screen.getByText('Found')).toBeInTheDocument());
+			expect(screen.queryByText('Apply')).not.toBeInTheDocument();
+		});
+	});
+
 	describe('track options (custom filename + episode)', () => {
 		it('saves a custom_filename via updateTrack', async () => {
 			renderComponent(TrackTitleSearch, {
