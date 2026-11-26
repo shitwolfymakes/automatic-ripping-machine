@@ -1,4 +1,4 @@
-"""Show-id resolution across episode-list providers (design spec 6.2).
+"""Show-id resolution across episode-list providers.
 
 Reads the show ids already known for a job (`metadata_json.identity.external_ids`)
 and asks each episode-list provider whose own id field is still empty to

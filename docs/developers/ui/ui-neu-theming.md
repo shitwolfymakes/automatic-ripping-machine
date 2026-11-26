@@ -9,7 +9,7 @@ scheme, everything you need is here.
 
 ## 1. How a scheme loads
 
-`services/ui-neu/frontend/src/lib/stores/colorScheme.ts` owns the whole
+`services/ui-neu/frontend/src/lib/stores/color-scheme.ts` owns the whole
 lifecycle. A scheme has two halves:
 
 1. **A token map** (`ColorScheme.tokens`), compiled into the app as part of

@@ -1,4 +1,4 @@
-"""Phase 8 wire schemas for drive mutations.
+"""Wire schemas for drive mutations.
 
 Read views still return the `Drive` SQLModel directly (the UI hand-types its
 projection); this module only houses the update request body so the manual
@@ -49,7 +49,7 @@ class DriveView(BaseModel):
     disc_enum_timeout: int | None
     created_at: datetime | None
     updated_at: datetime | None
-    # Lifecycle (spec §1). `lifecycle` is the operator's decision; `present`
+    # Lifecycle. `lifecycle` is the operator's decision; `present`
     # is whether the hardware is here right now — orthogonal.
     lifecycle: DriveLifecycle
     present: bool
@@ -62,8 +62,8 @@ class DriveView(BaseModel):
     # Informational note about the last disc (not an error); see Drive.notice.
     notice: str | None = None
     current_job: DriveCurrentJobView | None = None
-    # Bus the drive hangs off, derived from by_id_name's prefix; not stored
-    # (setup spec 2026-10-01 §6.6). "usb" | "sata" | "other" | None.
+    # Bus the drive hangs off, derived from by_id_name's prefix; not stored.
+    # "usb" | "sata" | "other" | None.
     connection: Literal["usb", "sata", "other"] | None = None
     kind: DriveKind = DriveKind.OPTICAL
     source_kind: DriveSourceKind | None = None

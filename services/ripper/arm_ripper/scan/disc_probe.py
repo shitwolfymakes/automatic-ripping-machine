@@ -7,7 +7,7 @@ that runs before OMDb/TMDB. pydvdid returns None for anything without a
 sources (ARM_SOURCE_PATH) directly with no loop-mount.
 
 Disc-type classification is handled upstream by MakeMKV's CINFO:1 (see
-makemkv.scan_disc), so the probe no longer mounts the disc — which is why the
+makemkv.scan_disc), so the probe does not mount the disc — which is why the
 ripper service needs neither CAP_SYS_ADMIN nor an AppArmor exception.
 """
 

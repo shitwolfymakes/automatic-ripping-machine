@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { renderComponent, screen, cleanup } from '$lib/test-utils';
+import { renderComponent, screen, cleanup } from '$lib/testing/render';
 import Layout from '../+layout.svelte';
 import { createRawSnippet } from 'svelte';
 
@@ -20,7 +20,7 @@ vi.mock('$lib/api/client', () => ({
 }));
 
 // These tests exercise the 401/session-expiry path. Tokenless browsing is a
-// valid state now — a 401 just routes straight to /login, no guest attempt.
+// valid state — a 401 just routes straight to /login, no guest attempt.
 const apiLogoutMock = vi.fn(() => Promise.resolve());
 vi.mock('$lib/api/auth', () => ({
 	logout: () => apiLogoutMock()
@@ -28,7 +28,8 @@ vi.mock('$lib/api/auth', () => ({
 
 const gotoMock = vi.fn();
 vi.mock('$app/navigation', () => ({
-	goto: (...args: unknown[]) => gotoMock(...args)
+	goto: (...args: unknown[]) => gotoMock(...args),
+	onNavigate: vi.fn()
 }));
 
 const logoutLocalMock = vi.fn();
@@ -60,7 +61,7 @@ vi.mock('$lib/stores/theme', async () => {
 	return { theme: writable('dark'), toggleTheme: vi.fn() };
 });
 
-vi.mock('$lib/stores/colorScheme', async () => {
+vi.mock('$lib/stores/color-scheme', async () => {
 	const { writable } = await import('svelte/store');
 	return {
 		colorScheme: writable('default'),
@@ -76,7 +77,7 @@ vi.mock('$lib/stores/dashboard', async () => {
 		arm_online: true,
 		active_jobs: [],
 		drives_online: 0,
-		drive_names: {},
+		drives: {},
 		notification_count: 0,
 		ripping_enabled: true,
 		transcoder_online: false,
@@ -150,7 +151,7 @@ describe('Layout', () => {
 	});
 
 	it('hides the resource stats surfaces when the Interface preference is off', async () => {
-		const { setUiPref } = await import('$lib/stores/uiPrefs');
+		const { setUiPref } = await import('$lib/stores/ui-prefs');
 		setUiPref('showStats', true);
 		const { unmount } = renderComponent(Layout, { props: { children: childSnippet() } });
 		expect(document.querySelector('[data-testid="bottom-stats-bar"]')).not.toBeNull();
@@ -206,10 +207,7 @@ describe('Layout', () => {
 				{ job_id: 2, status: 'transcoding', title: 'Movie B' }
 			] as never[],
 			drives_online: 1,
-			drive_names: {},
-			iso_sources: {},
-			iso_source_kinds: {},
-			drive_source_kinds: {},
+			drives: {},
 			preparing: [],
 			notification_count: 0,
 			ripping_enabled: true,
@@ -217,7 +215,8 @@ describe('Layout', () => {
 			makemkv_key_checked_at: null,
 			transcoder_online: false,
 			transcoder_stats: null,
-			active_transcodes: []
+			active_transcodes: [],
+			review_wait_seconds: 60
 		}));
 
 		renderComponent(Layout, { props: { children: childSnippet() } });

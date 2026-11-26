@@ -1,10 +1,10 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { renderComponent, screen, fireEvent, waitFor, cleanup, within } from '$lib/test-utils';
+import { renderComponent, screen, fireEvent, waitFor, cleanup, within } from '$lib/testing/render';
 import NotificationsTab from '../NotificationsTab.svelte';
 import * as api from '$lib/api/channels';
 import { toasts, dismissToast } from '$lib/stores/toast.svelte';
 import type { Channel } from '$lib/types/notifications';
-import { discordCatalog, appriseChannel, webhookChannel } from './apprise-fixtures';
+import { discordCatalog, appriseChannel, webhookChannel } from '../../../__fixtures__/apprise-fixtures';
 
 const ch: Channel = webhookChannel();
 
@@ -153,7 +153,7 @@ describe('NotificationsTab', () => {
 		// expand advanced + edit a non-private field
 		const adv = (await screen.findByText(/Advanced \(/)).closest('details') as HTMLDetailsElement;
 		adv.open = true;
-		await fireEvent.input(await screen.findByLabelText(/Thread/i), { target: { value: '9' } });
+		await fireEvent.input(await screen.findByLabelText(/^Thread/i), { target: { value: '9' } });
 		await fireEvent.click(screen.getByRole('button', { name: /save changes/i }));
 		await waitFor(() =>
 			expect(update).toHaveBeenCalledWith(
@@ -211,7 +211,7 @@ describe('NotificationsTab', () => {
 		await fireEvent.click(screen.getByText('D'));
 		const adv = (await screen.findByText(/Advanced \(/)).closest('details') as HTMLDetailsElement;
 		adv.open = true;
-		await fireEvent.input(await screen.findByLabelText(/Thread/i), { target: { value: '9' } });
+		await fireEvent.input(await screen.findByLabelText(/^Thread/i), { target: { value: '9' } });
 		// editor "Send test" button (text), not the row's icon button
 		const sendTestBtns = await screen.findAllByRole('button', { name: /send test/i });
 		const editorBtn = sendTestBtns.find((b) => b.textContent?.toLowerCase().includes('send test'));
@@ -263,7 +263,7 @@ describe('NotificationsTab', () => {
 		await fireEvent.input(screen.getByLabelText('Channel Label'), { target: { value: 'New' } });
 		await fireEvent.click(await screen.findByRole('button', { name: /select a service/i }));
 		await fireEvent.click(await screen.findByRole('button', { name: /Discord/ }));
-		await fireEvent.input(screen.getByLabelText(/Webhook ID/i), { target: { value: '1' } });
+		await fireEvent.input(screen.getByLabelText(/^Webhook ID/i), { target: { value: '1' } });
 		await fireEvent.click(screen.getByLabelText('Rip completed'));
 		await fireEvent.click(screen.getByRole('button', { name: /save channel/i }));
 

@@ -77,7 +77,7 @@ def test_infra_returns_whitelisted_values_only():
     assert r.status_code == 200, r.text
     body = r.json()
     assert "MEDIA_ROOT" in body
-    # moved to operator config (config.max_parallel_transcodes) — no longer infra
+    # an operator config value (config.max_parallel_transcodes), not infra
     assert "MAX_PARALLEL_TRANSCODES" not in body
     # secrets / bootstrap NEVER exposed
     for forbidden in ("DATABASE_URL", "ARM_SERVICE_TOKEN", "TLS_CERT_PATH", "TLS_KEY_PATH"):
@@ -90,3 +90,58 @@ def test_infra_requires_jwt():
     with TestClient(app) as c:
         r = c.get("/api/settings/infra")
     assert r.status_code == 200
+
+
+def test_schema_puts_auto_apply_in_the_defaults_group():
+    """Auto-apply lives with the routing defaults it governs, not on the Transcoding tab."""
+    app, token = _app()
+    with TestClient(app) as c:
+        groups = c.get("/api/settings/schema", headers=_auth(token)).json()["groups"]
+    by_name = {g["name"]: g for g in groups}
+    order = [g["name"] for g in groups]
+    assert [f["key"] for f in by_name["Defaults"]["fields"]] == [
+        "auto_transcode_on_idle",
+        "miss_media_type",
+        "miss_titles_kept",
+    ]
+    field = by_name["Defaults"]["fields"][0]
+    assert field["label"] == "Apply these defaults automatically after each rip"
+    assert field["help"] == (
+        "When a rip completes, apply its default session (the drive's default when it fits the disc, "
+        "else the media-type route) and queue its transcodes. A session chosen for one rip always applies."
+    )
+    media, kept = by_name["Defaults"]["fields"][1:]
+    assert (media["label"], media["type"], media["enum_values"]) == (
+        "Treat unidentified video discs as",
+        "enum",
+        ["movie", "tv"],
+    )
+    assert media["enum_labels"] == {"movie": "Movie", "tv": "TV"}
+    assert kept["enum_labels"] == {"all": "All titles", "preset": "Same as the rip preset"}
+    assert media["help"] == (
+        "The media type a DVD or Blu-ray that misses identification starts with. "
+        "Flip it on the review screen before you start the rip."
+    )
+    assert (kept["label"], kept["type"], kept["enum_values"]) == (
+        "Titles kept on an unidentified disc",
+        "enum",
+        ["all", "preset"],
+    )
+    assert kept["help"] == (
+        "All keeps every title for you to review. Preset keeps what the routed session's rip preset would "
+        "(for example only the main feature)."
+    )
+    assert "auto_transcode_on_idle" not in [f["key"] for f in by_name["Transcoding"]["fields"]]
+    assert order.index("Defaults") + 1 == order.index("Transcoding")
+
+
+def test_setup_transcoding_step_keeps_its_fields_after_the_move():
+    """First-run setup's transcoding step still lists the toggle and concurrency, and not auto-apply."""
+    app, token = _app()
+    with TestClient(app) as c:
+        groups = c.get("/api/settings/schema", headers=_auth(token)).json()["groups"]
+    step = sorted(
+        (f for g in groups for f in g["fields"] if f.get("setup_step") == "transcoding"),
+        key=lambda f: f["setup_order"],
+    )
+    assert [f["key"] for f in step] == ["transcode_enabled", "max_parallel_transcodes"]

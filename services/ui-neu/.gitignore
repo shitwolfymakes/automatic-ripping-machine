@@ -44,7 +44,6 @@ docker-compose.override.yml
 
 # Logs
 *.log
-.superpowers/
 
 # Coverage / test tooling
 .coverage

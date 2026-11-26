@@ -186,7 +186,7 @@ def test_hint_is_rerooted_under_dev_root(tmp_path: Path) -> None:
 
 
 def test_node_port_cuts_the_sysfs_path_before_the_scsi_host(tmp_path: Path) -> None:
-    """D-004 follow-up: the port is the ripper's identity check for a drive with
+    """The port is the ripper's identity check for a drive with
     no by-id link, matching the backend scanner's `sysfs_port`."""
     from arm_ripper.drive_resolve import node_port
 

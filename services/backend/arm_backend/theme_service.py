@@ -3,8 +3,8 @@
 The backend owns only USER-uploaded themes (under settings.ARM_THEMES_PATH, the
 /data/themes mount). Built-in themes are a frontend concern — their tokens are
 compiled into the UI and their CSS ships as static assets
-(services/ui-neu/frontend/static/themes/), so the backend no longer stores or
-serves them.
+(services/ui-neu/frontend/static/themes/), so the backend does not store or
+serve them.
 """
 
 from __future__ import annotations

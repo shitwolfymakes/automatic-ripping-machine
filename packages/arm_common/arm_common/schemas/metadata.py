@@ -19,10 +19,10 @@ class MetadataCandidate(BaseModel):
     status: str | None = None
     track_count: int | None = None
     # Every id this result carries (tmdb with its kind, imdb, tvdb), so
-    # applying it stores the identity that was picked (spec 3.4).
+    # applying it stores the identity that was picked.
     external_ids: ExternalIds | None = None
     # The source that produced this candidate (tmdb/omdb/tvmaze/tvdb), and
-    # what it knows about the title (match picker spec 3.1).
+    # what it knows about the title.
     provider: str | None = None
     facts: IdentityFacts | None = None
 

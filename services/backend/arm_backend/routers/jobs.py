@@ -70,8 +70,10 @@ from arm_common.enums import (
 )
 from arm_common.schemas.job_metadata import (
     identity_suggestion_of,
+    no_countdown_reason,
     previously_ripped_job_id,
     with_flags,
+    without_flags,
     without_identity_suggestion,
 )
 
@@ -85,7 +87,7 @@ router = APIRouter(prefix="/api/jobs", tags=["jobs"])
 # heartbeats delayed by transient network blips while still catching
 # tray-open/no-disc clicks made seconds after the ripper noticed. A reading
 # older than this means the ripper stopped beating, and the trigger is
-# refused rather than sent to nobody (D-241).
+# refused rather than sent to nobody.
 _MEDIA_STATUS_FRESHNESS = timedelta(seconds=90)
 _MEDIA_STATUS_READY: frozenset[DriveMediaStatus] = frozenset({DriveMediaStatus.LOADED, DriveMediaStatus.UNKNOWN})
 _MEDIA_STATUS_DETAIL: dict[DriveMediaStatus, str] = {
@@ -205,8 +207,7 @@ async def abandon_job(
         subprocess so file handles release on `/raw/<id>/`.
 
     `delete_raw` is plumbed in the WS payload because only the ripper has
-    `/raw` mounted; doing the rmtree here would silently no-op (and used to,
-    pre-fix). Even when there's no active task, the ripper still runs the
+    `/raw` mounted; doing the rmtree here would silently no-op. Even when there's no active task, the ripper still runs the
     rmtree against any orphaned partial-rip directory.
     """
     job = (await db.execute(select(Job).where(col(Job.id) == job_id))).scalar_one_or_none()
@@ -234,7 +235,7 @@ async def rip_start_review(
     db: AsyncSession = Depends(get_session),
     hub: WSHub = Depends(get_hub),
 ) -> Job:
-    """Operator Start for a disc held in the timed review gate (spec §5.2).
+    """Operator Start for a disc held in the timed review gate.
 
     Transitions AWAITING_REVIEW -> RIPPING here (the backend owns the transition;
     rip-start then tolerates already-RIPPING) and emits the `rip.start` WS command
@@ -258,7 +259,10 @@ async def rip_start_review(
 
 async def _start_held_job(db: AsyncSession, hub: WSHub, job: Job) -> None:
     """AWAITING_REVIEW -> RIPPING, plus the `rip.start` command that unblocks
-    the parked ripper. Commits. 422 when every track is excluded."""
+    the parked ripper. Commits. 422 when every track is excluded. The
+    operator starting the rip counts the disc as matched and releases a
+    blocked miss, so the `unidentified` flag and the blocked-miss marker go
+    and auto-apply runs once the rip finishes."""
     tracks = list((await db.execute(select(Track).where(col(Track.job_id) == job.id))).scalars().all())
     if tracks and all(t.excluded for t in tracks):
         raise HTTPException(
@@ -268,6 +272,7 @@ async def _start_held_job(db: AsyncSession, hub: WSHub, job: Job) -> None:
 
     job.status = JobStatus.RIPPING
     job.started_at = datetime.now(timezone.utc)
+    job.metadata_json = without_flags(job.metadata_json, "unidentified", "blocked_miss")
     db.add(job)
     await db.flush()
 
@@ -359,7 +364,7 @@ async def review_pause(
     db: AsyncSession = Depends(get_session),
     hub: WSHub = Depends(get_hub),
 ) -> Job:
-    """Pause/resume ONE held disc's review countdown (per-job pause, spec §11).
+    """Pause/resume ONE held disc's review countdown (per-job pause).
 
     `?paused=true` freezes this disc's auto-start countdown (waits indefinitely
     for Start) while other discs keep counting; `?paused=false` resumes with a
@@ -375,15 +380,11 @@ async def review_pause(
             status_code=status.HTTP_409_CONFLICT,
             detail=f"review-pause only valid for awaiting_review, got {enum_value_str(job.status)}",
         )
-    if previously_ripped_job_id(job.metadata_json) is not None:
+    no_countdown = no_countdown_reason(job.metadata_json)
+    if no_countdown is not None:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="this disc was ripped before; it has no countdown to pause",
-        )
-    if identity_suggestion_of(job.metadata_json) is not None:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="this disc is waiting for you to confirm its identity; it has no countdown to pause",
+            detail=f"{no_countdown}; it has no countdown to pause",
         )
     job.manual_pause = paused
     if not paused:
@@ -607,7 +608,7 @@ async def manual_trigger(
 
     # The ripper drops a trigger while it owns any job, and no ripper acts on
     # one for a detached drive or after it stopped beating. Refuse those here,
-    # in the DriveCard's order and wording (D-208), so the click gets a reason
+    # in the DriveCard's order and wording, so the click gets a reason
     # it can show instead of a 202 nothing follows. The card gates the first
     # two itself; heartbeat age it cannot judge against the browser clock.
     live = (
@@ -680,7 +681,7 @@ async def update_job(
     """Edit user-controlled fields on a Job + optional per-track operator edits.
     Job title/year stay behind identify/resolve; track `status` stays ripper-owned
     (not in TrackEditRequest)."""
-    # M2: lock the job row (then its tracks) so a concurrent identity write
+    # Lock the job row (then its tracks) so a concurrent identity write
     # (the episode stage's apply, /identity/match) serializes with this one.
     job = (await db.execute(select(Job).where(col(Job.id) == job_id).with_for_update())).scalar_one_or_none()
     if job is None:
@@ -698,7 +699,7 @@ async def resolve(
     hub: WSHub = Depends(get_hub),
     stage_runner: EpisodeStageRunner | None = Depends(get_stage_runner),
 ) -> ResolveResponse:
-    # M2: lock the job row before the identity write (lock order: job, then tracks).
+    # Lock the job row before the identity write (lock order: job, then tracks).
     job = (await session.execute(select(Job).where(col(Job.id) == job_id).with_for_update())).scalar_one_or_none()
     if job is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown job_id: {job_id}")
@@ -719,7 +720,7 @@ async def accept_identity_suggestion(
     stage_runner: EpisodeStageRunner | None = Depends(get_stage_runner),
 ) -> ResolveResponse:
     """Confirm the confident match identify held because the media type's
-    auto-apply switch was off (identification-sources spec D-10).
+    auto-apply switch was off.
 
     Applies the stored hit exactly as identify would have, then hands the
     job to the resolve path (provenance, fan-out, `identify.resolved`, the

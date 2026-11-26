@@ -5,8 +5,8 @@ FROM python:3.14-slim-bookworm AS mkv-build
 
 ENV DEBIAN_FRONTEND=noninteractive
 
-# Build deps for makemkv-oss + makemkv-bin (mirrors v2 temp_install_mkv_hb_deps.sh,
-# minus HandBrake — that lands in Phase 7 with the transcode container).
+# Build deps for makemkv-oss + makemkv-bin. HandBrake is not built here; the
+# transcode container carries it.
 # qtbase5-dev is needed because MakeMKV's OSS configure builds a GUI that we
 # never ship; we only copy makemkvcon out into the runtime stage.
 RUN apt-get update \
@@ -71,10 +71,9 @@ ENV DEBIAN_FRONTEND=noninteractive \
     UV_COMPILE_BYTECODE=1 \
     UV_PROJECT_ENVIRONMENT=/opt/venv
 
-# Phase 2 runtime deps: MakeMKV handles its own DVD CSS, so we deliberately
-# skip libdvd-pkg / libdvdcss here — Phase 3 (real rip pipeline) can re-add
-# them if any rip-time tool turns out to need them. Keeps the image to
-# main-repo packages only and avoids enabling contrib / non-free.
+# Runtime deps: MakeMKV handles its own DVD CSS, so we deliberately skip
+# libdvd-pkg / libdvdcss here. Keeps the image to main-repo packages only and
+# avoids enabling contrib / non-free.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         tini \

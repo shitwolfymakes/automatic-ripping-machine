@@ -8,12 +8,12 @@
    convention. Both hooks style identically. */
 @layer components {
 	/* gap 1rem, not 1.5rem: the Settings tab strip (this block's first real
-	   consumer) was flex gap-4 in the original markup.
+	   consumer) uses a 1rem gap.
 	   The 1px rule is an inset shadow, not a border-bottom: a tab's own 2px
 	   underline then paints over it inside the strip's box, so the strip is
-	   exactly as tall as a tab. The old border-bottom plus a -1px tab margin
-	   made the content 1px taller than the box, and overflow-x: auto (which
-	   forces overflow-y to auto) drew a vertical scrollbar on the strip.
+	   exactly as tall as a tab. A border-bottom plus a -1px tab margin would make the content 1px
+	   taller than the box, and overflow-x: auto (which forces overflow-y to auto) would draw a
+	   vertical scrollbar on the strip.
 	   overflow-y: hidden keeps it from ever scrolling vertically. */
 	.tabs {
 		display: flex;
@@ -24,8 +24,7 @@
 	}
 	/* padding 0.25rem 0.625rem (px-1 py-2.5), weight 500, line-height 1.25rem
 	   (text-sm's bundled value, taller than the browser default for this
-	   font stack): matches the Settings tab strip's original tabClass()
-	   string exactly. The 2px border-bottom covers .tabs' inset 1px rule, so
+	   font stack): these are the Settings tab strip's exact values. The 2px border-bottom covers .tabs' inset 1px rule, so
 	   the strip's total height is the tab's own box. */
 	.tabs-tab {
 		padding: 0.625rem 0.25rem;

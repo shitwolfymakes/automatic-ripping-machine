@@ -1,4 +1,4 @@
-"""Every legal transition in spec §1's diagram, and every illegal one -> 409."""
+"""Every legal transition in the lifecycle diagram, and every illegal one -> 409."""
 
 from __future__ import annotations
 
@@ -149,7 +149,7 @@ def test_unenroll_refused_while_ripping(signing_key: bytes) -> None:
     [JobStatus.CREATED, JobStatus.AWAITING_USER_ID, JobStatus.IDENTIFIED, JobStatus.AWAITING_REVIEW],
 )
 def test_unenroll_refused_while_a_pre_rip_job_is_live(signing_key: bytes, job_status: JobStatus) -> None:
-    """D-016: removing the ripper kills its scan/identify/review pipeline, so
+    """Removing the ripper kills its scan/identify/review pipeline, so
     any non-terminal job blocks unenroll, not just RIPPING."""
     db = FakeSession()
     db.rows["drives"] = [_drive(DriveLifecycle.ENROLLED)]
@@ -251,7 +251,7 @@ def test_unenroll_503_without_a_manager(signing_key: bytes) -> None:
 
 
 def test_enroll_503_when_host_paths_are_unset(signing_key: bytes) -> None:
-    """A3: a present-but-disabled manager (docker is fine, ARM_HOST_*_PATH
+    """A present-but-disabled manager (docker is fine, ARM_HOST_*_PATH
     isn't set) must not be reported as "docker socket not available" — that
     would be a false diagnosis pointing the operator at the wrong fix."""
     db = FakeSession()
@@ -264,7 +264,7 @@ def test_enroll_503_when_host_paths_are_unset(signing_key: bytes) -> None:
 
 
 def test_enroll_unknown_drive_is_404_even_without_a_manager(signing_key: bytes) -> None:
-    """A4: _load_drive runs before require_ripper_manager, so an unknown drive_id is 404
+    """_load_drive runs before require_ripper_manager, so an unknown drive_id is 404
     regardless of docker's state — no manager to consult means nothing to
     say about docker either."""
     db = FakeSession()
@@ -282,7 +282,7 @@ def test_unenroll_unknown_drive_is_404_even_without_a_manager(signing_key: bytes
     assert r.status_code == 404
 
 
-# --- A1: concurrent enroll/unenroll on the same drive is serialized ---------
+# --- Concurrent enroll/unenroll on the same drive is serialized ---------
 #
 # `FakeSession` hands every reader the SAME Drive object instance (it's an
 # in-memory list, not a real per-transaction snapshot), and neither handler
@@ -381,7 +381,7 @@ async def test_concurrent_enroll_on_the_same_drive_is_serialized(signing_key: by
 
 
 async def test_concurrent_unenroll_waits_for_an_in_flight_enrolls_docker_call(signing_key: bytes) -> None:
-    """A1, the reachable regression: unenroll started while a concurrent
+    """The reachable regression: unenroll started while a concurrent
     enroll on the same drive is still inside its docker call must not run
     `manager.remove` until that `ensure_running` call (and its commit) has
     finished — otherwise the two docker operations overlap on the same

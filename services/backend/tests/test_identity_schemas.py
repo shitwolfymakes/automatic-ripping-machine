@@ -39,6 +39,7 @@ def test_field_maps_cover_resolver_managed_fields() -> None:
     assert set(TRACK_CLAIM_FIELDS.values()) == {
         "role",
         "title",
+        "edition",
         "season",
         "episode_number",
         "episode_number_end",

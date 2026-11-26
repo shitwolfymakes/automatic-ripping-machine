@@ -1,4 +1,4 @@
-"""TMDb episode-list provider (design spec 6.2, source `episodes_tmdb`).
+"""TMDb episode-list provider (source `episodes_tmdb`).
 
 Show ids come from `ExternalIds.tmdb` when already known, else are resolved
 via TMDb's `/find` endpoint from an IMDb or TVDB id. Auth is the v4 bearer
@@ -103,7 +103,7 @@ class TmdbEpisodes:
             raise SourceError("tmdb malformed response") from e
         if not episodes:
             # An existing season with no (usable) episodes is a degenerate/
-            # transient response (C7), not a definitive miss — the season
+            # transient response, not a definitive miss — the season
             # route itself 404s when the season truly doesn't exist.
             raise SourceError(f"tmdb season {number} for show {show_id} returned no episodes")
         episodes.sort(key=lambda ep: ep.number)

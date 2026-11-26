@@ -1,11 +1,11 @@
-export type JsonKind = 'object' | 'array' | 'string' | 'number' | 'boolean' | 'null';
+type JsonKind = 'object' | 'array' | 'string' | 'number' | 'boolean' | 'null';
 
-export interface JsonEntry {
+interface JsonEntry {
 	key: string;
 	value: unknown;
 }
 
-export interface ClassifiedJson {
+interface ClassifiedJson {
 	kind: JsonKind;
 	isContainer: boolean;
 	preview: string;

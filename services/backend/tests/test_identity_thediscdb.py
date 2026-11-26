@@ -227,7 +227,7 @@ def test_build_claims_non_dict_item_treated_as_missing() -> None:
 
 
 def test_build_claims_selects_only_main_and_episodes() -> None:
-    # Reuse the featurette fixture from the old test_apply_map_featurette_not_selected:
+    # Featurette fixture:
     # a Featurette entry must produce a claim WITHOUT `selected` in model_fields_set.
     match = _match(
         [

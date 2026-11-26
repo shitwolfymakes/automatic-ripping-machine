@@ -31,7 +31,7 @@ nvenc_driver_ok() {
     echo 0
 }
 
-# Phase 7b: enumerate GPUs host-side so the GPU-free backend can fill the `gpus`
+# Enumerate GPUs host-side so the GPU-free backend can fill the `gpus`
 # table from ARM_GPUS instead of probing hardware. Prints a compact JSON array
 # (empty `[]` if none). Every entry carries `"encoder_kinds":[]`: the backend
 # probes each device itself with a real test encode, so this only reports which
