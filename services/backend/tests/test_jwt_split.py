@@ -134,7 +134,7 @@ async def test_require_jwt_allows_must_change_user_on_password_route() -> None:
 
 
 def test_openapi_declares_the_auth_schemes() -> None:
-    """The wire contract names the scheme each route needs (D-183)."""
+    """The wire contract names the scheme each route needs."""
     from arm_backend.main import app
 
     schema = app.openapi()
@@ -152,7 +152,7 @@ def test_openapi_declares_the_auth_schemes() -> None:
 
 def test_openapi_splits_guest_reads_from_writer_only_operations() -> None:
     """Every UserJWT operation is either guest-readable (token optional, so an
-    extra empty requirement) or writer-only (token required) (D-244)."""
+    extra empty requirement) or writer-only (token required)."""
     from arm_backend.main import app
 
     user_ops = {

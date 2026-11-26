@@ -1,10 +1,10 @@
 """Sanitiser for human-readable path components.
 
 The MusicBrainz lookup for a track titled `"Crown / She Said"` (a real
-release on Collective Soul's *Dosage*) used to render
-`Collective Soul/Dosage/11 - Crown / She Said - flac.flac`, which ffmpeg
-interpreted as a non-existent subdirectory; every track in the queue
-shared the artist/album path, so a single dirty title blocked the whole
+release on Collective Soul's *Dosage*) would render
+`Collective Soul/Dosage/11 - Crown / She Said - flac.flac` unsanitised, which ffmpeg
+interprets as a non-existent subdirectory; every track in the queue
+shares the artist/album path, so a single dirty title would block the whole
 session's transcodes. `sanitize_path_component` strips the separator
 chars before they reach the path template.
 """

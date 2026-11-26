@@ -8,8 +8,7 @@ metadata:
 Docs, memory entries, code comments and `CLAUDE.md` describe the current state.
 When behavior changes, replace the old description with the new one instead of
 annotating it ("DONE", "no longer", "used to", "until X lands", "the old
-installer"). History belongs in git, the spec and plan files
-(`docs/superpowers/`, `docs/plans/`) and `CHANGELOG.md`.
+installer"). History belongs in git and `CHANGELOG.md`.
 
 **Why:** a developer reading the docs needs what is true now; transition notes
 age into noise. The owner stated this on 2026-10-09, after the installer

@@ -1,10 +1,16 @@
 import { describe, it, expect, afterEach } from 'vitest';
-import { renderComponent, screen, cleanup, fireEvent } from '$lib/test-utils';
+import { renderComponent, screen, cleanup, fireEvent } from '$lib/testing/render';
 import IdentityCardHarness from './IdentityCardHarness.svelte';
-import { IDENTITY_METAS, IDENTITY_DEFAULTS } from '$lib/utils/__tests__/fixtures/identity-metas';
+import { IDENTITY_METAS, IDENTITY_DEFAULTS } from '$lib/__fixtures__/identity-metas';
 
-// Branch pins for IdentityCard, beside IdentityCard.test.ts. No branch is
-// left open.
+// Branch pins for IdentityCard, beside IdentityCard.test.ts. Every branch of
+// IdentityCard's own code is covered. The coverage tool still reports arms and
+// functions that are Svelte's:
+// - each `id`, `data-testid` and `describedby` built from a key, and each help
+//   text `{...}`, compiles to `(...) ?? ''`; keys and help texts are strings.
+// - each `bind:value={values[...]}` compiles to a getter, a setter and one more
+//   generated function that never runs. The setters do run: the tolerance test
+//   below and the source toggles in IdentityCard.test.ts write through them.
 
 afterEach(() => cleanup());
 
@@ -27,6 +33,12 @@ describe('IdentityCard', () => {
 		const box = screen.getByRole('spinbutton', { name: 'Episode match tolerance (seconds)' });
 		await fireEvent.input(box, { target: { value: '120' } });
 		expect(valuesOf(component).episode_match_tolerance_seconds).toBe(120);
+	});
+
+	it('draws the episode sources without a tolerance box when its field is missing', () => {
+		render(without('episode_match_tolerance_seconds'));
+		expect(screen.getByRole('list', { name: 'Episode sources' })).toBeInTheDocument();
+		expect(screen.queryByRole('spinbutton', { name: 'Episode match tolerance (seconds)' })).toBeNull();
 	});
 
 	it('draws no box for a source list whose field is missing', () => {

@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { createRawSnippet } from 'svelte';
-import { renderComponent, screen, cleanup, fireEvent, waitFor } from '$lib/test-utils';
+import { renderComponent, screen, cleanup, fireEvent, waitFor } from '$lib/testing/render';
 
 const gotoMock = vi.fn();
 vi.mock('$app/navigation', () => ({ goto: (to: string) => gotoMock(to) }));

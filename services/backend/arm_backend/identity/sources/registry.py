@@ -1,5 +1,5 @@
 """Tier and default rank per identity source id (1 is the highest tier).
-PR 4 replaces the defaults with the operator's settings through the
+The operator's settings replace the defaults through the
 accessors below: `episode_sources_setting`/`enabled_episode_source_ids`,
 `hint_sources_setting`/`enabled_hint_sources`, `disabled_source_ids`,
 `source_ranks`, `episode_tolerance`, and `episode_auto_apply`."""
@@ -22,7 +22,7 @@ SOURCE_TIERS: dict[str, int] = {
     "preset": TIER_BY_CAPABILITY[Capability.PRESET],
 }
 
-# Within a tier, lower rank wins. Spec 4.5 default for disc_hint_sources. This
+# Within a tier, lower rank wins. The default for disc_hint_sources. This
 # is the rank map for the *default* settings only, kept as the oracle
 # `source_ranks(None)` is tested against; production code computes ranks from
 # the operator's config through `source_ranks()`, never by reading this map.
@@ -47,8 +47,8 @@ EPISODE_SOURCE_BY_SETTING: dict[str, str] = {
 # Every episode-match source id, in the settings map's order.
 EPISODE_SOURCE_IDS: tuple[str, ...] = tuple(EPISODE_SOURCE_BY_SETTING.values())
 
-# Episode-match provider settings in default rank order (spec 4.5 default;
-# PR 4 makes this the operator's setting).
+# Episode-match provider settings in default rank order (the operator's
+# setting overrides it).
 DEFAULT_EPISODE_SOURCES: tuple[str, ...] = ("tmdb", "tvmaze", "tvdb")
 
 # Episode-stage defaults, used when a Config row has no value (legacy/in-memory rows).
@@ -56,10 +56,10 @@ DEFAULT_EPISODE_SOURCES: tuple[str, ...] = ("tmdb", "tvmaze", "tvdb")
 EPISODE_TOLERANCE_S = 300
 # False: every episode-stage result is stored as a suggestion, never applied.
 EPISODE_AUTO_APPLY = True
-# Stop trying further episode sources once one applies at this coverage (spec 5: 80%).
+# Stop trying further episode sources once one applies at this coverage (80%).
 COVERAGE_STOP = 0.8
 
-# Disc-hint sources by setting value (spec 4.5 `disc_hint_sources`).
+# Disc-hint sources by setting value (`disc_hint_sources`).
 HINT_SOURCE_BY_SETTING: dict[str, Source] = {BD_TITLE.id: BD_TITLE, LABEL.id: LABEL}
 _DEFAULT_HINT_SETTING: tuple[str, ...] = tuple(s.id for s in HINT_SOURCES)
 
@@ -100,7 +100,7 @@ def enabled_hint_sources(cfg: Config | None) -> tuple[Source, ...]:
 
 
 def disabled_source_ids(cfg: Config | None) -> frozenset[str]:
-    """Ranked-capability sources the operator unchecked (spec 4.5: membership = enabled)."""
+    """Ranked-capability sources the operator unchecked (membership = enabled)."""
     every = set(EPISODE_SOURCE_IDS) | set(HINT_SOURCE_BY_SETTING)
     enabled = set(enabled_episode_source_ids(cfg)) | {s.id for s in enabled_hint_sources(cfg)}
     return frozenset(every - enabled)
@@ -130,7 +130,7 @@ def episode_auto_apply(cfg: Config | None) -> bool:
 
 
 # ---------------------------------------------------------------------------
-# Online sources (spec §5.2). `metadata.source_selection.online_source_ids`
+# Online sources. `metadata.source_selection.online_source_ids`
 # reads the operator's `movie_sources` / `episode_sources` / `music_sources`
 # columns; the tuples below are the defaults it falls back to for a row that
 # has no value.
@@ -174,8 +174,8 @@ def music_auto_apply(cfg: Config | None) -> bool:
 
 
 def auto_apply_for(cfg: Config | None, kind: str) -> bool:
-    """Whether a confident match of this kind is applied by identify (spec
-    D-10: one switch per media type; TV shares the episode switch). An
+    """Whether a confident match of this kind is applied by identify (one
+    switch per media type; TV shares the episode switch). An
     unknown kind applies: identify never holds a hit it cannot classify."""
     if kind == "movie":
         return movie_auto_apply(cfg)

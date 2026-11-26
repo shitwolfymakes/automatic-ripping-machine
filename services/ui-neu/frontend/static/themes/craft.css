@@ -27,7 +27,7 @@
 }
 
 /* The .nav block is a flex column, where adjacent margins do NOT
-   collapse (the original block-level <nav> let them). This scheme's
+   collapse (a block-level <nav> would let them). This scheme's
    inter-link spacing therefore rides the nav's own gap instead of a
    margin on each link, which would otherwise double. */
 [data-scheme="craft"] aside:where([data-sidebar]) .nav {

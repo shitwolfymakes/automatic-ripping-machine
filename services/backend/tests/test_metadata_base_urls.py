@@ -1,4 +1,4 @@
-"""Tier-3: metadata base URLs are env-overridable, defaulting to current literals."""
+"""Metadata base URLs are env-overridable, defaulting to current literals."""
 
 import httpx
 import pytest

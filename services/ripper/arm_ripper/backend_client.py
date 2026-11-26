@@ -165,7 +165,7 @@ class BackendClient:
         return JobView.model_validate(r.json())
 
     async def get_in_flight_job(self, drive_id: str) -> JobView | None:
-        """Phase 9 — boot-probe lookup. Returns None on 404."""
+        """Boot-probe lookup. Returns None on 404."""
         return await self._get_or_none(f"/api/ripper/drives/{drive_id}/in-flight-job", JobView)
 
     async def get_current_job(self, drive_id: str) -> JobView | None:
@@ -178,7 +178,7 @@ class BackendClient:
         return await self._get_or_none(f"/api/ripper/drives/{drive_id}/held-job", HeldJobView)
 
     async def recovery_abandon(self, job_id: str) -> JobView:
-        """Abandon a counting-down held job on reboot recovery (review gate §6.3)."""
+        """Abandon a counting-down held job on reboot recovery."""
         r = await self._client.post(f"/api/ripper/jobs/{job_id}/recovery-abandon")
         r.raise_for_status()
         return JobView.model_validate(r.json())
@@ -190,13 +190,13 @@ class BackendClient:
         — a flapping backend should not silently disable ripping.
         """
         # drive_id lets the backend apply this drive's own auto-rip override
-        # (Drive.drive_mode) over the global default (setup spec 2026-10-01 D1).
+        # (Drive.drive_mode) over the global default.
         r = await self._client.get("/api/ripper/config", params={"drive_id": self._drive_id})
         r.raise_for_status()
         return RipperConfigView.model_validate(r.json())
 
     async def resume(self, job_id: str) -> RipStartResponse:
-        """Phase 9 — per-job crash-recovery reset. Same response shape as
+        """Per-job crash-recovery reset. Same response shape as
         rip-start so the ripper's existing flow continues unchanged.
         """
         r = await self._client.post(f"/api/ripper/jobs/{job_id}/resume")

@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { readable } from 'svelte/store';
-import { renderComponent, screen, fireEvent, cleanup, waitFor } from '$lib/test-utils';
+import { renderComponent, screen, fireEvent, cleanup, waitFor } from '$lib/testing/render';
 import type { DriveView, SetupView } from '$lib/types/api.gen';
 
 // Branch pins for DrivesStep, beside steps-behaviour.test.ts. No branch is
@@ -126,7 +126,7 @@ describe('DrivesStep branches', () => {
 		setup([drive({})]);
 		updateDrive.mockResolvedValue({});
 		renderComponent(DrivesStep, { props: { view: view() } });
-		const name = await screen.findByLabelText(/friendly name/i);
+		const name = await screen.findByLabelText(/^friendly name/i);
 		const before = fetchDrives.mock.calls.length;
 		await fireEvent.input(name, { target: { value: 'Living room' } });
 		await fireEvent.blur(name);

@@ -1,4 +1,4 @@
-"""Ripper source mode: ARM_SOURCE_PATH replaces the old manual-trigger hook.
+"""Ripper source mode: ARM_SOURCE_PATH selects a one-shot pipeline run instead of the poll loop.
 
 `run_source_mode` is the one-shot entry point `amain` calls when the backend
 spawned this container for an ISO rip (no ARM_DRIVE_DEV, no optical poll loop):

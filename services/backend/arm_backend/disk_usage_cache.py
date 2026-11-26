@@ -1,4 +1,4 @@
-"""Cached disk usage via subprocess-based refresh (ported from neu).
+"""Cached disk usage via subprocess-based refresh.
 
 statvfs() blocks indefinitely on NFS mounts in kernel D-state. This module
 refreshes disk usage in a SUBPROCESS with a hard timeout; a stalled subprocess

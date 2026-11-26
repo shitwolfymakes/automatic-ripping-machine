@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
 	import { clearPasswordMustChange } from '$lib/stores/auth';
-	import ChangePasswordForm from '$lib/components/settings/ChangePasswordForm.svelte';
+	import ChangePasswordForm from '$lib/components/shared/ChangePasswordForm.svelte';
 
 	function onsuccess() {
 		clearPasswordMustChange();

@@ -1,5 +1,5 @@
 <script lang="ts">
-	import type { DocsTocEntry } from '$lib/docs/api';
+	import type { DocsTocEntry } from '$lib/help/api';
 
 	interface Props {
 		toc: DocsTocEntry[];
@@ -25,6 +25,8 @@
 		   gap above the bottom edge */
 		max-height: calc(100dvh - var(--shell-header-height, 3.5rem) - var(--shell-footer-height, 0px) - 3rem);
 		overflow-y: auto;
+		/* keeps the column's scrollbar off the entry links */
+		padding-right: 0.75rem;
 	}
 	.help-toc {
 		display: flex;

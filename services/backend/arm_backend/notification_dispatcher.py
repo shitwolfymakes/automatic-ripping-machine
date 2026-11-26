@@ -1,4 +1,4 @@
-"""Phase 11 — message dispatcher core.
+"""Message dispatcher core.
 
 Single asyncio task started in the FastAPI lifespan, mirroring the shape
 of `TranscodeDispatcher`. Each tick:
@@ -79,7 +79,7 @@ NOTABLE_EVENT_TYPES: frozenset[str] = NOTIFIABLE_EVENT_TYPES | DEFAULT_INBOX_EVE
 async def _unsent_events(db: AsyncSession) -> Sequence[Event]:
     """Every notable event not yet notified, oldest first."""
     # Filter on notified_at in SQL: the events table is never pruned,
-    # so loading every notable event each tick grows with history (D-168).
+    # so loading every notable event each tick grows with history.
     return (
         (
             await db.execute(

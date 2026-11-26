@@ -6,11 +6,10 @@ carry an AACS Disc ID; a CD has a MusicBrainz Disc ID; DVDs and BDs
 carry a matrix256v1 structural hash; a TheDiscDB content hash identifies a
 disc in that database. New algos slot in without a schema change.
 
-Reverse lookup is the medium-term motivation: "have I ripped this disc
-before?" needs an index on (algo, value), so this table is shaped for
-that lookup pattern. (No reverse lookups in v3.0 itself yet — but the
-canonical algo names (crc64, aacs, musicbrainz, matrix256, thediscdb) need to be
-stable now to avoid migrating later.)
+Reverse lookup is why the table is shaped this way: "have I ripped this disc
+before?" needs an index on (algo, value). The canonical algo names (crc64,
+aacs, musicbrainz, matrix256, thediscdb) must stay stable so stored rows keep
+matching.
 """
 
 from datetime import datetime

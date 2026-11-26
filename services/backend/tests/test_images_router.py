@@ -463,7 +463,7 @@ def test_redirect_without_location_is_unavailable(client, monkeypatch):
 
 
 def test_negative_cache_drops_expired_entries_on_write() -> None:
-    """D-160: expired negative entries are pruned instead of kept forever."""
+    """Expired negative entries are pruned instead of kept forever."""
     images_router._NEGATIVE_CACHE.clear()
     images_router._negative_cache_put("https://image.tmdb.org/a.jpg", 0.0)
     images_router._negative_cache_put("https://image.tmdb.org/b.jpg", 10.0)
@@ -474,7 +474,7 @@ def test_negative_cache_drops_expired_entries_on_write() -> None:
 
 
 def test_negative_cache_is_capped_and_evicts_oldest(monkeypatch) -> None:
-    """D-160: distinct failing URLs cannot grow the dict past the cap."""
+    """Distinct failing URLs cannot grow the dict past the cap."""
     images_router._NEGATIVE_CACHE.clear()
     monkeypatch.setattr(images_router, "_NEGATIVE_CACHE_MAX_ENTRIES", 3)
     for i in range(5):

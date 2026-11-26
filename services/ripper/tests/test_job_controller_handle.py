@@ -81,7 +81,7 @@ async def test_eject_skipped_when_drive_is_absent(monkeypatch, caplog) -> None:
 
 async def test_post_rip_eject_uses_the_handles_current_node(monkeypatch, tmp_path) -> None:
     """The node captured at rip start is stale after a mid-rip renumbering;
-    eject must follow the handle (followups: Plan 1 drill finding)."""
+    eject must follow the handle."""
     monkeypatch.setattr(raw_dir_module, "RAW_ROOT", tmp_path)
     monkeypatch.setattr(disc_rip_module, "EJECT_GRACE_SECONDS", 0.0)
     ejected: list[str] = []

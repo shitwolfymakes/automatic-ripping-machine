@@ -42,7 +42,7 @@ async def test_register_retries_transport_errors_then_returns_the_id(monkeypatch
 
 
 async def test_register_refused_retries_slowly_and_logs_once(monkeypatch, caplog) -> None:
-    """E1: a register refusal is self-healing, not fatal — retry slowly
+    """A register refusal is self-healing, not fatal — retry slowly
     (REGISTER_REFUSED_RETRY_SECONDS) instead of parking forever. An
     unchanged refusal is logged once at ERROR (repeats downgrade to DEBUG,
     so a stuck enrollment doesn't spam the log every minute)."""

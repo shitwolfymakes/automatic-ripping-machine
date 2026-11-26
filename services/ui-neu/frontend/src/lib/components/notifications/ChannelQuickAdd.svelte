@@ -1,12 +1,18 @@
 <script lang="ts">
+	import { errorMessage } from '$lib/utils/errors';
 	import { onMount } from 'svelte';
 	import type { Catalog } from '$lib/types/notifications';
 	import { fetchServices, fetchEventTypes, type EventTypeInfo } from '$lib/api/channels';
 	import { saveArmConfig } from '$lib/api/settings';
 	import AddChannelForm from './AddChannelForm.svelte';
-	import { createChannelFromBody, runTest, testUnsavedBody, type AddChannelBody } from './channelActions';
-	import StatusStrip from '$lib/components/StatusStrip.svelte';
-	import Glyph from '$lib/components/Glyph.svelte';
+	import {
+		createChannelFromBody,
+		runTest,
+		testUnsavedBody,
+		type AddChannelBody
+	} from '../../notifications/channel-actions';
+	import StatusStrip from '$lib/components/shared/StatusStrip.svelte';
+	import Glyph from '$lib/components/shared/Glyph.svelte';
 
 	// One phone or chat channel, added without leaving the setup walkthrough.
 	// The same AddChannelForm Settings > Notifications uses, in its compact
@@ -21,7 +27,7 @@
 		try {
 			[catalog, eventTypes] = await Promise.all([fetchServices(), fetchEventTypes()]);
 		} catch (e) {
-			loadError = e instanceof Error ? e.message : 'Could not load the notification services.';
+			loadError = errorMessage(e, 'Could not load the notification services.');
 		}
 	});
 

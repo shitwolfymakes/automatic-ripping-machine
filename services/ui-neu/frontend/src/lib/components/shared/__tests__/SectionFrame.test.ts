@@ -1,0 +1,94 @@
+import { describe, it, expect, afterEach } from 'vitest';
+import { renderComponent, screen, cleanup } from '$lib/testing/render';
+import SectionFrame from '../SectionFrame.svelte';
+import { createRawSnippet } from 'svelte';
+
+function textSnippet(text: string) {
+	return createRawSnippet(() => ({
+		render: () => `<p>${text}</p>`
+	}));
+}
+
+describe('SectionFrame', () => {
+	afterEach(() => cleanup());
+
+	describe('rendering', () => {
+		it('renders children content', () => {
+			renderComponent(SectionFrame, {
+				props: { children: textSnippet('Hello World') }
+			});
+			expect(screen.getByText('Hello World')).toBeInTheDocument();
+		});
+
+		it('renders label when provided', () => {
+			renderComponent(SectionFrame, {
+				props: { label: 'Test Section', children: textSnippet('content') }
+			});
+			expect(screen.getByText('Test Section')).toBeInTheDocument();
+		});
+
+		it('does not render label when empty', () => {
+			const { container } = renderComponent(SectionFrame, {
+				props: { children: textSnippet('content') }
+			});
+			const topBar = container.querySelector('.section-frame-bar-top');
+			expect(topBar?.querySelector('span')).toBeNull();
+		});
+	});
+
+	describe('props', () => {
+		it('sets data-frame-variant attribute', () => {
+			const { container } = renderComponent(SectionFrame, {
+				props: { variant: 'compact', children: textSnippet('content') }
+			});
+			const frame = container.querySelector('[data-frame-variant]');
+			expect(frame).toHaveAttribute('data-frame-variant', 'compact');
+		});
+
+		it('renders sidebar blocks only in full variant', () => {
+			const { container } = renderComponent(SectionFrame, {
+				props: { variant: 'full', children: textSnippet('content') }
+			});
+			expect(container.querySelector('.section-frame-sidebar')).toBeInTheDocument();
+		});
+
+		it('does not render sidebar in compact variant', () => {
+			const { container } = renderComponent(SectionFrame, {
+				props: { variant: 'compact', children: textSnippet('content') }
+			});
+			expect(container.querySelector('.section-frame-sidebar')).toBeNull();
+		});
+
+		it('sets inline --frame-accent when accent is provided', () => {
+			const { container } = renderComponent(SectionFrame, {
+				props: { accent: '#99f', children: textSnippet('content') }
+			});
+			const frame = container.querySelector('.section-frame') as HTMLElement;
+			expect(frame.style.getPropertyValue('--frame-accent')).toBe('#99f');
+		});
+
+		it('omits inline --frame-accent when accent is not provided (theme token can apply)', () => {
+			const { container } = renderComponent(SectionFrame, {
+				props: { children: textSnippet('content') }
+			});
+			const frame = container.querySelector('.section-frame') as HTMLElement;
+			expect(frame.style.getPropertyValue('--frame-accent')).toBe('');
+		});
+
+		it('sets data-frame-emphasis only when emphasis is true', () => {
+			const { container } = renderComponent(SectionFrame, {
+				props: { emphasis: true, children: textSnippet('content') }
+			});
+			const frame = container.querySelector('.section-frame') as HTMLElement;
+			expect(frame).toHaveAttribute('data-frame-emphasis');
+		});
+
+		it('omits data-frame-emphasis by default', () => {
+			const { container } = renderComponent(SectionFrame, {
+				props: { children: textSnippet('content') }
+			});
+			const frame = container.querySelector('.section-frame') as HTMLElement;
+			expect(frame).not.toHaveAttribute('data-frame-emphasis');
+		});
+	});
+});
