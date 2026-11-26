@@ -1,3 +1,9 @@
+// Every branch of WorkerPoolPanel's own code is covered. The coverage tool
+// still reports ten open arms that are Svelte's: each text `{...}` compiles to
+// `(...) ?? ''`, and none of these values is ever null. They are the worker
+// count and max_parallel, the GPU counts and the queued count, the task id,
+// claimed_by (inside its own #if), progress_pct (twice) and the heartbeat age
+// (inside its own #if).
 import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
 import { renderComponent, screen, cleanup } from '$lib/testing/render';
 import type { GpuView, TranscodeStatsView, TranscodeWorkerView } from '$lib/types/api.gen';
@@ -142,7 +148,7 @@ describe('WorkerPoolPanel', () => {
 
 	it('shows the percentage and the time since the heartbeat', () => {
 		renderPanel({ workers: [makeWorker({ progress_pct: 42 })] });
-		expect(screen.getByText(/42%/)).toHaveTextContent('42%· 30s since heartbeat');
+		expect(screen.getByText(/42%/)).toHaveTextContent('42% · 30s since heartbeat');
 	});
 
 	it('shows only the percentage when the heartbeat cannot be parsed', () => {

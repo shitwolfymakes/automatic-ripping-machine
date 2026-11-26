@@ -103,12 +103,21 @@
 
 	// ── Sessions view callbacks ────────────────────────────────────────────────
 
+	// A preset created inline belongs to the builder it was created from, so
+	// each opening of the builder starts without one.
+	function forgetPreselectedPresets() {
+		preselectRipId = undefined;
+		preselectTranscodeId = undefined;
+	}
+
 	function openNewSession() {
+		forgetPreselectedPresets();
 		editing = null;
 		builderOpen = true;
 	}
 
 	function openEditSession(s: JoinedSession) {
+		forgetPreselectedPresets();
 		editing = s;
 		builderOpen = true;
 	}

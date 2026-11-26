@@ -1,4 +1,5 @@
-import type { JobView, JobStatus, TranscodeTaskView, IsoPrepareView } from '$lib/types/api.gen';
+import type { JobView, JobStatus, TranscodeTaskView, TranscodeStatsView, IsoPrepareView } from '$lib/types/api.gen';
+import { taskCount } from '$lib/transcode/stats';
 import { fetchConfigView } from './config';
 import { fetchDrives } from './drives';
 import { fetchIsoPreparing } from './iso';
@@ -16,12 +17,10 @@ import { fetchNotificationCount } from './notifications';
 // (STICKY_FIELDS / TWO_STRIKE_FIELDS) holds last-good values through blips.
 // ---------------------------------------------------------------------------
 
-// Transcoder summary as the sidebar reads it. v3's TranscodeStatsView has no
-// worker_running/pending fields, so those stay undefined; the dashboard badges
-// optional-chain them.
+// Transcoder summary as the header reads it: how many transcode tasks are
+// queued.
 interface TranscoderStats {
-	worker_running?: boolean | null;
-	pending?: number | null;
+	pending: number;
 }
 
 /** An ISO rip whose ripper is scanning or unpacking the image: no job yet. */
@@ -164,6 +163,10 @@ function selectPreparing(
 		.map((p) => ({ ...p, iso_name: isoSources[p.drive_id], iso_kind: isoSourceKinds[p.drive_id] }));
 }
 
+function transcoderStatsOf(stats: TranscodeStatsView): TranscoderStats {
+	return { pending: taskCount(stats, 'queued') };
+}
+
 function activeTranscodesOf(transcodes: TranscodeTaskView[] | null): TranscodeTaskView[] {
 	return (transcodes ?? []).filter((t) => IN_PROGRESS_TRANSCODE_STATUSES.has(t.status));
 }
@@ -218,9 +221,7 @@ export async function fetchDashboardSnapshot(): Promise<DashboardSnapshot> {
 		makemkv_key_valid: config?.makemkv_key_valid ?? null,
 		makemkv_key_checked_at: config?.makemkv_key_checked_at ?? null,
 		transcoder_online: transcoderOnline,
-		// v3 TranscodeStatsView has no worker_running/pending — surface nothing
-		// rather than a wrong value; the badges optional-chain these.
-		transcoder_stats: transcoderStatsRes.status === 'fulfilled' ? {} : null,
+		transcoder_stats: orNull(settledValue(transcoderStatsRes), transcoderStatsOf),
 		active_transcodes: activeTranscodesOf(transcodes)
 	};
 }

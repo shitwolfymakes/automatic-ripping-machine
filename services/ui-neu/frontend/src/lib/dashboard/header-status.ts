@@ -2,11 +2,13 @@
 // mobile stats panel.
 import type { DashboardData } from '$lib/api/dashboard';
 
-export function transcoderDotStatus(
-	d: Pick<DashboardData, 'transcoder_online' | 'transcoder_stats'>
-): 'ok' | 'warn' | 'off' {
-	if (d.transcoder_online && (d.transcoder_stats?.worker_running ?? true)) return 'ok';
-	return d.transcoder_online ? 'warn' : 'off';
+export function transcoderDotStatus(d: Pick<DashboardData, 'transcoder_online'>): 'ok' | 'off' {
+	return d.transcoder_online ? 'ok' : 'off';
+}
+
+/** The "N transcoding" count: in-progress tasks only, since queued ones have their own "N queued" count. */
+export function transcodingCount(d: Pick<DashboardData, 'active_transcodes'>): number {
+	return d.active_transcodes.filter((t) => t.status === 'in_progress').length;
 }
 
 /** One row of the mobile stats panel's service list. */
@@ -21,7 +23,7 @@ interface ServiceRow {
  * status.
  */
 export function serviceRows(
-	d: Pick<DashboardData, 'arm_online' | 'db_available' | 'transcoder_online' | 'transcoder_stats' | 'makemkv_key_valid'>
+	d: Pick<DashboardData, 'arm_online' | 'db_available' | 'transcoder_online' | 'makemkv_key_valid'>
 ): ServiceRow[] {
 	return [
 		{

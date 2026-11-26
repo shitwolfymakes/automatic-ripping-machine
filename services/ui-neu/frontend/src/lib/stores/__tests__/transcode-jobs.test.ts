@@ -144,16 +144,46 @@ describe('TranscodeJobs.switchTab', () => {
 		expect(fetchJobsMock).toHaveBeenCalledWith({ status: 'queued' });
 	});
 
-	it('caches a response that lands after a switch under the new tab', async () => {
+	it('drops a response for the previous tab that lands after a switch', async () => {
 		const { jobs, cache } = await load();
-		let resolve!: (v: TranscodeTaskView[]) => void;
-		fetchJobsMock.mockReturnValueOnce(new Promise((r) => (resolve = r)));
-		const pending = jobs.load();
+		let resolveAll!: (v: TranscodeTaskView[]) => void;
+		fetchJobsMock.mockReturnValueOnce(new Promise((r) => (resolveAll = r)));
+		const allLoad = jobs.load();
+		fetchJobsMock.mockResolvedValueOnce([NEW]);
 		jobs.switchTab('done');
-		resolve([OLD]);
-		await pending;
-		expect(cache.getJobsCache('done')).toEqual([OLD]);
+		await vi.waitFor(() => expect(jobs.jobs).toEqual([NEW]));
+		resolveAll([OLD]);
+		await allLoad;
+		expect(jobs.jobs).toEqual([NEW]);
+		expect(cache.getJobsCache('done')).toEqual([NEW]);
 		expect(cache.getJobsCache('all')).toBeNull();
+		expect(jobs.loading).toBe(false);
+	});
+
+	it('drops a failure for the previous tab that lands after a switch', async () => {
+		const { jobs } = await load();
+		let rejectAll!: (e: Error) => void;
+		fetchJobsMock.mockReturnValueOnce(new Promise((_, r) => (rejectAll = r)));
+		const allLoad = jobs.load();
+		fetchJobsMock.mockResolvedValueOnce([NEW]);
+		jobs.switchTab('done');
+		await vi.waitFor(() => expect(jobs.jobs).toEqual([NEW]));
+		rejectAll(new Error('boom'));
+		await allLoad;
+		expect(jobs.error).toBeNull();
+		expect(jobs.jobs).toEqual([NEW]);
+	});
+
+	it('keeps the loading flag up while a newer load is still in flight', async () => {
+		const { jobs } = await load();
+		let resolveFirst!: (v: TranscodeTaskView[]) => void;
+		fetchJobsMock.mockReturnValueOnce(new Promise((r) => (resolveFirst = r)));
+		const first = jobs.load();
+		fetchJobsMock.mockReturnValueOnce(new Promise(() => {}));
+		jobs.switchTab('failed');
+		resolveFirst([OLD]);
+		await first;
+		expect(jobs.loading).toBe(true);
 	});
 });
 
@@ -188,5 +218,23 @@ describe('TranscodeJobs polling', () => {
 	it('does nothing when stopped with no timer', async () => {
 		const { jobs } = await load();
 		expect(() => jobs.stopPolling()).not.toThrow();
+	});
+
+	it('finishPolling stops the poll and loads once more without the loading flag', async () => {
+		const { jobs } = await load({ tab: 'all', data: [OLD] });
+		jobs.startPolling();
+		fetchJobsMock.mockResolvedValue([NEW]);
+		jobs.finishPolling();
+		expect(fetchJobsMock).toHaveBeenCalledTimes(1);
+		expect(jobs.loading).toBe(false);
+		await vi.advanceTimersByTimeAsync(10000);
+		expect(fetchJobsMock).toHaveBeenCalledTimes(1);
+		expect(jobs.jobs).toEqual([NEW]);
+	});
+
+	it('finishPolling does nothing when no poll runs', async () => {
+		const { jobs } = await load({ tab: 'all', data: [OLD] });
+		jobs.finishPolling();
+		expect(fetchJobsMock).not.toHaveBeenCalled();
 	});
 });
