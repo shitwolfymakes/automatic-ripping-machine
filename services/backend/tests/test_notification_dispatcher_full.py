@@ -5,8 +5,9 @@ the run-loop exception + tick-timeout paths, and _load_job(None).
 from __future__ import annotations
 
 import asyncio
-
-
+import http.server
+import threading
+from collections.abc import Iterator
 from typing import Any
 
 import pytest
@@ -106,7 +107,7 @@ async def test_run_loop_swallows_tick_error_then_stops(monkeypatch: pytest.Monke
 
 
 async def test_real_notifier_raises_when_async_notify_fails(monkeypatch: pytest.MonkeyPatch) -> None:
-    """apprise signals failure by RETURN VALUE (False/None), never raising —
+    """apprise signals failure by RETURN VALUE (a falsy result), never raising —
     the notifier must convert that into an exception or failures are
     unrecordable (last_success_at/dispatch_log lie)."""
 
@@ -125,9 +126,40 @@ async def test_real_notifier_raises_when_async_notify_fails(monkeypatch: pytest.
         await RealAppriseNotifier("").notify(["json://localhost"], "T", "B")
 
 
+class _OkHandler(http.server.BaseHTTPRequestHandler):
+    def do_POST(self) -> None:
+        self.rfile.read(int(self.headers["Content-Length"]))
+        self.send_response(200 if self.path == "/ok" else 500)
+        self.end_headers()
+
+    def log_message(self, *args: Any) -> None:
+        pass
+
+
+@pytest.fixture
+def json_server() -> Iterator[str]:
+    """A local endpoint for apprise's json:// plugin: `/ok` answers 200,
+    any other path 500."""
+    srv = http.server.HTTPServer(("127.0.0.1", 0), _OkHandler)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    yield f"json://127.0.0.1:{srv.server_port}"
+    srv.shutdown()
+
+
+async def test_real_notifier_accepts_apprise_success(json_server: str) -> None:
+    """apprise v2 returns an AppriseResult, not `True`, so success must be
+    read through bool(), not identity."""
+    await RealAppriseNotifier("").notify([f"{json_server}/ok"], "T", "B")
+
+
+async def test_real_notifier_raises_on_partial_delivery(json_server: str) -> None:
+    with pytest.raises(apprise_notifier.AppriseDeliveryError, match="PARTIAL"):
+        await RealAppriseNotifier("").notify([f"{json_server}/ok", f"{json_server}/fail"], "T", "B")
+
+
 async def test_real_notifier_raises_on_invalid_url(monkeypatch: pytest.MonkeyPatch) -> None:
     """ap.add() returns False for a URL apprise can't parse; an empty bag
-    makes async_notify return None. Both must surface as failures."""
+    makes async_notify return a NOMATCH result. Both must surface as failures."""
 
     class _RejectingAdd(_FakeApprise):
         def add(self, url: str) -> bool:
