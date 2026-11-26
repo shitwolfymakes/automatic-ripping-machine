@@ -23,7 +23,7 @@ const makeTranscode = (id = 't1', name = 'tc t1') => ({
 	is_builtin: false,
 	tool: 'handbrake' as const,
 	preset_ref: null,
-	preset_json: null,
+	handbrake_settings: null,
 	container: 'mkv' as const,
 	encoder: 'any_h265',
 	extra_args: null,
@@ -68,6 +68,12 @@ describe('ripPresetCopy', () => {
 });
 
 describe('transcodePresetCopy', () => {
+	it('keeps the HandBrake settings, so a clone of a tuned preset encodes the same', () => {
+		const settings = { video: { quality: 20 } };
+		const p = { ...makeTranscode(), handbrake_settings: settings } as unknown as TranscodePresetView;
+		expect(transcodePresetCopy(p).handbrake_settings).toEqual(settings);
+	});
+
 	it('copies the whole body, carrying preset_ref and extra_args', () => {
 		const p = { ...makeTranscode(), preset_ref: 'Fast 1080p30', extra_args: '--foo' } as TranscodePresetView;
 		expect(transcodePresetCopy(p)).toEqual({
@@ -75,6 +81,7 @@ describe('transcodePresetCopy', () => {
 			media_type: 'movie',
 			tool: 'handbrake',
 			preset_ref: 'Fast 1080p30',
+			handbrake_settings: null,
 			container: 'mkv',
 			encoder: 'any_h265',
 			extra_args: '--foo'

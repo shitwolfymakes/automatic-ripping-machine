@@ -78,7 +78,7 @@ function createTranscodePreset(overrides: Partial<TranscodePresetView> = {}): Tr
 		is_builtin: false,
 		tool: 'handbrake',
 		preset_ref: null,
-		preset_json: null,
+		handbrake_settings: null,
 		...overrides
 	} as TranscodePresetView;
 }

@@ -1,6 +1,7 @@
 // Settings > Session Routing's grid: its media and disc rows, and the rules
 // that pick a row's route and the sessions it may offer.
 import type { DiscType, MediaType, SessionRouteView, SessionView } from '$lib/types/api.gen';
+import { humanizeMediaType } from '$lib/utils/preset-labels';
 import { mediaTypesCompatible } from '$lib/utils/sessions';
 
 /** The grid's media-type rows, in display order. */
@@ -87,4 +88,44 @@ export function sessionNameFor(sessions: readonly SessionView[], sessionId: stri
 /** A disc type as itself, or "Any disc" for the wildcard. */
 export function discLabel(discType: DiscType | null): string {
 	return discType ?? 'Any disc';
+}
+
+export interface RouteCellView {
+	value: string;
+	className: string;
+	disabled: boolean;
+}
+
+/** How one grid cell renders: the routed session id ("" for None), the class
+ * that marks it set or empty, and whether it is locked (not an admin, the
+ * row in flight, or no session on offer). */
+export function routeCellView(
+	route: SessionRouteView | undefined,
+	optionCount: number,
+	pending: boolean,
+	isAdmin: boolean
+): RouteCellView {
+	return {
+		value: route?.session_id ?? '',
+		className: `routing-cell ${route ? 'routing-cell-set' : 'routing-cell-empty'}`,
+		disabled: !isAdmin || pending || optionCount === 0
+	};
+}
+
+/** The label of an option in a cell's select. */
+export function sessionOptionLabel(session: SessionView): string {
+	return `${session.name}${session.is_builtin ? ' (built-in)' : ''}`;
+}
+
+export interface OtherRouteView {
+	label: string;
+	name: string;
+}
+
+/** An Other-routes row: the "Media / Disc" label and the routed session's name. */
+export function otherRouteView(route: SessionRouteView, sessions: readonly SessionView[]): OtherRouteView {
+	return {
+		label: `${humanizeMediaType(route.media_type)} / ${discLabel(route.disc_type)}`,
+		name: sessionNameFor(sessions, route.session_id)
+	};
 }

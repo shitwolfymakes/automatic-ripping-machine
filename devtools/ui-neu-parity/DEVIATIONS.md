@@ -130,7 +130,8 @@ baseline.
 A spec-compliance review found literal `rgb()`/hex/`white`/`black` values in scoped `<style>` blocks,
 which the strict token set forbids outright ("no token matches" is not an exemption - the nearest
 role is used and any visible gap is recorded here). Fixed in `PresetRow.svelte`, `SessionCard.svelte`,
-and `PresetEditor.svelte`:
+and `PresetEditor.svelte` (PresetRow and SessionCard have since become DataTable rows, defined in
+`tableColumns.ts` and rendered by `SessionsHub`):
 - BUILT-IN tag: literal Tailwind amber (`rgb(254 243 199)`/`rgb(180 83 9)` light,
   `rgb(120 53 15 / .3)`/`rgb(252 211 77)` dark, added in fix round 1) replaced with
   `--color-warning-soft`/`--color-on-warning-soft` in both files.
@@ -163,7 +164,7 @@ it replaces; the Clone button border is now primary-blue-tinted instead of neutr
 same pre-existing header/tab-strip sub-pixel noise already on record - no other region differs.
 
 - `dark__desktop__settings-sessions.png`: BUILT-IN badge amber-100/700 -> --color-warning-soft/--color-on-warning-soft, and its `rounded` (4px) -> badge-sm's --radius-sm (2px): the radius scale has no 4px step (2px/6px), so both the shade and the radius are named collapses on the same 20px badge; Clone button gray-300/600 -> btn defaults (--color-border-strong/--color-primary-text); recipe strip bg-black/10 and /20 -> color-mix(--color-backdrop 20%/33%, transparent); disabled Delete button .btn:disabled opacity 0.4 over .btn-danger's already-30%-alpha-mixed border/text
-- `default__desktop__settings-sessions.png` (1.788%): the same four collapses as the entry above, repeated once per visible session card down the page (Task 8b's own surface, the SessionsHub filter bar and TYPE chip row, was made geometry- and fill-exact against baseline by DOM measurement; the residual mass sits on the SessionCard rows, whose components the 8b commits never touched).
+- `default__desktop__settings-sessions.png` (1.788%): the same four collapses as the entry above, repeated once per visible session card down the page (Task 8b's own surface, the SessionsHub filter bar and TYPE chip row, was made geometry- and fill-exact against baseline by DOM measurement; the residual mass sits on the session rows (formerly SessionCard, now DataTable rows from `tableColumns.ts`), whose components the 8b commits never touched).
 - `default__mobile__settings-sessions.png` (2.449%): same; the mobile ratio runs higher because each card fills the narrow viewport, so the per-card collapses cover a larger pixel fraction.
 - `dark__mobile__settings-sessions.png` (2.826%): same, dark twin.
 

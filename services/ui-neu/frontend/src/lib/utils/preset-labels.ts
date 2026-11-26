@@ -1,5 +1,5 @@
 // The labels and one-line summaries the sessions screens show for a
-// session's or preset's settings, shared by SessionCard and PresetRow.
+// session's or preset's settings, shared by the Sessions and preset tables.
 // Each label shows an unknown value as it is, and a missing one as -.
 
 import type { RipPresetView, TranscodePresetView } from '$lib/types/api.gen';
@@ -29,6 +29,9 @@ const MEDIA_TYPE_LABELS: ReadonlyMap<string, string> = new Map([
 	['data', 'Data'],
 	['iso', 'ISO']
 ]);
+
+/** The label of the Video group: movie and TV transcode presets, which fit sessions of either. */
+export const VIDEO_GROUP_LABEL = 'Video';
 
 /** A media type's label. */
 export function humanizeMediaType(v: string | null | undefined): string {

@@ -1,5 +1,6 @@
 import js from '@eslint/js';
 import prettier from 'eslint-config-prettier';
+import sonarjs from 'eslint-plugin-sonarjs';
 import svelte from 'eslint-plugin-svelte';
 import { defineConfig } from 'eslint/config';
 import globals from 'globals';
@@ -50,6 +51,14 @@ export default defineConfig(
 				{ argsIgnorePattern: '^_', varsIgnorePattern: '^_', caughtErrorsIgnorePattern: '^_' }
 			],
 			'@typescript-eslint/no-explicit-any': 'error'
+		}
+	},
+	{
+		// Development guidelines: cognitive complexity of 15 or less (SonarQube rule S3776). SonarQube
+		// for IDE does not analyse .svelte, so the same rule runs here over .ts, .js and Svelte scripts.
+		plugins: { sonarjs },
+		rules: {
+			'sonarjs/cognitive-complexity': ['error', 15]
 		}
 	},
 	{

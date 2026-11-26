@@ -12,6 +12,7 @@ from fastapi.testclient import TestClient
 import pytest
 
 from arm_backend.db import get_session
+from arm_backend.handbrake_schema_store import SchemaStore
 from arm_backend.jwt_utils import issue_access_token
 from arm_backend.routers import transcode_presets as tp_router
 from arm_common import (
@@ -34,6 +35,7 @@ def signing_key() -> bytes:
 def _make_app(signing_key: bytes, db: FakeSession) -> tuple[FastAPI, str]:
     app = FastAPI()
     app.state.signing_key = signing_key
+    app.state.handbrake_schema_store = SchemaStore()
     app.include_router(tp_router.router)
 
     async def _override_session() -> FakeSession:
@@ -91,7 +93,20 @@ def test_list_all_and_filter_by_media_type(signing_key: bytes) -> None:
     assert all_rows.status_code == 200
     assert len(all_rows.json()) == 2
     assert filtered.status_code == 200
-    assert [r["media_type"] for r in filtered.json()] == ["tv"]
+    # A movie preset fits a TV session too, so it is listed for TV.
+    assert sorted(r["media_type"] for r in filtered.json()) == ["movie", "tv"]
+
+
+def test_filter_by_music_lists_only_music(signing_key: bytes) -> None:
+    db = FakeSession()
+    app, token = _make_app(signing_key, db)
+    db.rows["transcode_presets"] = [
+        _preset("tpr_movie", name="movie", media_type=MediaType.MOVIE),
+        _preset("tpr_flac", name="flac", media_type=MediaType.MUSIC),
+    ]
+    with TestClient(app) as client:
+        r = client.get("/api/transcode-presets?media_type=music", headers=_auth(token))
+    assert [row["media_type"] for row in r.json()] == ["music"]
 
 
 def test_get_found_and_404(signing_key: bytes) -> None:

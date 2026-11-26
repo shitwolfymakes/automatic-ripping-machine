@@ -35,6 +35,7 @@ class RegisterTranscoderRequest(BaseModel):
     task_id: str
     hostname: str
     hw_caps: HardwareCaps
+    schema_hash: str | None = None  # content hash of the image's HandBrake schema; None before this feature
 
 
 class RegisterTranscoderResponse(BaseModel):
