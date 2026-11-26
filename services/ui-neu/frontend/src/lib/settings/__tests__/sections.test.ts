@@ -244,3 +244,26 @@ describe('foldSavedConfig', () => {
 		expect(settings.config).toEqual({ log_level: 'INFO' });
 	});
 });
+
+describe('sectionFields: Transcoding', () => {
+	const meta = (key: string, editable = true) => ({ key, group: 'Transcoding', editable }) as ConfigFieldMeta;
+
+	it('leads with the toggle, hides the capability flag and puts concurrency in its own section', () => {
+		const sections = sectionFields('Transcoding', [
+			meta('transcode_enabled'),
+			meta('transcode_capable', false),
+			meta('max_parallel_transcodes')
+		]);
+		expect(sections.map((s) => s.title)).toEqual(['Transcoding', 'Concurrency']);
+		expect(sections[0].fields.map((f) => f.key)).toEqual(['transcode_enabled']);
+		expect(sections[1].fields.map((f) => f.key)).toEqual(['max_parallel_transcodes']);
+	});
+});
+
+describe('the Defaults group', () => {
+	it('is rendered on the Sessions tab, so its field links point there', () => {
+		const groups = [{ name: 'Defaults', fields: [{ key: 'auto_transcode_on_idle' }] }] as SettingsGroup[];
+		expect(settingsTabFor('Defaults')).toBe('sessions');
+		expect(settingsFieldHref('auto_transcode_on_idle', groups)).toBe('#sessions/auto_transcode_on_idle');
+	});
+});
