@@ -216,14 +216,13 @@
 		color: var(--color-text-muted);
 	}
 	/* .btn-link inherits .btn's own 0.875rem/1.25rem rather than this row's
-	   text-xs (0.75rem/1rem); the original had no size class of its own,
-	   inheriting the paragraph's text-xs (fix round 1). */
+	   text-xs (0.75rem/1rem), so the refresh button restates text-xs. */
 	.bash-script-fields-refresh-btn {
 		font-size: 0.75rem;
 		line-height: 1rem;
 	}
 	/* btn-sm sets font-size but not line-height (inherits .btn's 1.25rem);
-	   the original was text-xs (1rem bundled line-height). */
+	   text-xs bundles a 1rem line-height. */
 	.bash-script-fields-viewer-btn {
 		line-height: 1rem;
 	}
@@ -256,15 +255,14 @@
 		font-weight: 400;
 		color: var(--color-text-muted);
 	}
-	/* text-status-error (not field-error's --color-danger) matches the
-	   original's status token; size restated since field-error's size isn't used here. */
+	/* text-status-error (not field-error's --color-danger) is the status token used here; size is restated since field-error's size isn't used. */
 	.bash-script-fields-status-error {
 		font-size: 0.75rem;
 		line-height: 1rem;
 		color: var(--color-status-error);
 	}
 	/* field-help's own "code" descendant rule gives inline code a background
-	   pill; the original's monospace code snippets here were always plain
+	   pill; the monospace code snippets here are plain
 	   text with no box, so that pill is switched off for this file's codes. */
 	.field-help code.mono {
 		padding: 0;

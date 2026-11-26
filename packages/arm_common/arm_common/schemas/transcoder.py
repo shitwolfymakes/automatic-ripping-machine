@@ -1,4 +1,4 @@
-"""Phase 7 wire schemas: transcoder ↔ Backend.
+"""Wire schemas: transcoder ↔ Backend.
 
 The transcode container is short-lived and single-purpose; its API surface is
 five endpoints (register / claim / heartbeat / complete / fail). The Backend
@@ -21,8 +21,8 @@ from arm_common.schemas.sessions import (
 
 
 class HardwareCaps(BaseModel):
-    """Self-reported transcoder capabilities. Phase 7 (CPU-only) ignores these;
-    Phase 7b consumes them for GPU dispatch + `gpus` row writes.
+    """Self-reported transcoder capabilities. The Backend does not dispatch on
+    these; GPU eligibility comes from the probed `gpus` rows.
     """
 
     cpu_count: int = Field(ge=1)

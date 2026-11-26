@@ -37,7 +37,7 @@
 		color: var(--color-text);
 		font-size: 0.875rem;
 	}
-	/* the original detail text inherited the list's own text-sm (0.875rem)
+	/* the detail text inherits the list's own text-sm (0.875rem)
 	   context, not panel-hint's smaller 0.75rem. */
 	.health-check-row-detail {
 		font-size: 0.875rem;

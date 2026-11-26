@@ -111,7 +111,7 @@ describe('SchemaConfigForm', () => {
 	});
 
 	it('resends a reverted field on a second save instead of diffing against the stale original config', async () => {
-		// I1: uncheck/re-check (here: change/revert) in one visit must not diff
+		// uncheck/re-check (here: change/revert) in one visit must not diff
 		// against the original `config` prop, which the parent never refreshes.
 		renderComponent(SchemaConfigForm, { props: { group: GROUP, config: CONFIG } });
 		const select = screen.getByRole('combobox', { name: /provider/i });
@@ -499,7 +499,7 @@ describe('SchemaConfigForm Identity section', () => {
 	});
 });
 
-describe('SchemaConfigForm setup walkthrough modes (setup spec §7.3)', () => {
+describe('SchemaConfigForm setup walkthrough modes', () => {
 	type FormApi = { save(): Promise<boolean>; isDirty(): boolean; isSet(key: string): boolean };
 
 	it('deferred + bare: no title or Save row; save() writes the same payload Settings would', async () => {

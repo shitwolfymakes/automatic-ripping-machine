@@ -8,7 +8,7 @@
 
 	// The config fields a step owns, picked from CONFIG_FIELD_META by their
 	// setup_step tag and rendered by the same SchemaConfigForm Settings uses
-	// (setup spec D5). Steps wrap this and call save()/isSet() on Continue.
+	// Steps wrap this and call save()/isSet() on Continue.
 	let { step, children }: { step: string; children?: Snippet<[ConfigView]> } = $props();
 
 	let group = $state<SettingsGroup | null>(null);

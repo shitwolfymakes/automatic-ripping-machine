@@ -106,7 +106,7 @@ describe('Job Detail Page', () => {
 
 		it('renders tracks table', async () => {
 			renderComponent(JobDetailPage);
-			// Source column was replaced by Kind + Filename; assert on the Kind header.
+			// The table has Kind + Filename columns; assert on the Kind header.
 			await waitFor(() => {
 				expect(screen.getByRole('columnheader', { name: 'Kind' })).toBeInTheDocument();
 			});

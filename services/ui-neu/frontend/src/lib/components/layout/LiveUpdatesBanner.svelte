@@ -1,4 +1,4 @@
-<!-- G-28: a visible "live updates unavailable" state instead of the WS
+<!-- A visible "live updates unavailable" state instead of the WS
      client's silent reconnect loop. Shows only after the connection has
      failed repeatedly (wsStatus 'offline'), stays until a connection
      authenticates, and never renders while the socket is idle or merely

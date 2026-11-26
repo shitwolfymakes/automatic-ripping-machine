@@ -76,7 +76,7 @@ def _auth(token: str) -> dict[str, str]:
 
 
 class _StubScanner:
-    """Scanner stub for the pre-existing rescan tests below (Task 5, Ruling C):
+    """Scanner stub for the pre-existing rescan tests below:
     they predate the real scanner and only assert the heartbeat-derived
     online/stale counts, so the scan itself is a no-op summary."""
 

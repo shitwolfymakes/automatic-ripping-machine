@@ -15,9 +15,9 @@
 		// pickerSessions).
 		transcodePresets?: TranscodePresetView[];
 		globalDefaults?: Partial<Record<PrescanKey, number>>;
-		/** 'essentials': name + 4K only, for the setup walkthrough (setup spec §5.4). */
+		/** 'essentials': name + 4K only, for the setup walkthrough. */
 		variant?: 'full' | 'essentials';
-		/** The global auto-rip default a drive with no mode of its own follows (setup spec D1). */
+		/** The global auto-rip default a drive with no mode of its own follows. */
 		globalAutoRip?: boolean;
 	}
 

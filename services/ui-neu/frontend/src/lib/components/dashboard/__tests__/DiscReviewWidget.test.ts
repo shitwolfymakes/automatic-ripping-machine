@@ -66,7 +66,7 @@ describe('DiscReviewWidget', () => {
 	describe('tracks', () => {
 		it('renders the v3 tracks table from data.tracks', async () => {
 			renderWidget();
-			// The tracks table now lives at the bottom of the Info tab — open it first.
+			// The tracks table lives at the bottom of the Info tab — open it first.
 			await waitFor(() => expect(screen.getByRole('button', { name: 'Info' })).toBeInTheDocument());
 			await fireEvent.click(screen.getByRole('button', { name: 'Info' }));
 			await waitFor(() => {
@@ -126,8 +126,8 @@ describe('DiscReviewWidget', () => {
 	describe('sections', () => {
 		it('opens the Info section (replaces the removed Disc info panel)', async () => {
 			renderWidget();
-			// Info is now the first action button; the old "Disc info" panel is gone
-			// (disc number/total moved into the Info form).
+			// Info is the first action button; there is no separate "Disc info" panel (disc number/total are
+			// in the Info form).
 			await waitFor(() => expect(screen.getByText('Info')).toBeInTheDocument());
 			expect(screen.queryByText('Disc info')).not.toBeInTheDocument();
 			await fireEvent.click(screen.getByText('Info'));
@@ -201,7 +201,7 @@ describe('DiscReviewWidget', () => {
 		});
 	});
 
-	describe('already ripped (D-132)', () => {
+	describe('already ripped', () => {
 		const held = createJob({
 			status: 'awaiting_review',
 			title: 'Resident Evil: Retribution',

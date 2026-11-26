@@ -19,7 +19,7 @@
 </div>
 
 <style>
-	/* grid-3's 1rem gap is wider than this strip's original gap-3 (0.75rem). */
+	/* grid-3's 1rem gap is wider than this strip's gap-3 (0.75rem). */
 	.stat-strip {
 		gap: 0.75rem;
 	}

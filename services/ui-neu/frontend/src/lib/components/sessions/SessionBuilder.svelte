@@ -269,16 +269,13 @@
 {/snippet}
 
 <style>
-	/* original: ml-1 text-red-500 (no dark: variant - same shade in both modes).
-	   --color-danger is red-600 in light / red-400 in dark, a mode-dependent
-	   shift the original never had; kept anyway per the migration reference's
-	   own ruling (row 38: "red-600 reads fine as both fill and text") since no
-	   mode-independent danger role exists in spec 5.1. */
+	/* ml-1 text-red-500 (same shade in both modes). --color-danger is red-600 in light / red-400 in
+	   dark, a mode-dependent shift; accepted since no mode-independent danger role exists. */
 	.session-builder-required {
 		margin-left: 0.25rem;
 		color: var(--color-danger);
 	}
-	/* original: ml-1 text-xs text-gray-400 dark:text-gray-500 - text-faint
+	/* ml-1 text-xs text-gray-400 (gray-500 in dark) - text-faint
 	   already flips gray-400/gray-500 across modes, matching exactly. */
 	.session-builder-optional {
 		margin-left: 0.25rem;
@@ -286,7 +283,7 @@
 		line-height: 1rem;
 		color: var(--color-text-faint);
 	}
-	/* original media-type chips: rounded-md border px-3 py-1 text-sm
+	/* media-type chips are rounded-md border px-3 py-1 text-sm
 	   font-medium - chip's own radius (--radius-sm), padding (0.125rem
 	   0.375rem) and size (0.75rem) are tuned for the tighter filter-pill look,
 	   so the segmented-control metrics are restated here on top of chip's
@@ -313,8 +310,7 @@
 		opacity: 0.5;
 		cursor: not-allowed;
 	}
-	/* original: rounded-md border border-gray-200 dark:border-gray-700 - a
-	   plain neutral-bordered disclosure with no equivalent block. */
+	/* a plain neutral-bordered disclosure with no equivalent block. */
 	.session-builder-advanced {
 		border: 1px solid var(--color-border);
 		border-radius: var(--radius-md);
@@ -331,7 +327,7 @@
 	.session-builder-advanced-body {
 		padding: 0.5rem 0.75rem 0.75rem;
 	}
-	/* original: text-xs font-medium text-gray-600 dark:text-gray-400
+	/* text-xs font-medium
 	   (12px/16px) - field-label's own default is 0.875rem/1.25rem/600, tuned
 	   for a top-level field label, not this smaller nested-textarea caption. */
 	.session-builder-overrides-label {

@@ -99,7 +99,7 @@ describe('sectionFields layout hints', () => {
 	});
 });
 
-describe('setup step field selection (setup spec 2026-10-01 §7.2)', () => {
+describe('setup step field selection', () => {
 	const f = (key: string, extra: Partial<ConfigFieldMeta> = {}): ConfigFieldMeta => ({
 		key,
 		group: 'Ripping',

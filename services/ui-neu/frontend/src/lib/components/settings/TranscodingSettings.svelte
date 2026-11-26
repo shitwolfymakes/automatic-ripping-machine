@@ -35,7 +35,7 @@
 </div>
 
 <style>
-	/* the original toggle row was gap-3 (0.75rem), not field-row's 0.5rem. */
+	/* the toggle row gap is 0.75rem, not field-row's 0.5rem. */
 	.settings-page-notif-toggle-row {
 		gap: 0.75rem;
 	}

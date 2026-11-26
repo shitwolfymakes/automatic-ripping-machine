@@ -1,4 +1,4 @@
-"""Phase 12 — structured JSONL logging shared by every v3 service.
+"""Structured JSONL logging shared by every v3 service.
 
 `configure_service_logging(service_name)` is what each service's `main.py`
 calls in place of `logging.basicConfig`. It installs a single

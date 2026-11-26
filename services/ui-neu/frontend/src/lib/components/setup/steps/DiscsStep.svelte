@@ -8,7 +8,7 @@
 	import type { StepCommitResult } from '../../../setup/steps';
 
 	// Step 6: the global "when you insert a disc" default (the disc_handling
-	// widget) and, read-only, what each kind of disc gets (setup spec §5.7).
+	// widget) and, read-only, what each kind of disc gets.
 	let { view }: { view: SetupView; setBlocked?: (reason: string | null) => void } = $props();
 	void view;
 	let fields: SetupConfigFields | undefined = $state();

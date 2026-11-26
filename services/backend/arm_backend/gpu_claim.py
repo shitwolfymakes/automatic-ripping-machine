@@ -150,14 +150,14 @@ def _runs_ffmpeg_engine(gpu: Gpu) -> bool:
 
 def exclude_ffmpeg_engine(gpus: list[Gpu], preset: TranscodePreset) -> list[Gpu]:
     """Drop devices whose encoder runs the ffmpeg VAAPI engine when the preset has HandBrake settings,
-    which that engine cannot apply (M4)."""
+    which that engine cannot apply."""
     if not has_handbrake_settings(preset):
         return gpus
     return [g for g in gpus if not _runs_ffmpeg_engine(g)]
 
 
 def exclude_invalid_families(gpus: list[Gpu], codec: str, invalid: Mapping[str, list[SettingIssue]]) -> list[Gpu]:
-    """Drop devices whose encoder for `codec` is a family the claim-time check found invalid (R1)."""
+    """Drop devices whose encoder for `codec` is a family the claim-time check found invalid."""
     return [g for g in gpus if _family_for(g, codec) not in invalid]
 
 

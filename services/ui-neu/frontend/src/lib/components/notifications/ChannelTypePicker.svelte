@@ -73,12 +73,11 @@
 		font-weight: 600;
 		color: var(--color-text-secondary);
 	}
-	/* badge-sm's default tint-2/primary-text pairing was bg-primary/15
-	   text-primary here (fix round 1: the nearest documented tint, tint-3 at
-	   20%, was visibly more saturated than the original's literal 15% -
-	   color-mix against --color-primary at the exact 15% reproduces it,
-	   the same pattern tokens.css itself uses for tint-1/2/3), and the
-	   original size (9.5px) sits a hair under badge-sm's 0.625rem. */
+	/* this badge is bg-primary/15 text-primary rather than badge-sm's default tint-2/primary-text
+	   pairing (the nearest documented tint, tint-3 at 20%, is visibly more saturated than the 15%
+	   wanted here - color-mix against --color-primary at an exact 15% gives it, the same pattern
+	   tokens.css itself uses for tint-1/2/3), and its size (9.5px) sits a hair under badge-sm's
+	   0.625rem. */
 	.channel-type-option-badge {
 		position: absolute;
 		top: 0.75rem;

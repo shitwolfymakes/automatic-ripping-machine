@@ -36,7 +36,7 @@ export function baseVideoEncoder(base: BaseValues): string | null {
 	return typeof base?.VideoEncoder === 'string' ? base.VideoEncoder : null;
 }
 
-// R2: the base's VideoEncoder depth when it is this family, else 8.
+// The base's VideoEncoder depth when it is this family, else 8.
 export function inheritedDepth(family: SlimFamily, base: BaseValues): { depth: number; source: 'base' | 'default' } {
 	const encoder = baseVideoEncoder(base);
 	const variant = family.variants.find((v) => v.encoder === encoder);

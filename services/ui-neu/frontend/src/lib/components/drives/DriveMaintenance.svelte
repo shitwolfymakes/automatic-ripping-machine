@@ -82,12 +82,10 @@
 	.drive-maintenance-right {
 		text-align: right;
 	}
-	/* the original border was border-primary/20 (--color-border), lighter
-	   than .btn's default border-primary-strong. */
-	/* these two were px-3 py-1.5 text-xs originally: 6px vertical padding and
-	   the text-xs leading ratio (16px at 12px type). btn-sm's 4px padding plus
-	   .btn's text-sm ratio (17.14px at 12px) rendered them 2px shorter and
-	   shifted everything below (the Task 7 btn-sm audit case). */
+	/* the border is --color-border, lighter than .btn's default border-primary-strong. */
+	/* these two use 6px vertical padding and a 16px line height at 12px type; btn-sm's 4px padding
+	   plus .btn's text-sm ratio (17.14px at 12px) would render them 2px shorter and shift
+	   everything below. */
 	.drive-maintenance-btn {
 		padding-top: 0.375rem;
 		padding-bottom: 0.375rem;
@@ -97,8 +95,7 @@
 		border-color: var(--color-border);
 	}
 	/* text-xs text-gray-500 - not panel-hint's block-level note, whose own
-	   margin-top would add space above this span that the original,
-	   a plain basis-full flex item, never had. */
+	   margin-top would add space above this span, a plain basis-full flex item. */
 	.drive-maintenance-summary {
 		font-size: 0.75rem;
 		line-height: 1rem;

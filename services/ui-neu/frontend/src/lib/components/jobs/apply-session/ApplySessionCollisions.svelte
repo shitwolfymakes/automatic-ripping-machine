@@ -20,8 +20,8 @@
 
 	const hasDuplicateInRequest = $derived(collisions.some((c) => c.reason === 'duplicate_in_request'));
 
-	// I3: the backend refuses overwrite unconditionally when any collision is
-	// owned by a DIFFERENT job (see _evict_colliding_tasks / G-08) — eviction
+	// the backend refuses overwrite unconditionally when any collision is
+	// owned by a DIFFERENT job (see _evict_colliding_tasks) — eviction
 	// only ever removes tasks owned by the applying job. Offering Overwrite
 	// here would loop the user into a 409 every time, so hide it and explain
 	// instead. Same-job-only (or ownership-unknown) collisions keep the

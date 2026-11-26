@@ -558,7 +558,7 @@
 		grid-template-columns: auto minmax(0, 1fr) auto;
 	}
 	.iso-picker-row[aria-disabled='true'] {
-		/* Disabled per spec's own convention (opacity 0.4 + not-allowed), keyed
+		/* Disabled per the disabled-row convention (opacity 0.4 + not-allowed), keyed
 		   off aria-disabled rather than list-row.css's data-disabled — this row
 		   stays focusable (roving tabindex still lands on it), just inert. */
 		opacity: 0.4;

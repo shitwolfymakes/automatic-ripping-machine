@@ -155,7 +155,7 @@
 <style>
 	/* scroll-mt-24 (the settings page scrolls a field to the top with an
 	   offset for the sticky header) and the highlight-flash transition aren't
-	   covered by any block. gap: the original was space-y-1 (0.25rem), tighter
+	   covered by any block. gap: the gap is 0.25rem, tighter
 	   than the stack-sm modifier (0.5rem). */
 	.config-schema-field {
 		gap: 0.25rem;
@@ -163,8 +163,8 @@
 		border-radius: var(--radius-lg);
 		transition: box-shadow var(--motion-base) var(--ease);
 	}
-	/* the read-only value was font-mono text-sm text-gray-500 (0.875rem/1.25rem);
-	   .mono is size-neutral, so this component supplies its own original size. */
+	/* the read-only value is font-mono text-sm text-gray-500 (0.875rem/1.25rem);
+	   .mono is size-neutral, so this component supplies its own size. */
 	.config-schema-field-value {
 		font-size: 0.875rem;
 		line-height: 1.25rem;

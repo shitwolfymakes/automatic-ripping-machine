@@ -1,5 +1,5 @@
 """The claim-time settings filters in gpu_claim: which families a preset's HandBrake settings make
-invalid, and how that prunes the devices and the CPU fallback (spec 4.4 Claim row, 4.5)."""
+invalid, and how that prunes the devices and the CPU fallback."""
 
 from __future__ import annotations
 

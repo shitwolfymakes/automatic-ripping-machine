@@ -202,7 +202,7 @@
 		border: 1px solid var(--color-border);
 		border-radius: var(--radius-md);
 	}
-	/* the original was px-3 py-1.5 (px-2 for the Episode column), between
+	/* cell padding is 0.75rem/0.375rem (0.5rem horizontally for the Episode column), between
 	   table's own default padding and table-compact's - a custom override
 	   rather than either preset */
 	.review-tracks-table {
