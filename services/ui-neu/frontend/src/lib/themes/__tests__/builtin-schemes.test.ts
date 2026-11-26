@@ -41,6 +41,20 @@ describe('COLOR_SCHEMES', () => {
 		}
 	});
 
+	it('no scheme carries the removed primary alias tokens', () => {
+		const removed = [
+			'--color-primary-dark',
+			'--color-primary-light-bg',
+			'--color-primary-light-bg-dark',
+			'--color-primary-border'
+		];
+		for (const scheme of COLOR_SCHEMES) {
+			for (const token of removed) {
+				expect(scheme.tokens, `${scheme.id} ${token}`).not.toHaveProperty(token);
+			}
+		}
+	});
+
 	it('no schemes have a forceDark property', () => {
 		for (const scheme of COLOR_SCHEMES) {
 			expect((scheme as unknown as Record<string, unknown>).forceDark).toBeUndefined();

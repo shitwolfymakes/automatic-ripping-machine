@@ -83,7 +83,7 @@ describe('ChannelEditor', () => {
 
 	it('apprise editor renders the service fields resolved from service_id', async () => {
 		renderEditor(appriseDiscord(), discordCatalog);
-		const wid = (await screen.findByLabelText(/Webhook ID/i)) as HTMLInputElement;
+		const wid = (await screen.findByLabelText(/^Webhook ID/i)) as HTMLInputElement;
 		expect(wid).toBeInTheDocument();
 		expect(wid.value).toBe('');
 	});
@@ -102,7 +102,7 @@ describe('ChannelEditor', () => {
 	it('apprise editor save with filled fields reports them in appriseFields', async () => {
 		const onsave = vi.fn();
 		renderEditor(appriseDiscord(), discordCatalog, { onsave });
-		await fireEvent.input(await screen.findByLabelText(/Webhook ID/i), { target: { value: '99' } });
+		await fireEvent.input(await screen.findByLabelText(/^Webhook ID/i), { target: { value: '99' } });
 		await waitFor(() => expect(screen.getByRole('button', { name: /save changes/i })).toBeEnabled());
 		await fireEvent.click(screen.getByRole('button', { name: /save changes/i }));
 		expect(onsave.mock.calls[0][0].appriseFields).toEqual(expect.objectContaining({ webhook_id: '99' }));
@@ -126,13 +126,13 @@ describe('ChannelEditor', () => {
 			}),
 			discordCatalog
 		);
-		const wid = (await screen.findByLabelText(/Webhook ID/i)) as HTMLInputElement;
+		const wid = (await screen.findByLabelText(/^Webhook ID/i)) as HTMLInputElement;
 		expect(wid.type).toBe('password');
 		expect(wid.value).toBe('');
 		expect(wid.placeholder).toMatch(/leave blank to keep/i);
 		const adv = screen.getByText(/Advanced \(/).closest('details') as HTMLDetailsElement;
 		adv.open = true;
-		const thread = (await screen.findByLabelText(/Thread/i)) as HTMLInputElement;
+		const thread = (await screen.findByLabelText(/^Thread/i)) as HTMLInputElement;
 		expect(thread.value).toBe('5');
 	});
 
@@ -142,7 +142,7 @@ describe('ChannelEditor', () => {
 			discordCatalog
 		);
 		expect(await screen.findByText(/added via a raw URL/i)).toBeInTheDocument();
-		expect(screen.queryByLabelText(/Webhook ID/i)).toBeNull();
+		expect(screen.queryByLabelText(/^Webhook ID/i)).toBeNull();
 	});
 
 	it('bash shows the test panel instead of the Send test button', async () => {

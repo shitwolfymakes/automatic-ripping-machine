@@ -24,7 +24,7 @@ from arm_transcode.heartbeat import ProgressState
 
 FIXTURE = Path(__file__).parents[3] / "packages/arm_common/tests/fixtures/handbrake-schema-1.11.1.json"
 
-# The Plex export's settings as stored (spec 4.3): common keys plus an nvenc_h264 block.
+# The Plex export's settings as stored: common keys plus an nvenc_h264 block.
 PLEX = HandbrakeSettings(
     common={
         "PictureWidth": 1280,
@@ -126,7 +126,7 @@ async def _run(tmp_path: Path, preset: TranscodePresetView) -> int:
 
 @pytest.mark.asyncio
 async def test_no_settings_argv_is_todays(monkeypatch, tmp_path, spawns) -> None:
-    """M11: the builtin Plex H.265 preset launches exactly today's argv."""
+    """The builtin Plex H.265 preset launches the plain `--preset` argv."""
     monkeypatch.setattr(handbrake_preset_file, "load_baked_schema", _no_schema_expected)
     monkeypatch.setenv("ARM_TRANSCODE_ENCODER", "cpu_h265")
     await _run(tmp_path, _preset(extra_args="--quality 20"))
@@ -214,7 +214,7 @@ async def test_preset_encoder_runs_without_encoder_flag(monkeypatch, tmp_path, s
 async def test_preset_encoder_applies_the_base_family_block_without_encoder_flag(
     monkeypatch, tmp_path, spawns, baked
 ) -> None:
-    """Ruling 24: the base's x265 block is written and flagged; the base keeps its own encoder."""
+    """The base's x265 block is written and flagged; the base keeps its own encoder."""
     monkeypatch.setenv("ARM_TRANSCODE_ENCODER", "preset")
     settings = HandbrakeSettings(encoders={"x265": {"VideoPreset": "slow", "VideoQualitySlider": 20}})
     await _run(tmp_path, _preset(encoder="preset", handbrake_settings=settings))
@@ -288,7 +288,7 @@ def test_write_preset_file_writes_arm_preset_json(tmp_path) -> None:
 
 
 def _stale_schema() -> HandbrakeSchema:
-    """The baked schema of an image that predates `PictureWidth` (spec 4.10 version skew)."""
+    """The baked schema of an image that predates `PictureWidth` (version skew)."""
     schema = _schema()
     keys = {name: spec for name, spec in schema.keys.items() if name != "PictureWidth"}
     return dataclasses.replace(schema, keys=keys)
@@ -296,7 +296,7 @@ def _stale_schema() -> HandbrakeSchema:
 
 @pytest.mark.asyncio
 async def test_common_key_unknown_to_the_baked_schema_is_rejected(monkeypatch, tmp_path, spawns) -> None:
-    """M5: libhb would drop the key silently (spike run 5); the transcoder fails the task naming it."""
+    """libhb would drop the key silently; the transcoder fails the task naming it."""
     monkeypatch.setattr(handbrake_preset_file, "load_baked_schema", _stale_schema)
     monkeypatch.setenv("ARM_TRANSCODE_ENCODER", "cpu_h264")
     with pytest.raises(SettingsRejected, match=r"^HandBrake settings rejected: .*PictureWidth"):

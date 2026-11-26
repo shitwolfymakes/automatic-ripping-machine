@@ -65,14 +65,13 @@
 </div>
 
 <style>
-	/* the original settings-section panel was p-6 (1.5rem), not .panel's
+	/* the settings-section panel is p-6 (1.5rem), not .panel's
 	   own p-4 (1rem) default. */
 	.schema-form-section {
 		padding: 1.5rem;
 	}
-	/* the original group/section blurbs were text-sm (0.875rem/1.25rem),
-	   not panel-hint's 0.75rem - panel-hint is sized for a note under a
-	   form control, a visibly smaller role. */
+	/* the group/section blurbs are text-sm (0.875rem/1.25rem), not panel-hint's 0.75rem - panel-hint
+	   is sized for a note under a form control, a visibly smaller role. */
 	.schema-form-section-description {
 		font-size: 0.875rem;
 		line-height: 1.25rem;

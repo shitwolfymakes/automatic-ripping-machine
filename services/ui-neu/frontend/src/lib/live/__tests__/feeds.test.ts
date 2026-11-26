@@ -40,6 +40,15 @@ describe('rip feed', () => {
 		expect(feed({ track_id: 't1', progress_pct: 20 }, 20_000).etaSeconds).toBeNull();
 	});
 
+	it('resets when a per-title percentage starts over at the next title', () => {
+		const feed = createRipFeed();
+		feed({ track_id: 't1', progress_pct: 0 }, 0);
+		feed({ track_id: 't1', progress_pct: 50 }, 50_000);
+		feed({ track_id: 't1', progress_pct: 100 }, 100_000);
+		expect(feed({ track_id: 't2', progress_pct: 0 }, 101_000).etaSeconds).toBeNull();
+		expect(feed({ track_id: 't2', progress_pct: 25 }, 126_000).etaSeconds).toBe(75);
+	});
+
 	it('does not reset on a backwards step of 1 point or less', () => {
 		const feed = createRipFeed();
 		feed({ track_id: 't1', progress_pct: 50 }, 0);

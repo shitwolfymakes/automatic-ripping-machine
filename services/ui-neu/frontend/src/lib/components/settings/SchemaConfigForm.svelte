@@ -233,9 +233,8 @@
 		font-weight: 600;
 		color: var(--color-text);
 	}
-	/* the original group/section blurbs were text-sm (0.875rem/1.25rem),
-	   not panel-hint's 0.75rem - panel-hint is sized for a note under a
-	   form control, a visibly smaller role. */
+	/* the group/section blurbs are text-sm (0.875rem/1.25rem), not panel-hint's 0.75rem - panel-hint
+	   is sized for a note under a form control, a visibly smaller role. */
 	.schema-config-form-description {
 		font-size: 0.875rem;
 		line-height: 1.25rem;
@@ -245,30 +244,26 @@
 		font-size: 0.875rem;
 		line-height: 1.25rem;
 	}
-	/* .stack's flex gap is unconditional between every child, unlike the
-	   original margin-based space-y-4 stack, where this div's own top/bottom
-	   margins collapsed through it when it held no content (an empty block
-	   box with no border/padding) - display:none removes it from the flex
-	   layout entirely so an empty result row costs no gap, matching that
-	   collapse instead of adding a second, uncollapsed gap unit. */
+	/* .stack's flex gap is unconditional between every child, unlike a margin-based stack, where this
+	   div's own top/bottom margins would collapse through it when it held no content (an empty
+	   block box with no border/padding) - display:none removes it from the flex layout entirely so
+	   an empty result row costs no gap, rather than adding a second, uncollapsed gap unit. */
 	.schema-config-form-key-check[data-empty='true'] {
 		display: none;
 	}
 	.schema-config-form-bare {
 		gap: 1.25rem;
 	}
-	/* success only now - a rejected save renders the alert-danger block above
+	/* success only - a rejected save renders the alert-danger block above
 	   instead. */
 	.schema-config-form-feedback {
 		font-size: 0.875rem;
 		color: var(--color-text-muted);
 	}
-	/* the original was px-3 py-2 text-sm - .btn's own default size, not
-	   .btn-sm's compact one, but at a 0.75rem horizontal padding rather
-	   than .btn's 1rem. Its border was border-primary/20 (--color-border)
-	   with muted text (text-gray-700), not .btn's default
-	   border-primary-strong + primary text. It never wrapped, so keep the
-	   label on one line at the narrow mobile width. */
+	/* the button is text-sm at .btn's own default size, not .btn-sm's compact one, but at a 0.75rem
+	   horizontal padding rather than .btn's 1rem. Its border is --color-border with secondary text,
+	   not .btn's default border-primary-strong + primary text. It never wraps, so keep the label on one
+	   line at the narrow mobile width. */
 	.schema-config-form-key-check-btn {
 		white-space: nowrap;
 		padding-inline: 0.75rem;

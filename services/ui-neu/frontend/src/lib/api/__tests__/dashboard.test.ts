@@ -236,11 +236,19 @@ describe('fetchDashboardSnapshot endpoint failures', () => {
 		expect(snap.active_transcodes.map((t) => t.id)).toEqual(['t1', 't2']);
 	});
 
-	it('reports transcoder_stats null when the stats fetch fails and an empty object otherwise', async () => {
+	it('reports transcoder_stats null when the stats fetch fails', async () => {
 		vi.mocked(fetchTranscoderStats).mockRejectedValueOnce(new Error('boom'));
 		expect((await fetchDashboardSnapshot()).transcoder_stats).toBeNull();
+	});
 
-		expect((await fetchDashboardSnapshot()).transcoder_stats).toEqual({});
+	it('reports the queued task count as transcoder_stats.pending', async () => {
+		vi.mocked(fetchTranscoderStats).mockResolvedValueOnce({ tasks_by_status: { queued: 3, done: 9 } } as never);
+		expect((await fetchDashboardSnapshot()).transcoder_stats).toEqual({ pending: 3 });
+	});
+
+	it('reports pending 0 when the stats have no queued tasks', async () => {
+		vi.mocked(fetchTranscoderStats).mockResolvedValueOnce({ tasks_by_status: { done: 9 } } as never);
+		expect((await fetchDashboardSnapshot()).transcoder_stats).toEqual({ pending: 0 });
 	});
 
 	it('reports notification_count null when the count fetch fails', async () => {

@@ -162,7 +162,7 @@ describe('IsoPicker', () => {
 		await waitFor(() => expect(startIsoRipMock).toHaveBeenCalledWith('a.iso', 'ses_1'));
 		expect(props.onstarted).toHaveBeenCalledWith('drv_iso1');
 
-		// The success notice links to the new card (spec 7.2 / design frame 1n).
+		// The success notice links to the new card.
 		const toast = toasts.value.at(-1);
 		expect(toast).toMatchObject({
 			tone: 'success',

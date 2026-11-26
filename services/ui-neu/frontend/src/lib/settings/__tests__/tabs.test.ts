@@ -54,8 +54,8 @@ describe('settingsTabLabel', () => {
 });
 
 describe('tabFromHash', () => {
-	it('falls back to Identification for an empty hash', () => {
-		expect(tabFromHash('')).toBe('Identification');
+	it('falls back to the first tab, API Keys, for an empty hash', () => {
+		expect(tabFromHash('')).toBe('Keys');
 	});
 
 	it.each([...SCREEN_TABS])('opens the %s screen tab', (tab) => {
@@ -78,8 +78,8 @@ describe('tabFromHash', () => {
 		expect(tabFromHash('#appearance')).toBe('themes');
 	});
 
-	it('falls back to Identification for an unknown tab', () => {
-		expect(tabFromHash('#music')).toBe('Identification');
+	it('falls back to the first tab, API Keys, for an unknown tab', () => {
+		expect(tabFromHash('#music')).toBe('Keys');
 	});
 });
 

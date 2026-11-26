@@ -138,7 +138,7 @@ class _OpticalRip:
         self._hasher = TitleHasher()
 
     def _drive_dropped(self) -> bool:
-        """The drive left the bus under this rip (D-133). The first time
+        """The drive left the bus under this rip. The first time
         `drive_lost` says so, set `stop`, which kills makemkvcon."""
         if self._stop is None:
             return False

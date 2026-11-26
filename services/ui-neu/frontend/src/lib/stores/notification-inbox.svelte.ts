@@ -27,12 +27,17 @@ export class NotificationInbox {
 	// Purge deletes cleared rows, which the inbox list omits, so this comes from the count endpoint.
 	clearedCount = $state(0);
 	unseenCount = $derived(this.rows.filter((n) => !n.seen).length);
+	/** Whether the rows include dismissed (cleared) ones, for Show dismissed. */
+	includeCleared = $state(false);
 
 	load = async (): Promise<void> => {
 		this.loading = true;
 		this.error = null;
 		try {
-			const [rows, counts] = await Promise.all([fetchNotifications(), fetchNotificationCount().catch(() => null)]);
+			const [rows, counts] = await Promise.all([
+				fetchNotifications(this.includeCleared),
+				fetchNotificationCount().catch(() => null)
+			]);
 			this.rows = rows;
 			this.clearedCount = counts?.cleared ?? 0;
 		} catch (e) {
@@ -40,6 +45,12 @@ export class NotificationInbox {
 		} finally {
 			this.loading = false;
 		}
+	};
+
+	/** Sets whether the rows include dismissed ones, then reloads them. */
+	setIncludeCleared = (include: boolean): Promise<void> => {
+		this.includeCleared = include;
+		return this.load();
 	};
 
 	dismiss = async (id: string): Promise<void> => {

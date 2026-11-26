@@ -280,8 +280,8 @@ def test_resolve_fans_out_multiple_waiting_identify_applications(signing_key: by
 
 def test_resolve_ripped_awaiting_identify_status_fans_out(signing_key: bytes, tmp_path: Path) -> None:
     """Fan-out isn't gated on AWAITING_USER_ID specifically — a ripped
-    placeholder drains the same way, promoting to RIPPED (its rip is done;
-    G-09) rather than IDENTIFIED."""
+    placeholder drains the same way, promoting to RIPPED (its rip is done)
+    rather than IDENTIFIED."""
     db = FakeSession()
     hub = _CapturingHub()
     _seed(db, job_status=JobStatus.RIPPED_AWAITING_IDENTIFY)
@@ -445,7 +445,7 @@ def test_resolve_fan_out_session_missing_returns_outcome(signing_key: bytes, tmp
 
 
 def test_resolve_media_mismatch_keeps_application_parked(signing_key: bytes, tmp_path: Path) -> None:
-    """G-04: resolve sets `job.media_type` from the identify call, then
+    """Resolve sets `job.media_type` from the identify call, then
     drains parked applications. A session applied before identity was known
     (e.g. a movie session routed to what turns out to be a music CD) must
     stay parked with `skipped_reason='media_mismatch'` instead of fanning
@@ -602,7 +602,7 @@ def test_resolve_on_held_disc_with_review_tracks_keeps_application_parked(signin
 def test_resolve_commits_identity_before_after_rip_drain_raises(
     signing_key: bytes, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Fix 75-2 regression: a drain exception inside after_rip must not
+    """A drain exception inside after_rip must not
     destroy the operator's resolve.
 
     `drain_parked_applications_after_rip` wraps `fan_out_waiting_identify_applications`
@@ -657,7 +657,7 @@ def test_resolve_commits_identity_before_after_rip_drain_raises(
 
 
 def test_resolve_ripped_placeholder_promotes_to_ripped_and_runs_after_rip(signing_key: bytes, tmp_path: Path) -> None:
-    """G-09: resolving a ripped_awaiting_identify placeholder promotes it to
+    """Resolving a ripped_awaiting_identify placeholder promotes it to
     RIPPED (its rip is done — IDENTIFIED would claim otherwise), clears the
     spent `unidentified` flag, and runs the same post-rip pass rip-complete
     runs: the parked application fans out against the just-resolved title."""
@@ -694,7 +694,7 @@ def test_resolve_ripped_placeholder_promotes_to_ripped_and_runs_after_rip(signin
 def test_resolve_unidentified_partial_rip_runs_after_rip(
     signing_key: bytes, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, flags: dict, expect_after_rip: bool
 ) -> None:
-    """D-027: rip-complete skips after_rip for an unidentified RIPPED_PARTIAL
+    """Rip-complete skips after_rip for an unidentified RIPPED_PARTIAL
     job, so resolve must run it (auto-apply of the pending/default session as
     well as the drain), not only the parked-application fan-out. An
     identified partial rip already had after_rip at rip-complete."""

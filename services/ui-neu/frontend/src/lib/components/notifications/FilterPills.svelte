@@ -35,9 +35,8 @@
 	}
 	/* Inside this bordered pill-group the chip block's default looks (tint-2
 	   background at rest, solid-fill white-on-blue when pressed, and a smaller
-	   padding than this group's pills ever had) are too loud next to the
-	   group's own border: pills here keep their original px-2.5 py-1 text-xs
-	   size, stay plain text at rest, and get only a light primary-tint-3
+	   padding than this group's pills use) are too loud next to the
+	   group's own border: pills here use px-2.5 py-1 text-xs size, stay plain text at rest, and get only a light primary-tint-3
 	   highlight (not a solid fill) when active. */
 	.filter-pills .chip {
 		padding: 0.25rem 0.625rem;

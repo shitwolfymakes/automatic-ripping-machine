@@ -18,7 +18,7 @@
 </div>
 
 <style>
-	/* .stack-sm is 0.5rem; the original space-y-3 wrapper here was 0.75rem. */
+	/* .stack-sm is 0.5rem; the wrapper here is 0.75rem. */
 	.skeleton-card-lines {
 		gap: 0.75rem;
 	}

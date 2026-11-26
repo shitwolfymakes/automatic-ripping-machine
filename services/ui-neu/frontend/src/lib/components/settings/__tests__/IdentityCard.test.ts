@@ -187,4 +187,25 @@ describe('IdentityCard', () => {
 		expect(screen.queryByRole('checkbox', { name: 'ARM community database (CRC64)' })).not.toBeInTheDocument();
 		expect(screen.getByRole('checkbox', { name: 'TheDiscDB disc map' })).toBeInTheDocument();
 	});
+
+	it('links every option and source list to the docs of the setting it writes', () => {
+		render();
+		const ids = (el: HTMLElement) =>
+			within(el)
+				.getAllByRole('link', { name: /^Docs for/ })
+				.map((a) => a.getAttribute('data-field-id'));
+		expect(ids(step(2))).toEqual(expect.arrayContaining(['config.thediscdb_enabled', 'config.crc64service_enabled']));
+		expect(ids(step(3))).toEqual(
+			expect.arrayContaining([
+				'config.movie_sources',
+				'config.episode_sources',
+				'config.episode_match_tolerance_seconds'
+			])
+		);
+		expect(ids(step(4))).toEqual(expect.arrayContaining(['config.movie_auto_apply', 'config.episode_auto_apply']));
+		expect(new Set(ids(document.querySelector('[data-step="advanced"]') as HTMLElement))).toEqual(
+			new Set(['config.disc_hint_sources'])
+		);
+		expect(screen.getByRole('heading', { name: 'Movies' })).toBeInTheDocument();
+	});
 });

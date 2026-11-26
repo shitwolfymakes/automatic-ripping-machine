@@ -77,12 +77,17 @@ describe('DiscReviewStatusBar', () => {
 		expect(onpause).not.toHaveBeenCalled();
 	});
 
-	it('does nothing when the control is pressed without handlers', async () => {
+	it('shows no control without handlers', () => {
 		renderComponent(DiscReviewStatusBar, { props: baseProps() });
-		await fireEvent.click(screen.getByRole('button', { name: 'Pause timer' }));
+		expect(screen.queryByRole('button')).not.toBeInTheDocument();
 		cleanup();
 		renderComponent(DiscReviewStatusBar, { props: baseProps({ paused: true }) });
-		await fireEvent.click(screen.getByRole('button', { name: 'Resume timer' }));
+		expect(screen.queryByRole('button')).not.toBeInTheDocument();
 		expect(screen.getByText('Paused')).toBeInTheDocument();
+	});
+
+	it('disables the control while a toggle is in flight', () => {
+		renderComponent(DiscReviewStatusBar, { props: baseProps({ onpause: vi.fn(), busy: true }) });
+		expect(screen.getByRole('button', { name: 'Pause timer' })).toBeDisabled();
 	});
 });

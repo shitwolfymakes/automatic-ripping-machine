@@ -2,6 +2,7 @@
 	import type { Snippet } from 'svelte';
 	import type { ConfigFieldMeta } from '$lib/types/api.gen';
 	import Glyph from '$lib/components/shared/Glyph.svelte';
+	import FieldLabel from '$lib/components/shared/FieldLabel.svelte';
 	import { HIDDEN_SECRET } from '$lib/api/config';
 	import { readOnlyValue } from '$lib/settings/config-field';
 	import RankedListField from './RankedListField.svelte';
@@ -55,6 +56,8 @@
 	}
 	const boolValue = $derived(Boolean(value));
 	const helpId = $derived(field.help ? `setting-help-${field.key}` : undefined);
+	const controlId = $derived(`setting-control-${field.key}`);
+	const docsId = $derived(`config.${field.key}`);
 </script>
 
 <div class="config-schema-field stack" id="setting-{field.key}" data-testid="setting-{field.key}">
@@ -66,29 +69,31 @@
 		<!-- A read-only field is a plain muted value under the label, not a
 		     disabled control, so every non-editable field in this
 		     schema-driven form reads the same regardless of type. -->
-		<div class="field-label">{field.label}</div>
+		<FieldLabel label={field.label} {docsId} />
 		<div class="mono config-schema-field-value">{readOnlyValue(field, value)}</div>
 	{:else if field.type === 'bool'}
-		<label class="field field-row">
+		<div class="field field-row">
 			<input
+				id={controlId}
 				type="checkbox"
 				aria-label={field.label}
 				checked={boolValue}
 				{disabled}
 				onchange={(e) => (value = (e.currentTarget as HTMLInputElement).checked)}
 			/>
-			<span class="field-label">{field.label}</span>
-		</label>
+			<FieldLabel for={controlId} label={field.label} {docsId} />
+		</div>
 	{:else if field.type === 'ranked'}
-		<div class="field-label">{field.label}</div>
+		<FieldLabel label={field.label} {docsId} />
 		<RankedListField {field} bind:value {config} {helpId} {keyTab} {disabled} />
 	{:else}
-		<div class="field-label">{field.label}</div>
+		<FieldLabel for={controlId} label={field.label} {docsId} />
 		<!-- The control and an optional trailing action (e.g. a Check button)
 		     share one row so they align regardless of the help text below. -->
 		<div class="flex items-center gap-2">
 			{#if field.type === 'enum'}
 				<select
+					id={controlId}
 					aria-label={field.label}
 					aria-describedby={describedBy}
 					value={value ?? ''}
@@ -106,6 +111,7 @@
 				     no min/max here, the backend's 400 on an out-of-range value is
 				     the validation (see SchemaConfigForm's save-error alert). -->
 				<input
+					id={controlId}
 					type="number"
 					step="1"
 					inputmode="numeric"
@@ -122,6 +128,7 @@
 			{:else if isSecret}
 				<SecretInput
 					bind:value
+					id={controlId}
 					aria-label={field.label}
 					aria-describedby={describedBy}
 					revealLabel="Show hidden value"
@@ -130,6 +137,7 @@
 				/>
 			{:else}
 				<input
+					id={controlId}
 					type="text"
 					aria-label={field.label}
 					aria-describedby={describedBy}
@@ -155,7 +163,7 @@
 <style>
 	/* scroll-mt-24 (the settings page scrolls a field to the top with an
 	   offset for the sticky header) and the highlight-flash transition aren't
-	   covered by any block. gap: the original was space-y-1 (0.25rem), tighter
+	   covered by any block. gap: the gap is 0.25rem, tighter
 	   than the stack-sm modifier (0.5rem). */
 	.config-schema-field {
 		gap: 0.25rem;
@@ -163,8 +171,8 @@
 		border-radius: var(--radius-lg);
 		transition: box-shadow var(--motion-base) var(--ease);
 	}
-	/* the read-only value was font-mono text-sm text-gray-500 (0.875rem/1.25rem);
-	   .mono is size-neutral, so this component supplies its own original size. */
+	/* the read-only value is font-mono text-sm text-gray-500 (0.875rem/1.25rem);
+	   .mono is size-neutral, so this component supplies its own size. */
 	.config-schema-field-value {
 		font-size: 0.875rem;
 		line-height: 1.25rem;

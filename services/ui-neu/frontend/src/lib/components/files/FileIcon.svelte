@@ -44,7 +44,7 @@
 </svg>
 
 <style>
-	/* file-icon-*: category colour, dissolved from legacy.css (Task 6). Text
+	/* file-icon-*: category colour. Text
 	   colour only, so plain colour rules on tokens (no shared block covers a
 	   7-way category palette on a single-purpose icon). */
 	.file-icon-directory {

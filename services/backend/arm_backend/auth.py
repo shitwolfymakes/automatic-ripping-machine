@@ -95,7 +95,7 @@ _MUST_CHANGE_WHITELIST: tuple[str, ...] = (
 )
 
 # Read-only GETs the first-run walkthrough's step 1 renders before the password
-# is changed (setup spec 2026-10-01 §6.2). Exact path + GET only, so the setup
+# is changed. Exact path + GET only, so the setup
 # write routes (PUT /api/setup/steps/..., POST /api/setup/...) stay locked.
 _MUST_CHANGE_GET_EXACT: frozenset[str] = frozenset({"/api/setup", "/api/system/resources", "/api/system/version"})
 
@@ -107,7 +107,7 @@ async def require_jwt(
 ) -> User:
     if authorization is None:
         # Anonymous request → act as the guest account when guest access is
-        # enabled (spec 2026-07-12-anonymous-guest). A present-but-bad token
+        # enabled. A present-but-bad token
         # never falls back — only a fully absent header.
         guest = (await session.execute(select(User).where(col(User.username) == GUEST_USERNAME))).scalar_one_or_none()
         if guest is None:

@@ -8,7 +8,7 @@ import type { DriveSummary } from '$lib/api/dashboard';
  * dialogs, log rows, ...). `drives` is the dashboard store's sticky
  * `drives: Record<driveId, DriveSummary>` map (see `$lib/stores/dashboard`);
  * callers that don't have it yet (or whose drive isn't in it) fall back to
- * the raw id so the UI never renders a blank where an id used to be.
+ * the raw id so the UI never renders a blank where an id would be.
  */
 export function driveLabel(driveId: string | null | undefined, drives?: Record<string, DriveSummary> | null): string {
 	if (!driveId) return '';

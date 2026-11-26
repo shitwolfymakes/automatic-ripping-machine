@@ -18,7 +18,8 @@ vi.mock('$lib/api/auth', () => ({
 }));
 
 vi.mock('$app/navigation', () => ({
-	goto: vi.fn()
+	goto: vi.fn(),
+	onNavigate: vi.fn()
 }));
 
 vi.mock('$lib/stores/auth', async () => {

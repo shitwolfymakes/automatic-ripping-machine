@@ -167,7 +167,7 @@ async def test_run_encoder_ffmpeg_vaapi_routes_without_preset_ref(monkeypatch, t
 @pytest.mark.asyncio
 async def test_run_encoder_progress_callback_records_frame_rates(monkeypatch, tmp_path) -> None:
     """Every field the engine reports lands on the ProgressState the heartbeat
-    pump reads, the frame rates included (D-248)."""
+    pump reads, the frame rates included."""
     import arm_transcode.main as m
 
     monkeypatch.setenv("ARM_TRANSCODE_ENCODER", "vaapi_h265")

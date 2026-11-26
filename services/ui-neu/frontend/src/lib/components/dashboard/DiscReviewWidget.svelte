@@ -197,8 +197,9 @@
 			waitSeconds={manualWaitSeconds}
 			paused={countdownPaused || !!countdownHeld}
 			held={countdownHeld}
-			onpause={!$isAdmin || paused || actions.pauseBusy ? undefined : () => actions.setPaused(job, true)}
-			onresume={!$isAdmin || paused || actions.pauseBusy ? undefined : () => actions.setPaused(job, false)}
+			onpause={!$isAdmin || paused ? undefined : () => actions.setPaused(job, true)}
+			onresume={!$isAdmin || paused ? undefined : () => actions.setPaused(job, false)}
+			busy={actions.pauseBusy}
 		/>
 
 		<!-- Body: poster, then the title row and one aligned, labeled row per fact. -->

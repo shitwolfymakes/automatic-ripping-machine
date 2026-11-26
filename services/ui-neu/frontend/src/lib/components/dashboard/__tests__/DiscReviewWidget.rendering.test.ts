@@ -109,7 +109,7 @@ describe('DiscReviewWidget', () => {
 			renderWidget({ status: 'identified' });
 			await waitFor(() => expect(screen.getByText('Cancel')).toBeInTheDocument());
 			expect(screen.getByText('Start rip')).toBeInTheDocument();
-			// The old "Done" button is gone — Start rip / Cancel are the actions.
+			// There is no "Done" button — Start rip / Cancel are the actions.
 			expect(screen.queryByText('Done')).not.toBeInTheDocument();
 		});
 
@@ -263,7 +263,7 @@ describe('DiscReviewWidget', () => {
 				])
 			);
 			renderWidget({ disc_type: 'bluray' });
-			// The tracks table now lives at the bottom of the Info tab — open it first.
+			// The tracks table lives at the bottom of the Info tab — open it first.
 			await waitFor(() => expect(screen.getByRole('button', { name: 'Info' })).toBeInTheDocument());
 			await fireEvent.click(screen.getByRole('button', { name: 'Info' }));
 			await waitFor(() => {
@@ -277,7 +277,7 @@ describe('DiscReviewWidget', () => {
 				detail({ disc_type: 'bluray' }, [createTrack({ id: 'trk_1', index: 0, source_ref: 't00.mkv', title: 'Ep' })])
 			);
 			renderWidget({ id: 'job_3', disc_type: 'bluray' });
-			// The tracks table now lives at the bottom of the Info tab — open it first.
+			// The tracks table lives at the bottom of the Info tab — open it first.
 			await waitFor(() => expect(screen.getByRole('button', { name: 'Info' })).toBeInTheDocument());
 			await fireEvent.click(screen.getByRole('button', { name: 'Info' }));
 			await waitFor(() => expect(screen.getByText('Ep')).toBeInTheDocument());
@@ -351,7 +351,7 @@ describe('DiscReviewWidget', () => {
 			)
 		);
 		renderWidget({ status: 'awaiting_user_id' });
-		// The tracks table now lives at the bottom of the Info tab — open it first.
+		// The tracks table lives at the bottom of the Info tab — open it first.
 		await waitFor(() => expect(screen.getByRole('button', { name: 'Info' })).toBeInTheDocument());
 		await fireEvent.click(screen.getByRole('button', { name: 'Info' }));
 		await waitFor(() => expect(screen.getByText('Scanned titles (2)')).toBeInTheDocument());
@@ -392,7 +392,7 @@ describe('DiscReviewWidget', () => {
 			expect(show).not.toHaveTextContent('Season 2');
 			// The season has its own row.
 			expect(screen.getByTestId('season-row')).toHaveTextContent('Season 2');
-			// The TYPE toggle replaces the old "Series" chip.
+			// The TYPE toggle is used rather than a "Series" chip.
 			expect(screen.queryByText('Series')).not.toBeInTheDocument();
 		});
 
@@ -431,7 +431,7 @@ describe('DiscReviewWidget', () => {
 			mockFetchJob.mockResolvedValueOnce(detail(over as never));
 			renderWidget(over as never);
 			await waitFor(() =>
-				expect(screen.getByTestId('match-row')).toHaveTextContent('Matched on ARM community database , Series, 1974')
+				expect(screen.getByTestId('match-row')).toHaveTextContent('Matched on ARM community database, Series, 1974')
 			);
 		});
 

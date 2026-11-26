@@ -26,7 +26,7 @@
 		transcodePresets: TranscodePresetView[];
 		/** The global prescan defaults the settings panel shows beside each override. */
 		globalDefaults: Partial<Record<PrescanKey, number>>;
-		/** The global auto-rip default a drive with no mode of its own follows (setup spec D1). */
+		/** The global auto-rip default a drive with no mode of its own follows. */
 		globalAutoRip: boolean;
 	}
 
@@ -48,13 +48,11 @@
 	const unenrollName = $derived(drive.display_name || drive.model || drive.hostname);
 </script>
 
-<!-- Plain `card`, deliberately NOT `card card-status`: the original card shell
-     (git 441d35d2, `rounded-lg border border-primary/20 bg-surface p-2.5
-     shadow-xs`) carried no status-driven styling at all. Drive status only ever
-     coloured the inline label/badge in the header, never the card itself, so
-     `card-status`'s 4px left accent stripe would be a new visual element the
-     baseline has no counterpart for. `isDetached` is the one shell-level state
-     the original had (`opacity-60`), kept here as `data-detached`. -->
+<!-- Plain `card`, deliberately NOT `card card-status`: the drive card carries no status-driven
+     styling. Drive status only colours the inline label/badge in the header, never the card itself,
+     so `card-status`'s 4px left accent stripe would be a visual element with no counterpart.
+     `isDetached` is the one shell-level state (dimmed with `opacity-60`), set here as
+     `data-detached`. -->
 <div class="card drive-card" data-detached={isDetached}>
 	<!-- Header: name + rename + status -->
 	<DriveCardHeader {drive} {onupdate} />
@@ -218,8 +216,7 @@
 		opacity: 0.6;
 	}
 
-	/* the original was space-y-0.5 (0.125rem) - finer than stack-sm's
-	   0.5rem, so this needs its own flex column and gap. */
+	/* the gap is 0.125rem - finer than stack-sm's 0.5rem, so this needs its own flex column and gap. */
 	.drive-card-info {
 		display: flex;
 		flex-direction: column;

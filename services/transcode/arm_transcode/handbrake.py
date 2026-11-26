@@ -19,7 +19,7 @@ encoder_args`) and passes the resulting `--encoder <id>` pair in as
 `encoder_args`, appended *after* `--preset` so HandBrake's preset-driven
 encoder is overridden. A preset with HandBrake settings instead imports a
 materialised one-preset file (`--preset-import-file <file> --preset arm`)
-and its `encoder_args` come from `materialise` (spec 4.7). `extra_args`
+and its `encoder_args` come from `materialise`. `extra_args`
 from the user-defined preset still appends last (escape hatch).
 """
 

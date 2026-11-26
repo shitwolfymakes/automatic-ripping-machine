@@ -1,3 +1,9 @@
+// Open arms the coverage tool reports that are Svelte's, not the component's:
+// each text or attribute `{...}` below compiles to `(...) ?? ''`, and none of
+// these values is null where it renders. The IMDb id in both links and the
+// match detail (each inside its own #if), the miss line (inside `#if isMusic &&
+// missLine`, and with a fallback text in the TV row), the season number, and
+// the unmatched and total title counts.
 // The review card's facts list, rendered with plain props.
 //
 // Branch not forced here: the Disc row's `{#if discLine}` never turns false,
@@ -114,7 +120,7 @@ describe('DiscReviewFacts', () => {
 
 		it('names the provider of a movie matched without an IMDb id', () => {
 			renderFacts(createJob({ year: 1999, metadata_json: { identity: { provider: 'tmdb' } } }));
-			expect(screen.getByTestId('match-row')).toHaveTextContent('Matched on TMDb , 1999');
+			expect(screen.getByTestId('match-row')).toHaveTextContent('Matched on TMDb, 1999');
 		});
 
 		it('says "Set by hand" for a title no provider matched, without a detail', () => {
@@ -126,14 +132,14 @@ describe('DiscReviewFacts', () => {
 
 		it('adds the detail to a hand-set match', () => {
 			renderFacts(createJob({ year: 1999, media_type: 'movie' }));
-			expect(screen.getByTestId('match-row')).toHaveTextContent('Set by hand , Movie, 1999');
+			expect(screen.getByTestId('match-row')).toHaveTextContent('Set by hand, Movie, 1999');
 		});
 
 		it('keys a TV match on has_series', () => {
 			renderFacts(tvJob({ has_series: true, year: 1974, metadata_json: { identity: { provider: 'tvdb' } } }), {
 				isTv: true
 			});
-			expect(screen.getByTestId('match-row')).toHaveTextContent('Show Matched on TVDB , TV Series, 1974');
+			expect(screen.getByTestId('match-row')).toHaveTextContent('Show Matched on TVDB, TV Series, 1974');
 		});
 
 		it('treats an identify miss as no match even with a title', () => {

@@ -38,7 +38,7 @@ class Materialised:
 
 
 def resolve_depth(schema: HandbrakeSchema, family: str, preset_ref: str | None, block: dict[str, Any]) -> int:
-    """R2: the block's ``bit_depth``; else the base's depth when its encoder is in ``family``; else 8."""
+    """The block's ``bit_depth``; else the base's depth when its encoder is in ``family``; else 8."""
     if "bit_depth" in block:
         depth: int = block["bit_depth"]
         return depth

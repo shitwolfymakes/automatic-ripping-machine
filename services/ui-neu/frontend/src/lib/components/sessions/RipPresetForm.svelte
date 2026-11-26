@@ -1,12 +1,12 @@
 <script lang="ts">
-	// Ported from the removed Vue UI's RipPresetForm view. The Vue view was a
-	// routed page; this is an inline (no-route) form driven by props. Field
-	// wiring, the disabled rules, and the create / custom-edit / built-in
-	// submit-body shapes follow the Vue source faithfully.
+	// An inline (no-route) form driven by props: field wiring, the disabled rules, and the create /
+	// custom-edit / built-in submit-body shapes.
 	import { createRipPreset, updateRipPreset } from '$lib/api/rip-presets';
 	import { PresetSave } from '$lib/stores/preset-save.svelte';
 	import type { EditorStatus } from '../../ui/editor-status';
 	import TrackFiltersEditor from '../jobs/TrackFiltersEditor.svelte';
+	import FieldLabel from '../shared/FieldLabel.svelte';
+	import { FIELD_IDS } from '$lib/sessions/rip-preset-form';
 	import { trackFiltersBody, type TrackFilters } from '$lib/jobs/track-filters';
 	import { errorId, focusFirstInvalid, invalidAttrs, nameErrors } from '$lib/ui/form-validation';
 	import type { IdentificationMode, MediaType, OutputMode, RipPresetView, TrackSelection } from '$lib/types/api.gen';
@@ -78,8 +78,7 @@
 		await save.run(savePreset, (p) => onsaved(p));
 	}
 
-	// the old shared input-class constants are gone: inputs live in .field
-	// wrappers now, styled by field.css's descendant rule.
+	// inputs live in .field wrappers, styled by field.css's descendant rule.
 </script>
 
 <form id={formId} class="stack rip-preset-form" onsubmit={submit}>
@@ -94,7 +93,7 @@
 	{/if}
 
 	<div class="field">
-		<label class="field-label" for={NAME_ID}>Name</label>
+		<FieldLabel for={NAME_ID} label="Name" docsId={FIELD_IDS.name} />
 		<input
 			id={NAME_ID}
 			data-testid="preset-name"
@@ -106,8 +105,8 @@
 		{#if errors[NAME_ID]}<p class="field-error" id={errorId(NAME_ID)}>{errors[NAME_ID]}</p>{/if}
 	</div>
 
-	<label class="field">
-		<span class="field-label">Media type</span>
+	<div class="field">
+		<FieldLabel for="preset-media-type" label="Media type" docsId={FIELD_IDS.media_type} />
 		<select id="preset-media-type" data-testid="preset-media-type" bind:value={mediaType} disabled={editing}>
 			<option value="movie">Movie</option>
 			<option value="tv">TV</option>
@@ -115,10 +114,10 @@
 			<option value="data">Data</option>
 			<option value="iso">ISO</option>
 		</select>
-	</label>
+	</div>
 
-	<label class="field">
-		<span class="field-label">Track selection</span>
+	<div class="field">
+		<FieldLabel for="preset-track-selection" label="Track selection" docsId={FIELD_IDS.track_selection} />
 		<select
 			id="preset-track-selection"
 			data-testid="preset-track-selection"
@@ -130,10 +129,10 @@
 			<option value="archive">Archive (every track)</option>
 			<option value="custom">Custom</option>
 		</select>
-	</label>
+	</div>
 
-	<label class="field">
-		<span class="field-label">Identification mode</span>
+	<div class="field">
+		<FieldLabel for="preset-identification-mode" label="Identification mode" docsId={FIELD_IDS.identification_mode} />
 		<select
 			id="preset-identification-mode"
 			data-testid="preset-identification-mode"
@@ -144,17 +143,17 @@
 			<option value="skip">Skip</option>
 			<option value="deferred_placeholder">Deferred placeholder</option>
 		</select>
-	</label>
+	</div>
 
-	<label class="field">
-		<span class="field-label">Output mode</span>
+	<div class="field">
+		<FieldLabel for="preset-output-mode" label="Output mode" docsId={FIELD_IDS.output_mode} />
 		<select id="preset-output-mode" data-testid="preset-output-mode" bind:value={outputMode} disabled={isBuiltin}>
 			<option value="tracks">Tracks</option>
 			<option value="iso">ISO</option>
 			<option value="data_copy">Data copy</option>
 			<option value="folder">Disc backup (folder)</option>
 		</select>
-	</label>
+	</div>
 
 	{#if showFilters}
 		<TrackFiltersEditor value={filters} onchange={(v) => (filters = v)} />

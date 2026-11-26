@@ -1,7 +1,7 @@
 /* text helpers: eyebrow (small uppercase tracked label), label-caps, mono, kbd.
    .mono is size-neutral (font-family + tabular-nums only): it sits inside
    many different contexts (a table cell, a card value, a read-only field)
-   each with its own original text size, so the size comes from the
+   each with its own text size, so the size comes from the
    surrounding block or the consumer's own scoped rule, never from .mono
    itself. */
 @layer components {

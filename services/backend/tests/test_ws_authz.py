@@ -1,7 +1,7 @@
 """Per-principal topic authorization.
 
 Uses a hand-rolled fake AsyncSession that satisfies the few `select(...)`
-calls the authz module makes — no real DB. Avoids the Phase 3 JSONB
+calls the authz module makes — no real DB. Avoids the JSONB
 limitation that blocks in-memory SQLite.
 """
 

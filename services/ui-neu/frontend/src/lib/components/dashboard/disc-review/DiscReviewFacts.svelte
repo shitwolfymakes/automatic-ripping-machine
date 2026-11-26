@@ -75,11 +75,11 @@
 						target="_blank"
 						rel="noopener noreferrer"
 						class="disc-review-widget-ext-id">{jobMeta.imdb_id}</a
-					>
-					{#if matchDetail}<span class="disc-review-widget-muted">, {matchDetail}</span>{/if}
+					>{#if matchDetail}<span class="disc-review-widget-muted">, {matchDetail}</span>{/if}
 				{:else if isTv ? job.has_series : !!job.title?.trim() && !isMiss}
-					<span>{showProvider ? `Matched on ${showProvider}` : 'Set by hand'}</span>
-					{#if matchDetail}<span class="disc-review-widget-muted">, {matchDetail}</span>{/if}
+					<span>{showProvider ? `Matched on ${showProvider}` : 'Set by hand'}</span>{#if matchDetail}<span
+							class="disc-review-widget-muted">, {matchDetail}</span
+						>{/if}
 				{:else}
 					<span class="disc-review-widget-needs">{isTv ? 'Needs show' : 'No match'}</span><span
 						class="disc-review-widget-muted"
