@@ -1,0 +1,124 @@
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { renderComponent, screen, fireEvent, cleanup } from '$lib/testing/render';
+
+// vi.mock factories are hoisted — all values must be inline (no top-level vars).
+vi.mock('$lib/stores/dashboard', async () => {
+	const { writable } = await import('svelte/store');
+	const store = writable({
+		db_available: true,
+		arm_online: true,
+		active_jobs: [
+			{ job_id: 1, status: 'ripping', title: 'Movie A' },
+			{ job_id: 2, status: 'transcoding', title: 'Movie B' }
+		],
+		drives_online: 2,
+		drives: {},
+		notification_count: 3,
+		ripping_enabled: true,
+		makemkv_key_valid: true,
+		makemkv_key_checked_at: null,
+		transcoder_online: true,
+		transcoder_stats: { pending: 4 },
+		active_transcodes: [{ id: 't1', status: 'in_progress' }]
+	});
+	return {
+		dashboard: { ...store, start: vi.fn(), stop: vi.fn(), error: writable(null) }
+	};
+});
+
+vi.mock('$lib/stores/auth', async () => {
+	const { writable, derived } = await import('svelte/store');
+	const _authed = writable(true);
+	return {
+		isGuest: derived(_authed, (a) => !a),
+		__setAuthed: (v: boolean) => _authed.set(v)
+	};
+});
+
+vi.mock('$lib/stores/resources.svelte', async () => {
+	const { readable } = await import('svelte/store');
+	return {
+		// SidebarStats draws once the first poll has landed (initialized).
+		resources: Object.assign(
+			readable({
+				cpu_percent: 42,
+				cpu_temp: 0,
+				memory: { total_gb: 16, used_gb: 8, free_gb: 8, percent: 50 },
+				storage: [{ name: 'Raw', path: '/raw', total_gb: 100, used_gb: 20, free_gb: 80, percent: 20 }]
+			}),
+			{ initialized: readable(true) }
+		),
+		startResources: vi.fn(),
+		stopResources: vi.fn()
+	};
+});
+
+// SidebarStats also waits for the version read before it draws.
+vi.mock('$lib/api/system', () => ({ fetchSystemVersion: () => Promise.resolve({ version: '1' }) }));
+
+import MobileStatsPanel from '$lib/components/layout/MobileStatsPanel.svelte';
+
+// jsdom can't navigate; prevent the default so anchor clicks don't log
+// "Not implemented: navigation to another Document".
+const preventNav = (e: Event) => e.preventDefault();
+beforeEach(() => document.addEventListener('click', preventNav));
+afterEach(() => {
+	document.removeEventListener('click', preventNav);
+	cleanup();
+});
+
+describe('MobileStatsPanel', () => {
+	it('renders the four service-health rows', () => {
+		renderComponent(MobileStatsPanel);
+		expect(screen.getByText('ARM')).toBeInTheDocument();
+		expect(screen.getByText('DB')).toBeInTheDocument();
+		expect(screen.getByText('Transcode')).toBeInTheDocument();
+		expect(screen.getByText('Key')).toBeInTheDocument();
+	});
+
+	it('Settings-bound rows are plain text for guests; Transcode stays a link', async () => {
+		const auth = (await import('$lib/stores/auth')) as unknown as { __setAuthed: (v: boolean) => void };
+		auth.__setAuthed(false);
+		renderComponent(MobileStatsPanel, { props: { onnavigate: vi.fn() } });
+		expect(document.querySelector('[data-mobile-stats] a[href^="/settings"]')).toBeNull();
+		expect(screen.getByText('Key')).toBeInTheDocument();
+		expect(screen.getByRole('link', { name: /transcode/i })).toHaveAttribute('href', '/transcoder');
+		auth.__setAuthed(true);
+	});
+
+	it('Key row deep-links to the MakeMKV key field', () => {
+		renderComponent(MobileStatsPanel, { props: { onnavigate: vi.fn() } });
+		expect(screen.getByRole('link', { name: /key/i })).toHaveAttribute('href', '/settings#Keys/makemkv_key');
+	});
+
+	it('renders live activity counts from the dashboard store', () => {
+		renderComponent(MobileStatsPanel);
+		expect(screen.getByText(/2 drives/)).toBeInTheDocument();
+		// One ripping job (transcoding job excluded from the ripping count)
+		expect(screen.getByText(/1 ripping/)).toBeInTheDocument();
+		expect(screen.getByText(/1 transcoding/)).toBeInTheDocument();
+		expect(screen.getByText(/4 queued/)).toBeInTheDocument();
+		expect(screen.getByText(/3 notifications/)).toBeInTheDocument();
+	});
+
+	it('renders the resource stats panel (CPU/Mem/Storage)', async () => {
+		renderComponent(MobileStatsPanel);
+		expect(await screen.findByText('CPU')).toBeInTheDocument();
+		expect(screen.getByText(/42/)).toBeInTheDocument();
+		expect(screen.getByText('Raw')).toBeInTheDocument();
+	});
+
+	it('fires onnavigate when any link inside the panel is clicked', async () => {
+		const onnavigate = vi.fn();
+		renderComponent(MobileStatsPanel, { props: { onnavigate } });
+		await fireEvent.click(screen.getByText('ARM'));
+		expect(onnavigate).toHaveBeenCalledTimes(1);
+	});
+
+	it('does not fire onnavigate for non-link clicks', async () => {
+		const onnavigate = vi.fn();
+		renderComponent(MobileStatsPanel, { props: { onnavigate } });
+		await fireEvent.click(await screen.findByText('CPU'));
+		expect(onnavigate).not.toHaveBeenCalled();
+	});
+});

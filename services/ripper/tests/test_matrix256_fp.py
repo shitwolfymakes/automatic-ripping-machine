@@ -77,7 +77,7 @@ def _escaping(target: Path) -> str:
 
 
 def test_dotdot_record_cannot_escape_the_skeleton(tmp_path: Path) -> None:
-    """D-003: a disc-supplied `..` name must not truncate a file outside the
+    """A disc-supplied `..` name must not truncate a file outside the
     skeleton root (the defect's PoC)."""
     victim = _victim(tmp_path)
     with pytest.raises(UnsafeRecordError):

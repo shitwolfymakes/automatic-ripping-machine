@@ -1,4 +1,4 @@
-"""TVmaze title search (PR 2b). Keyless; TVmaze asks for at most 20
+"""TVmaze title search. Keyless; TVmaze asks for at most 20
 requests per 10 s, which a search box and identify stay well under.
 Episode listing lives in identity/episodes/providers/tvmaze.py."""
 

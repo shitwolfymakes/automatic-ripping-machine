@@ -1,4 +1,4 @@
-"""Cross-disc continuity (spec 6.3): which episodes are still unclaimed and
+"""Cross-disc continuity: which episodes are still unclaimed and
 where this disc should start, plus ranking of per-season match results.
 
 `start_anchor`'s sentinel for "no remaining episode reaches the target
@@ -98,7 +98,7 @@ def align_runs(
     tolerance: int = 300,
     anchor: int | None = None,
 ) -> MatchResult:
-    """Align within each run of episodes no sibling disc holds (spec 6.3): a
+    """Align within each run of episodes no sibling disc holds: a
     disc can never span another disc's episodes, while plain gaps in the
     provider's numbering stay inside one run.
 

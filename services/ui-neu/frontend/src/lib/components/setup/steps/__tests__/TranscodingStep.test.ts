@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
-import { renderComponent, screen, cleanup, waitFor } from '$lib/test-utils';
+import { renderComponent, screen, cleanup, waitFor } from '$lib/testing/render';
 import type { SetupView } from '$lib/types/api.gen';
 import { setTranscoderEnabled } from '$lib/stores/config';
 
@@ -10,7 +10,7 @@ import { setTranscoderEnabled } from '$lib/stores/config';
 const gpusProps = vi.hoisted(() => ({ current: null as { location: { label: string } | null } | null }));
 const fieldsState = vi.hoisted(() => ({ save: null as (() => Promise<boolean>) | null }));
 
-vi.mock('$lib/components/settings/GpusCard.svelte', () => ({
+vi.mock('$lib/components/shared/GpusCard.svelte', () => ({
 	default: (_anchor: unknown, props: { location: { label: string } | null }) => {
 		gpusProps.current = props;
 	}

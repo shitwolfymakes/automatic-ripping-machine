@@ -1,4 +1,4 @@
-"""JobMetadata typed core (step 2 §3.4): flag helpers + round-trip safety."""
+"""JobMetadata typed core: flag helpers + round-trip safety."""
 
 from __future__ import annotations
 

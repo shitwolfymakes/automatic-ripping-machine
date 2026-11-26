@@ -1,0 +1,32 @@
+name: "Field docs links"
+on:
+  schedule:
+  - cron: "17 5 * * 1"   # Mondays 05:17 UTC
+  workflow_dispatch:
+
+permissions:
+  issues: write
+  contents: read
+
+concurrency:
+  group: field-docs-links
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+    - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+      with:
+        persist-credentials: false
+    - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+      with:
+        node-version-file: services/ui-neu/frontend/.nvmrc
+    # Requests each external link in field_docs.json, then opens/updates the
+    # open `docs-links` issue (creating the label if missing) or comments and
+    # closes it when every link resolves.
+    - run: node devtools/check-field-docs-links.mjs
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        GITHUB_REPOSITORY: ${{ github.repository }}

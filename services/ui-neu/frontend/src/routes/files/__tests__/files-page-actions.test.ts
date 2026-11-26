@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
-import { renderComponent, screen, fireEvent, cleanup, waitFor, within } from '$lib/test-utils';
+import { renderComponent, screen, fireEvent, cleanup, waitFor, within } from '$lib/testing/render';
 import FilesPage from '../+page.svelte';
 import * as stores from '$app/stores';
 import * as auth from '$lib/stores/auth';
@@ -319,7 +319,7 @@ describe('roots', () => {
 		mockFetchRoots.mockResolvedValue([]);
 		renderComponent(FilesPage);
 		await waitFor(() => expect(mockFetchRoots).toHaveBeenCalled());
-		await waitFor(() => expect(document.querySelectorAll('tr[aria-busy="true"]').length).toBe(8));
+		expect(await screen.findByText('No media directories configured')).toBeInTheDocument();
 		expect(screen.queryByRole('group', { name: 'File root tabs' })).not.toBeInTheDocument();
 		expect(mockFetchDirectory).not.toHaveBeenCalled();
 	});
@@ -511,6 +511,21 @@ describe('rename', () => {
 		expect(screen.getByText('Renamed to film.mkv')).toBeInTheDocument();
 		await vi.advanceTimersByTimeAsync(200);
 		await waitFor(() => expect(screen.queryByText('Renamed to film.mkv')).not.toBeInTheDocument());
+	});
+
+	it("keeps a later message up for its own 3 seconds, not the earlier one's", async () => {
+		vi.useFakeTimers({ shouldAdvanceTime: true });
+		await renderPage();
+		await rename('movie.mkv', 'film.mkv');
+		await screen.findByText('Renamed to film.mkv');
+		await vi.advanceTimersByTimeAsync(2000);
+		mockRename.mockRejectedValueOnce(new Error('Name taken'));
+		await rename('movie.mkv', 'clip.mkv');
+		await screen.findByText('Name taken');
+		await vi.advanceTimersByTimeAsync(2000);
+		expect(screen.getByText('Name taken')).toBeInTheDocument();
+		await vi.advanceTimersByTimeAsync(1100);
+		await waitFor(() => expect(screen.queryByText('Name taken')).not.toBeInTheDocument());
 	});
 });
 

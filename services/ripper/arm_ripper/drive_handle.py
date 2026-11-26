@@ -1,11 +1,10 @@
 """The single source of truth for "which node is my drive on right now".
 
-Before this existed, the poll loop, heartbeat loop, JobController, boot
-probe and eject each held their own copy of the device path, captured
-once at startup. After a renumbering replug they disagreed: the poll loop
-followed the drive while the heartbeat probed a stale node forever and a
-manual rip could target another drive entirely. Every consumer now reads
-this handle; only the poll loop writes it.
+The poll loop, heartbeat loop, JobController, boot probe and eject all
+read this handle; only the poll loop writes it. A private copy of the
+device path captured once at startup would go stale after a renumbering
+replug: the poll loop would follow the drive while the heartbeat probed a
+stale node forever and a manual rip could target another drive entirely.
 """
 
 from __future__ import annotations

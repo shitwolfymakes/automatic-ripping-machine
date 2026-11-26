@@ -73,7 +73,7 @@ def _search_candidates(
     label_year: int | None = None
     if scan.volume_label:
         label_title, label_year = normalize_volume_label(scan.volume_label)
-    # D-4: the volume label is a search candidate only while the `label`
+    # The volume label is a search candidate only while the `label`
     # disc hint is enabled; an operator who ignores disc text gets no
     # label search at all. Its year still narrows the hint candidate.
     label_enabled = "label" in hint_sources_setting(cfg)
@@ -214,7 +214,7 @@ class MetadataDispatcher:
         return None
 
     async def identify_from_fingerprint(self, scan: ScanResult, cfg: Config) -> MetadataResult | None:
-        """The disc's fingerprint sources only (spec Step 2): today the keyless
+        """The disc's fingerprint sources only: today the keyless
         community CRC64 database. Split out of `identify` so a caller that
         already holds an exact disc-map title can still consult it — it needs
         no API key, so it is the one online step a keyless install has — without
@@ -243,11 +243,11 @@ class MetadataDispatcher:
         return None
 
     def has_imdb_lookup(self, cfg: Config, kind: Kind) -> bool:
-        """True when an enabled source for `kind` can resolve an IMDb id (D-1)."""
+        """True when an enabled source for `kind` can resolve an IMDb id."""
         return any(capability(s, "lookup_imdb") is not None for s in sources_for(cfg, kind, self._sources))
 
     async def identify_from_imdb(self, imdb_id: str, cfg: Config, *, kind: Kind = "movie") -> MetadataResult | None:
-        """Exact-ID identify for a TheDiscDB-matched disc (spec D-1): the
+        """Exact-ID identify for a TheDiscDB-matched disc: the
         enabled sources for `kind`, in rank order, first hit wins. None when
         the id is empty, no source offers the lookup, or every source misses
         (the caller falls back to the fuzzy identify in that last case)."""
@@ -266,7 +266,7 @@ class MetadataDispatcher:
 
     async def fill_external_ids(self, hit: MetadataResult | None, cfg: Config) -> MetadataResult | None:
         """Fill the ids a hit lacks so the stored identity lets every episode
-        source find the show (spec S-10). A TMDb hit gets IMDb/TVDB ids from
+        source find the show. A TMDb hit gets IMDb/TVDB ids from
         its `external_ids`; any other movie/TV hit with an IMDb id gets its
         TMDb id from TMDb /find through the tmdb source, when that source is
         configured. Ids already in the payload win; a failure or

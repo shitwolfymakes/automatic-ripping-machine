@@ -1,4 +1,4 @@
-"""Tier-4: image-proxy cache caps are env-tunable, defaulting to current values."""
+"""Image-proxy cache caps are env-tunable, defaulting to current values."""
 
 from arm_backend.config import Settings
 

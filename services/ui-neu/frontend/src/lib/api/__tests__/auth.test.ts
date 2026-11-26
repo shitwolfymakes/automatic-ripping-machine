@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { login, logout, changePassword } from '../auth';
+import { setUnauthorizedHandler } from '../client';
 
 const mockFetch = vi.fn();
 vi.stubGlobal('fetch', mockFetch);
@@ -25,9 +26,12 @@ describe('login', () => {
 		expect(JSON.parse(init.body)).toEqual({ username: 'admin', password: 'pw' });
 	});
 
-	it('propagates a 401 as a thrown error', async () => {
+	it("throws a 401's detail without treating it as an expired session", async () => {
+		const on401 = vi.fn();
+		setUnauthorizedHandler(on401);
 		mockFetch.mockResolvedValue(jsonResponse({ detail: 'invalid credentials' }, false, 401, 'Unauthorized'));
-		await expect(login('admin', 'bad')).rejects.toThrow();
+		await expect(login('admin', 'bad')).rejects.toThrow('invalid credentials');
+		expect(on401).not.toHaveBeenCalled();
 	});
 });
 
@@ -49,4 +53,23 @@ describe('changePassword', () => {
 		expect(init.method).toBe('POST');
 		expect(JSON.parse(init.body)).toEqual({ current_password: 'old', new_password: 'newpassw0rd' });
 	});
+
+	it('throws a wrong current password (400) as its detail, without ending the session', async () => {
+		const on401 = vi.fn();
+		setUnauthorizedHandler(on401);
+		mockFetch.mockResolvedValue(jsonResponse({ detail: 'current password incorrect' }, false, 400, 'Bad Request'));
+		await expect(changePassword('typo', 'newpassw0rd')).rejects.toThrow('current password incorrect');
+		expect(on401).not.toHaveBeenCalled();
+	});
+
+	it.each(['invalid jwt: Signature has expired', 'unknown user', 'account disabled', 'authentication required'])(
+		'ends the session on a 401 (%s), which on this route always means the token',
+		async (detail) => {
+			const on401 = vi.fn();
+			setUnauthorizedHandler(on401);
+			mockFetch.mockResolvedValue(jsonResponse({ detail }, false, 401, 'Unauthorized'));
+			await expect(changePassword('old', 'newpassw0rd')).rejects.toThrow();
+			expect(on401).toHaveBeenCalledTimes(1);
+		}
+	);
 });

@@ -1,4 +1,4 @@
-"""Phase 12 — `arm_common.logging` shape, contextvar propagation, override semantics.
+"""`arm_common.logging` shape, contextvar propagation, override semantics.
 
 The helper lives in `arm_common`; tests for it live here because the
 arm_common workspace package has no `tests/` directory and pytest's

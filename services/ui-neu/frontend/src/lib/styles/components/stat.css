@@ -9,10 +9,8 @@
 		background: var(--color-surface);
 		padding: 1rem;
 	}
-	/* 10.5px, not --eyebrow-size (11px): StatStrip's original label was an
-	   arbitrary text-[10.5px] value, not the shared eyebrow token, and no
-	   line-height was ever set on it (browser default ratio applies, same as
-	   the original), so the label height matches exactly. */
+	/* 10.5px, not --eyebrow-size (11px): StatStrip's label is an arbitrary text-[10.5px] value, not
+	   the shared eyebrow token, and sets no line-height (the browser default ratio applies). */
 	.stat-label {
 		font-size: 10.5px;
 		font-weight: 600;

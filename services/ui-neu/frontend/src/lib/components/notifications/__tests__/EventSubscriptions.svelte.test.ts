@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from 'vitest';
-import { renderComponent, screen, fireEvent, cleanup } from '$lib/test-utils';
+import { renderComponent, screen, fireEvent, cleanup } from '$lib/testing/render';
 import type { ChannelTemplate } from '$lib/types/notifications';
 import type { EventTypeInfo } from '$lib/api/channels';
 import EventSubscriptions from '../EventSubscriptions.svelte';
@@ -116,9 +116,28 @@ describe('EventSubscriptions', () => {
 		renderComponent(EventSubscriptions, { props });
 		const field = screen.getByLabelText('rip.completed Recipient') as HTMLInputElement;
 		expect(field.placeholder).toBe('inherit');
-		expect(screen.getByText('Recipient *')).toBeTruthy();
+		expect(screen.getByText('Recipient')).toBeTruthy();
+		expect(screen.getByText('*')).toHaveAttribute('aria-hidden', 'true');
 		expect(screen.queryByLabelText('rip.completed SMTP password')).toBeNull();
 		await fireEvent.input(field, { target: { value: 'oncall@x' } });
 		expect(props.templates['rip.completed'].inputs).toEqual({ TO: 'oncall@x' });
+	});
+
+	it('labels the overrides by name and links them to the per-event overrides help', () => {
+		const inputs = [{ key: 'TO', label: 'Recipient', required: false, secret: false, default: '', values: ['a', 'b'] }];
+		renderComponent(EventSubscriptions, {
+			props: { selected: ['rip.completed'], templates: {}, eventTypes: catalogEventTypes, inputs }
+		});
+		expect(screen.getByLabelText('Title', { selector: 'input' })).toBe(screen.getByLabelText('rip.completed title'));
+		expect(screen.getByLabelText('Body', { selector: 'textarea' })).toBe(screen.getByLabelText('rip.completed body'));
+		expect(screen.getByLabelText('Recipient', { selector: 'select' })).toBe(
+			screen.getByLabelText('rip.completed Recipient')
+		);
+		for (const name of ['Title', 'Body', 'Recipient']) {
+			expect(screen.getByRole('link', { name: `Docs for ${name} (opens in a new tab)` })).toHaveAttribute(
+				'href',
+				'/help/guide/notification-scripts#per-event-overrides'
+			);
+		}
 	});
 });
