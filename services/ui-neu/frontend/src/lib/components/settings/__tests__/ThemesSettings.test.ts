@@ -151,38 +151,34 @@ describe('ThemesSettings feedback', () => {
 		setSchemes([userTheme('mine', 'Mine')]);
 		renderThemes();
 		expect(document.querySelector('.alert')).toBeNull();
-		expect(document.querySelector('.settings-page-feedback')).toBeNull();
 	});
 
-	it('shows a success feedback at the top and under the user themes', () => {
+	it('shows a success feedback once, as an alert at the top', () => {
 		setSchemes([userTheme('mine', 'Mine')]);
 		const themes = new UserThemes();
 		themes.feedback = { type: 'success', message: 'Theme "Mine" deleted' };
 		renderThemes(themes);
+		expect(screen.getAllByText('Theme "Mine" deleted')).toHaveLength(1);
 		const alert = document.querySelector('.alert') as HTMLElement;
 		expect(alert).toHaveClass('alert-success');
 		expect(alert).toHaveTextContent('Theme "Mine" deleted');
-		const line = document.querySelector('.settings-page-feedback') as HTMLElement;
-		expect(line).toHaveAttribute('data-error', 'false');
-		expect(line).toHaveTextContent('Theme "Mine" deleted');
 	});
 
-	it('shows an error feedback as a danger alert and an error line', () => {
+	it('shows an error feedback once, as a danger alert', () => {
 		setSchemes([userTheme('mine', 'Mine')]);
 		const themes = new UserThemes();
 		themes.feedback = { type: 'error', message: 'Delete failed' };
 		renderThemes(themes);
+		expect(screen.getAllByText('Delete failed')).toHaveLength(1);
 		expect(document.querySelector('.alert')).toHaveClass('alert-danger');
-		expect(document.querySelector('.settings-page-feedback')).toHaveAttribute('data-error', 'true');
 	});
 
-	it('shows only the top alert when there are no user themes', () => {
+	it('shows the alert when there are no user themes', () => {
 		setSchemes([builtin('default', 'Default')]);
 		const themes = new UserThemes();
 		themes.feedback = { type: 'error', message: 'Delete failed' };
 		renderThemes(themes);
 		expect(screen.getByText('Delete failed')).toBeInTheDocument();
-		expect(document.querySelector('.settings-page-feedback')).toBeNull();
 	});
 });
 

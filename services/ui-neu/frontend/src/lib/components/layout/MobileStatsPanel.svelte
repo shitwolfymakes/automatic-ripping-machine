@@ -2,7 +2,7 @@
 	import { plural } from '$lib/utils/plural';
 	import { isGuest } from '$lib/stores/auth';
 	import { dashboard } from '$lib/stores/dashboard';
-	import { serviceRows } from '$lib/dashboard/header-status';
+	import { serviceRows, transcodingCount } from '$lib/dashboard/header-status';
 	import { countRipping } from '$lib/jobs/status';
 	import SidebarStats from './SidebarStats.svelte';
 
@@ -14,6 +14,7 @@
 	let { onnavigate }: Props = $props();
 
 	const rippingCount = $derived(countRipping($dashboard.active_jobs ?? []));
+	const transcoding = $derived(transcodingCount($dashboard));
 
 	// Links inside SidebarStats (storage rows) must also close the drawer, so
 	// catch link clicks at the panel root instead of per-anchor. Keyboard
@@ -61,9 +62,9 @@
 			{#if rippingCount > 0}
 				<p class="nav-item mobile-stats-ripping">{rippingCount} ripping</p>
 			{/if}
-			{#if $dashboard.active_transcodes.length > 0}
+			{#if transcoding > 0}
 				<a href="/transcoder" class="nav-item mobile-stats-transcoding">
-					{$dashboard.active_transcodes.length} transcoding
+					{transcoding} transcoding
 				</a>
 			{/if}
 			{#if $dashboard.transcoder_online && (Number($dashboard.transcoder_stats?.pending) || 0) > 0}
@@ -87,7 +88,7 @@
 	.mobile-stats {
 		font-variant-numeric: tabular-nums;
 	}
-	/* .stack-sm is 0.5rem; the original space-y-1 lists here were 0.25rem. */
+	/* .stack-sm is 0.5rem; the lists here are 0.25rem. */
 	.mobile-stats-list {
 		gap: 0.25rem;
 	}

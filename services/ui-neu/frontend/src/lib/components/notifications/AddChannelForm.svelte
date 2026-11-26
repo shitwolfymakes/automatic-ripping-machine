@@ -138,7 +138,7 @@
 
 <style>
 	/* Same border/radius/shadow as .panel (an elevated surface), but the
-	   original's header/body/footer each carry their own independent padding
+	   header/body/footer each carry their own independent padding
 	   rather than one uniform pad, so this stays a local shell instead of .panel. */
 	.add-channel-form {
 		border: 1px solid var(--color-border-strong);

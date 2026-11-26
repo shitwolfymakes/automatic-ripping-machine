@@ -30,9 +30,8 @@
 		color: var(--color-text-muted);
 	}
 	/* panel-section's own background is a translucent primary tint, which
-	   only matches the original's DARK-mode bg-page/5 half of its pair; the
-	   original LIGHT mode was the flat --color-page - same gap as the
-	   NotificationsTab precedent from Task 9 */
+	   only matches the DARK-mode bg-page/5 half of this banner's pair; the LIGHT mode is the flat
+	   --color-page - same gap as NotificationsTab's toolbar */
 	.transcoder-page-offline-banner {
 		background: var(--color-page);
 	}

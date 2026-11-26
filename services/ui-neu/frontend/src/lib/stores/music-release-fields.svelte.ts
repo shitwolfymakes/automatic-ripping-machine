@@ -1,6 +1,7 @@
 // The music search's edit fields for the chosen release: album, artist and
 // year, seeded from each release, and the disc number and total, seeded from
 // the job and kept from one release to the next.
+import { untrack } from 'svelte';
 import type { JobView, MetadataReleaseDetail } from '$lib/types/api.gen';
 
 export class MusicReleaseFields {
@@ -22,14 +23,15 @@ export class MusicReleaseFields {
 
 	/**
 	 * Sets album, artist and year from the release, and fills a blank disc total
-	 * from a multi-disc release's disc count. The read of discTotal is tracked
-	 * by the caller's effect (see #593).
+	 * from a multi-disc release's disc count. The read of discTotal is
+	 * untracked, so an effect that seeds depends on the release alone and an
+	 * edit to the disc total does not reseed the other fields.
 	 */
 	seed = (detail: MetadataReleaseDetail): void => {
 		this.artist = detail.artist ?? '';
 		this.album = detail.title;
 		this.year = detail.year != null ? String(detail.year) : '';
-		if (detail.disc_count != null && detail.disc_count > 1 && !this.discTotal) {
+		if (detail.disc_count != null && detail.disc_count > 1 && !untrack(() => this.discTotal)) {
 			this.discTotal = String(detail.disc_count);
 		}
 	};

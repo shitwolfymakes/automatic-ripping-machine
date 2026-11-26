@@ -1,4 +1,4 @@
-"""Phase 12 — `LogTailer.tick` behaviour with a fake WSHub.
+"""`LogTailer.tick` behaviour with a fake WSHub.
 
 The tailer scans a log dir, parses JSONL, gates on subscriber count via
 the hub, and re-emits to `logs.{job_id}` for any line whose job_id has

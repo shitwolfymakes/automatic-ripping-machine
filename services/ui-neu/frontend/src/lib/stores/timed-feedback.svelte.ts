@@ -13,21 +13,43 @@ export interface Feedback {
 export class TimedFeedback {
 	/** The message showing, or null. */
 	current = $state<Feedback | null>(null);
+	#timer: ReturnType<typeof setTimeout> | null = null;
+	readonly #ms: number;
+
+	/** `ms` is how long a `show` message stays up. */
+	constructor(ms: number = FEEDBACK_MS) {
+		this.#ms = ms;
+	}
 
 	/** Shows a message that stays until another replaces it. */
 	hold(type: Feedback['type'], message: string): void {
+		this.dispose();
 		this.current = { type, message };
 	}
 
 	/**
-	 * Shows a message, and clears whichever message is up FEEDBACK_MS later.
-	 * The timer is never cancelled, so an earlier message's timer can clear a
-	 * later message early.
+	 * Shows a message and clears it `ms` later. A newer message cancels the
+	 * pending clear, so each message stays up for its own full duration.
 	 */
 	show(type: Feedback['type'], message: string): void {
+		this.dispose();
 		this.current = { type, message };
-		setTimeout(() => {
+		this.#timer = setTimeout(() => {
+			this.#timer = null;
 			this.current = null;
-		}, FEEDBACK_MS);
+		}, this.#ms);
+	}
+
+	/** Removes the message now and cancels its pending clear. */
+	clear(): void {
+		this.dispose();
+		this.current = null;
+	}
+
+	/** Cancels the pending clear; call it when the owning component unmounts. */
+	dispose(): void {
+		if (this.#timer === null) return;
+		clearTimeout(this.#timer);
+		this.#timer = null;
 	}
 }

@@ -191,9 +191,8 @@
 			 interactive tablist role (svelte a11y
 			 a11y_no_noninteractive_element_to_interactive_role). This is the
 			 same shape SessionsArea.svelte uses. The <nav aria-label="Settings
-			 tabs"> wrapper is kept because the parity harness selects the strip
-			 with nav[aria-label="Settings tabs"]; it is an unstyled block box,
-			 so the inner div reproduces the previous nav's own box exactly.
+			 tabs"> wrapper keeps the strip selectable with nav[aria-label="Settings tabs"]; it is an
+			 unstyled block box.
 			 data-settings-tabs is the published hook schemes style it by. -->
 			<nav aria-label="Settings tabs" data-settings-tabs>
 				<div class="tabs settings-page-tabs" role="tablist">

@@ -37,8 +37,8 @@ const editSession = {
 
 async function fillRequired() {
 	await fireEvent.input(screen.getByLabelText(/session name/i), { target: { value: 'My Movies' } });
-	await fireEvent.change(screen.getByLabelText(/rip preset/i), { target: { value: 'r1' } });
-	await fireEvent.input(screen.getByLabelText(/output path/i), { target: { value: 'movies/{title}.{ext}' } });
+	await fireEvent.change(screen.getByLabelText(/^rip preset/i), { target: { value: 'r1' } });
+	await fireEvent.input(screen.getByLabelText(/^output path/i), { target: { value: 'movies/{title}.{ext}' } });
 }
 
 const setOverrides = (value: string) =>
@@ -188,7 +188,7 @@ describe('SessionBuilder selects', () => {
 		renderComponent(SessionBuilder, props());
 		await fillRequired();
 		expect(screen.getByText('Rips only, no transcode step.')).toBeInTheDocument();
-		await fireEvent.change(screen.getByLabelText(/transcode preset/i), { target: { value: 't1' } });
+		await fireEvent.change(screen.getByLabelText(/^transcode preset/i), { target: { value: 't1' } });
 		expect(screen.queryByText('Rips only, no transcode step.')).not.toBeInTheDocument();
 		await submit();
 		await waitFor(() =>
@@ -199,7 +199,7 @@ describe('SessionBuilder selects', () => {
 	it('"+ Create new rip preset..." calls oncreaterip and keeps the previous rip value', async () => {
 		const oncreaterip = vi.fn();
 		renderComponent(SessionBuilder, props({ oncreaterip }));
-		const sel = screen.getByLabelText(/rip preset/i) as HTMLSelectElement;
+		const sel = screen.getByLabelText(/^rip preset/i) as HTMLSelectElement;
 		await fireEvent.change(sel, { target: { value: 'r1' } });
 		await fireEvent.change(sel, { target: { value: '__create_rip__' } });
 		expect(oncreaterip).toHaveBeenCalledOnce();
@@ -209,7 +209,7 @@ describe('SessionBuilder selects', () => {
 	it('"+ Create new transcode preset..." calls oncreatetranscode and keeps the previous transcode value', async () => {
 		const oncreatetranscode = vi.fn();
 		renderComponent(SessionBuilder, props({ oncreatetranscode }));
-		const sel = screen.getByLabelText(/transcode preset/i) as HTMLSelectElement;
+		const sel = screen.getByLabelText(/^transcode preset/i) as HTMLSelectElement;
 		await fireEvent.change(sel, { target: { value: 't1' } });
 		await fireEvent.change(sel, { target: { value: '__create_tc__' } });
 		expect(oncreatetranscode).toHaveBeenCalledOnce();
@@ -222,7 +222,7 @@ describe('SessionBuilder output path', () => {
 		vi.mocked(createSession).mockResolvedValue({ id: 's1' } as any);
 		renderComponent(SessionBuilder, props());
 		await fillRequired();
-		await fireEvent.input(screen.getByLabelText(/output path/i), { target: { value: 'x/{title}' } });
+		await fireEvent.input(screen.getByLabelText(/^output path/i), { target: { value: 'x/{title}' } });
 		await submit();
 		await waitFor(() =>
 			expect(createSession).toHaveBeenCalledWith(expect.objectContaining({ output_path_template: 'x/{title}' }))
@@ -233,8 +233,8 @@ describe('SessionBuilder output path', () => {
 		vi.useFakeTimers();
 		try {
 			renderComponent(SessionBuilder, props());
-			await fireEvent.input(screen.getByLabelText(/output path/i), { target: { value: 'x/{title}' } });
-			await fireEvent.change(screen.getByLabelText(/transcode preset/i), { target: { value: 't1' } });
+			await fireEvent.input(screen.getByLabelText(/^output path/i), { target: { value: 'x/{title}' } });
+			await fireEvent.change(screen.getByLabelText(/^transcode preset/i), { target: { value: 't1' } });
 			await vi.advanceTimersByTimeAsync(300);
 			expect(previewTemplate).toHaveBeenLastCalledWith({
 				template: 'x/{title}',

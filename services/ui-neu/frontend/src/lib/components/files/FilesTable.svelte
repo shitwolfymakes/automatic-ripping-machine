@@ -71,8 +71,7 @@
 <style>
 	/* replaces the banned inline `hidden lg:table-cell`/`hidden
 	   md:table-cell` (table/table-row/table-cell are Tailwind
-	   display-utility names, banned outright by the lint per Task 11 fix
-	   round 3 - only the table block's own classes may set that display
+	   display-utility names, banned outright by the lint - only the table block's own classes may set that display
 	   value) */
 	.files-page-cell-lg {
 		display: none;

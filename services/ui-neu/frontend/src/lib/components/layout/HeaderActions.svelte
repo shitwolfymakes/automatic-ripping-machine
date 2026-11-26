@@ -48,7 +48,9 @@
 		const newValue = !$dashboard.ripping_enabled;
 		dashboard.update((d) => ({ ...d, ripping_enabled: newValue }));
 		try {
-			await setRippingEnabled(newValue);
+			const config = await setRippingEnabled(newValue);
+			// The reply is the saved state, newer than any poll in flight.
+			dashboard.update((d) => ({ ...d, ripping_enabled: !config.ripping_paused }));
 		} catch {
 			// Revert on failure — next poll will also reconcile
 			dashboard.update((d) => ({ ...d, ripping_enabled: !newValue }));
@@ -191,19 +193,16 @@
 </div>
 
 <style>
-	/* original header icon buttons were p-2 (0.5rem/8px), not .btn-icon's
-	   default 0.375rem (6px) - that smaller value is right for the denser
-	   row icon buttons elsewhere (channel rows use p-1.5/6px), but shifts
-	   these four header buttons (sidebar toggle, quick actions, sign out,
-	   theme) ~2px narrower than the original. */
+	/* header icon buttons are 0.5rem/8px, not .btn-icon's default 0.375rem (6px) - that smaller value
+	   is right for the denser row icon buttons elsewhere (channel rows use 6px), but would make
+	   these four header buttons (sidebar toggle, quick actions, sign out, theme) ~2px narrower. */
 	.layout-header-icon {
 		padding: 0.5rem;
 	}
 
 	/* Auto-Start control: a labeled toggle, tinted by whether ripping is on.
 	   Overrides the shared .btn box model (border, min-height, padding) back
-	   to this control's original geometry (no border, natural height,
-	   px-3 py-1.5), since .btn's border-strong ring and --control-h min-height
+	   to this control's own geometry (no border, natural height, 0.75rem/0.375rem padding), since .btn's border-strong ring and --control-h min-height
 	   were designed for bordered action buttons, not this pill. */
 	.layout-autostart {
 		gap: 0.5rem;

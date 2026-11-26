@@ -3,7 +3,7 @@ import { deferSetup, fetchSetup, putSetupStep } from '$lib/api/setup';
 import { errorMessage } from '$lib/utils/errors';
 
 // First-run walkthrough state shared by the /setup route, the dashboard
-// checklist card and Settings > System (setup spec 2026-10-01 §5.11).
+// checklist card and Settings > System.
 
 export const setupState = $state<{ view: SetupView | null; loading: boolean; error: string | null }>({
 	view: null,

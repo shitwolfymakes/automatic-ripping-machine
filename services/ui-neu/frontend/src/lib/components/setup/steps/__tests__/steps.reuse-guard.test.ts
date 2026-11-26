@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 
-// Setup spec D5: the walkthrough composes the components Settings uses and
+// The walkthrough composes the components Settings uses and
 // never implements a setting itself. A step file may read (getters) but every
 // write goes through a shared component's own save().
 const sources = import.meta.glob('../*.svelte', { query: '?raw', import: 'default', eager: true }) as Record<

@@ -242,8 +242,8 @@
 
 <style>
 	/* card-status colours its accent stripe from data-status (job/drive/
-	   transcode statuses); the original's left accent was the video-type hue
-	   instead, a different axis, so this overrides the accent colour. */
+	   transcode statuses); this row's left accent is the video-type hue instead, a different axis, so
+	   this overrides the accent colour. */
 	.job-active-row {
 		border-left-color: var(--jt-accent);
 		cursor: pointer;

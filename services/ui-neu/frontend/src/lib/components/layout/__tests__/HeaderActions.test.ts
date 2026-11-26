@@ -73,7 +73,7 @@ beforeEach(() => {
 	setSession('admin');
 	setDash();
 	apiLogoutMock.mockResolvedValue(undefined);
-	vi.mocked(setRippingEnabled).mockResolvedValue(undefined as never);
+	vi.mocked(setRippingEnabled).mockImplementation((enabled) => Promise.resolve({ ripping_paused: !enabled } as never));
 });
 
 afterEach(() => {
@@ -123,6 +123,14 @@ describe('HeaderActions auto-start toggle', () => {
 		expect(dashState().ripping_enabled).toBe(false);
 	});
 
+	it('shows the ripping state from the reply to the change', async () => {
+		vi.mocked(setRippingEnabled).mockResolvedValueOnce({ ripping_paused: false } as never);
+		render();
+		await fireEvent.click(autoStart());
+		await waitFor(() => expect(autoStart()).not.toBeDisabled());
+		expect(dashState().ripping_enabled).toBe(true);
+	});
+
 	it('reverts the flip when the API call fails', async () => {
 		vi.mocked(setRippingEnabled).mockRejectedValueOnce(new Error('boom'));
 		render();
@@ -132,8 +140,8 @@ describe('HeaderActions auto-start toggle', () => {
 	});
 
 	it('ignores a second click while the first is in flight', async () => {
-		let resolve!: () => void;
-		vi.mocked(setRippingEnabled).mockReturnValueOnce(new Promise<void>((r) => (resolve = r)) as never);
+		let resolve!: (v: unknown) => void;
+		vi.mocked(setRippingEnabled).mockReturnValueOnce(new Promise((r) => (resolve = r)) as never);
 		render();
 		const button = autoStart();
 		await fireEvent.click(button);
@@ -142,7 +150,7 @@ describe('HeaderActions auto-start toggle', () => {
 		button.removeAttribute('disabled');
 		await fireEvent.click(button);
 		expect(setRippingEnabled).toHaveBeenCalledTimes(1);
-		resolve();
+		resolve({ ripping_paused: true });
 		await waitFor(() => expect(button).not.toBeDisabled());
 	});
 });

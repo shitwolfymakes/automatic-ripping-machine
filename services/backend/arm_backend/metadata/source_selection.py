@@ -18,13 +18,13 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-# Step 2 fingerprint sources, gated as a whole by `crc64service_enabled`.
+# Fingerprint sources, gated as a whole by `crc64service_enabled`.
 DEFAULT_FINGERPRINT_SOURCES: tuple[str, ...] = ("arm_server",)
 
 
 def online_source_ids(cfg: Config | None, media_type: str) -> tuple[str, ...]:
     """Source ids for `media_type` in the order they are tried: the operator's
-    ranked list per type. The TV list is the episode list (spec D-7); ids whose
+    ranked list per type. The TV list is the episode list; ids whose
     adapter does not exist yet are dropped by `sources_for`."""
     if media_type == "movie":
         return movie_sources_setting(cfg)
@@ -61,7 +61,7 @@ def search_source(cfg: Config | None, media_type: str, registry: Mapping[str, "O
 
     The chosen provider does NOT have to be on that ranked list — the two
     settings are independent. `search_provider_tv` offers OMDb, which the
-    automatic TV order (`episode_sources`, spec D-7) deliberately does not
+    automatic TV order (`episode_sources`) deliberately does not
     carry, and a music search box still answers after `music_sources` is
     cleared to stop automatic CD lookups. Matching against the ranked list
     alone silently ignored both choices. A provider that genuinely cannot be
@@ -87,7 +87,7 @@ def search_source(cfg: Config | None, media_type: str, registry: Mapping[str, "O
 def lookup_sources(
     cfg: Config | None, media_type: str, registry: Mapping[str, "OnlineSource"]
 ) -> tuple["OnlineSource", ...]:
-    """`sources_for` with the Search card's preferred source first (spec: the
+    """`sources_for` with the Search card's preferred source first (the
     operator's chosen provider answers an exact-id lookup before the rest)."""
     ranked = sources_for(cfg, media_type, registry)
     preferred = search_source(cfg, media_type, registry)
@@ -97,7 +97,7 @@ def lookup_sources(
 
 
 def fingerprint_sources(cfg: Config | None, registry: Mapping[str, "OnlineSource"]) -> tuple["OnlineSource", ...]:
-    """Step 2 sources that answer a disc fingerprint, in order; none when the
+    """Sources that answer a disc fingerprint, in order; none when the
     `crc64service_enabled` switch is off (it gates the whole fingerprint walk)."""
     if not crc64service_enabled(cfg):
         return ()

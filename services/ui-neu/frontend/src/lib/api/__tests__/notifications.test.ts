@@ -24,6 +24,15 @@ describe('fetchNotifications', () => {
 		expect(result).toEqual([{ id: 'abc', message: 'test' }]);
 		expect(mockFetch).toHaveBeenCalledWith('/api/notifications/inbox', expect.objectContaining({ method: 'GET' }));
 	});
+
+	it('asks for the cleared rows too when told to', async () => {
+		mockFetch.mockResolvedValue(jsonResponse([]));
+		await fetchNotifications(true);
+		expect(mockFetch).toHaveBeenCalledWith(
+			'/api/notifications/inbox?include_cleared=true',
+			expect.objectContaining({ method: 'GET' })
+		);
+	});
 });
 
 describe('fetchNotificationCount', () => {

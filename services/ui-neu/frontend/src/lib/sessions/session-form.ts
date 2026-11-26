@@ -7,6 +7,16 @@ import { NAME_REQUIRED, type FieldErrors } from '$lib/ui/form-validation';
 export const SESSION_FIELDS = { name: 'sb-name', rip: 'sb-rip', path: 'sb-path', overrides: 'sb-overrides' } as const;
 export const SESSION_FIELD_ORDER: string[] = Object.values(SESSION_FIELDS);
 
+/** The builder's fields in the field docs registry. */
+export const FIELD_IDS = {
+	name: 'form.session.name',
+	media_type: 'form.session.media_type',
+	rip_preset: 'form.session.rip_preset',
+	transcode_preset: 'form.session.transcode_preset',
+	output_path: 'form.session.output_path',
+	overrides: 'form.session.overrides'
+} as const;
+
 export const RIP_PRESET_REQUIRED = 'Choose a rip preset';
 export const OUTPUT_PATH_REQUIRED = 'Output path is required';
 export const OVERRIDES_INVALID = 'Invalid JSON in overrides field';

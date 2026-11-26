@@ -45,6 +45,35 @@ describe('groupActiveJobs', () => {
 		expect(ids(g.waiting)).toEqual(['c', 'e']);
 		expect(ids(g.finishing)).toEqual([]);
 	});
+	it('puts every review status in waiting and none of them in finishing', () => {
+		const review = ['awaiting_user_id', 'identified', 'awaiting_review', 'ripped_awaiting_identify'];
+		const g = groupActiveJobs(
+			review.map((s) => idJob(s, s)),
+			none
+		);
+		expect(ids(g.waiting)).toEqual(review);
+		expect(ids(g.finishing)).toEqual([]);
+	});
+
+	it('puts every non-terminal status in exactly one section', () => {
+		const statuses = [
+			'created',
+			'awaiting_user_id',
+			'identified',
+			'awaiting_review',
+			'ripping',
+			'ripped',
+			'ripped_partial',
+			'ripped_awaiting_identify'
+		];
+		const g = groupActiveJobs(
+			statuses.map((s) => idJob(s, s)),
+			none
+		);
+		const placed = [g.scanning, g.waiting, g.ripping, g.finishing].flatMap(ids);
+		expect([...placed].sort()).toEqual([...statuses].sort());
+	});
+
 	it('reads a missing status as no section at all', () => {
 		const g = groupActiveJobs([idJob('a', undefined)], none);
 		expect([g.scanning, g.waiting, g.ripping, g.finishing].map(ids)).toEqual([[], [], [], []]);

@@ -138,9 +138,12 @@ async function setRole(role: string | null) {
 	auth.__setRole(role);
 }
 
-async function renderPage() {
+// The body (sections, idle panel, All Jobs) draws once the first dashboard
+// load lands; wait for it unless the test holds that load open.
+async function renderPage({ untilBody = true } = {}) {
 	const view = renderComponent(DashboardPage);
 	await waitFor(() => expect(screen.getByText('Dashboard')).toBeInTheDocument());
+	if (untilBody) await waitFor(() => expect(screen.getByText('All Jobs')).toBeInTheDocument());
 	return view;
 }
 
@@ -523,19 +526,19 @@ describe('Dashboard sections', () => {
 			expect(screen.getByText(/Insert a disc to get started - 1 drive online/)).toBeInTheDocument();
 		});
 
-		it('waits for the dashboard load', async () => {
+		it('waits for the dashboard load, with All Jobs held back alongside it', async () => {
 			vi.mocked(fetchDashboard).mockReturnValue(new Promise(() => {}));
-			await renderPage();
-			await waitFor(() => expect(screen.getByText('Listed l1')).toBeInTheDocument());
-			expect(screen.queryByText('No active rips or transcodes')).toBeNull();
-		});
-
-		it('waits for the jobs load', async () => {
-			vi.mocked(fetchJobsPage).mockReturnValue(new Promise(() => {}));
-			await renderPage();
-			await waitFor(() => expect(fetchDashboard).toHaveBeenCalled());
+			await renderPage({ untilBody: false });
+			await waitFor(() => expect(fetchJobsPage).toHaveBeenCalled());
 			await new Promise((r) => setTimeout(r, 20));
 			expect(screen.queryByText('No active rips or transcodes')).toBeNull();
+			expect(screen.queryByText('All Jobs')).toBeNull();
+		});
+
+		it('does not wait for the jobs load', async () => {
+			vi.mocked(fetchJobsPage).mockReturnValue(new Promise(() => {}));
+			await renderPage();
+			await waitFor(() => expect(screen.getByText('No active rips or transcodes')).toBeInTheDocument());
 		});
 
 		it.each([
@@ -576,8 +579,9 @@ describe('Dashboard sections', () => {
 
 		it('hides the pause banner while the dashboard is still loading', async () => {
 			vi.mocked(fetchDashboard).mockReturnValue(new Promise(() => {}));
-			await renderPage();
-			await waitFor(() => expect(screen.getByText('1 job')).toBeInTheDocument());
+			await renderPage({ untilBody: false });
+			await waitFor(() => expect(fetchJobsPage).toHaveBeenCalled());
+			await new Promise((r) => setTimeout(r, 20));
 			expect(screen.queryByText('Ripping Paused')).toBeNull();
 		});
 

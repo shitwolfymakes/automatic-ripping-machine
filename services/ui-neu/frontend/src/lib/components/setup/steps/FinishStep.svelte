@@ -13,7 +13,7 @@
 	import { setupSummaries } from '$lib/settings/setup-summaries';
 	import type { StepCommitResult } from '../../../setup/steps';
 
-	// Step 9: the first disc, the summary, and the certificate (setup spec §5.10).
+	// Step 9: the first disc, the summary, and the certificate.
 	let { view }: { view: SetupView; setBlocked?: (reason: string | null) => void } = $props();
 
 	const drives = createPollingStore(fetchDrives, [] as DriveView[], 3000);

@@ -129,6 +129,21 @@ describe('GpusCard probes', () => {
 		expect(screen.getByText("Couldn't test")).toBeInTheDocument();
 	});
 
+	it('drops "Couldn\'t test" when the result arrives after the timeout', async () => {
+		vi.useFakeTimers();
+		mockFetchGpus.mockResolvedValue([qsv]);
+		mockProbeGpu.mockResolvedValue(undefined);
+		renderComponent(GpusCard);
+		await vi.advanceTimersByTimeAsync(0);
+		await fireEvent.click(screen.getByLabelText(/Re-probe qsv/));
+		await vi.advanceTimersByTimeAsync(120_000);
+		expect(screen.getByText("Couldn't test")).toBeInTheDocument();
+
+		wsHandler?.(probedEvent({ gpu_id: qsv.id }));
+		await vi.advanceTimersByTimeAsync(0);
+		expect(screen.queryByText("Couldn't test")).not.toBeInTheDocument();
+	});
+
 	it('a gpu.probed event without a gpu_id still reloads the list', async () => {
 		mockFetchGpus.mockResolvedValue([qsv]);
 		renderComponent(GpusCard);

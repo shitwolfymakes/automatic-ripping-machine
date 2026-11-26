@@ -125,7 +125,7 @@ async def test_register_5xx_is_a_plain_http_error() -> None:
 
 
 async def test_register_refusal_falls_back_to_raw_text_on_unparseable_json_body() -> None:
-    """E2: the content-type header claiming JSON doesn't guarantee the body
+    """The content-type header claiming JSON doesn't guarantee the body
     actually parses as JSON — a proxy/gateway error page can carry
     "content-type: application/json" with an HTML body. Guard on the parse
     itself (ValueError), not the header."""
@@ -162,7 +162,7 @@ async def test_get_drive_parses_a_drive() -> None:
 
 
 async def test_get_ripper_config_sends_this_drive_id() -> None:
-    """The backend resolves the drive's own auto-rip override from drive_id (setup spec D1)."""
+    """The backend resolves the drive's own auto-rip override from drive_id."""
     seen = {}
 
     def handler(req: httpx.Request) -> httpx.Response:

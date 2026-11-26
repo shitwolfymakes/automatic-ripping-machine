@@ -1,4 +1,4 @@
-"""POST /api/jobs/{id}/resolve with a `match` block (match picker spec 3.6)."""
+"""POST /api/jobs/{id}/resolve with a `match` block."""
 # ruff: noqa: F811
 
 from __future__ import annotations

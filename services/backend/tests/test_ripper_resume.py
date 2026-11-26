@@ -1,4 +1,4 @@
-"""Phase 9 — `POST /api/ripper/jobs/{id}/resume` and
+"""`POST /api/ripper/jobs/{id}/resume` and
 `GET /api/ripper/drives/{id}/in-flight-job` end-to-end."""
 
 from __future__ import annotations
@@ -141,7 +141,7 @@ def test_resume_idempotent_does_not_inflate_attempts() -> None:
 
 
 def test_resume_resolves_routed_session_exactly_once() -> None:
-    """Fix 75-8 regression: resume must resolve the routed session ONE time
+    """Resume must resolve the routed session ONE time
     per request, mirroring rip-start. Before the fix, resolve_rip_preset_id_for_job
     and resolve_min_length_override each independently called
     resolve_routed_session_id."""

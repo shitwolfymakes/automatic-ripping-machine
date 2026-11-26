@@ -283,7 +283,7 @@ def test_get_config_missing_singleton_500() -> None:
     assert "config singleton missing" in r.json()["detail"]
 
 
-# --- /register (keyed on drive_id — spec §1, Plan 3) ---------------------------
+# --- /register (keyed on drive_id) ---------------------------
 
 _BY_ID = "usb-PIONEER_BD-RW_BDR-S12JX_AAAABBBB000E-0:0"
 
@@ -344,7 +344,7 @@ def test_register_refuses_a_drive_that_is_not_enrolled() -> None:
 
 
 def test_register_not_enrolled_refusal_is_logged(caplog: pytest.LogCaptureFixture) -> None:
-    """D2: the not-enrolled 409 is logged at WARNING (the mismatch 409 is
+    """The not-enrolled 409 is logged at WARNING (the mismatch 409 is
     already logged at ERROR by test_register_identity_mismatch...)."""
     db = FakeSession()
     db.rows["drives"] = [_enrolled(lifecycle=DriveLifecycle.DETECTED)]
@@ -376,7 +376,7 @@ def test_register_identity_mismatch_marks_the_row_error() -> None:
         (None, None, True),
         (None, _BY_ID, True),
         (_BY_ID, _BY_ID, True),
-        # D1: the row has a by-id binding — the ripper reporting no binding
+        # The row has a by-id binding — the ripper reporting no binding
         # at all counts as a mismatch, not an "unknown, skip the check" case.
         (_BY_ID, None, False),
     ],
@@ -547,7 +547,7 @@ def test_identify_with_hold_parks_review(signing_key: bytes) -> None:
 
 
 def test_identify_hold_with_pending_session_uses_routed_preset() -> None:
-    """Fix 75-1 regression: a manual trigger (explicit session_id) with
+    """A manual trigger (explicit session_id) with
     hold_for_review on must persist review tracks chosen by the ROUTED
     session's rip preset, not the drive/disc-type default. Before the fix,
     pending_session_id was assigned AFTER _persist_review_tracks ran, so
@@ -610,7 +610,7 @@ def test_identify_hold_with_pending_session_uses_routed_preset() -> None:
 
 
 async def test_persist_review_tracks_is_idempotent() -> None:
-    """Idempotency (audit M1): a title whose Track row already exists (ripper
+    """Idempotency: a title whose Track row already exists (ripper
     re-POSTed identify on the same held disc) is NOT re-inserted."""
     from arm_backend.identify_flow import _persist_review_tracks
     from arm_common import Job as _Job, Track as _Track, TrackKind as _TrackKind
@@ -707,7 +707,7 @@ def test_identify_paused_without_hold_still_409s() -> None:
 
 def test_identify_unidentified_with_hold_does_not_park(signing_key: bytes) -> None:
     """hold_for_review on but identify MISSES (block_on_miss off) -> the synthetic
-    IDENTIFIED-unidentified must NOT park in review (audit H5: gate on genuine
+    IDENTIFIED-unidentified must NOT park in review (gate on genuine
     success, not status==IDENTIFIED)."""
     db = FakeSession()
     db.rows["drives"] = [_drive()]
@@ -730,7 +730,7 @@ def test_identify_repost_on_held_disc_leaves_tracks_and_claims_alone(monkeypatch
     operator re-enabled a preset-dropped title. The reused job takes the
     already-identified path: no review tracks are persisted again, no preset
     claim is recorded and the resolver does not run, so no duplicate Track
-    rows appear and the operator's choice stands (Review Focus 5). The
+    rows appear and the operator's choice stands. The
     manual-over-preset precedence itself is
     `test_resolve_job_keeps_a_manual_reenable_over_a_preset_drop`."""
 
@@ -792,7 +792,7 @@ def test_identify_repost_on_held_disc_leaves_tracks_and_claims_alone(monkeypatch
 
 @pytest.mark.asyncio
 async def test_resolve_job_keeps_a_manual_reenable_over_a_preset_drop() -> None:
-    """D-088: the precedence the repost test above used to claim. A held disc
+    """The precedence of a manual re-enable over a preset drop. A held disc
     whose preset dropped title 2 and whose operator re-enabled it: resolving
     the stored claims keeps title 2 selected, owned by the manual claim, and
     leaves the preset's choice for title 1 in place."""
@@ -1035,7 +1035,7 @@ def test_identify_miss_stores_the_exact_and_the_fuzzy_attempts() -> None:
 
 
 class _StageRunner:
-    """Recording fake `EpisodeStageRunner` (Task 8): records every job_id
+    """Recording fake `EpisodeStageRunner`: records every job_id
     `schedule` was called with, without running anything for real."""
 
     def __init__(self) -> None:
@@ -1084,7 +1084,7 @@ def test_identify_movie_does_not_schedule_episode_stage() -> None:
 def test_identify_without_a_stage_runner_configured_skips_scheduling() -> None:
     """No `app.state.episode_stage` (every other test in this module, and
     real routers-under-test elsewhere): the dependency returns None and
-    identify proceeds exactly as before Task 8."""
+    identify proceeds exactly as when no stage runner is configured."""
     db = FakeSession()
     db.rows["drives"] = [_drive()]
     db.rows["config"] = [_config()]
@@ -1100,7 +1100,7 @@ def test_identify_without_a_stage_runner_configured_skips_scheduling() -> None:
 
 
 def test_identify_without_hold_then_rip_start_schedules_episode_stage() -> None:
-    """C1: with the default config (no review hold) identify creates no Track
+    """With the default config (no review hold) identify creates no Track
     rows, so the stage it schedules sees nothing to match. rip-start is where
     the tracks appear, so rip-start must schedule the stage too."""
     db = FakeSession()
@@ -1683,7 +1683,7 @@ def test_rip_start_returns_existing_tracks() -> None:
 
 def test_rip_start_existing_tracks_transitions_non_ripping() -> None:
     """Timed-review auto-start: rip-start on a held job whose review tracks were
-    pre-persisted must transition AWAITING_REVIEW -> RIPPING (audit B2), not
+    pre-persisted must transition AWAITING_REVIEW -> RIPPING, not
     return early without transitioning. started_at is stamped (was None)."""
     db = FakeSession()
     db.rows["drives"] = [_drive()]
@@ -2053,7 +2053,7 @@ class _patch_select_tracks:
         ripper_router.select_tracks = self._orig  # type: ignore[assignment]
 
 
-# --- dedupe / reuse (Task 3: identify wires find_reusable_job_for_disc) ------
+# --- dedupe / reuse (identify wires find_reusable_job_for_disc) ------
 
 
 def test_identify_reuses_pre_rip_job_no_duplicate() -> None:
@@ -2290,7 +2290,7 @@ def test_rip_complete_parked_application_with_missing_session_does_not_break(
 
 
 def test_rip_complete_failed_rip_cancels_parked_application(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    """D-082: nothing was ripped, so no drain will ever fill the parked
+    """Nothing was ripped, so no drain will ever fill the parked
     application; it is cancelled and no tasks are created."""
     from arm_backend import config as bcfg
 
@@ -2329,7 +2329,7 @@ def test_rip_complete_survives_parked_drain_failure(monkeypatch: pytest.MonkeyPa
     assert db.rows["session_applications"][0].status == SessionApplicationStatus.WAITING_IDENTIFY
 
 
-# --- rip-start honours the routed session's rip preset (G-01) ----------------
+# --- rip-start honours the routed session's rip preset ----------------
 
 
 def _session_row(session_id: str = "ses_r", rip_preset_id: str = "rpr_session") -> Session:
@@ -2346,7 +2346,7 @@ def _session_row(session_id: str = "ses_r", rip_preset_id: str = "rpr_session") 
 
 def test_rip_start_uses_pending_session_rip_preset() -> None:
     """A rip started with an explicit session choice rips that session's
-    track shape, not the disc-type default (G-01)."""
+    track shape, not the disc-type default."""
     db = FakeSession()
     db.rows["config"] = [_config()]
     db.rows["drives"] = [_drive()]
@@ -2364,7 +2364,7 @@ def test_rip_start_uses_pending_session_rip_preset() -> None:
 
 
 def test_rip_start_resolves_routed_session_exactly_once() -> None:
-    """Fix 75-8 regression: rip-start must resolve the routed session ONE
+    """Rip-start must resolve the routed session ONE
     time per request (preset choice + min-length override both derive from
     that single resolution), not once per consumer. Before the fix,
     resolve_rip_preset_id_for_job, resolve_rip_preset_for_job, and
@@ -2404,7 +2404,7 @@ def test_rip_start_resolves_routed_session_exactly_once() -> None:
 
 def test_rip_start_uses_drive_default_session_preset_without_auto_flag() -> None:
     """Routing ignores auto_transcode_on_idle: the drive default shapes the
-    rip even when unattended transcoding is off (§5.1)."""
+    rip even when unattended transcoding is off."""
     db = FakeSession()
     db.rows["config"] = [_config()]  # auto_transcode_on_idle=False
     drive = _drive()
@@ -2459,7 +2459,7 @@ def test_rip_start_routed_session_preset_not_seeded_500() -> None:
     assert "not seeded" in r.json()["detail"]
 
 
-# --- rip-complete parks unidentified placeholder rips (G-09) -----------------
+# --- rip-complete parks unidentified placeholder rips -----------------
 
 
 def test_rip_complete_unidentified_parks_awaiting_identify(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
@@ -2508,7 +2508,7 @@ def test_rip_complete_partial_unidentified_stays_ripped_partial(
 def test_rip_complete_partial_unidentified_does_not_run_after_rip(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    """Fix 75-3 regression: a RIPPED_PARTIAL placeholder (identify missed,
+    """A RIPPED_PARTIAL placeholder (identify missed,
     block_on_miss=false) must NOT run after_rip. Before the fix the
     unidentified-flag gate only covered the failed==0 (RIPPED) branch, so a
     partial placeholder fell through unconditionally and fanned out
@@ -2543,11 +2543,11 @@ def test_rip_complete_partial_unidentified_does_not_run_after_rip(
     assert not any(e["event_type"] == "session.queued" for e in hub.events)
 
 
-# --- identify records the identified kind + pending session (step 2 / G-03) --
+# --- identify records the identified kind + pending session --
 
 
 def test_identify_sets_media_type_from_kind() -> None:
-    """G-03: the provider's kind (movie/tv/music) lands on jobs.media_type
+    """The provider's kind (movie/tv/music) lands on jobs.media_type
     so routing and the UI can tell a TV disc from a movie."""
     db = FakeSession()
     db.rows["drives"] = [_drive()]
@@ -2590,7 +2590,7 @@ def test_identify_miss_leaves_media_type_unset() -> None:
 
 
 def test_identify_pending_session_lands_on_column() -> None:
-    """pending_session_id is a job column (step 2 §3.4); identify writes only
+    """pending_session_id is a job column; identify writes only
     the column, never a metadata_json mirror (task 2 drops the mirror)."""
     db = FakeSession()
     db.rows["drives"] = [_drive()]
@@ -2624,7 +2624,7 @@ def test_identify_writes_no_pending_mirror() -> None:
     assert "pending_session_id" not in job["metadata_json"]
 
 
-# --- identify files provider output under identity/provider_raw (step 2 §3.4)
+# --- identify files provider output under identity/provider_raw
 
 
 def test_identify_writes_identity_and_provider_raw_not_top_level() -> None:
@@ -2742,7 +2742,7 @@ def test_identify_bd_title_beats_label() -> None:
 
 
 def test_identify_disc_hint_sources_excludes_bd_title() -> None:
-    """PR 4: `disc_hint_sources=["label"]` narrows run_disc_hints (and the
+    """`disc_hint_sources=["label"]` narrows run_disc_hints (and the
     hint_title/hint_is_tv read that follows) to label only -- bd_title is
     neither run nor recorded, even on a Blu-ray with BDMT meta."""
     db = FakeSession()
@@ -2800,7 +2800,7 @@ def test_identify_passes_title_hint_is_tv_true_for_season_label() -> None:
 
 
 def test_identify_without_bd_meta_key_still_uses_label() -> None:
-    """Review Focus 3: an old ripper's scan_result has no `bd_meta` key at
+    """An old ripper's scan_result has no `bd_meta` key at
     all (not even null). identify must still run label hints and identify
     exactly as before."""
     db = FakeSession()
@@ -2877,7 +2877,7 @@ def test_identify_awaiting_user_id_still_applies_label_hints() -> None:
 
 
 async def test_resolve_manual_season_beats_label_hint() -> None:
-    """Review Focus 4: a hint-derived season is overridden by an operator
+    """A hint-derived season is overridden by an operator
     resolve, and that manual value survives a later resolve_job re-run."""
     from arm_backend.jwt_utils import issue_access_token
     from arm_backend.routers import jobs as jobs_router
@@ -3202,7 +3202,7 @@ def test_rip_start_job_without_drive_is_not_treated_as_an_iso() -> None:
     assert job.status == JobStatus.IDENTIFIED
 
 
-# --- per-drive auto-rip override (setup spec D1) ---
+# --- per-drive auto-rip override ---
 
 
 @pytest.mark.parametrize(
@@ -3326,7 +3326,7 @@ def test_owner_check_rejects_job_whose_drive_was_deleted() -> None:
 
 
 def test_identify_drops_a_pending_session_that_no_longer_exists(caplog: pytest.LogCaptureFixture) -> None:
-    """D-028: the session chosen at manual trigger was deleted before
+    """The session chosen at manual trigger was deleted before
     identify. Writing its id into the FK column would 500 (and the ripper
     would retry forever); identify drops it with a warning instead."""
     db = FakeSession()
@@ -3343,7 +3343,7 @@ def test_identify_drops_a_pending_session_that_no_longer_exists(caplog: pytest.L
 
 
 def test_identify_thediscdb_exact_walk_receives_the_release_kind() -> None:
-    """D-1: the route passes the TheDiscDB kind so a series id asks the TV sources."""
+    """The route passes the TheDiscDB kind so a series id asks the TV sources."""
     db = FakeSession()
     db.rows["drives"] = [_drive()]
     db.rows["config"] = [_config(block_on_miss=True, thediscdb_enabled=True)]
@@ -3363,7 +3363,7 @@ def test_identify_thediscdb_exact_walk_receives_the_release_kind() -> None:
 
 
 def test_identify_thediscdb_without_an_imdb_capable_source_uses_the_release() -> None:
-    """D-1: no enabled source offers an IMDb lookup → no online call; the job is
+    """No enabled source offers an IMDb lookup → no online call; the job is
     identified from the release's own title/year/kind with provider thediscdb."""
     db = FakeSession()
     db.rows["drives"] = [_drive()]
@@ -3516,7 +3516,7 @@ def test_identify_miss_title_uses_the_bdmt_hint_but_not_the_label_hint() -> None
 
 
 def test_identify_miss_title_prefers_release_then_label() -> None:
-    """D-4 miss title: TheDiscDB release title → raw label (with every hint off)."""
+    """Miss title: TheDiscDB release title → raw label (with every hint off)."""
     # 1. Release title beats the raw label when every lookup misses.
     db = FakeSession()
     db.rows["drives"] = [_drive()]

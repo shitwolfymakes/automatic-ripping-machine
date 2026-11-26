@@ -39,7 +39,7 @@ vi.mock('$lib/api/notifications', () => ({
 				message: 'Rip failed',
 				job_id: null,
 				seen: true,
-				cleared: false,
+				cleared: true,
 				seen_at: null,
 				cleared_at: null,
 				created_at: '2025-06-14T10:00:00Z'
@@ -199,7 +199,7 @@ describe('Notifications Page', () => {
 			expect(dismissNotification).not.toHaveBeenCalled();
 			expect(screen.queryByText('Job Complete')).not.toBeInTheDocument();
 			expect(screen.queryByText('Dismiss All')).not.toBeInTheDocument();
-			// Dismissed rows are still listed under Show dismissed until the next reload.
+			// Show dismissed reloads the list with the dismissed rows in it.
 			await fireEvent.click(screen.getByRole('checkbox'));
 			await waitFor(() => {
 				expect(screen.getByText('Job Complete')).toBeInTheDocument();
@@ -246,16 +246,20 @@ describe('Notifications Page', () => {
 	});
 
 	describe('interactions', () => {
-		it('shows dismissed notifications when checkbox toggled', async () => {
+		it('loads and shows the dismissed notifications when the checkbox is ticked', async () => {
+			const [unseen] = await fetchNotifications();
+			vi.mocked(fetchNotifications).mockClear();
+			vi.mocked(fetchNotifications).mockResolvedValueOnce([unseen]);
 			renderComponent(NotificationsPage);
 			await waitFor(() => {
 				expect(screen.getByText('Job Complete')).toBeInTheDocument();
 			});
-			const checkbox = screen.getByRole('checkbox');
-			await fireEvent.click(checkbox);
+			expect(fetchNotifications).toHaveBeenLastCalledWith(false);
+			await fireEvent.click(screen.getByRole('checkbox'));
 			await waitFor(() => {
 				expect(screen.getByText('Error')).toBeInTheDocument();
 			});
+			expect(fetchNotifications).toHaveBeenLastCalledWith(true);
 		});
 
 		it('renders dismiss button for unseen notifications', async () => {

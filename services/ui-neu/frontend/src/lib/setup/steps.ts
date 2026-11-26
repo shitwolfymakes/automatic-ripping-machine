@@ -1,7 +1,7 @@
 import type { GlyphName } from '$lib/ui/glyph-names';
 import type { SetupStep, SetupStepState, SetupView } from '$lib/types/api.gen';
 
-// The walkthrough's nine steps, in order (setup spec 2026-10-01 §5).
+// The walkthrough's nine steps, in order.
 export interface StepMeta {
 	id: SetupStep;
 	/** Stepper label. */

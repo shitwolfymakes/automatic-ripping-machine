@@ -18,6 +18,7 @@
 	import TranscodeJobList from '$lib/components/transcode/TranscodeJobList.svelte';
 	import TranscodeJobTabs from '$lib/components/transcode/TranscodeJobTabs.svelte';
 	import ConfirmDialog from '$lib/components/shared/ConfirmDialog.svelte';
+	import LoadState from '$lib/components/shared/LoadState.svelte';
 
 	// Singleton stores (see $lib/stores/transcoder) so stats/workers survive
 	// navigation and don't flash the offline/empty state on every visit.
@@ -28,6 +29,9 @@
 	const transcodeJobs = new TranscodeJobs();
 
 	let s = $derived($stats);
+	// The skeleton, offline banner and cards go through LoadState so they share
+	// its anti-flicker timing with the jobs list below.
+	const statsLoadError = $derived($statsError ? new Error($statsError) : null);
 
 	const taskActions = new TranscodeTaskActions(() => transcodeJobs.load());
 
@@ -39,12 +43,13 @@
 		taskActions.remove(id);
 	}
 
-	// Auto-refresh jobs when any are queued or in progress.
+	// Auto-refresh jobs when any are queued or in progress; when the queue
+	// goes idle, load once more so the last finished task shows its final state.
 	$effect(() => {
 		if (taskCount(s, 'in_progress') > 0 || taskCount(s, 'queued') > 0) {
 			transcodeJobs.startPolling();
 		} else {
-			transcodeJobs.stopPolling();
+			transcodeJobs.finishPolling();
 		}
 	});
 
@@ -116,19 +121,21 @@
 	     skeleton sized to match the real cards so it fills in place without a
 	     layout shift; only show the "offline" banner once a poll has actually
 	     confirmed the service is down, never while still loading. -->
-		{#if !$statsInitialized && !$statsError}
-			<TranscoderStatsSkeleton />
-		{:else if $statsError}
-			<!-- Offline banner -->
-			<TranscoderOfflineBanner />
-		{:else}
-			<!-- Worker pool + Stats cards -->
-			<div in:fade={fadeIn} out:fade={fadeOut} class="stack">
-				<!-- Worker pool status -->
-				<WorkerPoolPanel workers={$workers} stats={s} gpus={gpus.rows} />
-				<TranscoderStatTiles stats={s} />
-			</div>
-		{/if}
+		<LoadState data={$statsInitialized ? s : null} loading={!$statsInitialized} error={statsLoadError}>
+			{#snippet loadingSlot()}
+				<TranscoderStatsSkeleton />
+			{/snippet}
+			{#snippet errorSlot()}
+				<TranscoderOfflineBanner />
+			{/snippet}
+			{#snippet ready(current)}
+				<!-- Worker pool + Stats cards -->
+				<div class="stack">
+					<WorkerPoolPanel workers={$workers} stats={current} gpus={gpus.rows} />
+					<TranscoderStatTiles stats={current} />
+				</div>
+			{/snippet}
+		</LoadState>
 
 		<!-- Jobs section -->
 		<section class="space-y-4" data-page-section>

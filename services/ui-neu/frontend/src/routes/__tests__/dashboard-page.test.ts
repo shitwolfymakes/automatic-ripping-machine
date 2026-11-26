@@ -1,3 +1,7 @@
+// Open arms the coverage tool reports that are Svelte's, not the page's, each a
+// text `{...}` compiled to `(...) ?? ''`: the backend error's message (inside an
+// #if on the error), and the counts in the ACTIVE RIPS and TRANSCODING section
+// labels (array lengths, always numbers).
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { renderComponent, screen, cleanup, waitFor, fireEvent, within } from '$lib/testing/render';
 import DashboardPage from '../+page.svelte';
@@ -70,9 +74,11 @@ vi.mock('$lib/api/logs', () => ({
 }));
 
 /** Render dashboard and wait for initial data to load */
+// The body (sections, idle panel, All Jobs) draws once the first dashboard
+// load lands.
 async function renderDashboard() {
 	renderComponent(DashboardPage);
-	await waitFor(() => expect(screen.getByText('Dashboard')).toBeInTheDocument());
+	await waitFor(() => expect(screen.getByText('All Jobs')).toBeInTheDocument());
 }
 
 /** Render dashboard, wait for jobs, then switch to table view */
@@ -81,74 +87,6 @@ async function renderDashboardTable() {
 	await fireEvent.click(screen.getByText('Table'));
 	await waitFor(() => expect(screen.getByText('Title')).toBeInTheDocument());
 }
-
-describe('Dashboard job grouping logic', () => {
-	function groupJobs(jobs: Array<{ status: string | null; id: string }>) {
-		const waiting = jobs.filter((j) => {
-			const s = j.status?.toLowerCase();
-			return s === 'awaiting_user_id' || s === 'ripped_awaiting_identify';
-		});
-		const scanning = jobs.filter((j) => j.status?.toLowerCase() === 'created');
-		const active = jobs.filter((j) => j.status?.toLowerCase() === 'ripping');
-		const finishing = jobs.filter((j) => {
-			const s = j.status?.toLowerCase();
-			return s === 'identified' || s === 'ripped' || s === 'ripped_partial';
-		});
-		return { scanning, waiting, active, finishing };
-	}
-
-	it('created jobs go to scanning, not active', () => {
-		const { scanning, active } = groupJobs([
-			{ id: 'a', status: 'created' },
-			{ id: 'b', status: 'ripping' }
-		]);
-		expect(scanning.map((j) => j.id)).toEqual(['a']);
-		expect(active.map((j) => j.id)).toEqual(['b']);
-	});
-
-	it('awaiting_user_id + ripped_awaiting_identify go to waiting', () => {
-		const { waiting } = groupJobs([
-			{ id: 'a', status: 'awaiting_user_id' },
-			{ id: 'b', status: 'ripped_awaiting_identify' },
-			{ id: 'c', status: 'ripping' }
-		]);
-		expect(waiting.map((j) => j.id).sort()).toEqual(['a', 'b']);
-	});
-
-	it('ripping is the only ACTIVE-RIPS status', () => {
-		const { active } = groupJobs([
-			{ id: 'a', status: 'ripping' },
-			{ id: 'b', status: 'ripped' },
-			{ id: 'c', status: 'created' }
-		]);
-		expect(active.map((j) => j.id)).toEqual(['a']);
-	});
-
-	it('identified + ripped + ripped_partial go to finishing', () => {
-		const { finishing } = groupJobs([
-			{ id: 'a', status: 'identified' },
-			{ id: 'b', status: 'ripped' },
-			{ id: 'c', status: 'ripped_partial' },
-			{ id: 'd', status: 'ripping' }
-		]);
-		expect(finishing.map((j) => j.id).sort()).toEqual(['a', 'b', 'c']);
-	});
-
-	it('all 7 non-terminal statuses are partitioned with no gaps/overlaps', () => {
-		const jobs = [
-			{ id: '1', status: 'created' },
-			{ id: '2', status: 'awaiting_user_id' },
-			{ id: '3', status: 'identified' },
-			{ id: '4', status: 'ripping' },
-			{ id: '5', status: 'ripped' },
-			{ id: '6', status: 'ripped_partial' },
-			{ id: '7', status: 'ripped_awaiting_identify' }
-		];
-		const { scanning, waiting, active, finishing } = groupJobs(jobs);
-		const all = [...scanning, ...waiting, ...active, ...finishing].map((j) => j.id).sort();
-		expect(all).toEqual(['1', '2', '3', '4', '5', '6', '7']);
-	});
-});
 
 describe('Dashboard Page', () => {
 	afterEach(() => cleanup());

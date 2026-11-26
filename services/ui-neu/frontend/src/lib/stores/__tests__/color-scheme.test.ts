@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { get } from 'svelte/store';
 import { colorScheme, schemeLocksMode } from '../color-scheme';
+import { applySchemeToDocument } from '$lib/themes/apply-scheme';
 import { COLOR_SCHEMES } from '$lib/themes/builtin-schemes';
 
 describe('schemeLocksMode', () => {
@@ -70,28 +71,24 @@ describe('applyScheme effective-mode tokens', () => {
 		);
 	});
 
-	it('still writes the legacy -dark-suffixed names unchanged', () => {
+	it('reads the -dark twins as data and does not write them onto <html>', () => {
 		localStorage.setItem('theme', 'dark');
 		reapply(DEFAULT_SCHEME.id);
-		expect(document.documentElement.style.getPropertyValue('--color-surface-dark').trim()).toBe(
-			DEFAULT_SCHEME.tokens['--color-surface-dark']
-		);
-		expect(document.documentElement.style.getPropertyValue('--color-page-dark').trim()).toBe(
-			DEFAULT_SCHEME.tokens['--color-page-dark']
-		);
+		expect(document.documentElement.style.getPropertyValue('--color-surface-dark')).toBe('');
+		expect(document.documentElement.style.getPropertyValue('--color-page-dark')).toBe('');
 	});
 
-	it('keeps --color-primary mode-invariant even though the scheme has a --color-primary-dark alias', () => {
+	it('keeps --color-primary mode-invariant even when a scheme carries a --color-primary-dark token', () => {
 		localStorage.setItem('theme', 'dark');
-		reapply(DEFAULT_SCHEME.id);
+		const scheme = {
+			...DEFAULT_SCHEME,
+			tokens: { ...DEFAULT_SCHEME.tokens, '--color-primary-dark': 'rgb(1, 2, 3)' }
+		};
+		applySchemeToDocument(scheme, '');
 		expect(document.documentElement.style.getPropertyValue('--color-primary').trim()).toBe(
 			DEFAULT_SCHEME.tokens['--color-primary']
 		);
-		// The legacy alias itself is still written unchanged for unmigrated
-		// components (e.g. `dark:text-primary-dark`).
-		expect(document.documentElement.style.getPropertyValue('--color-primary-dark').trim()).toBe(
-			DEFAULT_SCHEME.tokens['--color-primary-dark']
-		);
+		expect(document.documentElement.style.getPropertyValue('--color-primary-dark')).toBe('');
 	});
 
 	it('does not write a -dark value for a role the scheme does not pair (e.g. --radius)', () => {

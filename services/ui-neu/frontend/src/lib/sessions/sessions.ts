@@ -86,13 +86,16 @@ function discTypeToMediaType(dt: DiscType): MediaType | null {
 }
 
 /**
- * The sessions a disc of this type can take: those of its media type plus tv
- * sessions, or every session when the disc type maps to no media type
- * (unknown).
+ * The sessions a job can take, by the Backend's compatibility rule
+ * (`mediaTypesCompatible`) against the job's media type, else the one its
+ * disc type implies; every session when neither is known (an unknown disc).
  */
-export function sessionsForDisc<S extends { media_type: string }>(sessions: readonly S[], discType: DiscType): S[] {
-	const mt = discTypeToMediaType(discType);
-	return sessions.filter((s) => mt === null || s.media_type === mt || s.media_type === 'tv');
+export function sessionsForJob<S extends { media_type: string }>(
+	sessions: readonly S[],
+	job: { media_type?: string | null; disc_type: DiscType }
+): S[] {
+	const mt = job.media_type ?? discTypeToMediaType(job.disc_type);
+	return sessions.filter((s) => mt === null || mediaTypesCompatible(mt, s.media_type));
 }
 
 /** The media types a session can have. */

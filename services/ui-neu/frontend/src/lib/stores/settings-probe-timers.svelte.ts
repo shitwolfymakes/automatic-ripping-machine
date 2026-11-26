@@ -40,14 +40,20 @@ export class ProbeTimers {
 	}
 
 	/**
-	 * Stops the device's probe timer, if it has one. A device with no timer is
-	 * left alone, so a timed-out flag stays set when a late result arrives.
+	 * Ends the device's probe when its result arrives: stops its timer, if it
+	 * has one, and clears its timed-out flag, so a result that arrives after
+	 * the timeout still replaces "couldn't test".
 	 */
 	stop(id: string): void {
-		if (!this.#timers[id]) return;
-		clearTimeout(this.#timers[id]);
-		const { [id]: _t, ...rest } = this.#timers;
-		this.#timers = rest;
+		if (this.#timers[id]) {
+			clearTimeout(this.#timers[id]);
+			const { [id]: _t, ...rest } = this.#timers;
+			this.#timers = rest;
+		}
+		if (this.#timedOut[id]) {
+			const { [id]: _f, ...rest } = this.#timedOut;
+			this.#timedOut = rest;
+		}
 	}
 
 	/** Clears every running timer, for when the card goes away. */

@@ -82,7 +82,7 @@ def test_inbox_list_excludes_cleared_by_default(signing_key: bytes) -> None:
 
 
 def test_inbox_list_limit_counts_only_uncleared_rows(signing_key: bytes) -> None:
-    """D-168: the cleared filter and the limit both run in SQL, filter first."""
+    """The cleared filter and the limit both run in SQL, filter first."""
     db = FakeSession()
     db.rows["notification_inbox"] = [
         NotificationInbox(id="nin_c", event_type="rip.completed", title="c", message="c", seen=True, cleared=True),

@@ -313,7 +313,7 @@ describe('JobActions branches', () => {
 	});
 
 	describe('shared clear timer', () => {
-		it("lets an earlier action's timer clear a later action's line", async () => {
+		it("keeps a later action's line up for its own 3 seconds", async () => {
 			mockAbandon.mockRejectedValueOnce(new Error('first failed'));
 			renderComponent(JobActions, { props: { job: allButtonsJob() } });
 			await runCase(CASES[0]);
@@ -324,12 +324,21 @@ describe('JobActions branches', () => {
 			await flush();
 			expect(feedbackEl()).toHaveTextContent('The next time this disc goes in, ARM rips it again');
 
-			await vi.advanceTimersByTimeAsync(999);
+			await vi.advanceTimersByTimeAsync(2999);
 			await tick();
-			expect(feedbackEl()).not.toBeNull();
+			expect(feedbackEl()).toHaveTextContent('The next time this disc goes in, ARM rips it again');
 			await vi.advanceTimersByTimeAsync(1);
 			await tick();
 			expect(feedbackEl()).toBeNull();
+		});
+
+		it('cancels the pending clear when it unmounts', async () => {
+			mockAbandon.mockRejectedValueOnce(new Error('first failed'));
+			const { unmount } = renderComponent(JobActions, { props: { job: allButtonsJob() } });
+			await fireEvent.click(btn('Abandon'));
+			await flush();
+			unmount();
+			expect(vi.getTimerCount()).toBe(0);
 		});
 	});
 

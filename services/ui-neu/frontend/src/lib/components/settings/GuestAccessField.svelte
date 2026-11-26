@@ -1,6 +1,8 @@
 <script lang="ts">
 	import { errorMessage } from '$lib/utils/errors';
 	import Toggle from '$lib/components/shared/Toggle.svelte';
+	import FieldLabel from '$lib/components/shared/FieldLabel.svelte';
+	import { FIELD_IDS } from '$lib/settings/users-form';
 	import { setUserDisabled } from '$lib/api/users';
 	import type { UserView } from '$lib/types/api.gen';
 
@@ -35,7 +37,7 @@
 {#if guest}
 	<div class="panel-section guest-access-field-row" data-testid="guest-access-row">
 		<div class="field guest-access-field-info">
-			<span class="field-label">Guest access</span>
+			<FieldLabel label="Guest access" docsId={FIELD_IDS.guest_access} />
 			<p class="field-help">
 				Let anyone on the network browse without signing in. Guests can view but not change anything.
 			</p>
@@ -63,7 +65,8 @@
 		min-width: 0;
 		flex: 1 1 0%;
 	}
-	.guest-access-field-info .field-label {
+	/* :global: the label is rendered by the child FieldLabel component, outside this component's own template */
+	.guest-access-field-info :global(.field-label) {
 		color: var(--color-text);
 	}
 	.guest-access-field-state {

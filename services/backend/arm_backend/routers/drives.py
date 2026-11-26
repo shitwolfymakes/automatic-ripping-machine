@@ -1,4 +1,4 @@
-"""Drive listing + PATCH for `default_session_id` / `display_name` (Phase 8)."""
+"""Drive listing + PATCH for `default_session_id` / `display_name`."""
 
 import asyncio
 from datetime import datetime, timezone
@@ -139,7 +139,7 @@ async def rescan_drives(
     user: User = Depends(require_jwt),
     db: AsyncSession = Depends(get_session),
 ) -> DriveRescanResponse:
-    """Run the host drive scan now (spec §2) and report the reconciled table.
+    """Run the host drive scan now and report the reconciled table.
     Also keeps the heartbeat-freshness counts behind the UI's online/stale
     badge; only enrolled drives are counted, since a detected or ignored
     drive has no ripper to heartbeat. `force` = Force Rescan: the prune window
@@ -243,7 +243,7 @@ async def delete_drive(
     # next startup (hostname upsert), so this only guards the live-job case;
     # job history is unaffected either way (jobs.drive_id is SET NULL on
     # delete, and Job.drive_serial keeps a permanent record of the physical
-    # drive — see migration 0016_2_jobs_drive_serial).
+    # drive — see `Job.drive_serial`).
     active = await _live_job(db, drive_id)
     if active is not None:
         raise HTTPException(
@@ -298,8 +298,8 @@ async def enroll_drive(
     _: User = Depends(require_writer),
     db: AsyncSession = Depends(get_session),
 ) -> DriveView:
-    """detected|ignored -> enrolled (spec §1): the operator says "this is
-    ARM's". Creates (or adopts) the ripper container (spec §3). A docker
+    """detected|ignored -> enrolled: the operator says "this is
+    ARM's". Creates (or adopts) the ripper container. A docker
     failure reverts the row and surfaces the error in `last_error` + the
     response.
 
@@ -382,7 +382,7 @@ async def unenroll_drive(
     db: AsyncSession = Depends(get_session),
 ) -> DriveView | Response:
     """enrolled -> detected (still plugged in) or gone (row deleted). Refused
-    mid-rip. Stops (or removes) the ripper container (spec §3) before the
+    mid-rip. Stops (or removes) the ripper container before the
     lifecycle changes; a docker failure leaves the row `enrolled`.
 
     Serialized per-drive (see `_drive_lock`) for the same reason as enroll."""

@@ -11,7 +11,7 @@ import type { LogEntry } from '$lib/api/logs';
 // set before any key can arrive. The coverage tool counts the operand as
 // evaluated and reports no gap; only its true outcome is unreachable.
 // (The scroll check's null-view return, which a user can't reach here either,
-// now lives in FollowScroll, whose own tests cover it.)
+// lives in FollowScroll, whose own tests cover it.)
 // jsdom does not implement isContentEditable (it is undefined on every
 // element), so the contentEditable test defines it on the element with
 // Object.defineProperty, as a browser reports it.

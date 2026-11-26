@@ -7,7 +7,9 @@
 	import type { EditorStatus } from '$lib/ui/editor-status';
 	import OutputPathField from './OutputPathField.svelte';
 	import { errorId, focusFirstInvalid, invalidAttrs } from '$lib/ui/form-validation';
+	import FieldLabel from '$lib/components/shared/FieldLabel.svelte';
 	import {
+		FIELD_IDS,
 		SESSION_FIELDS,
 		SESSION_FIELD_ORDER,
 		parseOverrides,
@@ -94,8 +96,9 @@
 		onstatus?.({ submitting, note: tcId ? '' : 'Rips only, no transcode step.' });
 	});
 
+	// The media chips are disabled on edit and for a built-in session, so this
+	// only runs while the media type may still change.
 	function switchMediaType(mt: MediaType) {
-		if (isEdit || readOnly) return; // immutable on edit / locked when built-in
 		mediaType = mt;
 		ripId = '';
 		tcId = '';
@@ -157,7 +160,7 @@
 
 		<!-- Session name -->
 		<div class="field">
-			<label for={SESSION_FIELDS.name} class="field-label">Session name</label>
+			<FieldLabel for={SESSION_FIELDS.name} label="Session name" docsId={FIELD_IDS.name} />
 			<input
 				id={SESSION_FIELDS.name}
 				type="text"
@@ -171,7 +174,7 @@
 
 		<!-- Media type segmented control -->
 		<div class="field">
-			<span class="field-label">Media type</span>
+			<FieldLabel label="Media type" docsId={FIELD_IDS.media_type} />
 			<div class="cluster">
 				{#each MEDIA_TYPES as mt (mt.value)}
 					<button
@@ -189,9 +192,7 @@
 
 		<!-- Rip preset -->
 		<div class="field">
-			<label for={SESSION_FIELDS.rip} class="field-label"
-				>Rip preset <span class="session-builder-required">*</span></label
-			>
+			<FieldLabel for={SESSION_FIELDS.rip} label="Rip preset" docsId={FIELD_IDS.rip_preset} required />
 			<select
 				id={SESSION_FIELDS.rip}
 				value={ripId}
@@ -209,8 +210,10 @@
 		</div>
 
 		<!-- Transcode preset (optional) -->
-		<label for="sb-tc" class="field">
-			<span class="field-label">Transcode preset <span class="session-builder-optional">(optional)</span></span>
+		<div class="field">
+			<FieldLabel for="sb-tc" label="Transcode preset" docsId={FIELD_IDS.transcode_preset}>
+				{#snippet marks()}<span class="session-builder-optional">(optional)</span>{/snippet}
+			</FieldLabel>
 			<select id="sb-tc" value={tcId} onchange={handleTcChange} disabled={readOnly}>
 				<option value="">No transcode, rip only</option>
 				{#each tcOptions as tc (tc.id)}
@@ -218,13 +221,11 @@
 				{/each}
 				<option value="__create_tc__">+ Create new transcode preset...</option>
 			</select>
-		</label>
+		</div>
 
 		<!-- Output path template -->
 		<div class="field">
-			<label class="field-label" for={SESSION_FIELDS.path}
-				>Output path <span class="session-builder-required">*</span></label
-			>
+			<FieldLabel for={SESSION_FIELDS.path} label="Output path" docsId={FIELD_IDS.output_path} required />
 			<OutputPathField
 				id={SESSION_FIELDS.path}
 				errorId={errors[SESSION_FIELDS.path] ? errorId(SESSION_FIELDS.path) : undefined}
@@ -243,9 +244,7 @@
 		<details class="session-builder-advanced" bind:open={advancedOpen}>
 			<summary class="session-builder-advanced-summary"> Advanced </summary>
 			<div class="stack stack-sm session-builder-advanced-body">
-				<label for={SESSION_FIELDS.overrides} class="field-label session-builder-overrides-label">
-					Overrides JSON
-				</label>
+				<FieldLabel for={SESSION_FIELDS.overrides} label="Overrides JSON" docsId={FIELD_IDS.overrides} />
 				<textarea
 					id={SESSION_FIELDS.overrides}
 					class="mono field-control"
@@ -269,24 +268,16 @@
 {/snippet}
 
 <style>
-	/* original: ml-1 text-red-500 (no dark: variant - same shade in both modes).
-	   --color-danger is red-600 in light / red-400 in dark, a mode-dependent
-	   shift the original never had; kept anyway per the migration reference's
-	   own ruling (row 38: "red-600 reads fine as both fill and text") since no
-	   mode-independent danger role exists in spec 5.1. */
-	.session-builder-required {
-		margin-left: 0.25rem;
-		color: var(--color-danger);
-	}
-	/* original: ml-1 text-xs text-gray-400 dark:text-gray-500 - text-faint
+	/* text-red-500 (same shade in both modes). --color-danger is red-600 in light / red-400 in
+	   dark, a mode-dependent shift; accepted since no mode-independent danger role exists. */
+	/* text-xs text-gray-400 (gray-500 in dark) - text-faint
 	   already flips gray-400/gray-500 across modes, matching exactly. */
 	.session-builder-optional {
-		margin-left: 0.25rem;
 		font-size: 0.75rem;
 		line-height: 1rem;
 		color: var(--color-text-faint);
 	}
-	/* original media-type chips: rounded-md border px-3 py-1 text-sm
+	/* media-type chips are rounded-md border px-3 py-1 text-sm
 	   font-medium - chip's own radius (--radius-sm), padding (0.125rem
 	   0.375rem) and size (0.75rem) are tuned for the tighter filter-pill look,
 	   so the segmented-control metrics are restated here on top of chip's
@@ -313,8 +304,7 @@
 		opacity: 0.5;
 		cursor: not-allowed;
 	}
-	/* original: rounded-md border border-gray-200 dark:border-gray-700 - a
-	   plain neutral-bordered disclosure with no equivalent block. */
+	/* a plain neutral-bordered disclosure with no equivalent block. */
 	.session-builder-advanced {
 		border: 1px solid var(--color-border);
 		border-radius: var(--radius-md);
@@ -331,10 +321,11 @@
 	.session-builder-advanced-body {
 		padding: 0.5rem 0.75rem 0.75rem;
 	}
-	/* original: text-xs font-medium text-gray-600 dark:text-gray-400
+	/* text-xs font-medium
 	   (12px/16px) - field-label's own default is 0.875rem/1.25rem/600, tuned
 	   for a top-level field label, not this smaller nested-textarea caption. */
-	.session-builder-overrides-label {
+	/* :global: the label is rendered by the child FieldLabel component, outside this component's own template */
+	.session-builder-advanced-body :global(.field-label) {
 		font-size: 0.75rem;
 		line-height: 1rem;
 		font-weight: 500;
