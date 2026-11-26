@@ -2,11 +2,12 @@ from arm_backend.notifications import catalog as cat
 
 
 class _FakePlugin:
-    def __init__(self, *, scheme, name, tokens=None, args=None, url="https://docs"):
+    def __init__(self, *, scheme, name, tokens=None, args=None, url="https://docs", setup_url=None):
         self.secure_protocol = scheme
         self.protocol = None
         self.service_name = name
         self.service_url = url
+        self.setup_url = setup_url
         self.template_tokens = tokens or {}
         self.template_args = args or {}
 
@@ -50,6 +51,18 @@ def test_catalog_builds_required_and_advanced(monkeypatch) -> None:
     assert adv["type"] == "choice"
     assert adv["values"] == ["markdown", "text"]
     assert adv["default"] == "text"
+
+
+def test_catalog_carries_the_apprise_setup_page(monkeypatch) -> None:
+    p = _FakePlugin(scheme="discord", name="Discord", setup_url="https://appriseit.com/services/discord/")
+    _patch(monkeypatch, [p])
+    assert cat.build_catalog()["services"][0]["setup_url"] == "https://appriseit.com/services/discord/"
+
+
+def test_catalog_falls_back_to_the_apprise_wiki_page(monkeypatch) -> None:
+    p = _FakePlugin(scheme="jira", name="Jira")
+    _patch(monkeypatch, [p])
+    assert cat.build_catalog()["services"][0]["setup_url"] == "https://github.com/caronc/apprise/wiki/Notify_jira"
 
 
 def test_catalog_blocklist_and_alias_skipped(monkeypatch) -> None:
@@ -131,3 +144,23 @@ def test_catalog_skips_plugin_that_raises(monkeypatch) -> None:
     _patch(monkeypatch, [bad, good])
     c = cat.build_catalog()
     assert [s["id"] for s in c["services"]] == ["good"]
+
+
+def test_featured_notify_fields_match_the_live_apprise_catalog() -> None:
+    """The docs registry declares each featured service's fields without importing
+    Apprise; this holds that list to the catalog the real Apprise plugins build."""
+    from arm_common.field_docs import FEATURED_NOTIFY_FIELDS
+
+    cat.build_catalog.cache_clear()
+    try:
+        services = {s["id"]: s for s in cat.build_catalog()["services"]}
+    finally:
+        cat.build_catalog.cache_clear()
+    assert list(FEATURED_NOTIFY_FIELDS) == cat.FEATURED_SERVICES
+    # Field order follows Apprise's template args, which a version bump may
+    # reorder without changing coverage, so the fields compare as sets.
+    live = {
+        sid: {f["key"] for f in services[sid]["required_fields"] + services[sid]["advanced_fields"]}
+        for sid in cat.FEATURED_SERVICES
+    }
+    assert live == {sid: set(keys) for sid, keys in FEATURED_NOTIFY_FIELDS.items()}

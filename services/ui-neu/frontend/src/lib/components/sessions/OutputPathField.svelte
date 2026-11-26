@@ -1,7 +1,7 @@
 <script lang="ts">
 	import type { MediaType, TemplatePreviewRequest } from '$lib/types/api.gen';
-	import { mediaTokens } from './sampleTokens';
-	import { TemplatePreview } from './templatePreview.svelte';
+	import { mediaTokens } from '../../sessions/sample-tokens';
+	import { TemplatePreview } from '../../stores/session-template-preview.svelte';
 
 	interface Props {
 		value: string;
@@ -21,20 +21,20 @@
 
 	const preview = new TemplatePreview();
 
-	// Built when the preview's wait ends, so it reads has_transcode_preset
-	// then (#600).
-	function previewRequest(template: string, type: MediaType): TemplatePreviewRequest {
+	function previewRequest(template: string, type: MediaType, hasPreset: boolean | undefined): TemplatePreviewRequest {
 		const body: TemplatePreviewRequest = { template, media_type: type };
-		if (has_transcode_preset !== undefined) {
-			body.has_transcode_preset = has_transcode_preset;
+		if (hasPreset !== undefined) {
+			body.has_transcode_preset = hasPreset;
 		}
 		return body;
 	}
 
 	$effect(() => {
-		// Access reactive values to track them
+		// Read every value the preview depends on here, so a change to any of
+		// them previews again.
 		const template = value;
 		const type = mediaType;
+		const hasPreset = has_transcode_preset;
 
 		preview.cancel();
 
@@ -43,7 +43,7 @@
 			return;
 		}
 
-		preview.schedule(() => previewRequest(template, type));
+		preview.schedule(() => previewRequest(template, type, hasPreset));
 
 		return preview.cancel;
 	});
@@ -118,7 +118,7 @@
 </div>
 
 <style>
-	/* original: font-mono text-sm (0.875rem/1.25rem) - .field-control's own
+	/* the text is font-mono 0.875rem/1.25rem - .field-control's own
 	   font-size/line-height (also 0.875rem/1.25rem) already match, so .mono
 	   only needs to add the family; nothing to restate here. */
 	.output-path-field-input {
@@ -133,8 +133,8 @@
 	.output-path-field-tokens {
 		gap: 0.375rem;
 	}
-	/* original chips: rounded bg-primary/10 px-2 py-0.5 font-mono text-xs
-	   font-medium text-primary hover:bg-primary/20 - chip's own radius
+	/* chips are rounded bg-primary/10 px-2 py-0.5 font-mono text-xs font-medium text-primary with
+	   hover:bg-primary/20 - chip's own radius
 	   (--radius-sm, matches rounded's default) and background/hover tokens
 	   already match; only the font (mono, not chip's default sans) and
 	   weight need restating. */
@@ -142,10 +142,8 @@
 		line-height: 1rem;
 		font-weight: 500;
 	}
-	/* original: rounded-md bg-gray-50 px-3 py-2 dark:bg-gray-800/50 - a plain
-	   neutral surface with no equivalent block; --color-primary-tint-1 is the
-	   nearest role (panel-section's own background) since no neutral
-	   surface token exists in spec 5.1. */
+	/* a plain neutral surface (rounded-md, px-3 py-2) with no equivalent block; --color-primary-tint-1
+	   is the nearest role (panel-section's own background) since no neutral surface token exists. */
 	.output-path-field-preview {
 		border-radius: var(--radius-md);
 		background: var(--color-primary-tint-1);
@@ -156,10 +154,8 @@
 	.output-path-field-preview-error {
 		background: var(--color-danger-soft);
 	}
-	/* original labels: text-xs font-semibold uppercase tracking-wide
-	   (12px/16px, tracking 0.025em) - NOT .eyebrow's metrics (10.5px,
-	   tracking 0.12em; that block is reserved for the arbitrary
-	   text-[10.5px] tracking-[0.12em] string per the migration reference),
+	/* labels are text-xs font-semibold uppercase tracking-wide (12px/16px, tracking 0.025em) - NOT
+	   .eyebrow's metrics (10.5px, tracking 0.12em),
 	   so restated in full here rather than borrowed from a block that looks
 	   similar but measures differently. */
 	.output-path-field-preview-label {
@@ -171,17 +167,14 @@
 		text-transform: uppercase;
 		color: var(--color-text-faint);
 	}
-	/* original error label: text-red-500, no dark: variant (same shade both
-	   modes) - --color-danger is red-600/red-400 across modes, the same
-	   accepted mode-dependent collapse the migration reference documents for
-	   the danger family generally. */
+	/* the error label is red-500 in both modes - --color-danger is red-600/red-400 across modes, an
+	   accepted mode-dependent shift. */
 	.output-path-field-error-label {
 		color: var(--color-danger);
 	}
-	/* original preview/error value text: font-mono text-sm (0.875rem/1.25rem),
-	   break-all (not overflow-wrap's word-preferring break-word) - reproduced
-	   exactly so long output-path strings wrap at the same column as before
-	   (a prior sibling task's regression here is why this is spelled out). */
+	/* preview/error value text: font-mono text-sm (0.875rem/1.25rem), break-all (not overflow-wrap's
+	   word-preferring break-word), so long output-path strings break at any character rather than
+	   only at word boundaries. */
 	.output-path-field-preview-value {
 		word-break: break-all;
 		font-size: 0.875rem;

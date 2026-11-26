@@ -40,7 +40,7 @@ def test_str_enum_string_accepts_exact_string_value_on_bind():
 
 
 def test_str_enum_string_rejects_unknown_value_on_bind():
-    # D-187: enums are VARCHAR in the DB, so the bind processor is the write-time
+    # Enums are VARCHAR in the DB, so the bind processor is the write-time
     # guardrail. A non-member must raise instead of being written verbatim.
     col = _StrEnumString(JobStatus)
     with pytest.raises(ValueError, match="not a valid JobStatus value"):
@@ -48,7 +48,7 @@ def test_str_enum_string_rejects_unknown_value_on_bind():
 
 
 def test_str_enum_string_cache_key_includes_enum_class():
-    # D-188: cache_ok types are keyed on __init__ args stored under the same
+    # cache_ok types are keyed on __init__ args stored under the same
     # name; otherwise every enum column type shares one compilation cache key.
     from sqlalchemy import literal, select
 
@@ -66,7 +66,7 @@ def test_str_enum_string_cache_key_includes_enum_class():
 
 
 def test_json_document_columns_are_jsonb_like_the_migrations():
-    # D-180: 0001_initial created both columns as JSONB; the models must agree.
+    # 0001_initial created both columns as JSONB; the models must agree.
     from sqlalchemy.dialects.postgresql import JSONB
 
     from arm_common.models import Drive, Job

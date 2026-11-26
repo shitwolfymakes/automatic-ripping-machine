@@ -1,7 +1,8 @@
 <script lang="ts">
 	// An on/off setting as a switch that saves on change (no Save button), such
 	// as the notifications master switch or Defaults' auto-apply. The caller saves.
-	import Toggle from '$lib/components/notifications/Toggle.svelte';
+	import Toggle from '$lib/components/shared/Toggle.svelte';
+	import FieldLabel from '$lib/components/shared/FieldLabel.svelte';
 
 	let {
 		key,
@@ -14,11 +15,11 @@
 </script>
 
 <div class="stack stack-sm" id="setting-{key}" data-testid="setting-{key}">
-	<label class="field field-row auto-save-toggle-row">
-		<Toggle {checked} {label} onchange={ontoggle} />
-		<span class="field-label">{label}</span>
+	<div class="field field-row auto-save-toggle-row">
+		<Toggle id="auto-save-{key}" {checked} {label} onchange={ontoggle} />
+		<FieldLabel for="auto-save-{key}" {label} docsId={`config.${key}`} />
 		<span class="auto-save-toggle-hint">(changes save automatically)</span>
-	</label>
+	</div>
 	{#if help}<p class="field-help">{help}</p>{/if}
 </div>
 

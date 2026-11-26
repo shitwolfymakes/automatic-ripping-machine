@@ -64,7 +64,7 @@ def test_diagnostics_after_password_change(app_client: object, admin_token: str)
 
 
 def test_transcode_presets_seeded_and_listable(app_client: object, admin_token: str) -> None:
-    """Covers the previously 0%-coverage transcode_presets router end to end,
+    """Covers the transcode_presets router end to end,
     against rows the real seeders inserted."""
     resp = app_client.get(  # type: ignore[attr-defined]
         "/api/transcode-presets",
@@ -76,7 +76,7 @@ def test_transcode_presets_seeded_and_listable(app_client: object, admin_token: 
 
 
 def test_transcodes_list_empty(app_client: object, admin_token: str) -> None:
-    """Covers the previously 0%-coverage transcodes router; no transcode
+    """Covers the transcodes router; no transcode
     tasks exist on a fresh DB."""
     resp = app_client.get(  # type: ignore[attr-defined]
         "/api/transcodes",

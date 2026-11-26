@@ -1,4 +1,4 @@
-"""HeartbeatPump reports the whole ProgressState on both surfaces (D-242, D-248)."""
+"""HeartbeatPump reports the whole ProgressState on both surfaces."""
 
 from __future__ import annotations
 

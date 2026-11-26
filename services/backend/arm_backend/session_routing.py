@@ -42,7 +42,7 @@ def routing_media_type(job: Job) -> MediaType | None:
     """The media type routing keys on: the identified kind, else what the disc
     type alone says. An audio CD is music whether or not MusicBrainz knew it,
     so an unidentified CD still reaches the music routes and the drive
-    default's compatibility gate (G-17) instead of a video default."""
+    default's compatibility gate instead of a video default."""
     if job.media_type is not None:
         return job.media_type
     if job.disc_type == DiscType.CD:
@@ -51,7 +51,7 @@ def routing_media_type(job: Job) -> MediaType | None:
 
 
 async def resolve_routed_session_id(db: AsyncSession, job: Job) -> str | None:
-    """Which session is ROUTED to this job (gap analysis §5.1, G-02/G-17).
+    """Which session is ROUTED to this job.
 
     Resolution order (single source of truth - rip-start's preset choice and
     the naming preview resolve through this same helper so neither can drift
@@ -65,7 +65,7 @@ async def resolve_routed_session_id(db: AsyncSession, job: Job) -> str | None:
          drive-default session's media_type is `media_types_compatible`
          with the job's. Otherwise (e.g. a movie drive default on a music CD
          job) it's skipped in favor of steps 3-4 - a drive default must not
-         permanently swallow a media type it was never meant for (G-17). A
+         permanently swallow a media type it was never meant for. A
          dangling `default_session_id` (the session row no longer exists)
          also falls through to routes, logged at DEBUG.
       3. `session_routes` row matching `(job.media_type, job.disc_type)` exactly.

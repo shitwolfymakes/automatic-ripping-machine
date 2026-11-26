@@ -1,9 +1,9 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { renderComponent, screen, cleanup } from '$lib/test-utils';
+import { renderComponent, screen, cleanup } from '$lib/testing/render';
 import { fireEvent } from '@testing-library/svelte';
 import type { HandbrakeSchemaSlimView, SettingIssue, SlimFamily } from '$lib/types/api.gen';
 import fixture from '$lib/handbrake/__tests__/fixtures/slim-schema.json';
-import { blockFields, type EncoderCard } from '$lib/handbrake/encoderCards';
+import { blockFields, type EncoderCard } from '$lib/handbrake/encoder-cards';
 import EncoderBlockCard from '../EncoderBlockCard.svelte';
 
 const schema = fixture as unknown as HandbrakeSchemaSlimView;
@@ -302,5 +302,16 @@ describe('EncoderBlockCard', () => {
 	it('shows no status badge on a card with no hardware state', () => {
 		mount('x264');
 		expect(document.querySelector('.encoder-card-badge')).toBeNull();
+	});
+
+	it("links the bit depth and every block field to the encoder family's HandBrake page", () => {
+		mount('nvenc_h264', { card: card({ family: 'nvenc_h264', state: 'verified', device: 'NVIDIA H.264' }) });
+		const links = screen.getAllByRole('link', { name: /^Docs for/ });
+		expect(links.length).toBeGreaterThan(1);
+		expect(screen.getByRole('link', { name: 'Docs for Bit depth (opens in a new tab)' })).toBeInTheDocument();
+		for (const link of links) {
+			expect(link).toHaveAttribute('href', 'https://handbrake.fr/docs/en/latest/technical/video-nvenc.html');
+			expect(link).toHaveAttribute('data-field-id', 'handbrake.family.nvenc');
+		}
 	});
 });

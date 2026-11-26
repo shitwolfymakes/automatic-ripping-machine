@@ -133,7 +133,7 @@ def _replace_index_atomically(
     Returns the row count."""
     dest_sqlite.parent.mkdir(parents=True, exist_ok=True)
     # Unique name per build: a fixed `<dest>.new` let two overlapping builds
-    # unlink each other's open database (D-159).
+    # unlink each other's open database.
     fd, tmp_name = tempfile.mkstemp(dir=dest_sqlite.parent, prefix=f"{dest_sqlite.name}.", suffix=".new")
     os.close(fd)
     new_path = Path(tmp_name)

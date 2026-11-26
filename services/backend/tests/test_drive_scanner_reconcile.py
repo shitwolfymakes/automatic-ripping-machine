@@ -164,7 +164,7 @@ async def test_enrolled_port_row_adopting_by_id_logs_warning(caplog) -> None:
     publishing a by-id link the enrolled row didn't have — the row silently
     adopts a new identity. That's surprising enough (a possible drive swap
     under an active enrollment) to warrant a log line naming the drive,
-    port, and new by-id name; Plan 3's register-time identity check is the
+    port, and new by-id name; the register-time identity check is the
     actual safety net."""
     db = FakeSession()
     db.rows["drives"] = [

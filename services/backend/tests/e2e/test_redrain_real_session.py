@@ -1,5 +1,5 @@
 """Real-session (aiosqlite) regression test for the parked-application drain
-after a failed fan-out (D-065).
+after a failed fan-out.
 
 A real `AsyncSession.rollback()` expires every loaded instance
 (`expire_on_commit=False` does not cover rollback), and reading an expired
@@ -44,7 +44,7 @@ def _restore_column_types(saved: list[tuple[object, object]]) -> None:
 async def test_redrain_survives_a_failed_job_and_drains_the_rest(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """D-065: the first job's fan-out fails and its drain rolls back. The log
+    """The first job's fan-out fails and its drain rolls back. The log
     line must not read the expired job, the PATCH path must not raise, and
     the second parked job is still re-drained."""
     saved_types = _retype_pg_columns_to_json()
@@ -94,7 +94,7 @@ async def test_redrain_survives_a_failed_job_and_drains_the_rest(
 async def test_after_rip_keeps_using_the_job_after_a_failed_drain(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """D-065: after_rip goes on to the auto-apply half with the same job
+    """`after_rip` goes on to the auto-apply half with the same job
     object the failed drain rolled back; it must have been reloaded."""
     saved_types = _retype_pg_columns_to_json()
     try:

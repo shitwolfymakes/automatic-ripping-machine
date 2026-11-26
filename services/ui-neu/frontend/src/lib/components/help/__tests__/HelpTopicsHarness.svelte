@@ -1,5 +1,5 @@
 <script lang="ts">
-	import type { DocsNavSection } from '$lib/docs/api';
+	import type { DocsNavSection } from '$lib/help/api';
 	import HelpTopics from '../HelpTopics.svelte';
 
 	// Holds the bound open in real $state, as the help page does, and shows it

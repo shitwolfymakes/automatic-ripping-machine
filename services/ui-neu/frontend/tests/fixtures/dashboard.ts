@@ -6,10 +6,7 @@ export const emptyDashboard: DashboardData = {
 	arm_online: true,
 	active_jobs: [],
 	drives_online: 0,
-	drive_names: {},
-	iso_sources: {},
-	iso_source_kinds: {},
-	drive_source_kinds: {},
+	drives: {},
 	preparing: [],
 	notification_count: 0,
 	ripping_enabled: true,
@@ -17,7 +14,8 @@ export const emptyDashboard: DashboardData = {
 	makemkv_key_checked_at: null,
 	transcoder_online: true,
 	transcoder_stats: null,
-	active_transcodes: []
+	active_transcodes: [],
+	review_wait_seconds: 60
 };
 
 // GET /api/jobs answers a plain JobView[] page (the total rides in the

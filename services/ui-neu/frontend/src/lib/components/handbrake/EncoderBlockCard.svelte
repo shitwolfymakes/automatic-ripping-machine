@@ -16,10 +16,11 @@
 		depthText,
 		VARIANT_LISTS,
 		type EncoderCard
-	} from '$lib/handbrake/encoderCards';
-	import { docUrlForFamily } from '$lib/handbrake/docLinks';
-	import { errorId, invalidAttrs } from '$lib/utils/formValidation';
-	import type { BaseValues } from '$lib/handbrake/sidebarModel';
+	} from '$lib/handbrake/encoder-cards';
+	import { familyDocsId } from '$lib/docs/field-docs';
+	import FieldLabel from '$lib/components/shared/FieldLabel.svelte';
+	import { errorId, invalidAttrs } from '$lib/ui/form-validation';
+	import type { BaseValues } from '$lib/handbrake/base-values';
 	import TunableField from './TunableField.svelte';
 
 	interface Props {
@@ -60,6 +61,8 @@
 
 	const prefix = $derived(`${family.name}-`);
 	const depthId = $derived(`${family.name}-bit-depth`);
+	// Every field on the card links to its encoder family's HandBrake page.
+	const docsId = $derived(familyDocsId(family.name));
 	const variant = $derived(cardVariant(family, block, inheritedDepth));
 	const defaultDepthLabel = $derived(
 		depthSource === 'base' ? `${depthText(inheritedDepth)}, from base preset` : `${depthText(inheritedDepth)}, default`
@@ -124,17 +127,17 @@
 		<div class="encoder-card-fields">
 			{#if fields.includes(BIT_DEPTH_FIELD.name)}
 				<div class="tunable-field" data-stored={depthStored}>
-					<div class="tunable-field-head">
-						<span class="tunable-field-inline">
-							<label class="field-label" for={depthId}>Bit depth</label>
-							{#if depthStored}<span class="changed-chip">Changed</span>{/if}
-						</span>
+					<FieldLabel for={depthId} label="Bit depth" {docsId}>
+						{#if depthStored}<span class="changed-chip">Changed</span>{/if}
 						{#if depthStored}
-							<button type="button" class="btn-link" disabled={readonly} onclick={() => onreset(BIT_DEPTH_FIELD.name)}
-								>Reset</button
+							<button
+								type="button"
+								class="btn-link encoder-card-reset"
+								disabled={readonly}
+								onclick={() => onreset(BIT_DEPTH_FIELD.name)}>Reset</button
 							>
 						{/if}
-					</div>
+					</FieldLabel>
 					<select
 						id={depthId}
 						class="field-control"
@@ -161,7 +164,7 @@
 					disabled={readonly}
 					idPrefix={prefix}
 					range={row.range}
-					docUrl={docUrlForFamily(family.name)}
+					{docsId}
 					onchange={(v) => onchange(row.name, v)}
 					onreset={() => onreset(row.name)}
 				/>
@@ -231,15 +234,8 @@
 		gap: 0.25rem;
 		min-width: 0;
 	}
-	.tunable-field-head {
-		display: flex;
-		align-items: baseline;
-		justify-content: space-between;
-		gap: 0.5rem;
-	}
-	.tunable-field-inline {
-		display: flex;
-		align-items: center;
-		gap: 0.5rem;
+	/* Reset sits at the end of the label row. */
+	.encoder-card-reset {
+		margin-left: auto;
 	}
 </style>

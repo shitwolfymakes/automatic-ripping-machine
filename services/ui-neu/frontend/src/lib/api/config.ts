@@ -1,7 +1,7 @@
 import type { ConfigView } from '$lib/types/api.gen';
 import { apiFetch, get } from './client';
 
-export interface AppConfig {
+interface AppConfig {
 	// Deployment fact: can this install run transcode containers at all
 	// (set at install time; a ripper-only install is not capable).
 	transcoder_capable: boolean;

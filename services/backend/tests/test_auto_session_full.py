@@ -387,7 +387,7 @@ async def test_overwrite_evicts_only_same_job_tasks(tmp_path: Path) -> None:
 
 
 async def test_overwrite_unowned_collision_is_cross_job_not_evicted(tmp_path: Path) -> None:
-    """Fix 76-5: a colliding task whose owning session_application is
+    """A colliding task whose owning session_application is
     missing (existing_job_id=None — Postgres-unreachable via CASCADE in
     real life, but modeled reachable by the fake tier / find_collisions,
     e.g. a dangling session_application_id) must classify as CROSS-JOB, not
@@ -419,7 +419,7 @@ async def test_overwrite_unowned_collision_is_cross_job_not_evicted(tmp_path: Pa
 
 
 async def test_overwrite_mixed_collision_409_reports_full_collision_list(tmp_path: Path) -> None:
-    """Fix 76-6: overwrite=True with BOTH a same-job and a cross-job
+    """`overwrite=True` with BOTH a same-job and a cross-job
     collision must report the FULL collision list in the skip outcome, not
     only the cross-job subset — the cross-job subset is what blocks, but
     the body should still tell the whole truth about every colliding path.

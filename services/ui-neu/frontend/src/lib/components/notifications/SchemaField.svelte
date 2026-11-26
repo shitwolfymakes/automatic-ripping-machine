@@ -1,12 +1,22 @@
 <script lang="ts">
 	import type { CatalogField } from '$lib/types/notifications';
+	import FieldLabel from '$lib/components/shared/FieldLabel.svelte';
 
 	let {
 		field,
 		value = $bindable(),
+		docsId,
 		onchange
-	}: { field: CatalogField; value: unknown; onchange?: (v: unknown) => void } = $props();
+	}: {
+		field: CatalogField;
+		value: unknown;
+		// Registry id of the field's docs (notify.<service>.<field>); none for a
+		// service whose docs are one link for the whole form.
+		docsId?: string;
+		onchange?: (v: unknown) => void;
+	} = $props();
 
+	const controlId = $props.id();
 	const inputType = $derived(field.private ? 'password' : 'text');
 
 	let boolValue = $derived(Boolean(value));
@@ -27,20 +37,22 @@
 </script>
 
 {#if field.type === 'bool'}
-	<label class="field field-row">
+	<div class="field field-row">
 		<input
+			id={controlId}
 			type="checkbox"
 			aria-label={field.label}
 			checked={boolValue}
 			onchange={(e) => setValue(e.currentTarget.checked)}
 		/>
-		<span>{field.label}{field.required ? ' *' : ''}</span>
-	</label>
+		<FieldLabel for={controlId} label={field.label} {docsId} required={field.required} />
+	</div>
 {:else}
-	<label class="field">
-		<span class="field-label">{field.label}{field.required ? ' *' : ''}</span>
+	<div class="field">
+		<FieldLabel for={controlId} label={field.label} {docsId} required={field.required} />
 		{#if field.type === 'choice'}
 			<select
+				id={controlId}
 				aria-label={field.label}
 				value={displayValue}
 				onchange={(e) => setValue((e.currentTarget as HTMLSelectElement).value)}
@@ -55,6 +67,7 @@
 			</select>
 		{:else if field.type === 'int' || field.type === 'float'}
 			<input
+				id={controlId}
 				type="number"
 				aria-label={field.label}
 				step={field.type === 'float' ? 'any' : '1'}
@@ -64,6 +77,7 @@
 			/>
 		{:else}
 			<input
+				id={controlId}
 				type={inputType}
 				aria-label={field.label}
 				value={displayValue}
@@ -72,5 +86,5 @@
 				required={field.required}
 			/>
 		{/if}
-	</label>
+	</div>
 {/if}

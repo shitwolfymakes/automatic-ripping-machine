@@ -112,8 +112,7 @@ class TMDBClient:
             parsed = self._parse_one(top, kind)
             if parsed is not None:
                 out.append(parsed)
-        # One detail call per candidate (external ids + credits appended):
-        # the same call count as the old external_ids fan-out, but it also
+        # One detail call per candidate (external ids + credits appended); the call
         # carries the facts the match picker shows. A TV row takes the latest
         # season's `credits`, not `aggregate_credits`: a long-running show's
         # all-seasons credits run to megabytes, and a row shows two names.
@@ -145,8 +144,7 @@ class TMDBClient:
     async def fetch_detail(
         self, tmdb_id: int | str, kind: Literal["movie", "tv"], *, all_seasons: bool = True
     ) -> dict[str, Any]:
-        """`/{kind}/{id}` with external ids and credits appended in one call
-        (match picker spec 3.3). A show's credits cover every season unless
+        """`/{kind}/{id}` with external ids and credits appended in one call. A show's credits cover every season unless
         `all_seasons` is false. Raises LookupError/LookupTimeout."""
         credits = "aggregate_credits" if kind == "tv" and all_seasons else "credits"
         try:

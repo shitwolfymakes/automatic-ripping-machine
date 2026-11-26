@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { renderComponent, screen, fireEvent, cleanup, waitFor } from '$lib/test-utils';
+import { renderComponent, screen, fireEvent, cleanup, waitFor } from '$lib/testing/render';
 import type {
 	EncoderAvailabilityView,
 	HandbrakeSchemaSlimView,
@@ -10,10 +10,10 @@ import slim from '$lib/handbrake/__tests__/fixtures/slim-schema.json';
 import tenBit from '$lib/handbrake/__tests__/fixtures/x265-10bit-import-response.json';
 import plex from '$lib/handbrake/__tests__/fixtures/plex-import-response.json';
 import { ApiError } from '$lib/api/client';
-import { parseHandbrakeImport } from '$lib/api/transcodePresets';
+import { parseHandbrakeImport } from '$lib/api/transcode-presets';
 import ImportPanel from '../ImportPanel.svelte';
 
-vi.mock('$lib/api/transcodePresets', () => ({ parseHandbrakeImport: vi.fn() }));
+vi.mock('$lib/api/transcode-presets', () => ({ parseHandbrakeImport: vi.fn() }));
 
 const schema = slim as unknown as HandbrakeSchemaSlimView;
 const PLEX = plex as unknown as ImportParseResponse;

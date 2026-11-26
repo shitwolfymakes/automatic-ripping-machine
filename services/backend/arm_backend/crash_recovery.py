@@ -1,4 +1,4 @@
-"""Phase 9 — crash recovery.
+"""Crash recovery.
 
 `reset_job_for_recovery` resets a single RIPPING job's non-queued tracks
 back to `queued` (incrementing `attempts`) and stamps `resumed_from_crash`

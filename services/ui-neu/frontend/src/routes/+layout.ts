@@ -70,13 +70,16 @@ export const load: LayoutLoad = async ({ url, fetch }) => {
 
 	if (!(await anonymousVisitAllowed(fetch))) redirect(307, '/login');
 
-	await hydrateConfigOnce();
+	if (skipsSetupCheck(url)) {
+		await hydrateConfigOnce();
+		return {};
+	}
 
-	if (skipsSetupCheck(url)) return {};
-
+	// The shell cannot draw until load returns, so the config and the
+	// first-run probe go out together rather than one after the other.
 	// null = ARM unreachable or erroring (503, etc.): don't redirect, let the
 	// normal UI handle it.
-	const firstRun = await probeFirstRun(fetch);
+	const [, firstRun] = await Promise.all([hydrateConfigOnce(), probeFirstRun(fetch)]);
 	if (firstRun === true) redirect(307, '/setup');
 	// Setup is complete or deferred - cache this so we don't re-check on every click
 	if (firstRun === false) setupConfirmedComplete = true;

@@ -1,4 +1,4 @@
-"""Phase 8: shared apply-session core + rip-complete auto-apply hook.
+"""Shared apply-session core + rip-complete auto-apply hook.
 
 `apply_session_internal` is the engine behind both code paths:
   * `POST /api/jobs/{id}/transcode` — manual click in the UI.
@@ -121,7 +121,7 @@ class ApplySessionOutcome(NamedTuple):
     idempotent: bool
     skipped_reason: SkippedReason | None
     # Human-readable detail for the caller's error response, populated only
-    # for skipped_reason="media_mismatch" (Fix 76-7). Computed once here, at
+    # for skipped_reason="media_mismatch". Computed once here, at
     # the guard site where `job`/`sess` are both in hand, so the manual-apply
     # router (jobs.py) can build its 422 straight from this field instead of
     # re-SELECTing the Session and asserting it's non-None — a re-query that
@@ -237,7 +237,7 @@ async def _existing_auto_outcome(db: AsyncSession, session_id: str, job: Job) ->
         .all()
     )
     if len(existing_rows) > 1:
-        # Parked twice before D-141; the extra rows still drain, each into
+        # A job can carry several applications of one session; the extra rows still drain, each into
         # its own collisions park, until someone deletes them.
         logger.warning(
             "job %s has %d applications of session %s; using the first (%s)",
@@ -554,7 +554,7 @@ def _media_mismatch_outcome(
 ) -> ApplySessionOutcome | None:
     """Return the media_mismatch skip when the session and job media types disagree, else None."""
     # routing_media_type, not job.media_type: an audio CD MusicBrainz missed
-    # is still music, and a video session on it would fan out nothing (D-033).
+    # is still music, and a video session on it would fan out nothing.
     job_media_type = routing_media_type(job)
     if (
         job_media_type is not None
@@ -696,7 +696,7 @@ async def _handle_collisions(
         # ever populated for reason="existing_task"), but that's a
         # structurally different "not applicable" sentinel, not an unowned
         # task — there's no task row to misattribute, so those stay
-        # evictable/same-job as before.
+        # evictable/same-job.
         cross_job_collisions = [c for c in collisions if c.reason == "existing_task" and c.existing_job_id != job.id]
         if cross_job_collisions:
             # The cross-job (+ unowned-task) subset is what blocks the
@@ -762,7 +762,7 @@ async def fan_out_tasks_for_application(
     if job.status not in POST_RIP_JOB_STATUSES:
         return await _park_before_rip(db, application, sess, job, overwrite, created_by_user_id)
 
-    # Fix 75-7: post-rip, `not resolved` is its own terminal outcome, never
+    # Post-rip, `not resolved` is its own terminal outcome, never
     # "no_tracks". Tracks can exist and still resolve zero outputs (every
     # track excluded, or none match the session's media_type/track-kind
     # routing); parking as "no_tracks" there would promise a rip-complete

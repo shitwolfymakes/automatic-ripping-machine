@@ -1,8 +1,8 @@
 <script lang="ts">
 	// Whether this deployment can run transcode containers at all (set at install
 	// time) and, once the GPU list is known, whether encoding falls back to the CPU.
-	import StatusField from '$lib/components/StatusField.svelte';
-	import StatusStrip from '$lib/components/StatusStrip.svelte';
+	import StatusField from '$lib/components/shared/StatusField.svelte';
+	import StatusStrip from '$lib/components/shared/StatusStrip.svelte';
 
 	let { capable, gpuEnabled }: { capable: boolean; gpuEnabled?: boolean } = $props();
 </script>
