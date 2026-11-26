@@ -18,6 +18,7 @@ from arm_ripper.eject import Ejector
 from arm_ripper.makemkv_prep import MakeMKVPrep
 from arm_ripper.makemkv_minlength import DEFAULT_MIN_TITLE_LENGTH_SECONDS
 from arm_ripper.ripper_config import ripper_config_or_none
+from arm_ripper.scan.makemkv import SCAN_TIMEOUT_SECONDS
 from arm_ripper.resolution_wait import IDENTIFY_WAIT, RESOLUTION_TIMEOUT_UNSET, REVIEW_WAIT, ResolutionWaiter, WaitSpec
 from arm_ripper.rip.dispatcher import NO_RIP_TOOL, rip_tool
 from arm_ripper.rip_events import disc_type_label, rip_started_message
@@ -346,12 +347,16 @@ class JobController:
         cfg = await ripper_config_or_none(self._client, "auto-rip config lookup", "proceeding fail-open")
         return cfg is None or cfg.auto_rip_on_insert
 
-    async def _min_title_length(self) -> int:
-        """The configured minimum title length the scan lists titles down to, or the host minimum when the config
-        can't be read."""
+    async def _scan_settings(self) -> tuple[int, float]:
+        """The minimum title length the scan lists titles down to and this drive's scan timeout, or the host minimum
+        and the default timeout when the config can't be read."""
         fallback = self._default_min_length_seconds
-        cfg = await ripper_config_or_none(self._client, "minimum title length lookup", f"using {fallback}s")
-        return fallback if cfg is None else cfg.min_title_length_seconds
+        cfg = await ripper_config_or_none(
+            self._client, "scan settings lookup", f"using {fallback}s minimum and {SCAN_TIMEOUT_SECONDS:.0f}s timeout"
+        )
+        if cfg is None:
+            return fallback, SCAN_TIMEOUT_SECONDS
+        return cfg.min_title_length_seconds, float(cfg.scan_timeout_seconds)
 
     async def _run_pipeline(self, device_path: str, *, pending_session_id: str | None) -> None:
         async with self._claim(None):
@@ -360,7 +365,8 @@ class JobController:
             # container up across a beta-key rotation doesn't scan/rip
             # protected discs with a stale key.
             await self._makemkv.prepare()
-            scan_result = await scan_or_none(device_path, await self._min_title_length())
+            min_title_length, scan_timeout = await self._scan_settings()
+            scan_result = await scan_or_none(device_path, min_title_length, timeout_seconds=scan_timeout)
             if scan_result is None:
                 return
 
