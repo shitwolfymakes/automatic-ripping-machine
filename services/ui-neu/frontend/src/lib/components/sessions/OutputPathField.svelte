@@ -21,20 +21,20 @@
 
 	const preview = new TemplatePreview();
 
-	// Built when the preview's wait ends, so it reads has_transcode_preset
-	// then (#600).
-	function previewRequest(template: string, type: MediaType): TemplatePreviewRequest {
+	function previewRequest(template: string, type: MediaType, hasPreset: boolean | undefined): TemplatePreviewRequest {
 		const body: TemplatePreviewRequest = { template, media_type: type };
-		if (has_transcode_preset !== undefined) {
-			body.has_transcode_preset = has_transcode_preset;
+		if (hasPreset !== undefined) {
+			body.has_transcode_preset = hasPreset;
 		}
 		return body;
 	}
 
 	$effect(() => {
-		// Access reactive values to track them
+		// Read every value the preview depends on here, so a change to any of
+		// them previews again.
 		const template = value;
 		const type = mediaType;
+		const hasPreset = has_transcode_preset;
 
 		preview.cancel();
 
@@ -43,7 +43,7 @@
 			return;
 		}
 
-		preview.schedule(() => previewRequest(template, type));
+		preview.schedule(() => previewRequest(template, type, hasPreset));
 
 		return preview.cancel;
 	});

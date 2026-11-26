@@ -6,7 +6,8 @@ import type { MediaType } from '$lib/types/api.gen';
 // handlers read their target with an as-cast rather than a null guard:
 // ConfirmDialog fires onconfirm only while it is open, which is only while the
 // target is set. The empty-message arms of the ConfirmDialog messages are
-// covered in sessionsAreaModel.test.ts.
+// covered in sessionsAreaModel.test.ts. One open arm is Svelte's: the tab's
+// `{tab.label}` compiles to `(...) ?? ''`, and every tab label is a string.
 
 vi.mock('$lib/api/sessions', () => ({
 	fetchSessions: vi.fn(),
@@ -611,6 +612,35 @@ describe('the inline dialog and the transcode preset sidebar', () => {
 		await waitFor(() => expect(createTranscodePreset).toHaveBeenCalled());
 		await waitFor(() => expect(screen.queryByRole('dialog', { name: 'New transcode preset' })).not.toBeInTheDocument());
 		await waitFor(() => expect(select.value).toBe('t2'));
+	});
+
+	async function createTranscodePresetFromBuilder() {
+		vi.mocked(createTranscodePreset).mockResolvedValue(makeTranscode('t2', 'tc new') as any);
+		renderComponent(SessionsArea);
+		await screen.findByText('ses Alpha');
+		const select = await openBuilderTranscodeSelect();
+		vi.mocked(fetchTranscodePresets).mockResolvedValue([makeTranscode(), makeTranscode('t2', 'tc new')]);
+		await fireEvent.change(select, { target: { value: '__create_tc__' } });
+		const tcDialog = await screen.findByRole('dialog', { name: 'New transcode preset' });
+		await fireEvent.input(screen.getByTestId('tp-name'), { target: { value: 'tc new' } });
+		await fireEvent.click(within(tcDialog).getByRole('button', { name: 'Save' }));
+		await waitFor(() => expect(select.value).toBe('t2'));
+		await fireEvent.click(
+			within(screen.getByRole('dialog', { name: 'New session' })).getByRole('button', { name: 'Cancel' })
+		);
+		await waitFor(() => expect(screen.queryByRole('dialog', { name: 'New session' })).not.toBeInTheDocument());
+	}
+
+	it('a preset created from the builder is not preselected in the next new session', async () => {
+		await createTranscodePresetFromBuilder();
+		const select = await openBuilderTranscodeSelect();
+		expect(select.value).toBe('');
+	});
+
+	it('a preset created from the builder is not forced into another session opened for edit', async () => {
+		await createTranscodePresetFromBuilder();
+		await fireEvent.click(screen.getByRole('button', { name: /^edit$/i }));
+		expect((screen.getByLabelText(/^transcode preset/i) as HTMLSelectElement).value).toBe('');
 	});
 
 	it('saving an edited transcode preset closes it and preselects nothing in the builder', async () => {

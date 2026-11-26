@@ -20,6 +20,8 @@ import { cancelIsoRip } from '$lib/api/iso';
 import { addToast } from '$lib/stores/toast.svelte';
 import * as auth from '$lib/stores/auth';
 import IsoPreparingRow from '../IsoPreparingRow.svelte';
+import { createIsoDrive } from '$lib/__fixtures__/drive';
+import type { IsoSourceKind } from '$lib/api/dashboard';
 
 const setAdmin = (auth as unknown as { __setAdmin: (v: boolean) => void }).__setAdmin;
 const AT = '2026-10-02T14:00:00Z';
@@ -28,15 +30,21 @@ type Prepare = {
 	drive_id: string;
 	phase: string;
 	updated_at: string;
-	iso_name: string;
-	iso_kind?: string;
+	source?: IsoSourceKind;
 	progress_pct?: number | null;
 	current_file?: string | null;
 };
 
 function render(over: Partial<Prepare> = {}) {
-	const prepare = { drive_id: 'drv_7', phase: 'scanning', updated_at: AT, iso_name: 'a.iso', ...over };
-	// Loose props: the phase is an open string and iso_kind is optional.
+	const { source = 'iso', ...rest } = over;
+	const prepare = {
+		drive_id: 'drv_7',
+		phase: 'scanning',
+		updated_at: AT,
+		drive: createIsoDrive('a.iso', source),
+		...rest
+	};
+	// Loose props: the phase is an open string.
 	return renderComponent(IsoPreparingRow, { props: { prepare } as never });
 }
 
@@ -51,32 +59,32 @@ describe('IsoPreparingRow branches', () => {
 
 	describe('phase label', () => {
 		it('labels an iso scan as Scanning image', () => {
-			render({ iso_kind: 'iso', phase: 'scanning' });
+			render({ source: 'iso', phase: 'scanning' });
 			expect(screen.getByText('Scanning image')).toBeInTheDocument();
 		});
 
 		it('labels an iso extraction as Unpacking image', () => {
-			render({ iso_kind: 'iso', phase: 'extracting' });
+			render({ source: 'iso', phase: 'extracting' });
 			expect(screen.getByText('Unpacking image')).toBeInTheDocument();
 		});
 
 		it('shows an unknown iso phase as is', () => {
-			render({ iso_kind: 'iso', phase: 'verifying' });
+			render({ source: 'iso', phase: 'verifying' });
 			expect(screen.getByText('verifying')).toBeInTheDocument();
 		});
 
 		it('labels a folder scan as Scanning disc folder', () => {
-			render({ iso_kind: 'folder', phase: 'scanning' });
+			render({ source: 'folder', phase: 'scanning' });
 			expect(screen.getByText('Scanning disc folder')).toBeInTheDocument();
 		});
 
 		it('labels a folder extraction as Unpacking image', () => {
-			render({ iso_kind: 'folder', phase: 'extracting' });
+			render({ source: 'folder', phase: 'extracting' });
 			expect(screen.getByText('Unpacking image')).toBeInTheDocument();
 		});
 
 		it('shows an unknown folder phase as is', () => {
-			render({ iso_kind: 'folder', phase: 'verifying' });
+			render({ source: 'folder', phase: 'verifying' });
 			expect(screen.getByText('verifying')).toBeInTheDocument();
 		});
 	});

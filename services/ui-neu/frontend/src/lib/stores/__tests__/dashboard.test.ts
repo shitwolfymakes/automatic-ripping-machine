@@ -23,7 +23,7 @@ describe('dashboard store sticky merge', () => {
 			arm_online: true,
 			active_jobs: [{ id: 1 } as unknown],
 			drives_online: 2,
-			drive_names: { '/dev/sr0': 'Drive 1' },
+			drives: { drv_1: { name: 'Drive 1', kind: 'optical', retired: false, source: null } },
 			notification_count: 7,
 			ripping_enabled: true,
 			makemkv_key_valid: null,
@@ -35,7 +35,7 @@ describe('dashboard store sticky merge', () => {
 		};
 	}
 
-	it('keeps prior notification_count when the response sends null on next poll', async () => {
+	it('keeps prior notification_count when BFF sends null on next poll', async () => {
 		fetchDashboardMock
 			.mockResolvedValueOnce(fullPayload({ notification_count: 7 }))
 			.mockResolvedValueOnce(fullPayload({ notification_count: null }));
@@ -44,23 +44,43 @@ describe('dashboard store sticky merge', () => {
 		await dashboard.refresh();
 		expect(get(dashboard).notification_count).toBe(7);
 		await dashboard.refresh();
-		// Sticky: still 7, not 0, even though the response sent null.
+		// Sticky: still 7, not 0, even though BFF sent null.
 		expect(get(dashboard).notification_count).toBe(7);
 	});
 
-	it('keeps prior drives_online + drive_names when the response sends null', async () => {
+	it('review_wait_seconds is 60 on a first failed config read, then holds the last read value', async () => {
 		fetchDashboardMock
-			.mockResolvedValueOnce(fullPayload({ drives_online: 3, drive_names: { '/dev/sr0': 'A' } }))
-			.mockResolvedValueOnce(fullPayload({ drives_online: null, drive_names: null }));
+			.mockResolvedValueOnce(fullPayload({ review_wait_seconds: null }))
+			.mockResolvedValueOnce(fullPayload({ review_wait_seconds: 300 }))
+			.mockResolvedValueOnce(fullPayload({ review_wait_seconds: null }));
+
+		const { dashboard } = await import('../dashboard');
+		await dashboard.refresh();
+		expect(get(dashboard).review_wait_seconds).toBe(60);
+		await dashboard.refresh();
+		expect(get(dashboard).review_wait_seconds).toBe(300);
+		await dashboard.refresh();
+		expect(get(dashboard).review_wait_seconds).toBe(300);
+	});
+
+	it('keeps prior drives_online + drives when BFF sends null', async () => {
+		fetchDashboardMock
+			.mockResolvedValueOnce(
+				fullPayload({
+					drives_online: 3,
+					drives: { drv_1: { name: 'A', kind: 'optical', retired: false, source: null } }
+				})
+			)
+			.mockResolvedValueOnce(fullPayload({ drives_online: null, drives: null }));
 
 		const { dashboard } = await import('../dashboard');
 		await dashboard.refresh();
 		await dashboard.refresh();
 		expect(get(dashboard).drives_online).toBe(3);
-		expect(get(dashboard).drive_names).toEqual({ '/dev/sr0': 'A' });
+		expect(get(dashboard).drives).toEqual({ drv_1: { name: 'A', kind: 'optical', retired: false, source: null } });
 	});
 
-	it('uses fresh value when the response sends a non-null value', async () => {
+	it('uses fresh value when BFF sends a non-null value', async () => {
 		fetchDashboardMock
 			.mockResolvedValueOnce(fullPayload({ notification_count: 7 }))
 			.mockResolvedValueOnce(fullPayload({ notification_count: 12 }));
@@ -71,7 +91,7 @@ describe('dashboard store sticky merge', () => {
 		expect(get(dashboard).notification_count).toBe(12);
 	});
 
-	it('uses fresh zero when the response sends 0 (not null) - 0 is a real count', async () => {
+	it('uses fresh zero when BFF sends 0 (not null) - 0 is a real count', async () => {
 		fetchDashboardMock
 			.mockResolvedValueOnce(fullPayload({ notification_count: 7 }))
 			.mockResolvedValueOnce(fullPayload({ notification_count: 0 }));

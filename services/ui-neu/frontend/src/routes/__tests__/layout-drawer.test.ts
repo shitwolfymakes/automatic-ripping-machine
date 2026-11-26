@@ -18,7 +18,8 @@ vi.mock('$lib/api/auth', () => ({
 }));
 
 vi.mock('$app/navigation', () => ({
-	goto: vi.fn()
+	goto: vi.fn(),
+	onNavigate: vi.fn()
 }));
 
 vi.mock('$lib/stores/auth', async () => {
@@ -55,7 +56,7 @@ vi.mock('$lib/stores/dashboard', async () => {
 		arm_online: true,
 		active_jobs: [],
 		drives_online: 1,
-		drive_names: {},
+		drives: {},
 		notification_count: 0,
 		ripping_enabled: true,
 		makemkv_key_valid: true,

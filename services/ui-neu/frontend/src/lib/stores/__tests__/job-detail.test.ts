@@ -106,13 +106,29 @@ describe('JobDetail load', () => {
 		expect(d.error?.message).toBe('Failed to load job');
 	});
 
-	it('redirects to the dashboard when the message mentions 404', async () => {
+	it('redirects to the dashboard when the job is not found', async () => {
 		const d = newDetail();
-		mockFetchJob.mockRejectedValueOnce(new Error('404 not found'));
+		mockFetchJob.mockRejectedValueOnce(new ApiError(404, 'unknown job_id: job_1', null));
 		await d.load();
 		expect(mockGoto).toHaveBeenCalledWith('/');
 		expect(d.error).toBeNull();
 		expect(d.loading).toBe(false);
+	});
+
+	it('shows an ApiError that is not a 404 instead of redirecting', async () => {
+		const d = newDetail();
+		mockFetchJob.mockRejectedValueOnce(new ApiError(500, 'server error 404', null));
+		await d.load();
+		expect(mockGoto).not.toHaveBeenCalled();
+		expect(d.error?.message).toBe('server error 404');
+	});
+
+	it('does not read a 404 from a plain Error message', async () => {
+		const d = newDetail();
+		mockFetchJob.mockRejectedValueOnce(new Error('404 not found'));
+		await d.load();
+		expect(mockGoto).not.toHaveBeenCalled();
+		expect(d.error?.message).toBe('404 not found');
 	});
 
 	it('clears an earlier error when the next load starts', async () => {
@@ -191,13 +207,31 @@ describe('JobDetail setExcluded', () => {
 		await d.setExcluded('t1', true);
 		expect(mockUpdateTrack).toHaveBeenCalledWith('job_9', 't1', { excluded: true });
 		expect(mockFetchJob).toHaveBeenCalledTimes(1);
+		expect(d.excludeError).toBeNull();
 	});
 
-	it('reloads after a failure and still rejects to the caller', async () => {
+	it('keeps the failure as the track exclude error and reloads, without rejecting', async () => {
 		const d = newDetail();
 		mockUpdateTrack.mockRejectedValueOnce(new Error('denied'));
-		await expect(d.setExcluded('t1', false)).rejects.toThrow('denied');
+		await expect(d.setExcluded('t1', false)).resolves.toBeUndefined();
+		expect(d.excludeError).toEqual({ trackId: 't1', message: 'denied' });
 		expect(mockFetchJob).toHaveBeenCalledTimes(1);
+	});
+
+	it('names a non-Error failure with a generic message', async () => {
+		const d = newDetail();
+		mockUpdateTrack.mockRejectedValueOnce('nope');
+		await d.setExcluded('t2', true);
+		expect(d.excludeError).toEqual({ trackId: 't2', message: 'Could not save' });
+	});
+
+	it('clears an earlier exclude error when the next toggle starts', async () => {
+		const d = newDetail();
+		mockUpdateTrack.mockRejectedValueOnce(new Error('denied'));
+		await d.setExcluded('t1', false);
+		mockUpdateTrack.mockResolvedValueOnce(undefined as never);
+		await d.setExcluded('t1', false);
+		expect(d.excludeError).toBeNull();
 	});
 });
 

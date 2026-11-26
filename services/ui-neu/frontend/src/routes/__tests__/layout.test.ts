@@ -28,7 +28,8 @@ vi.mock('$lib/api/auth', () => ({
 
 const gotoMock = vi.fn();
 vi.mock('$app/navigation', () => ({
-	goto: (...args: unknown[]) => gotoMock(...args)
+	goto: (...args: unknown[]) => gotoMock(...args),
+	onNavigate: vi.fn()
 }));
 
 const logoutLocalMock = vi.fn();
@@ -76,7 +77,7 @@ vi.mock('$lib/stores/dashboard', async () => {
 		arm_online: true,
 		active_jobs: [],
 		drives_online: 0,
-		drive_names: {},
+		drives: {},
 		notification_count: 0,
 		ripping_enabled: true,
 		transcoder_online: false,
@@ -206,10 +207,7 @@ describe('Layout', () => {
 				{ job_id: 2, status: 'transcoding', title: 'Movie B' }
 			] as never[],
 			drives_online: 1,
-			drive_names: {},
-			iso_sources: {},
-			iso_source_kinds: {},
-			drive_source_kinds: {},
+			drives: {},
 			preparing: [],
 			notification_count: 0,
 			ripping_enabled: true,
@@ -217,7 +215,8 @@ describe('Layout', () => {
 			makemkv_key_checked_at: null,
 			transcoder_online: false,
 			transcoder_stats: null,
-			active_transcodes: []
+			active_transcodes: [],
+			review_wait_seconds: 60
 		}));
 
 		renderComponent(Layout, { props: { children: childSnippet() } });

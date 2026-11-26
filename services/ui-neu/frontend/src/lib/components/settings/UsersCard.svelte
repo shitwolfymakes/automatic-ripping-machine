@@ -97,7 +97,7 @@
 
 <!-- ── Admin change-password slide-over (copied from SessionsArea's inline-preset slide-over) ── -->
 {#if panel === 'admin-password'}
-	<div role="presentation" class="users-card-scrim" onclick={closePanel}></div>
+	<button type="button" class="users-card-scrim" aria-label="Close dialog" onclick={closePanel}></button>
 	<div
 		role="dialog"
 		aria-modal="true"
@@ -228,6 +228,9 @@
 		inset: 0;
 		z-index: 40;
 		background: var(--color-backdrop);
+		border: 0;
+		padding: 0;
+		cursor: default;
 	}
 	.users-card-panel {
 		position: fixed;

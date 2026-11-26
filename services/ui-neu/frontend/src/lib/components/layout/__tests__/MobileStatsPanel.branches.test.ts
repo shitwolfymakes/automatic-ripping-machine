@@ -3,8 +3,11 @@ import type { Writable } from 'svelte/store';
 import { renderComponent, screen, fireEvent, cleanup } from '$lib/testing/render';
 
 // Branch pins for MobileStatsPanel, beside MobileStatsPanel.test.ts. Every
-// branch of the component is reachable from the rendered panel, so nothing
-// here is left unpinned.
+// branch of the component's own code is covered. The coverage tool still
+// reports five open arms that are Svelte's: each text `{...}` below compiles to
+// `(...) ?? ''`, and none of these values is null where it renders. A service
+// row's label, the ripping and transcoding counts (numbers), and the queued and
+// notification counts (each inside an #if that needs it above 0).
 
 // vi.mock factories are hoisted: all values must be inline (no top-level vars).
 vi.mock('$lib/stores/dashboard', async () => {
@@ -27,12 +30,16 @@ vi.mock('$lib/stores/auth', async () => {
 vi.mock('$lib/stores/resources.svelte', async () => {
 	const { readable } = await import('svelte/store');
 	return {
-		resources: readable({
-			cpu_percent: 42,
-			cpu_temp: 0,
-			memory: { total_gb: 16, used_gb: 8, free_gb: 8, percent: 50 },
-			storage: [{ name: 'Raw', path: '/raw', total_gb: 100, used_gb: 20, free_gb: 80, percent: 20 }]
-		}),
+		// SidebarStats draws once the first poll has landed (initialized).
+		resources: Object.assign(
+			readable({
+				cpu_percent: 42,
+				cpu_temp: 0,
+				memory: { total_gb: 16, used_gb: 8, free_gb: 8, percent: 50 },
+				storage: [{ name: 'Raw', path: '/raw', total_gb: 100, used_gb: 20, free_gb: 80, percent: 20 }]
+			}),
+			{ initialized: readable(true) }
+		),
 		startResources: vi.fn(),
 		stopResources: vi.fn()
 	};
@@ -48,13 +55,13 @@ const BASE = {
 	arm_online: true,
 	active_jobs: [],
 	drives_online: 2,
-	drive_names: {},
+	drives: {},
 	notification_count: 0,
 	ripping_enabled: true,
 	makemkv_key_valid: true,
 	makemkv_key_checked_at: null,
 	transcoder_online: true,
-	transcoder_stats: { worker_running: true, pending: 0 },
+	transcoder_stats: { pending: 0 },
 	active_transcodes: []
 };
 
@@ -104,13 +111,9 @@ describe('MobileStatsPanel services', () => {
 	});
 
 	it.each([
-		['online, worker running', true, { worker_running: true }, 'ok'],
-		['online, worker_running missing', true, { pending: 0 }, 'ok'],
-		['online, worker_running null', true, { worker_running: null }, 'ok'],
+		['online, with stats', true, { pending: 0 }, 'ok'],
 		['online, no stats', true, undefined, 'ok'],
-		['online, worker stopped', true, { worker_running: false }, 'warn'],
-		['offline, worker running', false, { worker_running: true }, 'off'],
-		['offline, worker stopped', false, { worker_running: false }, 'off'],
+		['offline, with stats', false, { pending: 0 }, 'off'],
 		['offline, no stats', false, undefined, 'off']
 	])('Transcode %s shows status %s', (_name, online, stats, status) => {
 		setDashboard({ transcoder_online: online, transcoder_stats: stats });
@@ -150,7 +153,8 @@ describe('MobileStatsPanel activity', () => {
 		['no drives', { drives_online: 0 }, /^0 drives$/],
 		['two drives', { drives_online: 2 }, /^2 drives$/],
 		['the database down', { db_available: false, drives_online: 2 }, /^-- drives$/],
-		['the database down with one drive', { db_available: false, drives_online: 1 }, /^-- drive$/]
+		['the database down with one drive', { db_available: false, drives_online: 1 }, /^-- drive$/],
+		['an unknown drive count', { drives_online: undefined }, /^drives$/]
 	])('shows the drive count for %s', (_name, overrides, text) => {
 		setDashboard(overrides);
 		renderComponent(MobileStatsPanel);
@@ -195,18 +199,44 @@ describe('MobileStatsPanel activity', () => {
 	});
 
 	it('links the transcoding line to the transcoder', () => {
-		setDashboard({ active_transcodes: [{ id: 't1' }, { id: 't2' }] });
+		setDashboard({
+			active_transcodes: [
+				{ id: 't1', status: 'in_progress' },
+				{ id: 't2', status: 'in_progress' }
+			]
+		});
 		renderComponent(MobileStatsPanel);
 		const el = screen.getByText(/2 transcoding/);
 		expect(el.tagName).toBe('A');
 		expect(el).toHaveAttribute('href', '/transcoder');
 	});
 
+	it('counts a queued task once, as queued and not as transcoding', () => {
+		setDashboard({
+			active_transcodes: [
+				{ id: 't1', status: 'in_progress' },
+				{ id: 't2', status: 'queued' },
+				{ id: 't3', status: 'queued' }
+			],
+			transcoder_online: true,
+			transcoder_stats: { pending: 2 }
+		});
+		renderComponent(MobileStatsPanel);
+		expect(screen.getByText(/1 transcoding/)).toBeInTheDocument();
+		expect(screen.getByText(/2 queued/)).toBeInTheDocument();
+	});
+
+	it('shows no transcoding line while every task is queued', () => {
+		setDashboard({ active_transcodes: [{ id: 't1', status: 'queued' }] });
+		renderComponent(MobileStatsPanel);
+		expect(screen.queryByText(/transcoding/)).toBeNull();
+	});
+
 	it.each([
 		['the transcoder is online and pending is above 0', true, { pending: 3 }, true],
 		['pending is a numeric string above 0', true, { pending: '3' }, true],
 		['pending is 0', true, { pending: 0 }, false],
-		['pending is missing', true, { worker_running: true }, false],
+		['pending is missing', true, {}, false],
 		['pending is non-numeric', true, { pending: 'lots' }, false],
 		['there are no stats', true, undefined, false],
 		['the transcoder is offline', false, { pending: 3 }, false]

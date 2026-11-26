@@ -26,6 +26,8 @@
 
 	let detail = $state<MetadataReleaseDetail | null>(null);
 	let loadingDetail = $state(false);
+	// A failed release load, shown with the results it was opened from.
+	let loadError = $state<string | null>(null);
 
 	// Cards flipped to show their tracklist on the back face.
 	const flips = new MusicFlipCards();
@@ -41,9 +43,13 @@
 	let visibleTracks = $derived(visibleTracksFor(detail, job.disc_number));
 
 	async function handleSearch(q: string, opts: MusicSearchOpts) {
+		// A search clears the open release, so it waits for a running apply, whose
+		// outcome would otherwise show under whatever release is opened next.
+		if (release.applying) return;
 		searching = true;
 		results = [];
 		searchError = null;
+		loadError = null;
 		detail = null;
 		flips.clear();
 		try {
@@ -61,11 +67,12 @@
 	async function openDetail(c: MetadataCandidate) {
 		if (!c.provider_id) return;
 		loadingDetail = true;
+		loadError = null;
 		release.feedback = null;
 		try {
 			detail = await fetchMusicDetail(c.provider_id);
 		} catch (e) {
-			release.feedback = { type: 'error', message: errorMessage(e, 'Load failed') };
+			loadError = errorMessage(e, 'Load failed');
 		} finally {
 			loadingDetail = false;
 		}
@@ -87,9 +94,8 @@
 				resolveBody: musicReleaseBody(fields, visibleTracks),
 				// Persist the release cover + any track-title mappings in one PATCH so
 				// the cover art shows on the job's cards/rows (resolve doesn't set it).
-				// The body is built after the resolve, from whatever release is open
-				// then (#595).
-				patchBody: () => releasePatchBody(detail?.poster_url ?? null, trackMapping)
+				// Built now, from the release being applied.
+				patchBody: releasePatchBody(detail.poster_url ?? null, trackMapping)
 			},
 			onapply
 		);
@@ -97,10 +103,20 @@
 </script>
 
 <div class="stack">
-	<MusicSearchForm {job} discTrackCount={discTracks.length} {searching} onsearch={handleSearch} />
+	<MusicSearchForm
+		{job}
+		discTrackCount={discTracks.length}
+		{searching}
+		locked={release.applying}
+		onsearch={handleSearch}
+	/>
 
 	{#if searchError}
 		<p class="music-search-meta">{searchError}</p>
+	{/if}
+
+	{#if loadError}
+		<p class="music-search-meta">{loadError}</p>
 	{/if}
 
 	<!-- Results grid -->

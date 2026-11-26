@@ -88,65 +88,72 @@
 	}
 </script>
 
-<div class="ranked-list-field-list" role="list" aria-label={field.label} aria-describedby={helpId}>
-	{#each rows as v (v)}
-		{@const isOn = selected.includes(v)}
-		{@const rank = selected.indexOf(v)}
-		{@const missing = missingKey(field, config, v)}
-		<div class="list-row list-row-compact ranked-list-field-row" role="listitem" data-on={isOn}>
-			<div class="list-row-lead">
-				<input
-					id={useId(v)}
-					type="checkbox"
-					checked={isOn}
-					{disabled}
-					aria-label={`Use ${labelOf(v)}`}
-					aria-describedby={rankId(v)}
-					onchange={(e) => toggle(v, (e.currentTarget as HTMLInputElement).checked)}
-				/>
-			</div>
-			<div class="list-row-main">
-				<div class="ranked-list-field-name">{labelOf(v)}</div>
-				<div id={rankId(v)} class="ranked-list-field-rank">
-					<span>{isOn ? `Rank ${rank + 1}` : 'Not used'}</span>
-					{#if missing}
-						<a class="chip chip-warning chip-sm" href={keyHref(missing)} title={`Open ${keyLabel(missing)}`}>
-							<Glyph name="warning" />
-							Needs {labelOf(v)} key
-						</a>
-					{/if}
+<div class="ranked-list-field">
+	<div class="ranked-list-field-list" role="list" aria-label={field.label} aria-describedby={helpId}>
+		{#each rows as v (v)}
+			{@const isOn = selected.includes(v)}
+			{@const rank = selected.indexOf(v)}
+			{@const missing = missingKey(field, config, v)}
+			<div class="list-row list-row-compact ranked-list-field-row" role="listitem" data-on={isOn}>
+				<div class="list-row-lead">
+					<input
+						id={useId(v)}
+						type="checkbox"
+						checked={isOn}
+						{disabled}
+						aria-label={`Use ${labelOf(v)}`}
+						aria-describedby={rankId(v)}
+						onchange={(e) => toggle(v, (e.currentTarget as HTMLInputElement).checked)}
+					/>
 				</div>
-			</div>
-			{#if isOn}
-				<div class="list-row-actions ranked-list-field-actions">
-					<button
-						id={buttonId(v, 'up')}
-						type="button"
-						class="btn btn-icon ranked-list-field-move"
-						aria-label={`Move ${labelOf(v)} up`}
-						disabled={disabled || rank === 0}
-						onclick={() => move(v, 'up')}
-					>
-						<Glyph name="chevron-up" />
-					</button>
-					<button
-						id={buttonId(v, 'down')}
-						type="button"
-						class="btn btn-icon ranked-list-field-move"
-						aria-label={`Move ${labelOf(v)} down`}
-						disabled={disabled || rank === selected.length - 1}
-						onclick={() => move(v, 'down')}
-					>
-						<Glyph name="chevron-down" />
-					</button>
+				<div class="list-row-main">
+					<div class="ranked-list-field-name">{labelOf(v)}</div>
+					<div id={rankId(v)} class="ranked-list-field-rank">
+						<span>{isOn ? `Rank ${rank + 1}` : 'Not used'}</span>
+						{#if missing}
+							<a class="chip chip-warning chip-sm" href={keyHref(missing)} title={`Open ${keyLabel(missing)}`}>
+								<Glyph name="warning" />
+								Needs {labelOf(v)} key
+							</a>
+						{/if}
+					</div>
 				</div>
-			{/if}
-		</div>
-	{/each}
+				{#if isOn}
+					<div class="list-row-actions ranked-list-field-actions">
+						<button
+							id={buttonId(v, 'up')}
+							type="button"
+							class="btn btn-icon ranked-list-field-move"
+							aria-label={`Move ${labelOf(v)} up`}
+							disabled={disabled || rank === 0}
+							onclick={() => move(v, 'up')}
+						>
+							<Glyph name="chevron-up" />
+						</button>
+						<button
+							id={buttonId(v, 'down')}
+							type="button"
+							class="btn btn-icon ranked-list-field-move"
+							aria-label={`Move ${labelOf(v)} down`}
+							disabled={disabled || rank === selected.length - 1}
+							onclick={() => move(v, 'down')}
+						>
+							<Glyph name="chevron-down" />
+						</button>
+					</div>
+				{/if}
+			</div>
+		{/each}
+	</div>
+	<div class="sr-only" aria-live="polite">{announcement}</div>
 </div>
-<div class="sr-only" aria-live="polite">{announcement}</div>
 
 <style>
+	/* the announcer is position: absolute; anchor it here so it can't land
+	   against the page and stretch the document past the scrolling main */
+	.ranked-list-field {
+		position: relative;
+	}
 	.ranked-list-field-list {
 		max-width: 36rem;
 	}

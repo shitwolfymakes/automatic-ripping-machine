@@ -1,8 +1,10 @@
 <script lang="ts" generics="T">
-	import type { Snippet } from 'svelte';
+	import { untrack, type Snippet } from 'svelte';
 	import { fade } from 'svelte/transition';
 	import { fadeIn } from '$lib/ui/transitions';
-	import { loadView } from '$lib/utils/load-state';
+	import { isPending, loadPhase } from '$lib/utils/load-state';
+	import { SKELETON_DELAY_MS, SKELETON_MIN_SHOW_MS, SkeletonGate } from '$lib/stores/skeleton-gate.svelte';
+	import { pageRevealed, trackPending } from '$lib/stores/page-reveal.svelte';
 
 	interface Props {
 		data: T | null | undefined;
@@ -16,53 +18,62 @@
 		errorSlot?: Snippet<[Error]>;
 	}
 
-	let { data, loading, error = null, isEmpty, minDelay = 150, loadingSlot, ready, empty, errorSlot }: Props = $props();
+	let {
+		data,
+		loading,
+		error = null,
+		isEmpty,
+		minDelay = SKELETON_DELAY_MS,
+		loadingSlot,
+		ready,
+		empty,
+		errorSlot
+	}: Props = $props();
 
-	let delayElapsed = $state(false);
-	let timer: ReturnType<typeof setTimeout> | null = null;
-
+	// A load faster than minDelay never shows the skeleton; one that does show
+	// it keeps it for at least SKELETON_MIN_SHOW_MS so it cannot flash. A
+	// caller that opts out with minDelay=0 (an in-place browser such as the ISO
+	// picker) wants the swap immediate both ways, so it gets no hold either.
+	const delay = untrack(() => minDelay);
+	const gate = new SkeletonGate(delay, delay === 0 ? 0 : SKELETON_MIN_SHOW_MS);
+	// While the page is still hidden, nobody sees the skeleton, so the gate
+	// drops it as soon as the data lands instead of holding it.
+	const revealed = pageRevealed();
 	$effect(() => {
-		if (loading) {
-			if (minDelay === 0) {
-				delayElapsed = true;
-			} else {
-				timer = setTimeout(() => {
-					delayElapsed = true;
-				}, minDelay);
-			}
-		} else {
-			if (timer) clearTimeout(timer);
-			timer = null;
-			delayElapsed = false;
-		}
-		return () => {
-			if (timer) clearTimeout(timer);
-		};
+		const visible = revealed();
+		untrack(() => gate.setVisible(visible));
 	});
+	$effect(() => {
+		const pending = isPending({ data, loading, error });
+		untrack(() => gate.update(pending));
+	});
+	$effect(() => () => gate.dispose());
+	// Hold the page reveal until this panel has something to show.
+	trackPending(() => isPending({ data, loading, error }));
 
-	const view = $derived(loadView({ data, loading, error, delayElapsed, isEmpty }));
+	const phase = $derived(loadPhase({ data, loading, error, skeletonShown: gate.shown, isEmpty }));
 </script>
 
-{#if view.phase === 'error'}
+{#if phase === 'error'}
 	<div in:fade|local={fadeIn}>
 		{#if errorSlot}
-			{@render errorSlot(view.error)}
+			{@render errorSlot(error as Error)}
 		{:else}
-			<p class="load-state-error">Failed to load: {view.error.message}</p>
+			<p class="load-state-error">Failed to load: {(error as Error).message}</p>
 		{/if}
 	</div>
-{:else if view.phase === 'waiting'}
+{:else if phase === 'waiting'}
 	<!-- Anti-flicker window: the skeleton is already in flow (space reserved)
          but invisible, so a fast load fades content in without a jump and a
          slow one reveals the skeleton without one either. -->
 	<div data-phase="waiting" aria-hidden="true">
 		{@render loadingSlot()}
 	</div>
-{:else if view.phase === 'loading'}
+{:else if phase === 'loading'}
 	<div in:fade|local={fadeIn}>
 		{@render loadingSlot()}
 	</div>
-{:else if view.phase === 'empty'}
+{:else if phase === 'empty'}
 	<div in:fade|local={fadeIn}>
 		{#if empty}
 			{@render empty()}
@@ -71,9 +82,8 @@
 		{/if}
 	</div>
 {:else}
-	<!-- 'ready': the view carries the data. -->
 	<div in:fade|local={fadeIn}>
-		{@render ready(view.data)}
+		{@render ready(data as T)}
 	</div>
 {/if}
 

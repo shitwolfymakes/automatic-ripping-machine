@@ -57,10 +57,10 @@ export function tabFromHash(hash: string): string {
 	// Validate the hash tab against the known-valid set: the static
 	// config-group tabs (group names, not knowable from the schema at parse
 	// time but fixed in this file) plus the bespoke screen-tabs. A stale or
-	// legacy hash (e.g. an old #music/#ripping bookmark) falls back to
-	// 'Identification' instead of leaving the content pane blank.
+	// legacy hash (e.g. an old #music/#ripping bookmark) falls back to the
+	// first tab, API Keys, instead of leaving the content pane blank.
 	const allowed = [...CONFIG_GROUP_TABS, ...SCREEN_TABS] as readonly string[];
-	return allowed.includes(tabPart) ? tabPart : 'Identification';
+	return allowed.includes(tabPart) ? tabPart : CONFIG_GROUP_TABS[0];
 }
 
 export function fieldFromHash(hash: string): string | null {

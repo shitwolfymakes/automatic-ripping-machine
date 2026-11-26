@@ -1,5 +1,9 @@
+// Every branch of the transcoder page's own code is covered across this file
+// and transcoder-page-sections.test.ts. The coverage tool still reports two
+// open arms that are Svelte's: `{$statsError}` and `{taskActions.error}` each
+// compile to `(...) ?? ''`, and both sit inside an #if on the same value.
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { renderComponent, screen, cleanup, waitFor, fireEvent } from '$lib/testing/render';
+import { renderComponent, screen, cleanup, waitFor, fireEvent, within } from '$lib/testing/render';
 import TranscoderPage from '../+page.svelte';
 import { setTranscoderEnabled, setTranscodeRuntimeEnabled } from '$lib/stores/config';
 import {
@@ -135,7 +139,7 @@ vi.mock('$lib/stores/dashboard', async () => {
 		arm_online: true,
 		active_jobs: [],
 		drives_online: 0,
-		drive_names: {},
+		drives: {},
 		notification_count: 0,
 		ripping_enabled: true,
 		makemkv_key_valid: null,
@@ -245,21 +249,26 @@ describe('Transcoder Page', () => {
 			expect(screen.queryByText('task is in status=queued, not failed')).not.toBeInTheDocument();
 		});
 
-		it('shows a failed delete in the feedback banner', async () => {
-			vi.spyOn(window, 'confirm').mockReturnValue(true);
+		it('asks through the confirm dialog, then shows a failed delete in the feedback banner', async () => {
 			vi.mocked(deleteTranscoderJob).mockRejectedValueOnce(new Error('transcode dispatcher unavailable'));
 			renderComponent(TranscoderPage);
 			await waitFor(() => expect(screen.getAllByText('Delete').length).toBeGreaterThan(0));
 			await fireEvent.click(screen.getAllByText('Delete')[0]);
+			const dialog = screen.getByRole('dialog');
+			expect(within(dialog).getByText('Delete transcode task')).toBeInTheDocument();
+			expect(within(dialog).getByText('Delete this transcode task?')).toBeInTheDocument();
+			await fireEvent.click(within(dialog).getByRole('button', { name: 'Delete' }));
+			expect(screen.queryByRole('dialog')).toBeNull();
 			await waitFor(() => expect(screen.getByText('transcode dispatcher unavailable')).toBeInTheDocument());
 		});
 
-		it('does not call delete when the confirm is declined', async () => {
-			vi.spyOn(window, 'confirm').mockReturnValue(false);
+		it('does not call delete when the confirm dialog is cancelled', async () => {
 			vi.mocked(deleteTranscoderJob).mockClear();
 			renderComponent(TranscoderPage);
 			await waitFor(() => expect(screen.getAllByText('Delete').length).toBeGreaterThan(0));
 			await fireEvent.click(screen.getAllByText('Delete')[0]);
+			await fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Cancel' }));
+			expect(screen.queryByRole('dialog')).toBeNull();
 			expect(deleteTranscoderJob).not.toHaveBeenCalled();
 		});
 	});

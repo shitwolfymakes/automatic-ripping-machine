@@ -1,3 +1,7 @@
+// Open arms the coverage tool reports that are Svelte's, not the component's:
+// the done and step counts in the heading (numbers), and a step row's test id,
+// badge class, badge text and setup link (strings), each compiled to
+// `(...) ?? ''`.
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { readable } from 'svelte/store';
 import { renderComponent, screen, fireEvent, cleanup, waitFor } from '$lib/testing/render';

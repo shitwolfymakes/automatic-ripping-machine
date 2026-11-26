@@ -12,14 +12,14 @@ vi.mock('$lib/stores/dashboard', async () => {
 			{ job_id: 2, status: 'transcoding', title: 'Movie B' }
 		],
 		drives_online: 2,
-		drive_names: {},
+		drives: {},
 		notification_count: 3,
 		ripping_enabled: true,
 		makemkv_key_valid: true,
 		makemkv_key_checked_at: null,
 		transcoder_online: true,
-		transcoder_stats: { worker_running: true, pending: 4 },
-		active_transcodes: [{ id: 't1' }]
+		transcoder_stats: { pending: 4 },
+		active_transcodes: [{ id: 't1', status: 'in_progress' }]
 	});
 	return {
 		dashboard: { ...store, start: vi.fn(), stop: vi.fn(), error: writable(null) }
@@ -38,16 +38,23 @@ vi.mock('$lib/stores/auth', async () => {
 vi.mock('$lib/stores/resources.svelte', async () => {
 	const { readable } = await import('svelte/store');
 	return {
-		resources: readable({
-			cpu_percent: 42,
-			cpu_temp: 0,
-			memory: { total_gb: 16, used_gb: 8, free_gb: 8, percent: 50 },
-			storage: [{ name: 'Raw', path: '/raw', total_gb: 100, used_gb: 20, free_gb: 80, percent: 20 }]
-		}),
+		// SidebarStats draws once the first poll has landed (initialized).
+		resources: Object.assign(
+			readable({
+				cpu_percent: 42,
+				cpu_temp: 0,
+				memory: { total_gb: 16, used_gb: 8, free_gb: 8, percent: 50 },
+				storage: [{ name: 'Raw', path: '/raw', total_gb: 100, used_gb: 20, free_gb: 80, percent: 20 }]
+			}),
+			{ initialized: readable(true) }
+		),
 		startResources: vi.fn(),
 		stopResources: vi.fn()
 	};
 });
+
+// SidebarStats also waits for the version read before it draws.
+vi.mock('$lib/api/system', () => ({ fetchSystemVersion: () => Promise.resolve({ version: '1' }) }));
 
 import MobileStatsPanel from '$lib/components/layout/MobileStatsPanel.svelte';
 
@@ -94,9 +101,9 @@ describe('MobileStatsPanel', () => {
 		expect(screen.getByText(/3 notifications/)).toBeInTheDocument();
 	});
 
-	it('renders the resource stats panel (CPU/Mem/Storage)', () => {
+	it('renders the resource stats panel (CPU/Mem/Storage)', async () => {
 		renderComponent(MobileStatsPanel);
-		expect(screen.getByText('CPU')).toBeInTheDocument();
+		expect(await screen.findByText('CPU')).toBeInTheDocument();
 		expect(screen.getByText(/42/)).toBeInTheDocument();
 		expect(screen.getByText('Raw')).toBeInTheDocument();
 	});
@@ -111,7 +118,7 @@ describe('MobileStatsPanel', () => {
 	it('does not fire onnavigate for non-link clicks', async () => {
 		const onnavigate = vi.fn();
 		renderComponent(MobileStatsPanel, { props: { onnavigate } });
-		await fireEvent.click(screen.getByText('CPU'));
+		await fireEvent.click(await screen.findByText('CPU'));
 		expect(onnavigate).not.toHaveBeenCalled();
 	});
 });

@@ -1,4 +1,6 @@
 <script lang="ts">
+	import { fade } from 'svelte/transition';
+	import { fadeIn } from '$lib/ui/transitions';
 	import { posterSrc } from '$lib/match/poster';
 
 	interface Props {
@@ -22,15 +24,41 @@
 
 	const showFallback = $derived(!url || errored);
 
+	// The poster stays transparent until it has downloaded, then fades in, so
+	// it never paints top-down or pops in after the page. Keyed by url, so a
+	// new poster on the same element fades in again.
+	let loadedUrl = $state<string | null | undefined>(null);
+	const loaded = $derived(loadedUrl === url);
+
 	function onError() {
 		errored = true;
+	}
+
+	// A poster from the browser cache shows at once instead of fading in again
+	// on every visit. Lazy images have not started loading when they mount, so
+	// img.complete cannot tell; a load landing within CACHED_LOAD_MS of the
+	// poster appearing did not touch the network.
+	const CACHED_LOAD_MS = 50;
+	let shownAt = 0;
+	let instant = $state(false);
+
+	// Re-runs per url (it reads it), so a new poster on the same element is
+	// timed from when its url arrived.
+	function markShown(_img: HTMLImageElement) {
+		void url;
+		shownAt = performance.now();
+	}
+
+	function onLoad() {
+		instant = performance.now() - shownAt < CACHED_LOAD_MS;
+		loadedUrl = url;
 	}
 </script>
 
 {#if showFallback}
 	<!-- data-poster is the theme hook (same contract as data-progress-track):
 	     schemes decorate posters through it rather than component classes. -->
-	<div data-poster class="poster-image-fallback flex items-center justify-center {className}">
+	<div data-poster class="poster-image-fallback flex items-center justify-center {className}" in:fade={fadeIn}>
 		<svg
 			class="h-2/5 w-2/5"
 			fill="none"
@@ -46,7 +74,18 @@
 		</svg>
 	</div>
 {:else}
-	<img data-poster src={posterSrc(url)} {alt} class={className} loading="lazy" onerror={onError} />
+	<img
+		data-poster
+		data-loaded={loaded}
+		data-instant={instant}
+		src={posterSrc(url)}
+		{alt}
+		class={className}
+		loading="lazy"
+		onerror={onError}
+		onload={onLoad}
+		{@attach markShown}
+	/>
 {/if}
 
 <style>
@@ -64,6 +103,16 @@
 	   icon, so the icon colour uses the blue accent token instead, which is
 	   close to blue-400/blue-500 (--color-accent-2 is exactly
 	   Tailwind's blue-500 rgb(59,130,246), blue-400 is rgb(96,165,250)). */
+	/* Opacity only: the image box is sized by its class, so nothing moves. */
+	img {
+		transition: opacity var(--motion-fast) var(--ease);
+	}
+	img[data-loaded='false'] {
+		opacity: 0;
+	}
+	img[data-instant='true'] {
+		transition: none;
+	}
 	.poster-image-fallback {
 		background: var(--color-info-soft);
 		color: var(--color-accent-2);

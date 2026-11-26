@@ -89,34 +89,28 @@ export function formatDateTime(dateString: string | null | undefined): string {
 }
 
 export function elapsedTime(startTime: string | null | undefined): string {
-	if (!startTime) return 'N/A';
-	const start = new Date(startTime);
-	const now = new Date();
-	const totalSeconds = Math.max(0, Math.floor((now.getTime() - start.getTime()) / 1000));
-
-	const hours = Math.floor(totalSeconds / 3600);
-	const minutes = Math.floor((totalSeconds % 3600) / 60);
-	const seconds = totalSeconds % 60;
-
-	if (hours > 0) return `${hours}h ${minutes}m`;
-	if (minutes > 0) return `${minutes}m ${seconds}s`;
-	return `${seconds}s`;
+	const start = startTime ? new Date(startTime).getTime() : NaN;
+	if (Number.isNaN(start)) return 'N/A';
+	return formatDuration((Date.now() - start) / 1000, { cap: false });
 }
 
 /**
- * Format a remaining-time estimate in seconds the way etaTime does, for an
- * ETA that arrives ready-made (the transcoder reports HandBrake's own).
- * Capped at 24h+.
+ * A length of time in seconds as `Xh Ym`, `Ym Zs` or `Zs`; negatives and
+ * non-finite values read as 0. `coarse` is the glanceable form for a rip ETA: `< 1m` under a minute,
+ * whole minutes from five on. At 24h or more it reads `24h+` unless `cap` is
+ * false (an elapsed time has no upper bound).
  */
-export function formatRemaining(remainingSec: number): string {
-	if (remainingSec >= 24 * 3600) return '24h+';
-	const sec = Math.max(0, remainingSec);
+export function formatDuration(seconds: number, opts: { coarse?: boolean; cap?: boolean } = {}): string {
+	const { coarse = false, cap = true } = opts;
+	const sec = Number.isFinite(seconds) ? Math.max(0, Math.floor(seconds)) : 0;
+	if (cap && sec >= 24 * 3600) return '24h+';
+	if (coarse && sec < 60) return '< 1m';
 	const h = Math.floor(sec / 3600);
 	const m = Math.floor((sec % 3600) / 60);
-	const s = Math.floor(sec % 60);
 	if (h > 0) return `${h}h ${m}m`;
-	if (m > 0) return `${m}m ${s}s`;
-	return `${s}s`;
+	if (coarse && m >= 5) return `${m}m`;
+	if (m > 0) return `${m}m ${sec % 60}s`;
+	return `${sec}s`;
 }
 
 /** The byte-copy fields of a live rip tick that formatTransfer reads. */
@@ -136,16 +130,6 @@ export function formatTransfer(live: ByteTransfer | null | undefined): string | 
 	];
 	if (live.rate_bps != null && live.rate_bps > 0) parts.push(`${formatBytes(live.rate_bps)}/s`);
 	return parts.join(' | ');
-}
-
-export function formatEta(seconds: number): string {
-	if (seconds < 60) return '< 1m';
-	const h = Math.floor(seconds / 3600);
-	const m = Math.floor((seconds % 3600) / 60);
-	const s = seconds % 60;
-	if (h > 0) return `${h}h ${m}m`;
-	if (m >= 5) return `${m}m`;
-	return `${m}m ${s}s`;
 }
 
 // Formats a track length in seconds as m:ss ('' when missing).

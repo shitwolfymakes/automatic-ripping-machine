@@ -13,6 +13,7 @@
 	import JobPagination from '$lib/components/dashboard/JobPagination.svelte';
 	import CloseButton from '$lib/components/shared/CloseButton.svelte';
 	import LoadState from '$lib/components/shared/LoadState.svelte';
+	import ConfirmDialog from '$lib/components/shared/ConfirmDialog.svelte';
 	import { uiPrefs } from '$lib/stores/ui-prefs';
 	import { isAdmin } from '$lib/stores/auth';
 
@@ -26,12 +27,22 @@
 	let bulkBusy = $state(false);
 	let bulkFeedback = $state<BulkFeedback | null>(null);
 
-	async function handleBulkAction(
-		action: 'delete' | 'purge',
-		params: { job_ids?: string[]; status?: string },
-		description: string
-	) {
-		if (!confirm(`Are you sure you want to ${description}?`)) return;
+	type BulkParams = { job_ids?: string[]; status?: string };
+	// The bulk delete waiting on its confirm dialog, if any.
+	let pendingBulk = $state<{ params: BulkParams; description: string } | null>(null);
+
+	// Every bulk action is a delete (see runBulkAction), so the action name
+	// does not change what is asked or sent.
+	function handleBulkAction(_action: 'delete' | 'purge', params: BulkParams, description: string) {
+		pendingBulk = { params, description };
+	}
+
+	function confirmBulkAction(params: BulkParams) {
+		pendingBulk = null;
+		runBulkAction(params);
+	}
+
+	async function runBulkAction(params: BulkParams) {
 		bulkBusy = true;
 		bulkFeedback = null;
 		try {
@@ -204,6 +215,19 @@
 		/>
 	</div>
 </section>
+
+{#if pendingBulk}
+	{@const pending = pendingBulk}
+	<ConfirmDialog
+		open
+		title="Delete jobs"
+		message={`Are you sure you want to ${pending.description}?`}
+		confirmLabel="Delete"
+		variant="danger"
+		onconfirm={() => confirmBulkAction(pending.params)}
+		oncancel={() => (pendingBulk = null)}
+	/>
+{/if}
 
 <style>
 	/* Cards / Table: one tinted track, the active view filled in primary */

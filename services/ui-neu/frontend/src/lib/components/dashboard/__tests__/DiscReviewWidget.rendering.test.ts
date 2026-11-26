@@ -3,6 +3,7 @@ import { renderComponent, screen, fireEvent, cleanup, waitFor, within } from '$l
 import DiscReviewWidget from '../DiscReviewWidget.svelte';
 import type { JobView, TrackView } from '$lib/types/api.gen';
 import { createJob, createJobDetail, createTrack } from '../../../__fixtures__/job';
+import { createDriveSummary } from '$lib/__fixtures__/drive';
 
 /** Build a JobDetailView from explicit job overrides + tracks. */
 function detail(jobOverrides: Partial<JobView> = {}, tracks: TrackView[] = []) {
@@ -125,8 +126,8 @@ describe('DiscReviewWidget', () => {
 			});
 		});
 
-		it('renders drive name from driveNames prop', async () => {
-			renderWidget({ drive_id: 'drv_1' }, { driveNames: { drv_1: 'Main Drive' } });
+		it('renders drive name from the drive prop', async () => {
+			renderWidget({ drive_id: 'drv_1' }, { drive: createDriveSummary({ name: 'Main Drive' }) });
 			await waitFor(() => {
 				expect(screen.getByText('Main Drive')).toBeInTheDocument();
 			});
@@ -430,7 +431,7 @@ describe('DiscReviewWidget', () => {
 			mockFetchJob.mockResolvedValueOnce(detail(over as never));
 			renderWidget(over as never);
 			await waitFor(() =>
-				expect(screen.getByTestId('match-row')).toHaveTextContent('Matched on ARM community database , Series, 1974')
+				expect(screen.getByTestId('match-row')).toHaveTextContent('Matched on ARM community database, Series, 1974')
 			);
 		});
 

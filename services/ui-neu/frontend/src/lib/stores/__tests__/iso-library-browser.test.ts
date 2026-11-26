@@ -159,7 +159,7 @@ describe('IsoLibraryBrowser.loadFolders', () => {
 
 		const result = folders('/mnt/discs');
 		d.resolve(result);
-		await pending;
+		await expect(pending).resolves.toBe(true);
 
 		expect(b.folderListing).toEqual(result);
 		expect(b.hostPath).toBe('/mnt/discs');
@@ -176,7 +176,7 @@ describe('IsoLibraryBrowser.loadFolders', () => {
 		const first = b.loadFolders();
 		await b.loadFolders();
 		slow.resolve(folders('/slow'));
-		await first;
+		await expect(first).resolves.toBe(false);
 
 		expect(b.folderListing).toEqual(fast);
 		expect(b.hostPath).toBe('/fast');
@@ -200,7 +200,7 @@ describe('IsoLibraryBrowser.loadFolders', () => {
 		const err = new Error('boom');
 		fetchIsoFoldersMock.mockRejectedValue(err);
 
-		await b.loadFolders();
+		await expect(b.loadFolders()).resolves.toBe(false);
 
 		expect(b.loadError).toBe(err);
 	});

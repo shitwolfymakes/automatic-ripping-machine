@@ -1,3 +1,6 @@
+// Open arms the coverage tool reports that are Svelte's, not the page's: the
+// delete dialog's title and message each interpolate `{deleteDialog.name}`,
+// which compiles to `(...) ?? ''`, and the dialog's name is always a string.
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import { renderComponent, screen, fireEvent, cleanup, waitFor, within } from '$lib/testing/render';
 import FilesPage from '../+page.svelte';
@@ -182,6 +185,17 @@ describe('Files Page', () => {
 			await waitFor(() => {
 				expect(screen.getByText('Connection failed')).toBeInTheDocument();
 			});
+		});
+
+		it('says no media directories are configured when there are no roots', async () => {
+			vi.mocked(fetchRoots).mockResolvedValueOnce([]);
+			const { container } = renderComponent(FilesPage);
+			await waitFor(() => {
+				expect(screen.getByText('No media directories configured')).toBeInTheDocument();
+			});
+			expect(container.querySelector('.files-page-listing')).toBeNull();
+			expect(container.querySelector('[data-file-roots]')).toBeNull();
+			expect(mockFetchDirectory).not.toHaveBeenCalled();
 		});
 
 		it('shows error when fetchDirectory fails', async () => {

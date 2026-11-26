@@ -19,8 +19,10 @@
 		searching: boolean;
 		/** Called with the trimmed query and the search options. */
 		onsearch: (query: string, opts: MusicSearchOpts) => void;
+		/** An apply is running: a new search would replace the release it reports on. */
+		locked?: boolean;
 	}
-	let { job, discTrackCount, searching, onsearch }: Props = $props();
+	let { job, discTrackCount, searching, onsearch, locked = false }: Props = $props();
 
 	// Seed from the typed `music` section (metadata_json.music.artist/.album) —
 	// bare top-level metadata keys are not used (see job-fields.ts).
@@ -143,7 +145,7 @@
 			<button
 				type="button"
 				onclick={submit}
-				disabled={searching || !query.trim()}
+				disabled={searching || locked || !query.trim()}
 				class="btn btn-primary music-search-action-btn"
 			>
 				{searching ? 'Searching...' : 'Search'}

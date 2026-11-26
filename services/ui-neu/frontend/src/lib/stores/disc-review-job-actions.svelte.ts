@@ -28,12 +28,12 @@ export class DiscReviewJobActions {
 		this.#done = done;
 	}
 
-	cancel = async (job: JobView | undefined, isoName: string | null): Promise<void> => {
+	cancel = async (job: JobView | undefined, fromIso: boolean): Promise<void> => {
 		if (!job) return;
 		this.cancelling = true;
 		this.errorMessage = null;
 		try {
-			if (isoName && job.drive_id) {
+			if (fromIso && job.drive_id) {
 				await cancelIsoRip(job.drive_id);
 			} else {
 				await abandonJob(job.id);

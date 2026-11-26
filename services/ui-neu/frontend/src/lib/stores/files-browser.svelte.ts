@@ -14,6 +14,10 @@ export class FilesBrowser {
 	loading = $state(true);
 	error = $state<string | null>(null);
 	filesError = $derived<Error | null>(this.error ? new Error(this.error) : null);
+	/** The roots read has succeeded; a failed read leaves this false. */
+	rootsLoaded = $state(false);
+	/** The roots have loaded and none is configured, so there is no listing to load. */
+	noRootsConfigured = $derived(!this.loading && this.rootsLoaded && this.roots.length === 0);
 
 	// Sort state
 	sortKey = $state<SortKey>('name');
@@ -75,6 +79,7 @@ export class FilesBrowser {
 	loadRoots = async () => {
 		try {
 			this.roots = sortRoots(await fetchRoots());
+			this.rootsLoaded = true;
 			if (this.roots.length > 0 && !this.current.root) {
 				this.current = { root: this.roots[0].key, subpath: '' };
 			}

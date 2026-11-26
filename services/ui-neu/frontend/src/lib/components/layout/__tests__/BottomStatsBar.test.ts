@@ -1,3 +1,6 @@
+// Open arms the coverage tool reports that are Svelte's, not the component's:
+// the memory used and total and a disk's free space each compile to
+// `(...) ?? ''`, and all three are numbers.
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import { flushSync } from 'svelte';
 import type { Writable } from 'svelte/store';
@@ -6,9 +9,10 @@ import { renderComponent, screen, cleanup } from '$lib/testing/render';
 // Drive the store with a fixed snapshot.
 // vi.mock factories are hoisted — all values must be inline (no top-level vars).
 vi.mock('$lib/stores/resources.svelte', async () => {
-	const { readable } = await import('svelte/store');
+	// Writable so a test can have the storage rows arrive after mount.
+	const { writable } = await import('svelte/store');
 	return {
-		resources: readable({
+		resources: writable({
 			cpu_percent: 95,
 			cpu_temp: 0,
 			memory: { total_gb: 16, used_gb: 8, free_gb: 8, percent: 50 },
@@ -26,7 +30,7 @@ vi.mock('$app/stores', async () => {
 });
 
 import { page } from '$app/stores';
-import { startResources, stopResources } from '$lib/stores/resources.svelte';
+import { resources, startResources, stopResources } from '$lib/stores/resources.svelte';
 import BottomStatsBar from '$lib/components/layout/BottomStatsBar.svelte';
 
 function goTo(pathname: string) {
@@ -45,6 +49,20 @@ beforeEach(() => {
 afterEach(() => cleanup());
 
 describe('BottomStatsBar', () => {
+	it('fades the storage rows in when they arrive after the first draw', () => {
+		const store = resources as unknown as Writable<Record<string, unknown>>;
+		let saved: unknown;
+		store.update((r) => {
+			saved = r.storage;
+			return { ...r, storage: [] };
+		});
+		renderComponent(BottomStatsBar);
+		expect(screen.queryByText(/Raw/)).toBeNull();
+		store.update((r) => ({ ...r, storage: saved }));
+		flushSync();
+		expect(screen.getByText(/Raw/)).toBeInTheDocument();
+	});
+
 	it('renders CPU, memory and per-root storage', () => {
 		renderComponent(BottomStatsBar);
 		expect(screen.getByText(/Raw/)).toBeInTheDocument();
