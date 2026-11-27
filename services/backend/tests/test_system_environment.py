@@ -8,7 +8,6 @@ from arm_backend.system_environment import (
     build_env_groups,
     mask_container_env,
     ripper_container_views,
-    strip_userinfo,
     transcode_container_views,
 )
 from arm_backend.transcode_container_spec import container_identity_env, gpu_env
@@ -61,20 +60,6 @@ def test_explicit_empty_string_is_env_source(make_settings):
 def test_url_userinfo_stripped(make_settings):
     groups = build_env_groups(make_settings(ARM_TRANSCODE_DOCKER_HOST="ssh://bob:pw@nas:22"), Config(id=1), 0)
     assert _var(groups, "ARM_TRANSCODE_DOCKER_HOST").value == "ssh://***@nas:22"
-
-
-def test_strip_userinfo_passes_non_urls_through():
-    assert strip_userinfo("/var/run/docker.sock") == "/var/run/docker.sock"
-    assert strip_userinfo("http://host:80/x") == "http://host:80/x"
-
-
-def test_strip_userinfo_username_only_and_ipv6():
-    assert strip_userinfo("ssh://bob@nas") == "ssh://***@nas"
-    assert strip_userinfo("ssh://u:p@[::1]:22") == "ssh://***@[::1]:22"
-
-
-def test_strip_userinfo_malformed_fails_closed():
-    assert strip_userinfo("http://bob:pw@[bad") == "***"
 
 
 def test_malformed_url_var_does_not_break_groups(make_settings):

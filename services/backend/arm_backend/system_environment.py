@@ -2,7 +2,6 @@
 
 from collections.abc import Mapping
 from typing import Any
-from urllib.parse import urlsplit, urlunsplit
 
 from arm_common import Config, Drive, DriveLifecycle, Gpu
 from arm_common.config_metadata import CONFIG_FIELD_META
@@ -27,22 +26,10 @@ from arm_backend.transcode_container_spec import (
     task_volume_pairs,
 )
 from arm_backend.transcode_images import vendor_override
+from arm_backend.url_masking import strip_userinfo
 
 # The GPU inventory card lives on the Transcoding settings tab.
 _GPUS_TAB = "Transcoding"
-
-
-def strip_userinfo(url: str) -> str:
-    """Replace any `user:pass@` in a URL with `***@`; non-URLs pass through, malformed ones are masked."""
-    try:
-        parts = urlsplit(url)
-    except ValueError:
-        # Unparseable: fail closed, the raw string may carry credentials.
-        return "***"
-    if "@" not in parts.netloc:
-        return url
-    host = parts.netloc.rsplit("@", 1)[1]
-    return urlunsplit(parts._replace(netloc=f"***@{host}"))
 
 
 def _stringify(raw: object) -> str:
