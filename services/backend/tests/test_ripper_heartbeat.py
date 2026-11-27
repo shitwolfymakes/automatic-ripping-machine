@@ -62,7 +62,7 @@ def test_heartbeat_persists_media_status() -> None:
     with TestClient(app) as client:
         r = client.post(
             "/api/ripper/heartbeat",
-            json={"drive_id": "drv_x", "media_status": "loaded"},
+            json={"drive_id": "drv_x", "media_status": "loaded", "scanning": False},
             headers=_service_auth(),
         )
     assert r.status_code == 204, r.text
@@ -72,6 +72,21 @@ def test_heartbeat_persists_media_status() -> None:
     assert drive.last_seen_at == drive.media_status_at
 
 
+@pytest.mark.parametrize("scanning", [True, False])
+def test_heartbeat_persists_the_scanning_flag(scanning: bool) -> None:
+    db = FakeSession()
+    drive = _seed(db)
+    drive.scanning = not scanning
+    with TestClient(_make_app(db)) as client:
+        r = client.post(
+            "/api/ripper/heartbeat",
+            json={"drive_id": "drv_x", "media_status": "loaded", "scanning": scanning},
+            headers=_service_auth(),
+        )
+    assert r.status_code == 204, r.text
+    assert drive.scanning is scanning
+
+
 def test_heartbeat_unknown_drive_returns_404() -> None:
     db = FakeSession()
     db.rows["drives"] = []
@@ -79,7 +94,7 @@ def test_heartbeat_unknown_drive_returns_404() -> None:
     with TestClient(app) as client:
         r = client.post(
             "/api/ripper/heartbeat",
-            json={"drive_id": "drv_missing", "media_status": "loaded"},
+            json={"drive_id": "drv_missing", "media_status": "loaded", "scanning": False},
             headers=_service_auth(),
         )
     assert r.status_code == 404
@@ -92,7 +107,7 @@ def test_heartbeat_requires_service_token() -> None:
     with TestClient(app) as client:
         r = client.post(
             "/api/ripper/heartbeat",
-            json={"drive_id": "drv_x", "media_status": "loaded"},
+            json={"drive_id": "drv_x", "media_status": "loaded", "scanning": False},
         )
     assert r.status_code in (401, 403)
 
@@ -102,7 +117,9 @@ def test_detached_heartbeat_marks_the_drive_offline_and_absent() -> None:
     drive = _seed(db)
     with TestClient(_make_app(db)) as client:
         r = client.post(
-            "/api/ripper/heartbeat", json={"drive_id": "drv_x", "media_status": "detached"}, headers=_service_auth()
+            "/api/ripper/heartbeat",
+            json={"drive_id": "drv_x", "media_status": "detached", "scanning": False},
+            headers=_service_auth(),
         )
     assert r.status_code == 204
     assert drive.status is DriveStatus.OFFLINE and drive.present is False
@@ -116,7 +133,9 @@ def test_heartbeat_after_detached_brings_the_drive_back_online() -> None:
     drive.present = False
     with TestClient(_make_app(db)) as client:
         client.post(
-            "/api/ripper/heartbeat", json={"drive_id": "drv_x", "media_status": "no_disc"}, headers=_service_auth()
+            "/api/ripper/heartbeat",
+            json={"drive_id": "drv_x", "media_status": "no_disc", "scanning": False},
+            headers=_service_auth(),
         )
     assert drive.status is DriveStatus.ONLINE and drive.present is True
 
@@ -127,7 +146,9 @@ def test_heartbeat_never_clears_error() -> None:
     drive.status = DriveStatus.ERROR
     with TestClient(_make_app(db)) as client:
         client.post(
-            "/api/ripper/heartbeat", json={"drive_id": "drv_x", "media_status": "loaded"}, headers=_service_auth()
+            "/api/ripper/heartbeat",
+            json={"drive_id": "drv_x", "media_status": "loaded", "scanning": False},
+            headers=_service_auth(),
         )
     assert drive.status is DriveStatus.ERROR
 
@@ -140,7 +161,9 @@ def test_detached_heartbeat_on_an_error_drive_stays_error() -> None:
     drive.status = DriveStatus.ERROR
     with TestClient(_make_app(db)) as client:
         client.post(
-            "/api/ripper/heartbeat", json={"drive_id": "drv_x", "media_status": "detached"}, headers=_service_auth()
+            "/api/ripper/heartbeat",
+            json={"drive_id": "drv_x", "media_status": "detached", "scanning": False},
+            headers=_service_auth(),
         )
     assert drive.status is DriveStatus.ERROR
     assert drive.present is False

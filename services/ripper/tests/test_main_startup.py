@@ -547,7 +547,7 @@ async def test_heartbeat_error_warns_and_keeps_beating(monkeypatch, caplog, exc)
     calls = {"n": 0}
 
     class Client:
-        async def heartbeat(self, *, drive_id, media_status) -> None:
+        async def heartbeat(self, *, drive_id, media_status, scanning) -> None:
             calls["n"] += 1
             if calls["n"] == 1:
                 raise exc
@@ -557,6 +557,9 @@ async def test_heartbeat_error_warns_and_keeps_beating(monkeypatch, caplog, exc)
 
     class Ctl:
         def is_idle(self) -> bool:  # pragma: no cover - not reached
+            return False
+
+        def is_scanning(self) -> bool:
             return False
 
     async def sleep(_s):

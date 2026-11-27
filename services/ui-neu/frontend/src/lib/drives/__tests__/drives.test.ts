@@ -25,6 +25,7 @@ function drive(over: Partial<DriveView> = {}): DriveView {
 		last_seen_at: null,
 		media_status: null,
 		media_status_at: null,
+		scanning: false,
 		default_session_id: null,
 		rip_speed: null,
 		drive_mode: null,
@@ -175,23 +176,27 @@ describe('prescanOverrideCount', () => {
 
 describe('cancelScanLabel', () => {
 	const job = { id: 'job_1', title: null, status: 'created' } as const;
+	const scanning = { media_status: 'loaded', scanning: true } as const;
 
-	it('offers the cancel while a disc is loaded and no job exists', () => {
-		expect(cancelScanLabel(drive({ media_status: 'loaded' }))).toBe('Cancel scan');
+	it('offers the cancel while the ripper reports a scan on a loaded drive', () => {
+		expect(cancelScanLabel(drive(scanning))).toBe('Cancel scan');
+	});
+	it('offers nothing while no scan is running', () => {
+		expect(cancelScanLabel(drive({ media_status: 'loaded', scanning: false }))).toBeNull();
 	});
 	it.each(['no_disc', 'tray_open', 'not_ready', 'unknown', null] as const)(
 		'offers nothing for media status %s',
 		(media_status) => {
-			expect(cancelScanLabel(drive({ media_status }))).toBeNull();
+			expect(cancelScanLabel(drive({ media_status, scanning: true }))).toBeNull();
 		}
 	);
 	it('offers nothing once the drive has a job', () => {
-		expect(cancelScanLabel(drive({ media_status: 'loaded', current_job: job }))).toBeNull();
+		expect(cancelScanLabel(drive({ ...scanning, current_job: job }))).toBeNull();
 	});
 	it('offers nothing on a detached drive', () => {
-		expect(cancelScanLabel(drive({ media_status: 'loaded', status: 'offline', present: false }))).toBeNull();
+		expect(cancelScanLabel(drive({ ...scanning, status: 'offline', present: false }))).toBeNull();
 	});
 	it('offers nothing when the ripper is offline', () => {
-		expect(cancelScanLabel(drive({ media_status: 'loaded', status: 'offline', present: true }))).toBeNull();
+		expect(cancelScanLabel(drive({ ...scanning, status: 'offline', present: true }))).toBeNull();
 	});
 });

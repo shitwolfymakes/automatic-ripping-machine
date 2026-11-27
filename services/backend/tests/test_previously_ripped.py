@@ -376,7 +376,7 @@ def test_the_drive_notice_lasts_until_the_tray_closes_empty(
     with TestClient(_ripper_app(db)) as client:
         r = client.post(
             "/api/ripper/heartbeat",
-            json={"drive_id": "drv_new", "media_status": media_status.value},
+            json={"drive_id": "drv_new", "media_status": media_status.value, "scanning": False},
             headers=_SERVICE_AUTH,
         )
     assert r.status_code == 204

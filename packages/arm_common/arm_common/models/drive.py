@@ -90,6 +90,8 @@ class Drive(SQLModel, table=True):
         sa_column=enum_column(DriveMediaStatus, "drive_media_status", nullable=True)
     )
     media_status_at: datetime | None = Field(sa_column=Column(DateTime(timezone=True), nullable=True))
+    # Reported on the same heartbeat: a pre-job scan is running on this drive.
+    scanning: bool = Field(default=False, sa_column=Column(Boolean, nullable=False, server_default="false"))
     rip_params_json: dict[str, Any] = Field(
         default_factory=dict,
         sa_column=Column(JSONB, nullable=False, server_default="{}"),
