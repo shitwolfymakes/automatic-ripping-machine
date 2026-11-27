@@ -103,6 +103,20 @@ class BdDiscMeta(BaseModel):
     language: str | None = None
 
 
+class BdPlaylist(BaseModel):
+    """One Blu-ray playlist (`BDMV/PLAYLIST/<name>.mpls`) as the ripper read it off the disc."""
+
+    name: str  # "00202.mpls"
+    # Clip numbers in play order (ScanTitle.segment_map numbering) and the
+    # seconds each plays; the two lists are parallel.
+    clips: list[int]
+    clip_seconds: list[float]
+    duration_seconds: int
+    chapter_count: int
+    # True when any PlayItem has angles; only the primary angle's clip is listed.
+    multi_angle: bool = False
+
+
 class ScanResult(BaseModel):
     disc_type: DiscType
     volume_label: str | None = None
@@ -115,6 +129,9 @@ class ScanResult(BaseModel):
     fingerprints: list[DiscFingerprintInput] = Field(default_factory=list)
     # Studio disc title + set position from the Blu-ray BDMT file, when present.
     bd_meta: BdDiscMeta | None = None
+    # Blu-ray playlists read from BDMV/PLAYLIST before makemkvcon ran; empty
+    # on other media or when the read failed.
+    playlists: list[BdPlaylist] = Field(default_factory=list)
     raw: dict[str, Any] = Field(default_factory=dict)
 
 

@@ -20,18 +20,18 @@ _LIST_TIMEOUT_SECONDS = 180
 _READ_TIMEOUT_SECONDS = 60
 
 
-def _exe() -> str | None:
+def executable() -> str | None:
     # Debian 12's `7zip` package (the ripper image) ships only `7zz`; p7zip
     # and newer Debian install `7z`.
     return shutil.which("7z") or shutil.which("7zz")
 
 
 def available() -> bool:
-    return _exe() is not None
+    return executable() is not None
 
 
 def _run(args: list[str], timeout: float) -> bytes | None:
-    exe = _exe()
+    exe = executable()
     if exe is None:
         return None
     try:
