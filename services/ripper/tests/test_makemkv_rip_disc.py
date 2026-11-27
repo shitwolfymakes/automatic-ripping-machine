@@ -1050,15 +1050,14 @@ def test_mkv_all_command_has_all_exactly_once_right_before_the_output_dir(tmp_pa
     assert cmd[-2:] == ["all", str(tmp_path)]
 
 
-def test_mkv_title_command_names_the_title_and_passes_the_minlength(tmp_path):
-    """MakeMKV numbers titles after its minimum-length filter, so the id names the right title only under the
-    `--minlength` it was picked by; no global `settings.conf` may decide it."""
-    assert makemkv_rip._mkv_title_command("/dev/sr0", tmp_path, 2, 60) == [
+def test_mkv_title_command_names_the_title_and_passes_no_minlength(tmp_path):
+    """MakeMKV numbers titles after its minimum-length filter; the scan's `info` runs without `--minlength`, so the
+    per-title command must not pass one either, or the id would name another title."""
+    assert makemkv_rip._mkv_title_command("/dev/sr0", tmp_path, 2) == [
         "makemkvcon",
         "mkv",
         "--robot",
         "--progress=-stdout",
-        "--minlength=60",
         "dev:/dev/sr0",
         "2",
         str(tmp_path),
@@ -1066,7 +1065,7 @@ def test_mkv_title_command_names_the_title_and_passes_the_minlength(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_rip_disc_for_one_title_passes_its_minlength(monkeypatch, tmp_path):
+async def test_rip_disc_for_one_title_leaves_out_minlength(monkeypatch, tmp_path):
     captured: dict[str, Any] = {}
     fake = _FakeProc([b'MSG:5036,0,2,"done","%1 %2","0","titles"\n'])
 
@@ -1078,7 +1077,7 @@ async def test_rip_disc_for_one_title_passes_its_minlength(monkeypatch, tmp_path
 
     await rip_disc(device_path="/dev/sr0", output_dir=tmp_path, minlength_seconds=60, title=2)
 
-    assert "--minlength=60" in captured["argv"]
+    assert not any(arg.startswith("--minlength") for arg in captured["argv"])
     assert list(captured["argv"][-3:]) == ["dev:/dev/sr0", "2", str(tmp_path)]
 
 
