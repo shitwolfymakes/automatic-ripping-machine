@@ -22,7 +22,7 @@
 		<InlineField
 			label="Title"
 			value={job.title || 'Untitled'}
-			canEdit={$isAdmin && jobDetail.canEditInPlace}
+			canEdit={$isAdmin && jobDetail.canResolve}
 			onsave={(raw) => onsavetitle(raw)}
 		/>
 	</h1>

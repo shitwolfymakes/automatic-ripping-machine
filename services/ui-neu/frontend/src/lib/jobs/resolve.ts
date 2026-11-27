@@ -54,10 +54,10 @@ function storedMusic(job: JobView): { artist: string; album: string; tracks: Mus
  * whole `music` block, so this restates the stored artist, album and every
  * track (each keeping its other keys) with the one trimmed change, padding the
  * track list with blank titles up to the scan's track count and the edited
- * track. The album is the title, so every save carries one: a blank album, or
- * an artist or track edit while no album is stored (a match whose release had
- * none), throws before anything is sent. Only an identified CD is edited in
- * place; the Match CD panel identifies one (see JobDetail.canEditInPlace).
+ * track. The album is the title; until one is stored the job's title stays,
+ * so a CD's identity can be entered a field at a time, in any order (the
+ * Backend counts it as identified once nothing is missing). A blank album
+ * edit throws before anything is sent.
  */
 export function cdEditBody(job: JobView, edit: CdEdit, raw: string, trackCount: number): ResolveBody {
 	const music = storedMusic(job);
@@ -67,15 +67,13 @@ export function cdEditBody(job: JobView, edit: CdEdit, raw: string, trackCount: 
 	if (edit.field === 'album') {
 		if (!value) throw new Error('An album is required');
 		music.album = value;
-	} else if (!music.album.trim()) {
-		throw new Error('Set the album first');
 	} else if (edit.field === 'artist') {
 		music.artist = value;
 	} else {
 		tracks[edit.index - 1] = { ...tracks[edit.index - 1], title: value };
 	}
 	return {
-		title: music.album,
+		title: music.album || (job.title ?? ''),
 		year: job.year ?? null,
 		music: { artist: music.artist, album: music.album, tracks }
 	};

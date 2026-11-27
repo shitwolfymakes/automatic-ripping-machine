@@ -726,3 +726,171 @@ def test_resolve_unidentified_partial_rip_runs_after_rip(
     assert r.status_code == 200, r.text
     assert r.json()["job"]["status"] == "ripped_partial"
     assert calls == (["after_rip"] if expect_after_rip else ["fan_out"])
+
+
+# --- A CD counts as identified only once its identity is complete ---------
+#
+# Album, artist and a title for every scanned track. A partial resolve on a
+# CD not yet identified stores what was sent and leaves the job where it is:
+# no promote, no fan-out or after-rip, no identify.resolved (so the ripper's
+# identify wait is not woken). The resolve that completes it does all of it once.
+
+_CD_SCAN = {"disc_type": "cd", "titles": [{"index": 1, "duration_seconds": 60}, {"index": 2, "duration_seconds": 61}]}
+_CD_FULL = {"artist": "Lali", "album": "Two Windows", "tracks": [{"title": "A"}, {"title": "B"}]}
+
+
+def _seed_cd(db: FakeSession, status: JobStatus, flags: dict[str, bool] | None = None) -> Job:
+    _seed(db, job_status=status, job_title="AUDIO_CD")
+    job: Job = db.rows["jobs"][0]
+    job.disc_type = DiscType.CD
+    job.metadata_json = {"scan_result": _CD_SCAN, "flags": flags or {}}
+    return job
+
+
+def _spy_post_resolve(monkeypatch: pytest.MonkeyPatch) -> list[str]:
+    import arm_backend.identity.resolve_service as resolve_service
+
+    calls: list[str] = []
+
+    async def fake_after_rip(_session, job, _hub):  # type: ignore[no-untyped-def]
+        calls.append("after_rip")
+        return []
+
+    async def fake_fan_out(_session, *, job, hub):  # type: ignore[no-untyped-def]
+        calls.append("fan_out")
+        return []
+
+    monkeypatch.setattr(resolve_service, "after_rip", fake_after_rip)
+    monkeypatch.setattr(resolve_service, "fan_out_waiting_identify_applications", fake_fan_out)
+    return calls
+
+
+def _resolve(client: TestClient, token: str, body: dict[str, object]) -> dict[str, object]:
+    r = client.post("/api/jobs/job_01JZXR7K3M5Q8N4VWA00000001/resolve", json=body, headers=_auth(token))
+    assert r.status_code == 200, r.text
+    return r.json()["job"]
+
+
+def _identify_events(hub: _CapturingHub) -> list[object]:
+    return [e["event_type"] for e in hub.events if e["event_type"] in ("identify.resolved", "rip.identify_resolved")]
+
+
+@pytest.mark.parametrize(
+    ("status", "flags"),
+    [
+        (JobStatus.AWAITING_USER_ID, {}),
+        (JobStatus.RIPPED_AWAITING_IDENTIFY, {"unidentified": True}),
+        (JobStatus.RIPPED_PARTIAL, {"unidentified": True}),
+    ],
+)
+def test_resolve_partial_cd_stores_music_but_stays_unidentified(
+    signing_key: bytes, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, status: JobStatus, flags: dict[str, bool]
+) -> None:
+    db = FakeSession()
+    hub = _CapturingHub()
+    _seed_cd(db, status, flags)
+    calls = _spy_post_resolve(monkeypatch)
+    app, token = _make_app(signing_key, db, tmp_path, hub)
+    with TestClient(app) as client:
+        job = _resolve(client, token, {"title": "AUDIO_CD", "year": None, "music": {**_CD_FULL, "artist": ""}})
+    assert job["status"] == status.value
+    assert job["metadata_json"]["music"]["album"] == "Two Windows"
+    assert job["metadata_json"]["flags"]["unidentified"] is flags.get("unidentified", False)
+    assert job["cd_identity_gaps"] == {"album": False, "artist": True, "untitled_tracks": []}
+    assert calls == []
+    assert _identify_events(hub) == []
+    assert db.rows["session_applications"][0].status == SessionApplicationStatus.WAITING_IDENTIFY
+
+
+def test_resolve_partial_cd_keeps_the_miss_markers(signing_key: bytes, tmp_path: Path) -> None:
+    db = FakeSession()
+    hub = _CapturingHub()
+    job_row = _seed_cd(db, JobStatus.AWAITING_USER_ID)
+    job_row.metadata_json = {**job_row.metadata_json, "identify_attempts": [{"outcome": "miss"}]}
+    app, token = _make_app(signing_key, db, tmp_path, hub)
+    with TestClient(app) as client:
+        job = _resolve(client, token, {"title": "AUDIO_CD", "year": None, "music": {"album": "Two Windows"}})
+    assert job["metadata_json"]["identify_attempts"] == [{"outcome": "miss"}]
+
+
+def test_iterative_cd_saves_promote_once_on_the_save_that_completes_it(
+    signing_key: bytes, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    db = FakeSession()
+    hub = _CapturingHub()
+    _seed_cd(db, JobStatus.RIPPED_AWAITING_IDENTIFY, {"unidentified": True})
+    calls = _spy_post_resolve(monkeypatch)
+    app, token = _make_app(signing_key, db, tmp_path, hub)
+    steps = [
+        {"artist": "Lali", "album": "", "tracks": []},
+        {"artist": "Lali", "album": "Two Windows", "tracks": []},
+        {"artist": "Lali", "album": "Two Windows", "tracks": [{"title": "A"}, {"title": ""}]},
+    ]
+    with TestClient(app) as client:
+        for music in steps:
+            job = _resolve(client, token, {"title": music["album"] or "AUDIO_CD", "year": None, "music": music})
+            assert job["status"] == "ripped_awaiting_identify"
+        assert calls == []
+        assert job["cd_identity_gaps"] == {"album": False, "artist": False, "untitled_tracks": [2]}
+        job = _resolve(client, token, {"title": "Two Windows", "year": None, "music": _CD_FULL})
+    assert job["status"] == "ripped"
+    assert job["cd_identity_gaps"] is None
+    assert job["metadata_json"]["flags"]["unidentified"] is False
+    assert calls == ["after_rip"]
+    assert _identify_events(hub) == ["identify.resolved", "rip.identify_resolved"]
+
+
+def test_match_cd_panel_resolve_with_the_whole_release_identifies_at_once(signing_key: bytes, tmp_path: Path) -> None:
+    db = FakeSession()
+    hub = _CapturingHub()
+    _seed_cd(db, JobStatus.AWAITING_USER_ID)
+    app, token = _make_app(signing_key, db, tmp_path, hub)
+    body = {
+        "title": "Two Windows",
+        "year": 2017,
+        "disc_number": None,
+        "disc_total": None,
+        "music": {
+            "artist": "Lali",
+            "album": "Two Windows",
+            "tracks": [
+                {"position": 1, "title": "A", "length_ms": 60000, "disc_number": 1},
+                {"position": 2, "title": "B", "length_ms": 61000, "disc_number": 1},
+            ],
+        },
+    }
+    with TestClient(app) as client:
+        job = _resolve(client, token, body)
+    assert job["status"] == "identified"
+    assert _identify_events(hub) == ["identify.resolved", "rip.identify_resolved"]
+
+
+def test_match_cd_panel_release_shorter_than_the_disc_leaves_the_rest_to_enter(
+    signing_key: bytes, tmp_path: Path
+) -> None:
+    db = FakeSession()
+    hub = _CapturingHub()
+    _seed_cd(db, JobStatus.AWAITING_USER_ID)
+    app, token = _make_app(signing_key, db, tmp_path, hub)
+    music = {"artist": "Lali", "album": "Two Windows", "tracks": [{"position": 1, "title": "A"}]}
+    with TestClient(app) as client:
+        job = _resolve(client, token, {"title": "Two Windows", "year": 2017, "music": music})
+    assert job["status"] == "awaiting_user_id"
+    assert job["cd_identity_gaps"] == {"album": False, "artist": False, "untitled_tracks": [2]}
+    assert _identify_events(hub) == []
+
+
+def test_resolve_correction_on_an_identified_cd_is_not_gated(
+    signing_key: bytes, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    db = FakeSession()
+    hub = _CapturingHub()
+    _seed_cd(db, JobStatus.RIPPED)
+    calls = _spy_post_resolve(monkeypatch)
+    app, token = _make_app(signing_key, db, tmp_path, hub)
+    with TestClient(app) as client:
+        job = _resolve(client, token, {"title": "Two Windows", "year": None, "music": {**_CD_FULL, "artist": ""}})
+    assert job["status"] == "ripped"
+    assert job["cd_identity_gaps"] is None
+    assert calls == ["fan_out"]
+    assert _identify_events(hub) == ["identify.resolved", "rip.identify_resolved"]

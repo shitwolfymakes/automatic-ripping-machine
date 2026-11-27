@@ -1043,22 +1043,59 @@ describe('Job detail page: CD identity', () => {
 		expect(screen.queryByRole('button', { name: 'Edit Album' })).not.toBeInTheDocument();
 	});
 
+	// A CD not yet identified takes its identity a field at a time; the
+	// Backend counts it as identified once nothing is missing.
+	const unidentified = (flags = {}) => ({
+		title: 'AUDIO_CD',
+		year: null,
+		metadata_json: { scan_result: cdMeta.scan_result, flags } as JobView['metadata_json']
+	});
+
+	it("saves an artist first on a CD not yet identified, keeping the disc's title until an album is set", async () => {
+		await renderCd({ status: 'awaiting_user_id', ...unidentified() });
+		await editAndSave('Artist', 'Lali');
+		await waitFor(() =>
+			expect(resolveJob).toHaveBeenCalledWith('job_42', {
+				title: 'AUDIO_CD',
+				year: null,
+				music: { artist: 'Lali', album: '', tracks: [{ title: '' }, { title: '' }] }
+			})
+		);
+	});
+
+	it('saves a song title on a ripped CD still waiting for its identity', async () => {
+		await renderCd(
+			{ status: 'ripped_awaiting_identify', ...unidentified({ unidentified: true }) },
+			{ tracks: [songRow()] }
+		);
+		await editAndSave('Track 2 title', 'Bee');
+		await waitFor(() =>
+			expect(resolveJob).toHaveBeenCalledWith('job_42', {
+				title: 'AUDIO_CD',
+				year: null,
+				music: { artist: '', album: '', tracks: [{ title: '' }, { title: 'Bee' }] }
+			})
+		);
+	});
+
 	it.each([
-		['awaiting_user_id', {}, []],
-		['ripped_awaiting_identify', { flags: { unidentified: true } }, [songRow()]],
-		['ripped_partial', { flags: { unidentified: true } }, []]
-	] as const)(
-		'keeps a CD not yet identified (%s) read-only: the Match CD panel identifies it',
-		async (status, meta, tracks) => {
-			await renderCd(
-				{ status, metadata_json: { ...cdMeta, ...meta } as JobView['metadata_json'] },
-				{ tracks: [...tracks] }
-			);
-			for (const label of ['Title', 'Year', 'Artist', 'Album', 'Track 1 title', 'Track 2 title']) {
-				expect(screen.queryByRole('button', { name: `Edit ${label}` })).not.toBeInTheDocument();
-			}
-			expect(screen.getByTestId('fact-album')).toHaveTextContent('Two Windows');
-			expect(screen.getByRole('button', { name: 'Match CD' })).toBeInTheDocument();
-		}
-	);
+		[
+			{ album: false, artist: true, untitled_tracks: [2, 3] },
+			'Still missing: the artist and titles for tracks 2 and 3.'
+		],
+		[{ album: true, artist: false, untitled_tracks: [2] }, 'Still missing: the album and the title of track 2.']
+	])('says what a CD not yet identified still lacks (%j)', async (gaps, text) => {
+		await renderCd({ status: 'awaiting_user_id', ...unidentified(), cd_identity_gaps: gaps }, { role: 'guest' });
+		const note = screen.getByTestId('cd-identity-missing');
+		expect(note).toHaveClass('alert', 'alert-info');
+		expect(note).toHaveTextContent(
+			'ARM counts this CD as identified once it has the album, the artist and a title for every track.'
+		);
+		expect(note).toHaveTextContent(text);
+	});
+
+	it('shows no missing-identity note once nothing is missing', async () => {
+		await renderCd({});
+		expect(screen.queryByTestId('cd-identity-missing')).not.toBeInTheDocument();
+	});
 });

@@ -78,16 +78,6 @@ describe('JobTitleBar', () => {
 		expect(screen.queryByRole('button', { name: 'Edit Title' })).not.toBeInTheDocument();
 	});
 
-	it('does not offer title editing on a CD not yet identified: the Match CD panel identifies it', () => {
-		render(createJob({ status: 'awaiting_user_id', disc_type: 'cd' }));
-		expect(screen.queryByRole('button', { name: 'Edit Title' })).not.toBeInTheDocument();
-	});
-
-	it('edits the title of an identified CD', () => {
-		render(createJob({ status: 'ripped', disc_type: 'cd' }));
-		expect(screen.getByRole('button', { name: 'Edit Title' })).toBeInTheDocument();
-	});
-
 	it('shows the year when there is one', () => {
 		render(createJob({ year: 1979 }));
 		expect(screen.getByText('(1979)')).toBeInTheDocument();

@@ -403,6 +403,28 @@ export type CatalogService = {
 };
 
 /**
+ * CdIdentityGaps
+ *
+ * What a CD not yet identified still lacks before it counts as
+ * identified: a blank album or artist, and the 1-based numbers of the
+ * scanned tracks with no title.
+ */
+export type CdIdentityGaps = {
+    /**
+     * Album
+     */
+    album: boolean;
+    /**
+     * Artist
+     */
+    artist: boolean;
+    /**
+     * Untitled Tracks
+     */
+    untitled_tracks: Array<number>;
+};
+
+/**
  * ChannelTemplate
  */
 export type ChannelTemplate = {
@@ -2930,6 +2952,11 @@ export type JobView = {
      * Match Episodes tab asks for the series first.
      */
     readonly has_series: boolean;
+    /**
+     * What a CD not yet identified still lacks (see pending_cd_identity):
+     * the job page lists it, since the rip waits until it is complete.
+     */
+    readonly cd_identity_gaps: CdIdentityGaps | null;
     /**
      * Episodes Unsure
      *

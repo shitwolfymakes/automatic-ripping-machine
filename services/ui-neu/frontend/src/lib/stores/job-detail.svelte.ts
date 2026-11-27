@@ -9,7 +9,6 @@ import type { EditableJobField } from '$lib/jobs/fields';
 import { readJobMetadata } from '$lib/jobs/metadata';
 import { buildResolveBody, cdEditBody, tvSeasonOrDiscChanged, type CdEdit } from '$lib/jobs/resolve';
 import { isPostRipStatus } from '$lib/jobs/status-groups';
-import { isIdentifyMiss } from '$lib/jobs/review';
 import { extractMusicTracks } from '$lib/music/tracks';
 import { handSetTrackCount, isSeriesTrackList } from '$lib/jobs/track-fields';
 
@@ -40,15 +39,6 @@ export class JobDetail {
 	canApply = $derived(!!this.detail && this.detail.job.actions.can_apply);
 	isVideoDisc = $derived(this.detail?.job.disc_type === 'dvd' || this.detail?.job.disc_type === 'bluray');
 	isCdDisc = $derived(this.detail?.job.disc_type === 'cd');
-	// Whether the job's identity can be edited in place (title bar, facts,
-	// song titles). A CD not yet identified gets its identity from the Match CD
-	// panel, which sends the album, artist and every track title in one
-	// resolve; an in-place save would identify it from one field.
-	canEditInPlace = $derived(
-		!!this.detail &&
-			this.detail.job.actions.can_resolve &&
-			!(this.detail.job.disc_type === 'cd' && isIdentifyMiss(this.detail.job))
-	);
 	// A CD's scanned track count, so its track list has a row per track even
 	// before any title is stored (0 without a scan or a job).
 	cdTrackCount = $derived(this.detail ? (readJobMetadata(this.detail.job.metadata_json).titleCount ?? 0) : 0);

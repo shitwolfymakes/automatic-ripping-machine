@@ -8504,6 +8504,33 @@
         ],
         "title": "CatalogService"
       },
+      "CdIdentityGaps": {
+        "properties": {
+          "album": {
+            "type": "boolean",
+            "title": "Album"
+          },
+          "artist": {
+            "type": "boolean",
+            "title": "Artist"
+          },
+          "untitled_tracks": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "title": "Untitled Tracks"
+          }
+        },
+        "type": "object",
+        "required": [
+          "album",
+          "artist",
+          "untitled_tracks"
+        ],
+        "title": "CdIdentityGaps",
+        "description": "What a CD not yet identified still lacks before it counts as\nidentified: a blank album or artist, and the 1-based numbers of the\nscanned tracks with no title."
+      },
       "ChannelTemplate": {
         "properties": {
           "title": {
@@ -13371,6 +13398,18 @@
             "description": "A TV show is known: a TMDb id of kind tv, a TVDB or TVmaze id, or a\nshow id some episode source resolved. False means the\nMatch Episodes tab asks for the series first.",
             "readOnly": true
           },
+          "cd_identity_gaps": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CdIdentityGaps"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "What a CD not yet identified still lacks (see pending_cd_identity):\nthe job page lists it, since the rip waits until it is complete.",
+            "readOnly": true
+          },
           "episodes_unsure": {
             "type": "boolean",
             "title": "Episodes Unsure",
@@ -13391,6 +13430,7 @@
           "actions",
           "looks_episodic",
           "has_series",
+          "cd_identity_gaps",
           "episodes_unsure"
         ],
         "title": "JobView"

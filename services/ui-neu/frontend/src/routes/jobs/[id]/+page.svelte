@@ -29,6 +29,7 @@
 	import { applyNote, identifyNote } from '$lib/jobs/action-notes';
 	import { fetchSessions } from '$lib/api/sessions';
 	import { buildMetadataFields } from '$lib/jobs/fields';
+	import { cdIdentityMissing } from '$lib/music/identity-gaps';
 	import LoadState from '$lib/components/shared/LoadState.svelte';
 	import SkeletonCard from '$lib/components/shared/SkeletonCard.svelte';
 	import JobRawMetadata from '$lib/components/jobs/JobRawMetadata.svelte';
@@ -198,6 +199,19 @@
 					</div>
 				{/if}
 
+				<!-- A CD not yet identified: it counts as identified once nothing is missing. -->
+				{#if job.cd_identity_gaps}
+					<div class="job-detail-suggestion">
+						<div class="alert alert-info" data-testid="cd-identity-missing">
+							<p class="alert-title flex items-center gap-2"><Glyph name="info" />CD not identified yet</p>
+							<p class="alert-body">
+								ARM counts this CD as identified once it has the album, the artist and a title for every track. Still
+								missing: {cdIdentityMissing(job.cd_identity_gaps)}.
+							</p>
+						</div>
+					</div>
+				{/if}
+
 				<!-- A TV disc with no show id: its episodes can't be matched automatically. -->
 				{#if $isAdmin && jobDetail.canResolve && jobDetail.isVideoDisc && (job.looks_episodic || job.media_type === 'tv') && !job.has_series}
 					<div class="job-detail-suggestion">
@@ -220,7 +234,7 @@
 					<!-- Metadata grid -->
 					<JobFactsGrid
 						fields={metadataFields}
-						canEdit={$isAdmin && jobDetail.canEditInPlace}
+						canEdit={$isAdmin && jobDetail.canResolve}
 						onsave={saveFact}
 						ontextsave={(field, raw) => jobDetail.saveCdField({ field }, raw)}
 					/>
@@ -287,7 +301,7 @@
 					excludeError={jobDetail.excludeError}
 					ontitleapplied={() => jobDetail.load()}
 					musicTracks={jobDetail.musicTracks}
-					canEditSongs={$isAdmin && jobDetail.canEditInPlace}
+					canEditSongs={$isAdmin && jobDetail.canResolve}
 					onsongsave={saveSong}
 				/>
 			{/if}
@@ -304,7 +318,7 @@
 			{#if tracks.length === 0 && jobDetail.musicTracks.length > 0}
 				<JobMusicTracklist
 					tracks={jobDetail.musicTracks}
-					canEdit={$isAdmin && jobDetail.canEditInPlace}
+					canEdit={$isAdmin && jobDetail.canResolve}
 					onsave={saveSong}
 				/>
 			{/if}

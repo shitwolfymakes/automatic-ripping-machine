@@ -301,10 +301,15 @@ describe('cdEditBody', () => {
 		expect(cdEditBody(job1, { field: 'artist' }, 'X', 3).music?.tracks).toHaveLength(3);
 	});
 
-	it('an artist or track edit with no album stored (a release that had none) throws, as the album is the title', () => {
+	it("an artist or track edit with no album yet keeps the job's title, so a CD's identity is entered in any order", () => {
 		const bare = cdJob(null, { title: 'DISC_LABEL', year: null });
-		expect(() => cdEditBody(bare, { field: 'track', index: 2 }, 'Two', 2)).toThrow('Set the album first');
-		expect(() => cdEditBody(bare, { field: 'artist' }, 'Lali Puna', 2)).toThrow('Set the album first');
+		expect(cdEditBody(bare, { field: 'artist' }, 'Lali Puna', 2)).toEqual({
+			title: 'DISC_LABEL',
+			year: null,
+			music: { artist: 'Lali Puna', album: '', tracks: [{ title: '' }, { title: '' }] }
+		});
+		expect(cdEditBody(bare, { field: 'track', index: 2 }, 'Two', 2).music?.tracks?.[1]).toEqual({ title: 'Two' });
+		expect(cdEditBody(cdJob(null, { title: null }), { field: 'artist' }, 'X', 0).title).toBe('');
 	});
 
 	it('a CD with no stored music makes a valid body from an album edit', () => {

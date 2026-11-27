@@ -764,7 +764,13 @@ async def accept_identity_suggestion(
     )
     logger.info("accept job_id=%s: %s suggestion %r applied -> %s", job.id, result.kind, result.title, job.status.value)
     return await resolve_identity(
-        session, job, req, hub=hub, stage_runner=stage_runner, before_identity=before_identity
+        session,
+        job,
+        req,
+        hub=hub,
+        stage_runner=stage_runner,
+        before_identity=before_identity,
+        gate_incomplete_cd=False,
     )
 
 
