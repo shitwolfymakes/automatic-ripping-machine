@@ -1,3 +1,7 @@
+// Open arms the coverage tool reports that are Svelte's, not the component's:
+// each text or attribute `{...}` below compiles to `(...) ?? ''`, and none can
+// be nullish. The track count in the heading (`tracks.length`, a number) and
+// the track number in each title editor's label (`Track {mt.number} title`).
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import { renderComponent, screen, cleanup, within, fireEvent, waitFor } from '$lib/testing/render';
 import JobMusicTracklist from '../JobMusicTracklist.svelte';

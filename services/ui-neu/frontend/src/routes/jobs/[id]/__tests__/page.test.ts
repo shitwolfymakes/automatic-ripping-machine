@@ -1,3 +1,6 @@
+// Open arms the coverage tool reports that are Svelte's, not the page's: the
+// page title's `{detail?.job.title || 'Job Detail'}` compiles to
+// `(...) ?? ''`, and an `||` with a string fallback is never nullish.
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { renderComponent, screen, cleanup, waitFor, fireEvent } from '$lib/testing/render';
 import Page from '../+page.svelte';
@@ -934,4 +937,128 @@ describe('Job detail page: no show id note', () => {
 		await renderJob({ disc_type: 'dvd', media_type: 'tv', has_series: false }, 'guest');
 		expect(screen.queryByTestId('no-show-id-note')).not.toBeInTheDocument();
 	});
+});
+
+describe('Job detail page: CD identity', () => {
+	const auth = authStore as unknown as { __setRole: (r: string | null) => void };
+	const cdMeta = {
+		music: { artist: 'Lali', album: 'Two Windows', tracks: [{ title: 'A' }, { title: 'B' }] },
+		scan_result: { titles: [{}, {}] }
+	} as unknown as JobView['metadata_json'];
+	const music = (change: object) => ({
+		artist: 'Lali',
+		album: 'Two Windows',
+		tracks: [{ title: 'A' }, { title: 'B' }],
+		...change
+	});
+
+	async function renderCd(job: Partial<JobView>, { tracks = [] as TrackView[], role = 'admin' } = {}) {
+		auth.__setRole(role);
+		mockFetchJob.mockResolvedValue({
+			...createJobDetail({ tracks }),
+			job: createJob({
+				id: 'job_42',
+				disc_type: 'cd',
+				status: 'ripped',
+				title: 'Two Windows',
+				year: 2020,
+				metadata_json: cdMeta,
+				...job
+			})
+		});
+		renderComponent(Page);
+		await screen.findByTestId('fact-album');
+	}
+
+	async function editAndSave(label: string, value: string) {
+		await fireEvent.click(screen.getByRole('button', { name: `Edit ${label}` }));
+		const input = screen.getByLabelText(label);
+		await fireEvent.input(input, { target: { value } });
+		await fireEvent.keyDown(input, { key: 'Enter' });
+	}
+
+	const songRow = () => createTrack({ id: 'trk_2', index: 2, kind: 'audio_track', status: 'done' });
+
+	afterEach(() => {
+		cleanup();
+		auth.__setRole('admin');
+		vi.clearAllMocks();
+	});
+
+	it('saves an album set in place on an identified CD', async () => {
+		await renderCd({});
+		await editAndSave('Album', 'Three Doors');
+		await waitFor(() =>
+			expect(resolveJob).toHaveBeenCalledWith('job_42', {
+				title: 'Three Doors',
+				year: 2020,
+				music: music({ album: 'Three Doors' })
+			})
+		);
+	});
+
+	it('saves an artist set in place on an identified CD', async () => {
+		await renderCd({});
+		await editAndSave('Artist', 'Lali Puna');
+		await waitFor(() =>
+			expect(resolveJob).toHaveBeenCalledWith('job_42', {
+				title: 'Two Windows',
+				year: 2020,
+				music: music({ artist: 'Lali Puna' })
+			})
+		);
+	});
+
+	it("saves a song title set in place on a track row, for that row's track", async () => {
+		await renderCd({}, { tracks: [songRow()] });
+		await editAndSave('Track 2 title', 'Bee');
+		await waitFor(() =>
+			expect(resolveJob).toHaveBeenCalledWith('job_42', {
+				title: 'Two Windows',
+				year: 2020,
+				music: music({ tracks: [{ title: 'A' }, { title: 'Bee' }] })
+			})
+		);
+	});
+
+	it('saves a song title set in place on the fallback tracklist', async () => {
+		await renderCd({});
+		await editAndSave('Track 2 title', 'Bee');
+		await waitFor(() =>
+			expect(resolveJob).toHaveBeenCalledWith('job_42', {
+				title: 'Two Windows',
+				year: 2020,
+				music: music({ tracks: [{ title: 'A' }, { title: 'Bee' }] })
+			})
+		);
+	});
+
+	it.each([
+		['track rows', [songRow()]],
+		['the fallback tracklist', []]
+	] as const)('gives a guest no song editors on %s', async (_label, tracks) => {
+		await renderCd({}, { tracks: [...tracks], role: 'guest' });
+		expect(screen.getByText('B')).toBeInTheDocument();
+		expect(screen.queryByRole('button', { name: /^Edit Track \d title$/ })).not.toBeInTheDocument();
+		expect(screen.queryByRole('button', { name: 'Edit Album' })).not.toBeInTheDocument();
+	});
+
+	it.each([
+		['awaiting_user_id', {}, []],
+		['ripped_awaiting_identify', { flags: { unidentified: true } }, [songRow()]],
+		['ripped_partial', { flags: { unidentified: true } }, []]
+	] as const)(
+		'keeps a CD not yet identified (%s) read-only: the Match CD panel identifies it',
+		async (status, meta, tracks) => {
+			await renderCd(
+				{ status, metadata_json: { ...cdMeta, ...meta } as JobView['metadata_json'] },
+				{ tracks: [...tracks] }
+			);
+			for (const label of ['Title', 'Year', 'Artist', 'Album', 'Track 1 title', 'Track 2 title']) {
+				expect(screen.queryByRole('button', { name: `Edit ${label}` })).not.toBeInTheDocument();
+			}
+			expect(screen.getByTestId('fact-album')).toHaveTextContent('Two Windows');
+			expect(screen.getByRole('button', { name: 'Match CD' })).toBeInTheDocument();
+		}
+	);
 });

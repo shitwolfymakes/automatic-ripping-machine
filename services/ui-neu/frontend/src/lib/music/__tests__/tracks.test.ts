@@ -42,6 +42,11 @@ describe('extractMusicTracks', () => {
 		expect(out[1].title).toBe('Track 2');
 	});
 
+	it('reads a null track entry as an untitled track', () => {
+		const out = extractMusicTracks({ music: { tracks: [null] } });
+		expect(out).toEqual([{ number: 1, title: 'Track 1', rawTitle: '', durationLabel: '-' }]);
+	});
+
 	it('pads with blank rows up to the minimum count', () => {
 		const out = extractMusicTracks({ music: { tracks: [{ title: 'A' }] } }, 3);
 		expect(out).toHaveLength(3);

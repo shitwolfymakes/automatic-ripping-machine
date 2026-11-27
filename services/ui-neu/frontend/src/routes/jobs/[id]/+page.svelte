@@ -220,7 +220,7 @@
 					<!-- Metadata grid -->
 					<JobFactsGrid
 						fields={metadataFields}
-						canEdit={$isAdmin && jobDetail.canResolve}
+						canEdit={$isAdmin && jobDetail.canEditInPlace}
 						onsave={saveFact}
 						ontextsave={(field, raw) => jobDetail.saveCdField({ field }, raw)}
 					/>
@@ -287,7 +287,7 @@
 					excludeError={jobDetail.excludeError}
 					ontitleapplied={() => jobDetail.load()}
 					musicTracks={jobDetail.musicTracks}
-					canEditSongs={$isAdmin && jobDetail.canResolve}
+					canEditSongs={$isAdmin && jobDetail.canEditInPlace}
 					onsongsave={saveSong}
 				/>
 			{/if}
@@ -304,7 +304,7 @@
 			{#if tracks.length === 0 && jobDetail.musicTracks.length > 0}
 				<JobMusicTracklist
 					tracks={jobDetail.musicTracks}
-					canEdit={$isAdmin && jobDetail.canResolve}
+					canEdit={$isAdmin && jobDetail.canEditInPlace}
 					onsave={saveSong}
 				/>
 			{/if}

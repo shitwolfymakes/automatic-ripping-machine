@@ -1,3 +1,7 @@
+// Open arms the coverage tool reports that are Svelte's, not the component's:
+// each text or attribute `{...}` below compiles to `(...) ?? ''`, and each sits
+// inside an #if on the same value. The year beside the title and the IMDb id
+// in the IMDb badge's link.
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { createRawSnippet } from 'svelte';
 import { renderComponent, screen, fireEvent, waitFor, cleanup } from '$lib/testing/render';
@@ -72,6 +76,16 @@ describe('JobTitleBar', () => {
 	it('does not offer title editing when the job cannot be resolved', () => {
 		render(createJob({ status: 'ripping' }));
 		expect(screen.queryByRole('button', { name: 'Edit Title' })).not.toBeInTheDocument();
+	});
+
+	it('does not offer title editing on a CD not yet identified: the Match CD panel identifies it', () => {
+		render(createJob({ status: 'awaiting_user_id', disc_type: 'cd' }));
+		expect(screen.queryByRole('button', { name: 'Edit Title' })).not.toBeInTheDocument();
+	});
+
+	it('edits the title of an identified CD', () => {
+		render(createJob({ status: 'ripped', disc_type: 'cd' }));
+		expect(screen.getByRole('button', { name: 'Edit Title' })).toBeInTheDocument();
 	});
 
 	it('shows the year when there is one', () => {
