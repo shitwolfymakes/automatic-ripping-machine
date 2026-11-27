@@ -196,6 +196,22 @@ class TrackRole(StrEnum):
     OTHER = "other"
 
 
+class TitleClass(StrEnum):
+    """What the classifier (arm_common.title_classes) decides about one scanned
+    Blu-ray title."""
+
+    # Kept; unique, or the representative of a group.
+    PRIMARY = "primary"
+    # Kept; one of >= 2 distinct cuts of the feature.
+    EDITION = "edition"
+    # Same clip sequence as the kept title, or a raw .m2ts a playlist covers.
+    DUPLICATE = "duplicate"
+    # Same clip set as the kept title, different order.
+    DECOY = "decoy"
+    # The kept title's clips plus one or two short extras (disclaimer, intro).
+    VARIANT = "variant"
+
+
 class MediaType(StrEnum):
     MOVIE = "movie"
     TV = "tv"
