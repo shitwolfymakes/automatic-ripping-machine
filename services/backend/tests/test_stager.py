@@ -6,7 +6,6 @@ fail, block or finish late) `place_staged`, the one I/O boundary the run calls."
 from __future__ import annotations
 
 import asyncio
-import hashlib
 import logging
 import os
 import shutil
@@ -39,7 +38,6 @@ from arm_common.fileops import CopyCancelled, LinkUnavailable, PlaceResult, Sour
 from tests._stage_env import JOB, Env, add_job, add_stage, add_track, load_stage, seed_stage
 
 BYTES = b"ripped bytes"
-SHA = hashlib.sha256(BYTES).hexdigest()
 
 
 def _dest(env: Env, track_id: str = "trk_a") -> Path:
@@ -165,9 +163,9 @@ def test_place_staged_links_on_the_same_filesystem(tmp_path: Path) -> None:
     src.write_bytes(BYTES)
     progress = _progress()
     result = place_staged(_plan(src, dst), threading.Event(), progress, lambda n: None)
-    assert result == PlaceResult(size=len(BYTES), sha256=SHA, linked=True)
+    assert result == PlaceResult(size=len(BYTES), linked=True)
     assert src.samefile(dst) and src.exists()
-    assert progress.done == len(BYTES)
+    assert progress.done == 0
     assert progress.linked is None
 
 
@@ -184,7 +182,7 @@ def test_place_staged_copies_when_a_link_is_refused(tmp_path: Path, monkeypatch:
     checkpoints: list[int] = []
     progress = _progress()
     result = place_staged(_plan(src, dst), threading.Event(), progress, checkpoints.append)
-    assert result.linked is False and result.sha256 == hashlib.sha256(BYTES * 5).hexdigest()
+    assert result == PlaceResult(size=len(BYTES * 5), linked=False)
     assert dst.read_bytes() == BYTES * 5 and not src.samefile(dst)
     assert progress.linked is False
     assert checkpoints and checkpoints == sorted(checkpoints)
@@ -198,18 +196,18 @@ def test_place_staged_resumes_a_copy_from_its_durable_offset(tmp_path: Path, mon
     monkeypatch.setattr(stager, "place_by_link", lambda *_a, **_k: (_ for _ in ()).throw(LinkUnavailable(18, "x")))
     result = place_staged(_plan(src, dst, resume_from=20), threading.Event(), _progress(), lambda n: None)
     assert dst.read_bytes() == BYTES * 4
-    assert result.sha256 == hashlib.sha256(BYTES * 4).hexdigest()
+    assert result == PlaceResult(size=len(BYTES * 4), linked=False)
 
 
-def test_place_staged_adopts_a_finished_placement_by_hashing_raw(tmp_path: Path) -> None:
+def test_place_staged_adopts_a_finished_placement_without_reading_raw(tmp_path: Path) -> None:
     src, dst = tmp_path / "raw.mkv", tmp_path / "stage" / "t.mkv"
     src.write_bytes(BYTES)
     dst.parent.mkdir()
     os.link(src, dst)
     progress = _progress()
     result = place_staged(_plan(src, dst), threading.Event(), progress, lambda n: None)
-    assert result == PlaceResult(size=len(BYTES), sha256=SHA, linked=True)
-    assert progress.done == len(BYTES)
+    assert result == PlaceResult(size=len(BYTES), linked=True)
+    assert progress.done == 0
 
 
 def test_place_staged_adopts_a_finished_copy_and_reports_it_unlinked(tmp_path: Path) -> None:
@@ -218,6 +216,17 @@ def test_place_staged_adopts_a_finished_copy_and_reports_it_unlinked(tmp_path: P
     dst.parent.mkdir()
     shutil.copy2(src, dst)
     assert place_staged(_plan(src, dst), threading.Event(), _progress(), lambda n: None).linked is False
+
+
+def test_place_staged_does_not_adopt_a_placement_whose_source_changed(tmp_path: Path) -> None:
+    src, dst = tmp_path / "raw.mkv", tmp_path / "stage" / "t.mkv"
+    src.write_bytes(BYTES)
+    dst.parent.mkdir()
+    shutil.copy2(src, dst)
+    plan = _plan(src, dst)
+    os.utime(src, ns=(1, 1))
+    with pytest.raises(SourceChanged):
+        place_staged(plan, threading.Event(), _progress(), lambda n: None)
 
 
 def test_place_staged_does_not_adopt_when_a_checkpoint_exists(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -231,14 +240,17 @@ def test_place_staged_does_not_adopt_when_a_checkpoint_exists(tmp_path: Path, mo
     assert seen == [] and result.linked is True
 
 
-def test_a_cancelled_link_pass_removes_the_link_and_keeps_the_source(tmp_path: Path) -> None:
+def test_a_cancelled_copy_pass_keeps_the_source_and_places_nothing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     src, dst = tmp_path / "raw.mkv", tmp_path / "stage" / "t.mkv"
     src.write_bytes(BYTES)
+    monkeypatch.setattr(stager, "place_by_link", lambda *_a, **_k: (_ for _ in ()).throw(LinkUnavailable(18, "x")))
     cancel = threading.Event()
     cancel.set()
     with pytest.raises(CopyCancelled):
         place_staged(_plan(src, dst), cancel, _progress(), lambda n: None)
-    assert src.exists() and not dst.exists() and not fileops.inprogress_path(dst).exists()
+    assert src.exists() and not dst.exists()
 
 
 def test_remove_staged_files_deletes_the_destination_and_its_temp(tmp_path: Path) -> None:
@@ -253,7 +265,7 @@ def test_remove_staged_files_deletes_the_destination_and_its_temp(tmp_path: Path
 # --- a whole run ------------------------------------------------------------------------------
 
 
-async def test_pending_becomes_staged_with_the_digest_on_the_track(env: Env) -> None:
+async def test_pending_becomes_staged(env: Env) -> None:
     stage_id = await seed_stage(env)
     await _run_one(env, stage_id)
     stage = await load_stage(env, stage_id)
@@ -262,8 +274,6 @@ async def test_pending_becomes_staged_with_the_digest_on_the_track(env: Env) -> 
     assert stage.staged_at is not None and stage.last_error is None
     assert (stage.source_size, stage.attempts) == (len(BYTES), 1)
     assert _dest(env).read_bytes() == BYTES
-    async with env.factory() as db:
-        assert (await db.get(Track, "trk_a")).sha256 == SHA  # type: ignore[union-attr]
     assert env.hub.types() == ["stage.started", "stage.completed"]
     assert env.hub.calls[-1]["payload"]["status"] == "staged"
 
@@ -278,7 +288,7 @@ async def test_a_track_deleted_before_the_commit_still_stages(env: Env, monkeypa
                 await db.commit()
 
         asyncio.run(drop())
-        return PlaceResult(size=1, sha256="d", linked=True)
+        return PlaceResult(size=1, linked=True)
 
     monkeypatch.setattr(stager, "place_staged", place_and_drop_the_track)
     worker = _stager(env)
@@ -377,7 +387,7 @@ async def test_a_vanished_row_ends_the_run_quietly(
                 await db.commit()
 
         asyncio.run(go())
-        return PlaceResult(size=1, sha256="d", linked=True)
+        return PlaceResult(size=1, linked=True)
 
     monkeypatch.setattr(stager, "place_staged", delete_the_row)
     with caplog.at_level(logging.INFO, logger="arm_backend.stager"):
@@ -395,7 +405,7 @@ def _blocking_place(outcome: str) -> Any:
         assert cancel.wait(5), "the stall watch never cancelled the copy"
         if outcome == "cancelled":
             raise CopyCancelled("stalled")
-        return PlaceResult(size=1, sha256="late", linked=True)
+        return PlaceResult(size=1, linked=True)
 
     return place
 
@@ -442,8 +452,6 @@ async def test_a_stalled_copy_that_finishes_anyway_never_commits_staged(
     await _stager(env)._work_once()
     stage = await load_stage(env, stage_id)
     assert stage.status == StageStatus.PENDING and stage.staged_at is None
-    async with env.factory() as db:
-        assert (await db.get(Track, "trk_a")).sha256 is None  # type: ignore[union-attr]
     assert "stage.completed" not in env.hub.types()
 
 
@@ -510,7 +518,7 @@ async def test_heartbeat_moves_only_when_bytes_advance_and_progress_is_published
         progress.add(len(BYTES))
         threading.Event().wait(0.1)  # a tick sees the bytes
         asyncio.run(read())
-        return PlaceResult(size=len(BYTES), sha256=SHA, linked=False)
+        return PlaceResult(size=len(BYTES), linked=False)
 
     monkeypatch.setattr(stager, "place_staged", place)
     await _stager(env)._work_once()
@@ -540,7 +548,7 @@ async def test_a_failing_progress_publish_does_not_stop_the_copy(
 
     def slow_place(plan: _Plan, cancel: threading.Event, progress: _StageProgress, on_checkpoint: Any) -> PlaceResult:
         threading.Event().wait(0.1)
-        return PlaceResult(size=1, sha256=SHA, linked=True)
+        return PlaceResult(size=1, linked=True)
 
     monkeypatch.setattr(stager, "place_staged", slow_place)
     with caplog.at_level(logging.WARNING, logger="arm_backend.stager"):
@@ -665,7 +673,7 @@ def _copying_place(outcome: str, started: threading.Event) -> Any:
         if outcome == "cancelled":
             raise CopyCancelled("job gone")
         plan.dest.write_bytes(b"whole")
-        return PlaceResult(size=5, sha256="late", linked=False)
+        return PlaceResult(size=5, linked=False)
 
     return place
 

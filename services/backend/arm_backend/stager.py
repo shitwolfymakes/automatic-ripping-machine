@@ -39,7 +39,6 @@ from arm_common.fileops import (
     SourceChanged,
     SourceStamp,
     copy_file_resumable,
-    hash_file,
     inprogress_path,
     is_placed,
     place_by_link,
@@ -175,10 +174,11 @@ def _file_size(path: Path) -> int | None:
         return None
 
 
-def _adopt_placed(source: Path, dest: Path, cancel: threading.Event, progress: _StageProgress) -> PlaceResult:
-    """A finished placement whose commit was lost: hash raw once and report it."""
-    digest = hash_file(source, cancel=cancel, on_bytes=progress.add)
-    return PlaceResult(size=dest.stat().st_size, sha256=digest, linked=source.samefile(dest))
+def _adopt_placed(source: Path, dest: Path, stamp: SourceStamp) -> PlaceResult:
+    """A finished placement whose commit was lost: confirm raw is still the stamped source and report it."""
+    if SourceStamp.of(source) != stamp:
+        raise SourceChanged(f"source changed since it was stamped: {source}")
+    return PlaceResult(size=dest.stat().st_size, linked=source.samefile(dest))
 
 
 def place_staged(
@@ -191,11 +191,9 @@ def place_staged(
 
     The stager never renames, because raw must survive for a re-stage."""
     if plan.resume_from == 0 and is_placed(plan.stamp, plan.dest):
-        return _adopt_placed(plan.source, plan.dest, cancel, progress)
+        return _adopt_placed(plan.source, plan.dest, plan.stamp)
     try:
-        return place_by_link(
-            plan.source, plan.dest, keep_source=True, expect=plan.stamp, cancel=cancel, on_bytes=progress.add
-        )
+        return place_by_link(plan.source, plan.dest, keep_source=True, expect=plan.stamp)
     except LinkUnavailable:
         progress.linked = False
     return copy_file_resumable(
@@ -445,16 +443,13 @@ class _StageRun:
         await emit_stage_event(self.hub, db, "stage.failed", stage)
 
     async def _commit_staged(self, result: PlaceResult) -> None:
-        """The file is placed and verified: STAGED, with the digest on the track."""
+        """The file is placed and verified: STAGED."""
         async with self.stage_txn() as (db, stage):
             stage.status = StageStatus.STAGED
             stage.staged_at = datetime.now(UTC)
             stage.linked = result.linked
             stage.bytes_durable = result.size
             stage.last_error = None
-            track = (await db.execute(select(Track).where(col(Track.id) == stage.track_id))).scalar_one_or_none()
-            if track is not None:
-                track.sha256 = result.sha256
             await emit_stage_event(self.hub, db, "stage.completed", stage)
 
     async def _requeue_or_fail(self, db: AsyncSession, stage: TrackStage, error: str | None) -> None:
@@ -684,7 +679,7 @@ def _sweep_reset_changed_source(stage: TrackStage) -> None:
 
 
 def _sweep_requeue_placed(stage: TrackStage) -> None:
-    # The worker adopts the finished file: it hashes raw once and commits STAGED.
+    # The worker adopts the finished file: it checks raw is unchanged and commits STAGED.
     stage.status = StageStatus.PENDING
     stage.bytes_durable = 0
 
