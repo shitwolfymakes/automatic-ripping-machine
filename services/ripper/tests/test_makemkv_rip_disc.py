@@ -1020,6 +1020,37 @@ def test_mkv_all_command_has_all_exactly_once_right_before_the_output_dir(tmp_pa
     assert cmd[-2:] == ["all", str(tmp_path)]
 
 
+def test_mkv_title_command_names_the_title_and_passes_no_minlength(tmp_path):
+    """MakeMKV numbers titles after its minimum-length filter, so a `--minlength` other than the one the scan's
+    `info` ran under would make the id name another title."""
+    assert makemkv_rip._mkv_title_command("/dev/sr0", tmp_path, 7) == [
+        "makemkvcon",
+        "mkv",
+        "--robot",
+        "--progress=-stdout",
+        "dev:/dev/sr0",
+        "7",
+        str(tmp_path),
+    ]
+
+
+@pytest.mark.asyncio
+async def test_rip_disc_for_one_title_leaves_out_minlength(monkeypatch, tmp_path):
+    captured: dict[str, Any] = {}
+    fake = _FakeProc([b'MSG:5036,0,2,"done","%1 %2","0","titles"\n'])
+
+    async def fake_create_subprocess_exec(*args: Any, **_kwargs: Any) -> _FakeProc:
+        captured["argv"] = args
+        return fake
+
+    monkeypatch.setattr(makemkv_rip.asyncio, "create_subprocess_exec", fake_create_subprocess_exec)
+
+    await rip_disc(device_path="/dev/sr0", output_dir=tmp_path, minlength_seconds=900, title=3)
+
+    assert not any(arg.startswith("--minlength") for arg in captured["argv"])
+    assert list(captured["argv"][-2:]) == ["3", str(tmp_path)]
+
+
 def _pending_state(**titles: tuple[bool, bool]) -> makemkv_stream.ParserState:
     """Titles keyed `t<idx>` -> (started_emitted, done_emitted)."""
     state = makemkv_stream.ParserState()

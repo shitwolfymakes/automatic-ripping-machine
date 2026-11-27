@@ -12,6 +12,7 @@ from arm_ripper.drive_handle import DriveHandle
 from arm_ripper.drive_poll import DriveErrorKind, DriveState, classify_drive_error, read_drive_status
 from arm_ripper.eject import Ejector
 from arm_ripper.rip import RipResult, rip_all
+from arm_ripper.rip.resume_plan import log_resume_plan, plan_resume
 from arm_ripper.rip.track_callbacks import TransferStats
 from arm_ripper.source import is_file_source
 from arm_ripper.ws_client import WSClient
@@ -114,11 +115,14 @@ class DiscRip:
         self._output_dir = output_dir
         self._tracks = list(rip_start.tracks)
         self._resumable = _resumable(disc_type, device_path, self._tracks)
+        self._resume_policy = rip_start.resume_policy
         self._lost = asyncio.Event()
         # Track ids whose title the lost drive left unfinished, and the files
-        # of every title that finished (kept across a resume).
+        # of every title that finished (kept across a resume). A rip resumed
+        # after a restart starts with the titles the backend kept DONE.
         self._unfinished: set[str] = set()
-        self._kept: set[Path] = set()
+        settled = [t for t in self._tracks if t.status == TrackStatus.DONE]
+        self._kept: set[Path] = {Path(t.output_path) for t in settled if t.output_path is not None}
         # IN_PROGRESS is sent once per track across every pass.
         self._started: set[str] = set()
         self._min_length_seconds = (
@@ -126,7 +130,8 @@ class DiscRip:
         )
         self._rip_path = device_path
         self._rip_dir = self._output_dir
-        self._skip: set[str] = set()
+        self._skip: set[str] = {t.id for t in settled}
+        self._per_title = False
         self._resumes = 0
 
     async def _on_track_start(self, track: TrackView) -> None:
@@ -248,13 +253,14 @@ class DiscRip:
     async def run(self) -> None:
         """Rip the disc through its resumes, then finish it."""
         self._output_dir.mkdir(parents=True, exist_ok=True)
+        if self._skip:
+            self._prepare_restart_resume()
         while True:
             await self._run_pass()
             if not (self._lost.is_set() and self._unfinished):
                 break
             # The drive dropped off the bus mid-rip. Keep the disc's finished
-            # titles and, once it is back, rip the rest with one more
-            # `mkv all` on its new node (never per-title invocations).
+            # titles and, once it is back, rip the rest on its new node.
             logger.warning(
                 "drive disconnected mid-rip on %s; %d title(s) unfinished; waiting up to %.0fs for it to return",
                 self._rip_path,
@@ -270,8 +276,8 @@ class DiscRip:
         await self._finish()
 
     async def _run_pass(self) -> None:
-        """One `mkv all` pass over the disc on its current node, with a watcher that stops makemkvcon if the drive
-        leaves that node (resumable rips only)."""
+        """One pass over the disc on its current node (`mkv all`, or per title on a resume that chose it), with a
+        watcher that stops makemkvcon if the drive leaves that node (resumable rips only)."""
         watcher = asyncio.create_task(self._watch_drive(self._rip_path)) if self._resumable else None
         try:
             await rip_all(
@@ -286,27 +292,43 @@ class DiscRip:
                 stop=self._lost if self._resumable else None,
                 skip_track_ids=self._skip,
                 drive_lost=(functools.partial(self._drive_gone, self._rip_path) if self._resumable else None),
+                per_title=self._per_title,
             )
         finally:
             if watcher is not None:
                 watcher.cancel()
 
+    def _prepare_restart_resume(self) -> None:
+        """Set up the first pass of a rip resumed after a restart: drop the files no settled title owns, rip into a
+        fresh resume folder, and choose how to read the disc."""
+        _remove_partial_outputs(self._output_dir, self._kept)
+        self._rip_dir = _next_resume_dir(self._output_dir)
+        logger.info("resuming after a restart; %d title(s) already settled", len(self._skip))
+        self._plan_resume()
+
     def _prepare_resume(self, returned: str) -> None:
         """Set up the next pass on the node the drive came back on: drop the partial files, skip every title already
-        settled, and rip into a fresh resume folder."""
+        settled, rip into a fresh resume folder, and choose how to read the disc."""
         self._resumes += 1
         _remove_partial_outputs(self._output_dir, self._kept)
         self._skip = {t.id for t in self._tracks} - self._unfinished
         self._unfinished.clear()
         self._lost.clear()
         self._rip_path = returned
-        self._rip_dir = self._output_dir / f"resume-{self._resumes}"
+        self._rip_dir = _next_resume_dir(self._output_dir)
         logger.info(
-            "drive back at %s; resuming %d title(s) with one more mkv all (resume %d)",
+            "drive back at %s; resuming %d title(s) (resume %d)",
             self._rip_path,
             len(self._tracks) - len(self._skip),
             self._resumes,
         )
+        self._plan_resume()
+
+    def _plan_resume(self) -> None:
+        """Choose `mkv all` or per title for the coming resume pass, and log why."""
+        plan = plan_resume(self._tracks, self._skip, self._min_length_seconds, self._resume_policy)
+        log_resume_plan(plan, self._resume_policy)
+        self._per_title = plan.per_title
 
     async def _finish(self) -> None:
         """Report rip-complete, then eject the drive at the node it is on now and give it a moment to settle."""
@@ -317,6 +339,15 @@ class DiscRip:
         # the rip (USB replug); the path captured at rip start is a hint only.
         await self._ejector.eject(self._device.current or self._start_path)
         await asyncio.sleep(EJECT_GRACE_SECONDS)
+
+
+def _next_resume_dir(output_dir: Path) -> Path:
+    """The first `resume-N` folder under the job's raw folder not already used, by this run or one before a
+    restart."""
+    n = 1
+    while (output_dir / f"resume-{n}").exists():
+        n += 1
+    return output_dir / f"resume-{n}"
 
 
 def _remove_partial_outputs(output_dir: Path, kept: set[Path]) -> None:
