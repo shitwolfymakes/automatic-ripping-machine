@@ -549,6 +549,26 @@ class AggregateOutcome(NamedTuple):
     event_type: str | None  # "session.completed" / "session.partial" / "session.failed"
 
 
+# Settled by `aggregate_session_application` once every task finished; a
+# re-queued failed task puts the application back in flight.
+_REOPENABLE_APPLICATION_STATUSES: frozenset[SessionApplicationStatus] = frozenset(
+    {SessionApplicationStatus.FAILED, SessionApplicationStatus.DONE_PARTIAL, SessionApplicationStatus.DONE}
+)
+
+
+def reopen_session_application(application: SessionApplication) -> bool:
+    """Put a settled application back to RUNNING (completed_at cleared) after
+    one of its failed tasks was re-queued, so the job reads as transcoding
+    again and the aggregate settles it afresh when the retry finishes.
+    Returns whether it changed; an application still in flight is left as is.
+    The caller commits."""
+    if application.status not in _REOPENABLE_APPLICATION_STATUSES:
+        return False
+    application.status = SessionApplicationStatus.RUNNING
+    application.completed_at = None
+    return True
+
+
 async def aggregate_session_application(
     db: AsyncSession,
     application: SessionApplication,
