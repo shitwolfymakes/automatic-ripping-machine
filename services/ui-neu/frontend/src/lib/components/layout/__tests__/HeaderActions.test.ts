@@ -62,6 +62,7 @@ function setDash(patch: Record<string, unknown> = {}) {
 	(dashboard as unknown as { set: (v: unknown) => void }).set({
 		db_available: true,
 		ripping_enabled: true,
+		hold_for_review: false,
 		...patch
 	});
 }
@@ -74,7 +75,9 @@ beforeEach(() => {
 	setSession('admin');
 	setDash();
 	apiLogoutMock.mockResolvedValue(undefined);
-	vi.mocked(setRippingEnabled).mockImplementation((enabled) => Promise.resolve({ ripping_paused: !enabled } as never));
+	vi.mocked(setRippingEnabled).mockImplementation((enabled) =>
+		Promise.resolve({ ripping_paused: !enabled, hold_for_review: !enabled } as never)
+	);
 });
 
 afterEach(() => {
@@ -95,6 +98,13 @@ describe('HeaderActions auto-start toggle', () => {
 		render();
 		expect(autoStart()).toHaveTextContent('Auto-Start');
 		expect(autoStart()).toHaveAttribute('aria-checked', 'true');
+	});
+
+	it('reads Hold for Review when paused with Review first on', () => {
+		setDash({ ripping_enabled: false, hold_for_review: true });
+		render();
+		expect(autoStart()).toHaveTextContent('Hold for Review');
+		expect(autoStart()).toHaveAttribute('aria-checked', 'false');
 	});
 
 	it('reads Paused when ripping is disabled', () => {
@@ -122,10 +132,12 @@ describe('HeaderActions auto-start toggle', () => {
 		expect(setRippingEnabled).toHaveBeenCalledWith(false);
 		await waitFor(() => expect(autoStart()).not.toBeDisabled());
 		expect(dashState().ripping_enabled).toBe(false);
+		expect(dashState().hold_for_review).toBe(true);
+		expect(autoStart()).toHaveTextContent('Hold for Review');
 	});
 
 	it('shows the ripping state from the reply to the change', async () => {
-		vi.mocked(setRippingEnabled).mockResolvedValueOnce({ ripping_paused: false } as never);
+		vi.mocked(setRippingEnabled).mockResolvedValueOnce({ ripping_paused: false, hold_for_review: false } as never);
 		render();
 		await fireEvent.click(autoStart());
 		await waitFor(() => expect(autoStart()).not.toBeDisabled());
@@ -137,6 +149,7 @@ describe('HeaderActions auto-start toggle', () => {
 		render();
 		await fireEvent.click(autoStart());
 		await waitFor(() => expect(dashState().ripping_enabled).toBe(true));
+		expect(dashState().hold_for_review).toBe(false);
 		expect(autoStart()).not.toBeDisabled();
 	});
 

@@ -170,7 +170,9 @@ afterEach(async () => {
 	cleanup();
 	gotoMock.mockClear();
 	vi.mocked(setRippingEnabled).mockReset();
-	vi.mocked(setRippingEnabled).mockImplementation((enabled) => Promise.resolve({ ripping_paused: !enabled } as never));
+	vi.mocked(setRippingEnabled).mockImplementation((enabled) =>
+		Promise.resolve({ ripping_paused: !enabled, hold_for_review: !enabled } as never)
+	);
 	vi.mocked(toggleTheme).mockClear();
 	startIsoRipMock.mockClear();
 	theme.set('dark');
@@ -345,7 +347,7 @@ describe('Layout Auto-Start toggle', () => {
 		expect(screen.queryByRole('switch')).not.toBeInTheDocument();
 	});
 
-	it('pauses ripping and labels the switch Paused', async () => {
+	it('pauses ripping and labels the switch Hold for Review', async () => {
 		renderLayout();
 		const toggle = screen.getByRole('switch');
 		expect(toggle).toHaveAttribute('aria-checked', 'true');
@@ -353,7 +355,7 @@ describe('Layout Auto-Start toggle', () => {
 		await fireEvent.click(toggle);
 		expect(setRippingEnabled).toHaveBeenCalledWith(false);
 		await waitFor(() => expect(toggle).toHaveAttribute('aria-checked', 'false'));
-		expect(toggle).toHaveTextContent('Paused');
+		expect(toggle).toHaveTextContent('Hold for Review');
 		expect(toggle).not.toBeDisabled();
 	});
 
