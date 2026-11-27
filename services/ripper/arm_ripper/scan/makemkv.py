@@ -4,6 +4,7 @@ from typing import NamedTuple
 
 from arm_common import DiscType
 from arm_common.schemas import DiscFingerprintInput, ScanResult, ScanTitle
+from arm_ripper.scan.bd_playlists import scan_playlists
 from arm_ripper.scan.disc_probe import DiscProbe, probe_disc
 from arm_ripper.scan.makemkv_info import parse_makemkvcon_info
 from arm_ripper.source import makemkv_source_url
@@ -159,6 +160,9 @@ def _fingerprints(probe: DiscProbe) -> list[DiscFingerprintInput]:
 
 
 async def scan_disc(device_path: str) -> ScanResult:
+    # Before makemkvcon: the playlist read is the early track list, and its
+    # logged elapsed_ms is the measurement of how early that list can arrive.
+    playlists = await scan_playlists(device_path)
     run = await _run_info(device_path)
 
     _raise_for_failure(run)
@@ -183,4 +187,5 @@ async def scan_disc(device_path: str) -> ScanResult:
         titles=titles,
         fingerprints=_fingerprints(probe),
         bd_meta=probe.bd_meta,
+        playlists=playlists,
     )

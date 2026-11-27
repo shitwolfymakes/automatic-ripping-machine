@@ -8321,6 +8321,51 @@
         "title": "BdDiscMeta",
         "description": "Blu-ray disc title from BDMV/META/DL/bdmt_<lang>.xml (studio-authored).\nOptional on the wire: older rippers never send it."
       },
+      "BdPlaylist": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "clips": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "title": "Clips"
+          },
+          "clip_seconds": {
+            "items": {
+              "type": "number"
+            },
+            "type": "array",
+            "title": "Clip Seconds"
+          },
+          "duration_seconds": {
+            "type": "integer",
+            "title": "Duration Seconds"
+          },
+          "chapter_count": {
+            "type": "integer",
+            "title": "Chapter Count"
+          },
+          "multi_angle": {
+            "type": "boolean",
+            "title": "Multi Angle",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "clips",
+          "clip_seconds",
+          "duration_seconds",
+          "chapter_count"
+        ],
+        "title": "BdPlaylist",
+        "description": "One Blu-ray playlist (`BDMV/PLAYLIST/<name>.mpls`) as the ripper read it off the disc."
+      },
       "Body_upload_theme_api_themes_post": {
         "properties": {
           "theme_json": {
@@ -16213,6 +16258,13 @@
                 "type": "null"
               }
             ]
+          },
+          "playlists": {
+            "items": {
+              "$ref": "#/components/schemas/BdPlaylist"
+            },
+            "type": "array",
+            "title": "Playlists"
           },
           "raw": {
             "additionalProperties": true,
