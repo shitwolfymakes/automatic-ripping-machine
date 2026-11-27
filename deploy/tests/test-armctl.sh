@@ -259,6 +259,55 @@ out="$( (prepare_storage "$ro") 2>&1 || true)"
 has "storage: an unwritable folder is an error" "is not writable" "$out"
 check "storage: a folder outside arm keeps its mode" "555" "$(stat -c '%a' "$ro")"
 
+# --- config: staging folder ---------------------------------------------------
+new_install staging
+check "staging: no flag and no saved answer means the default (empty)" "" \
+    "$(pick_storage "staging" "" ARM_HOST_STAGING_PATH "" </dev/null)"
+check "staging: a flag wins" "/mnt/nas/staging" \
+    "$(pick_storage "staging" "/mnt/nas/staging" ARM_HOST_STAGING_PATH "" </dev/null)"
+printf 'ARM_HOST_STAGING_PATH=/mnt/saved-staging\n' > "${ENV_FILE}"
+check "staging: a saved answer becomes the default" "/mnt/saved-staging" \
+    "$(pick_storage "staging" "" ARM_HOST_STAGING_PATH "" </dev/null)"
+check "staging: offload without a staging folder is an error" "yes" \
+    "$( (PROFILE=offload; STAGING_PATH=""; require_offload_staging) >/dev/null 2>&1 || echo yes )"
+check "staging: offload with a staging folder is accepted" "ok" \
+    "$( (PROFILE=offload; STAGING_PATH=/mnt/nas/s; require_offload_staging; echo ok) 2>&1 )"
+check "staging: a local profile may leave it empty" "ok" \
+    "$( (PROFILE=full; STAGING_PATH=""; require_offload_staging; echo ok) 2>&1 )"
+
+check "staging: unset, the host path is .staging inside raw" "/mnt/r/.staging" \
+    "$(RAW_PATH=/mnt/r; STAGING_PATH=""; staging_host_path)"
+check "staging: a chosen folder is the host path" "/mnt/nas/s" \
+    "$(RAW_PATH=/mnt/r; STAGING_PATH=/mnt/nas/s; staging_host_path)"
+RAW_PATH="${ARM_DIR}/raw"; STAGING_PATH=""
+( prepare_storage "${RAW_PATH}"; prepare_staging )
+check "staging: the default folder inside raw is created for this user" "yes" \
+    "$( [[ -d "${RAW_PATH}/.staging" && -O "${RAW_PATH}/.staging" ]] && echo yes || echo no )"
+STAGING_PATH="${TMPROOT}/staging-nas/s"
+( prepare_staging )
+check "staging: a chosen folder is created" "yes" "$( [[ -d "${STAGING_PATH}" ]] && echo yes || echo no )"
+STAGING_PATH=""
+
+# --- detect: network filesystem warning for raw ------------------------------
+# stat is stubbed in a subshell to print the filesystem type under test.
+raw_warn() {  # <fs type> [raw path]: stderr of warn_raw_network_fs, plus its rc
+    ( FS_TYPE="$1"; stat() { printf '%s\n' "${FS_TYPE}"; }; warn_raw_network_fs "${2-${TMPROOT}}"; echo "rc=$?" ) 2>&1
+}
+for t in nfs nfs4 cifs smb2 smbfs fuse.sshfs 9p; do
+    has "raw warning: ${t} warns" "is on a network filesystem (${t})" "$(raw_warn "$t")"
+done
+has "raw warning: it never refuses" "rc=0" "$(raw_warn nfs)"
+lacks "raw warning: ext4 is silent" "WARNING\|!" "$(raw_warn ext4)"
+check "raw warning: ext4 prints only the rc" "rc=0" "$(raw_warn ext4)"
+check "raw warning: an unset raw path is silent" "rc=0" "$(raw_warn nfs "")"
+check "fs_type_of: reads the nearest existing ancestor" "${TMPROOT}" \
+    "$( stat() { [[ "$4" == "${TMPROOT}" ]] && printf '%s' "$4"; }; fs_type_of "${TMPROOT}/not/yet/created" )"
+check "fs_type_of: a real folder has a type" "yes" "$( [[ -n "$(fs_type_of "${TMPROOT}")" ]] && echo yes || echo no )"
+check "up: warns about a network raw folder and still goes on" "yes" \
+    "$( (new_install upwarn; printf 'ARM_HOST_RAW_PATH=/mnt/nas/raw\n' >> "${ENV_FILE}"
+        stat() { echo nfs; }; stack_up() { echo STARTED; }; finish_up() { :; }
+        out="$(cmd_up 2>&1)"; [[ "${out}" == *"network filesystem (nfs)"* && "${out}" == *STARTED* ]] && echo yes ) )"
+
 # --- config: profile ----------------------------------------------------------
 new_install profile-choice; : > "${ENV_FILE}"
 check "profile: a flag wins" "ripper-only" "$( (PROFILE_ARG=ripper-only; choose_profile >/dev/null </dev/null; echo "${PROFILE}") )"
@@ -281,6 +330,11 @@ ov="$(cat "${HOST_OVERLAY}")"
 has "overlay quotes a path with spaces" '      - "/media/sam/My Passport/rips:/raw"' "$ov"
 has "overlay mounts the media folder" '      - "/mnt/nas/media:/media"' "$ov"
 lacks "overlay: no published port without offload" "ports:" "$ov"
+lacks "overlay: no staging mount when staging is unset" "/staging" "$ov"
+STAGING_PATH="/mnt/nas/arm staging"; write_host_overlay
+has "overlay: a staging folder is mounted at /staging" '      - "/mnt/nas/arm staging:/staging"' "$(cat "${HOST_OVERLAY}")"
+STAGING_PATH=""; write_host_overlay
+lacks "overlay: clearing staging removes the mount" "/staging" "$(cat "${HOST_OVERLAY}")"
 PROFILE=offload; REMOTE_BACKEND_URL="https://192.168.0.68:8080"; write_host_overlay
 ov="$(cat "${HOST_OVERLAY}")"
 has "overlay: offload publishes the callback port" '      - "8080:8443"' "$ov"
@@ -299,7 +353,7 @@ env_case() {
         ARMCTL_RELEASE_DIR="${REL}"
         PROFILE="$2"; RIPPER_ONLY=0
         if [[ "$2" == ripper-only ]]; then RIPPER_ONLY=1; fi
-        RAW_PATH="/r"; MEDIA_PATH="/m"; ISO_PATH="/i"; ARM_IMAGE_TAG_DEFAULT="v3.1.0"; IMAGE_PREFIX_ARG=""
+        RAW_PATH="/r"; MEDIA_PATH="/m"; ISO_PATH="/i"; STAGING_PATH="${ENV_STAGING:-}"; ARM_IMAGE_TAG_DEFAULT="v3.1.0"; IMAGE_PREFIX_ARG=""
         REMOTE_DOCKER_HOST="ssh://sam@192.168.0.92"; REMOTE_BACKEND_URL="https://192.168.0.68:8080"
         REMOTE_TRANSCODE_PUID=1001; REMOTE_TRANSCODE_PGID=1000
         REMOTE_GPUS='[{"vendor":"nvenc","device_path":"nvidia://0","encoder_kinds":[]}]'; REMOTE_RENDER_GID=""
@@ -319,6 +373,9 @@ has "env: readable by the owner only" "MODE=600" "$e"
 has "env: profile is recorded" "ARMCTL_PROFILE=full" "$e"
 has "env: full box is transcode-capable" "ARM_TRANSCODE_CAPABLE=true" "$e"
 has "env: raw path is absolute" "ARM_HOST_RAW_PATH=/r" "$e"
+lacks "env: no staging key without a staging folder" "ARM_HOST_STAGING_PATH=" "$(grep -v '^#' <<<"$e")"
+has "env: a staging folder is written" "ARM_HOST_STAGING_PATH=/mnt/s" "$(ENV_STAGING=/mnt/s env_case env-staging full)"
+lacks "env: clearing staging removes the key on a re-run" "ARM_HOST_STAGING_PATH=" "$(grep -v '^#' <<<"$(env_case env-staging full keep)")"
 has "env: ISO library path is absolute" "ARM_HOST_ISO_LIBRARY_PATH=/i" "$e"
 has "env: logs path is absolute" "ARM_HOST_LOGS_PATH=${TMPROOT}/env-full/arm/logs" "$e"
 has "env: certs path is the local folder" "ARM_HOST_CERTS_PATH=${TMPROOT}/env-full/arm/certs" "$e"
@@ -608,14 +665,14 @@ flow() {
         # Standalone, with errexit on: errexit is ignored in any conditional
         # context, which would hide a failing stage.
         set +e
-        ( set -e; cmd_install "$@"; echo "ASSUME=${ARMCTL_ASSUME} RAW=${RAW_ARG} MEDIA=${MEDIA_ARG} ISO=${ISO_ARG} PREFIX=${IMAGE_PREFIX_ARG} TAG=${ARM_IMAGE_TAG_DEFAULT}" >> "${log_file}"; echo "ARGV=${ARMCTL_ARGV[*]}" >> "${log_file}" ) </dev/null >"${TMPROOT}/flow.out" 2>&1
+        ( set -e; cmd_install "$@"; echo "ASSUME=${ARMCTL_ASSUME} RAW=${RAW_ARG} MEDIA=${MEDIA_ARG} ISO=${ISO_ARG} STAGING=${STAGING_ARG} PREFIX=${IMAGE_PREFIX_ARG} TAG=${ARM_IMAGE_TAG_DEFAULT}" >> "${log_file}"; echo "ARGV=${ARMCTL_ARGV[*]}" >> "${log_file}" ) </dev/null >"${TMPROOT}/flow.out" 2>&1
         echo "rc=$?" >> "${log_file}"
         set -e
         tr '\n' ';' < "${log_file}"
     )
 }
 check "install: full box runs every stage in order" \
-    "banner v3.1.0;choose_profile full;ensure_docker;refuse_second_stack;acquire_lock;ensure_layout;choose_storage;ensure_ca;make_leaf arm-backend;make_leaf arm-db;make_leaf arm-ui localhost testhost;write_env;write_host_overlay;ensure_nvidia_container_toolkit;install_udev_rule;link_armctl;stack_up;finish_up;ASSUME=ask RAW= MEDIA= ISO= PREFIX= TAG=v3.1.0;ARGV=install --profile full;rc=0;" \
+    "banner v3.1.0;choose_profile full;ensure_docker;refuse_second_stack;acquire_lock;ensure_layout;choose_storage;ensure_ca;make_leaf arm-backend;make_leaf arm-db;make_leaf arm-ui localhost testhost;write_env;write_host_overlay;ensure_nvidia_container_toolkit;install_udev_rule;link_armctl;stack_up;finish_up;ASSUME=ask RAW= MEDIA= ISO= STAGING= PREFIX= TAG=v3.1.0;ARGV=install --profile full;rc=0;" \
     "$(flow flow-full)"
 ui_sans_out="$(
     hostname() {
@@ -641,8 +698,8 @@ lacks "install: no second banner after the docker group restart" "banner" "$(ARM
 out="$(flow flow-nostart --no-start)"
 lacks "install: --no-start does not start the stack" "stack_up" "$out"
 has "install: --no-start still configures" "write_env;write_host_overlay;" "$out"
-out="$(flow flow-flags --yes --raw-path /r --media-path=/m --iso-library-path /i --image-prefix ghcr.io/fork)"
-has "install: flags are parsed in both --x v and --x=v forms" "ASSUME=yes RAW=/r MEDIA=/m ISO=/i PREFIX=ghcr.io/fork TAG=v3.1.0;" "$out"
+out="$(flow flow-flags --yes --raw-path /r --media-path=/m --iso-library-path /i --staging-path /s --image-prefix ghcr.io/fork)"
+has "install: flags are parsed in both --x v and --x=v forms" "ASSUME=yes RAW=/r MEDIA=/m ISO=/i STAGING=/s PREFIX=ghcr.io/fork TAG=v3.1.0;" "$out"
 out="$(flow flow-decline --no-host-changes)"
 has "install: --no-host-changes declines host changes" "ASSUME=no " "$out"
 set +e; out="$( (set -e; new_install flow-bad; ARMCTL_RELEASE_DIR="${REL}"; ARMCTL_ARGV=(install); cmd_install --bogus) 2>&1 )"; set -e
@@ -702,10 +759,19 @@ unattended_offload_install() {
     REMOTE_RUN=(false)
     BACKEND_RUNNING_TEST=(false)
     ARMCTL_ARGV=(install)
+    local staging_flag=(--staging-path "${ARM_DIR}/shared-staging")
+    [[ "${UNATTENDED_NO_STAGING:-}" == 1 ]] && staging_flag=()
     cmd_install --profile offload --offload-host ssh://sam@192.168.0.92 \
-        --offload-backend-url https://192.168.0.68:8080 --no-host-changes --no-start
+        --offload-backend-url https://192.168.0.68:8080 --no-host-changes --no-start \
+        "${staging_flag[@]}"
     echo "INSTALL REACHED THE END"
 }
+set +e
+out="$( ( set -e; UNATTENDED_NO_STAGING=1 unattended_offload_install nostaging ) </dev/null 2>&1 )"
+rc=$?
+set -e
+check "unattended offload install without --staging-path: fails" "1" "$rc"
+has "unattended offload install without --staging-path: says why" "needs a staging folder" "$out"
 set +e
 out="$( ( set -e; unattended_offload_install eof ) </dev/null 2>&1 )"
 rc=$?

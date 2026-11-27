@@ -146,6 +146,12 @@ check "verify_paths: all missing" "FAIL /a /b /c" "$(verify_paths /a /b /c)"
 remote_script 'exit 0'
 check "verify_paths: pass" "PASS" "$(verify_paths /a /b /c)"
 
+remote_script 'exit 1'
+check "verify_offload_paths: an empty staging path is an error" "FAIL_UNSET" "$(verify_offload_paths "" /b /c)"
+check "verify_offload_paths: missing paths are listed" "FAIL /s /b /c" "$(verify_offload_paths /s /b /c)"
+remote_script 'exit 0'
+check "verify_offload_paths: pass" "PASS" "$(verify_offload_paths /s /b /c)"
+
 # --- completion phase --------------------------------------------------------
 
 remote_script 'echo 27.4'
@@ -241,7 +247,7 @@ printf '\n' > "$REFENV"
 check "image ref: defaults fallback" "${ARM_IMAGE_PREFIX_DEFAULT}/arm-transcode:${ARM_IMAGE_TAG_DEFAULT}" "$(offload_image_ref "$REFENV")"
 
 # report uses the env-pinned ref (not the default prefix)
-printf 'ARM_TRANSCODE_DOCKER_HOST=ssh://sam@h\nARM_TRANSCODE_BACKEND_URL=https://b:8080\nARM_HOST_RAW_PATH=/a\nARM_HOST_MEDIA_PATH=/b\nARM_HOST_LOGS_PATH=/c\nARM_HOST_CERTS_PATH=/x\nARM_GPUS=[{"vendor":"nvenc"}]\nARM_IMAGE_PREFIX=armv3-local\nARM_IMAGE_TAG=hifi\n' > "$REFENV"
+printf 'ARM_TRANSCODE_DOCKER_HOST=ssh://sam@h\nARM_TRANSCODE_BACKEND_URL=https://b:8080\nARM_HOST_STAGING_PATH=/a\nARM_HOST_MEDIA_PATH=/b\nARM_HOST_LOGS_PATH=/c\nARM_HOST_CERTS_PATH=/x\nARM_GPUS=[{"vendor":"nvenc"}]\nARM_IMAGE_PREFIX=armv3-local\nARM_IMAGE_TAG=hifi\n' > "$REFENV"
 remote_script 'exit 0'
 BACKEND_RUNNING_TEST=(bash -c 'echo false' --)
 out="$(OFFLOAD_ENV_FILE="$REFENV" OFFLOAD_CA_FILE="$CAFIX2" OFFLOAD_REOFFER=0 offload_completion_report)"

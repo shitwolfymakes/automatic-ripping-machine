@@ -13,10 +13,12 @@ PROFILE_ARG=""
 RAW_ARG=""
 MEDIA_ARG=""
 ISO_ARG=""
+STAGING_ARG=""
 IMAGE_PREFIX_ARG=""
 RAW_PATH=""
 MEDIA_PATH=""
 ISO_PATH=""
+STAGING_PATH=""
 
 valid_profile() {
     [[ "$1" == full || "$1" == ripper-only || "$1" == offload ]]
@@ -123,6 +125,18 @@ prepare_storage() {
     fi
 }
 
+# The host folder mounted at /staging: the chosen one, else `.staging` inside
+# raw, the same default the backend computes.
+staging_host_path() {
+    printf '%s' "${STAGING_PATH:-${RAW_PATH}/.staging}"
+}
+
+# Staging must exist before the stack starts, or Docker creates it as root and
+# the backend cannot write to it.
+prepare_staging() {
+    prepare_storage "$(staging_host_path)"
+}
+
 # The ISO library is only ever read (the backend mounts it read-only), so unlike
 # the other folders it need not be writable: a read-only NAS share is fine.
 prepare_iso_library() {
@@ -143,12 +157,24 @@ choose_storage() {
     RAW_PATH="$(pick_storage "raw rips" "${RAW_ARG}" ARM_HOST_RAW_PATH "${ARM_DIR}/raw")"
     MEDIA_PATH="$(pick_storage "finished media" "${MEDIA_ARG}" ARM_HOST_MEDIA_PATH "${ARM_DIR}/media")"
     ISO_PATH="$(pick_storage "ISO library" "${ISO_ARG}" ARM_HOST_ISO_LIBRARY_PATH "${ARM_DIR}/iso-library")"
+    STAGING_PATH="$(pick_storage "staging (empty = <raw>/.staging)" "${STAGING_ARG}" ARM_HOST_STAGING_PATH "")"
+    require_offload_staging
     prepare_storage "${RAW_PATH}"
+    warn_raw_network_fs "${RAW_PATH}"
     prepare_storage "${MEDIA_PATH}"
     prepare_iso_library "${ISO_PATH}"
+    prepare_staging
     okline "raw rips:       ${RAW_PATH}"
     okline "finished media: ${MEDIA_PATH}"
     okline "ISO library:    ${ISO_PATH}"
+    okline "staging:        $(staging_host_path)"
+}
+
+# A remote transcoder reads staged tracks from storage it shares with this
+# host, and cannot reach this host's raw folder, so offload needs a staging folder.
+require_offload_staging() {
+    [[ "${PROFILE}" == offload && -z "${STAGING_PATH}" ]] || return 0
+    err "the offload profile needs a staging folder on storage shared with the transcode host: pass --staging-path <dir>"
 }
 
 # env_merge_new_keys <example> <env>: append every KEY=value line of the
@@ -230,6 +256,11 @@ write_env() {
     # in. armctl can be run from anywhere, so they are always written in full.
     env_set ARM_HOST_RAW_PATH "${RAW_PATH}"
     env_set ARM_HOST_MEDIA_PATH "${MEDIA_PATH}"
+    if [[ -n "${STAGING_PATH}" ]]; then
+        env_set ARM_HOST_STAGING_PATH "${STAGING_PATH}"
+    else
+        env_unset ARM_HOST_STAGING_PATH
+    fi
     env_set ARM_HOST_ISO_LIBRARY_PATH "${ISO_PATH}"
     env_set ARM_HOST_LOGS_PATH "${ARM_DIR}/logs"
     if [[ -z "$(env_file_value ARM_ALLOWED_ORIGINS)" ]]; then
@@ -266,7 +297,7 @@ write_env() {
     fi
 }
 
-# The per-install compose overlay: where raw rips and finished media live,
+# The per-install compose overlay: where raw rips, finished media and (when set) staging live,
 # and, for offload, the ssh folder and the published callback port. It is
 # rewritten in full each time, so a changed answer never leaves a stale entry.
 # Compose replaces a template mount that targets the same container path.
@@ -281,6 +312,9 @@ write_host_overlay() {
         printf '    volumes:\n'
         printf '      - "%s:/raw"\n' "${RAW_PATH}"
         printf '      - "%s:/media"\n' "${MEDIA_PATH}"
+        if [[ -n "${STAGING_PATH}" ]]; then
+            printf '      - "%s:/staging"\n' "${STAGING_PATH}"
+        fi
         if [[ "${PROFILE}" == offload ]]; then
             printf '      - "%s:/home/arm/.ssh:ro"\n' "${ARM_DIR}/ssh"
             printf '    ports:\n'
