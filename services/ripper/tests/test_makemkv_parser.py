@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 
 from arm_common import DiscType
@@ -402,3 +403,11 @@ def test_parses_blu_ray_with_decoy_playlists():
     assert {frozenset(t.segment_map or []) for t in decoys} == {frozenset(feature.segment_map)}
     assert len({tuple(t.segment_map or []) for t in decoys}) == 299
     assert [t.index for t in decoys if t.comment] == [0]
+
+
+def test_decoy_scan_titles_json_matches_parser():
+    """The classifier tests in arm_common read this export; it must not drift."""
+    lines = (FIXTURES / "makemkvcon_bd_decoy_playlists.txt").read_text().splitlines()
+    _, titles, _ = parse_makemkvcon_info(lines)
+    export = Path(__file__).parents[3] / "packages/arm_common/tests/fixtures/scan_titles/bd_decoy_playlists.json"
+    assert json.loads(export.read_text()) == [t.model_dump(mode="json") for t in titles]

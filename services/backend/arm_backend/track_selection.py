@@ -1,7 +1,7 @@
 from arm_common import TrackStatus, DiscType, OutputMode, RipPreset, Track, TrackKind, TrackSelection
 from arm_common.schemas import ScanResult, ScanTitle, TrackFilters
+from arm_common.title_classes import MAIN_FEATURE_MIN_SECONDS
 
-MAIN_FEATURE_MIN_SECONDS = 45 * 60
 ALL_TRACKS_MIN_SECONDS = 60
 
 
