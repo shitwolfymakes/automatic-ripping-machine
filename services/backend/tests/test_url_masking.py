@@ -33,3 +33,11 @@ def test_strip_userinfo_masks_an_unencoded_question_mark_in_the_password():
 
 def test_strip_userinfo_masks_credentials_in_a_url_with_no_scheme():
     assert strip_userinfo("admin:hunter2@arm.example:8443") == "***"
+
+
+def test_strip_userinfo_masks_a_password_with_an_at_sign_and_a_cut_character():
+    # urlsplit ends the host part at the `/`, `#` or `?`, so its `@` is the
+    # password's first one and the rest of the password follows it.
+    assert strip_userinfo("https://u:pa@ss/word@host") == "***"
+    assert strip_userinfo("https://u:a@b#c@host") == "***"
+    assert strip_userinfo("https://u:pa@ss?x@host") == "***"
