@@ -25,7 +25,7 @@
 		<MediaTypeSwitch {job} handSetCount={jobDetail.handSetCount} onchanged={onmediatypechanged} />
 	{/if}
 	{#if jobDetail.canApply && $isAdmin}
-		<button type="button" data-testid="apply-open" onclick={onapply} class="btn job-detail-header-btn">
+		<button type="button" data-testid="apply-open" onclick={onapply} class="btn btn-sm btn-primary">
 			Apply session
 		</button>
 	{/if}
@@ -33,13 +33,3 @@
 		<JobActions {job} onaction={jobDetail.load} {ondelete} />
 	{/if}
 </div>
-
-<style>
-	/* header buttons are text-sm (0.875rem) with 0.375rem/0.75rem padding - between .btn's default and .btn-sm */
-	.job-detail-header-btn {
-		min-height: auto;
-		padding: 0.375rem 0.75rem;
-		font-size: 0.875rem;
-		line-height: 1.25rem;
-	}
-</style>

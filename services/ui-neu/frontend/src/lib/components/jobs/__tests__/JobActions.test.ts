@@ -193,23 +193,18 @@ describe('JobActions', () => {
 		});
 	});
 
-	describe('props', () => {
-		it('renders compact buttons when compact is true', () => {
+	describe('button tones', () => {
+		it('renders each action as a small standard button coloured by what it does', () => {
+			const base = createJob({ status: 'ripped' });
 			renderComponent(JobActions, {
-				props: { job: createJob({ status: 'ripped' }), compact: true }
+				props: { job: { ...base, actions: { ...base.actions, can_abandon: true, can_delete: true } } }
 			});
-			const deleteBtn = screen.getByText('Delete');
-			expect(deleteBtn).toHaveClass('job-actions-pill', 'job-actions-pill-danger');
-			expect(deleteBtn).toHaveAttribute('data-compact', 'true');
-		});
-
-		it('renders standard buttons when compact is false', () => {
-			renderComponent(JobActions, {
-				props: { job: createJob({ status: 'ripped' }), compact: false }
-			});
-			const deleteBtn = screen.getByText('Delete');
-			expect(deleteBtn).toHaveClass('job-actions-pill', 'job-actions-pill-danger');
-			expect(deleteBtn).toHaveAttribute('data-compact', 'false');
+			const ripAgain = screen.getByRole('button', { name: 'Rip again' });
+			expect(ripAgain).toHaveClass('btn', 'btn-sm');
+			expect(ripAgain).not.toHaveClass('btn-warning');
+			expect(ripAgain).not.toHaveClass('btn-danger');
+			expect(screen.getByRole('button', { name: 'Abandon' })).toHaveClass('btn', 'btn-sm', 'btn-warning');
+			expect(screen.getByRole('button', { name: 'Delete' })).toHaveClass('btn', 'btn-sm', 'btn-danger');
 		});
 	});
 });
