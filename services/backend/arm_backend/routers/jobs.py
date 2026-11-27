@@ -31,7 +31,7 @@ from arm_backend.routers._deps import get_hub, get_stage_runner
 from arm_backend.rip_snapshot import skip_unticked
 from arm_backend.routers._params import JobIdParam, TrackIdParam
 from arm_backend.constants import CONFIG_SINGLETON_ID
-from arm_backend.stager import wake_active_stager
+from arm_backend.stager import cancel_job_staging, wake_active_stager
 from arm_backend.staging import StageNotRetryable, retry_failed_stage, stage_for_track
 from arm_backend.ws import WSHub
 from arm_common import (
@@ -561,6 +561,7 @@ async def delete_job(
             detail=f"job in non-terminal status {enum_value_str(job.status)}; abandon it first",
         )
 
+    await cancel_job_staging(job.id)
     counters: dict[str, int] | None = None
     if delete_raw:
         counters = await _clean_up_job_files(
@@ -610,6 +611,7 @@ async def delete_all_jobs(
         if job.status not in TERMINAL_JOB_STATUSES:
             skipped.append(job.id)
             continue
+        await cancel_job_staging(job.id)
         if delete_raw:
             counters = await _clean_up_job_files(
                 db, job.id, raw_root=raw_root, media_root=media_root, staging_root=staging
