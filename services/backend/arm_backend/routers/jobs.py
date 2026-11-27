@@ -16,6 +16,7 @@ from arm_backend.auto_session import (
 )
 from arm_backend.config import settings
 from arm_backend.db import get_session
+from arm_backend.identify_flow import pause_refuses_new_jobs
 from arm_backend.identity.apply import apply_identity_result, suggestion_to_result
 from arm_backend.identity.manual_edits import apply_manual_edits
 from arm_backend.identity.resolve_service import identity_snapshot, resolve_identity
@@ -598,7 +599,7 @@ async def manual_trigger(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown drive_id: {req.drive_id}")
 
     cfg = (await db.execute(select(Config).where(col(Config.id) == CONFIG_SINGLETON_ID))).scalar_one_or_none()
-    if cfg is not None and cfg.ripping_paused:
+    if pause_refuses_new_jobs(cfg):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="ripping is paused; no new jobs accepted",

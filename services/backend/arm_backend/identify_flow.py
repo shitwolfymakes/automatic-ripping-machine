@@ -104,6 +104,14 @@ class UnknownDriveError(Exception):
         self.drive_id = drive_id
 
 
+def pause_refuses_new_jobs(cfg: Config | None) -> bool:
+    """Whether the global pause turns a new job away. With the timed review gate on, a
+    paused machine still scans + identifies + PARKS the disc for review (pause only
+    suppresses auto-start at expiry); with it off, pause means reject outright.
+    Shared by disc insertion, Start rip and ISO rips so the three never disagree."""
+    return cfg is not None and bool(cfg.ripping_paused) and not cfg.hold_for_review
+
+
 class RippingPausedError(Exception):
     """Ripping is paused and the review gate is off, so no new job is accepted."""
 
@@ -194,11 +202,7 @@ class IdentifyFlow:
         return (await self.session.execute(select(Config).where(col(Config.id) == CONFIG_SINGLETON_ID))).scalar_one()
 
     def _reject_if_paused(self, cfg: Config) -> None:
-        # When the timed review gate is on, a paused machine still scans + identifies
-        # + PARKS the disc for review (pause only suppresses auto-start at expiry, see
-        # below); it does not reject the job. With the gate off, pause keeps its
-        # plain meaning: reject new jobs outright.
-        if cfg.ripping_paused and not cfg.hold_for_review:
+        if pause_refuses_new_jobs(cfg):
             raise RippingPausedError()
 
     async def _apply_previously_ripped_policy(self, drive: Drive, cfg: Config, scan: ScanResult) -> Job | None:
