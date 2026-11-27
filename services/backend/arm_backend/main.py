@@ -35,7 +35,7 @@ from arm_backend.notifications.inbox_listener import InboxListener
 from arm_backend.virtual_drive_lifecycle import run_virtual_drive_watchdog
 from arm_backend import release_check
 from arm_backend.ripper_manager import RipperManager
-from arm_backend.ripper_reconcile import reconcile_enrolled_rippers
+from arm_backend.ripper_reconcile import adopted_drive_ids, reconcile_enrolled_rippers
 from arm_backend.routers import (
     gpus as gpus_router,
     encoders as encoders_router,
@@ -187,10 +187,15 @@ class _BackendServices:
         # (DB-authoritative thereafter). Runs before the dispatcher starts.
         await refresh_gpu_inventory(self._app.state.ws_hub)
 
-        # Reset every RIPPING job's tracks to queued and stamp
-        # resumed_from_crash. Idempotent across boots; no-op when nothing crashed.
+        # The ripper reconcile comes first: it tells which drives' rippers
+        # survived this restart and are still ripping.
+        live_drive_ids = await self._start_ripper_manager()
+
+        # Reset every RIPPING job whose ripper is gone: its tracks to queued, and
+        # stamp resumed_from_crash. A job whose ripper is alive is left alone.
+        # Idempotent across boots; no-op when nothing crashed.
         await _startup_sweep(
-            lambda: sweep_in_flight_jobs(SessionLocal),
+            lambda: sweep_in_flight_jobs(SessionLocal, live_drive_ids),
             "backend startup: resumed %d crashed rip(s)",
             "startup crash-recovery sweep failed: %s",
         )
@@ -230,8 +235,6 @@ class _BackendServices:
         self._start_stager()
         gpu_probe_runner = self._start_gpu_probe_runner()
         handbrake_schema_runner = self._start_handbrake_schema_runner()
-
-        await self._start_ripper_manager()
 
         self._start_notifications()
 
@@ -368,9 +371,10 @@ class _BackendServices:
         gpu_probe_runner.start_boot_pass()
         return gpu_probe_runner
 
-    async def _start_ripper_manager(self) -> None:
+    async def _start_ripper_manager(self) -> frozenset[str]:
         """Reconcile the enrolled rippers on the local docker daemon and start
-        the ISO watchdog."""
+        the ISO watchdog. Returns the drives whose ripper container was
+        already running and was adopted (empty when there is no reconcile)."""
         # Ripper manager. Always the LOCAL
         # daemon and always its OWN client: the drives are plugged into this
         # host, whatever ARM_TRANSCODE_DOCKER_HOST says about transcoders, and a
@@ -378,6 +382,7 @@ class _BackendServices:
         # (each has its own connection pool / lifecycle expectations).
         ripper_manager: RipperManager | None = None
         self._iso_watchdog_task = None
+        live_drive_ids: frozenset[str] = frozenset()
         local_docker = build_docker_client(purpose="ripper manager")
         if local_docker is not None:  # pragma: no cover — needs a real docker socket; integration tier
             ripper_manager = RipperManager(settings=settings, docker_client=local_docker)
@@ -392,7 +397,8 @@ class _BackendServices:
                 # finished ISO rip is retired before the enrolled list is loaded
                 # and never respawned. The hub exists by now.
                 try:
-                    await reconcile_enrolled_rippers(ripper_manager, SessionLocal, hub=self._app.state.ws_hub)
+                    summary = await reconcile_enrolled_rippers(ripper_manager, SessionLocal, hub=self._app.state.ws_hub)
+                    live_drive_ids = adopted_drive_ids(summary)
                 except Exception as exc:
                     logger.exception("startup ripper reconcile failed: %s", exc)
                 # Rip from ISO: retire each virtual drive whose one-shot ripper has exited.
@@ -400,6 +406,7 @@ class _BackendServices:
                     run_virtual_drive_watchdog(SessionLocal, ripper_manager, self._app.state.ws_hub)
                 )
         self._app.state.ripper_manager = ripper_manager
+        return live_drive_ids
 
     def _start_notifications(self) -> None:
         """Start the outbound notification dispatcher (Apprise, bash hooks and

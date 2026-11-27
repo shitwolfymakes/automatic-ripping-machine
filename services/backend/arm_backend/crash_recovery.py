@@ -11,10 +11,11 @@ helper neither inflates `attempts` nor double-stamps.
 each through `reset_job_for_recovery`. Used both at backend startup
 (lifespan hook) and on-demand from the per-job `/resume` endpoint.
 
-Race note: if only the backend crashed and the ripper is still mid-rip,
-the sweep will reset that ripper's tracks to `queued`. The ripper's next
-in-flight `PATCH /tracks/{id}` flips them back to `in_progress` with one
-extra `attempts++`. Cosmetic only — the rip still completes normally.
+A backend restart is not a rip crash: the ripper is a separate container
+and keeps ripping. The startup sweep is told which drives' rippers the boot
+reconcile found alive (`should_recover`) and leaves those jobs alone; a job
+whose ripper is gone is the real crash and is reset. `/resume` is the
+ripper itself asking, so it always resets.
 """
 
 from __future__ import annotations
@@ -79,19 +80,27 @@ async def reset_job_for_recovery(db: AsyncSession, job: Job) -> int:
     return touched
 
 
-async def sweep_in_flight_jobs(db_factory: Callable[[], AsyncSession]) -> int:
-    """Run `reset_job_for_recovery` against every RIPPING job. Single
-    transaction. Returns the number of jobs swept.
+def should_recover(job: Job, live_drive_ids: frozenset[str]) -> bool:
+    """Whether a RIPPING job at backend startup is a crashed rip: its drive's
+    ripper container is not running (a live one is still ripping it)."""
+    return job.drive_id not in live_drive_ids
+
+
+async def sweep_in_flight_jobs(db_factory: Callable[[], AsyncSession], live_drive_ids: frozenset[str]) -> int:
+    """Run `reset_job_for_recovery` against every RIPPING job whose ripper is
+    gone (`live_drive_ids` are the drives whose ripper the boot reconcile
+    adopted). Single transaction. Returns the number of jobs reset.
 
     Accepts a session factory rather than a live session because this is
     called from the FastAPI lifespan, before the request scope exists.
     """
     async with db_factory() as session:
-        return await _sweep(session)
+        return await _sweep(session, live_drive_ids)
 
 
-async def _sweep(db: AsyncSession) -> int:
-    jobs = (await db.execute(select(Job).where(col(Job.status) == JobStatus.RIPPING))).scalars().all()
+async def _sweep(db: AsyncSession, live_drive_ids: frozenset[str]) -> int:
+    ripping = (await db.execute(select(Job).where(col(Job.status) == JobStatus.RIPPING))).scalars().all()
+    jobs = [job for job in ripping if should_recover(job, live_drive_ids)]
     if not jobs:
         return 0
     for job in jobs:

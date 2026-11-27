@@ -797,8 +797,29 @@ _TRACK_TRANSITIONS: dict[TrackStatus, tuple[TrackStatus, Callable[[Track, TrackU
 }
 
 
-def _require_transition(current: TrackStatus, allowed_from: TrackStatus, target: TrackStatus) -> None:
-    if current != allowed_from:
+# Targets a RIPPING job's QUEUED track may reach directly (see transition_permitted).
+_SETTLES_FROM_QUEUED = frozenset({TrackStatus.DONE, TrackStatus.FAILED})
+
+
+def transition_permitted(current: TrackStatus, target: TrackStatus, job_status: JobStatus) -> bool:
+    """Whether a ripper may move a track `current` -> `target`.
+
+    The table is the normal path. One extra edge: a QUEUED track of a RIPPING
+    job may be reported done or failed directly. The backend resets a track to
+    QUEUED when it recovers a job, and a ripper that was alive through that
+    reset still holds the title it is writing and reports its end. Rejecting
+    it would strand a finished file as queued for good. Every other move (out
+    of done/failed, queued -> done/failed on a job that is not ripping, a
+    target PATCH does not allow) stays rejected: a settled track is final,
+    and a job that is not ripping has no live rip to report."""
+    allowed_from = _TRACK_TRANSITIONS[target][0]
+    if current == allowed_from:
+        return True
+    return current == TrackStatus.QUEUED and target in _SETTLES_FROM_QUEUED and job_status == JobStatus.RIPPING
+
+
+def _require_transition(current: TrackStatus, target: TrackStatus, job_status: JobStatus) -> None:
+    if not transition_permitted(current, target, job_status):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=f"cannot move {current.value} -> {target.value}",
@@ -852,8 +873,9 @@ async def update_track(
             status_code=status.HTTP_409_CONFLICT,
             detail=f"target status {new_status.value} not allowed via PATCH",
         )
-    allowed_from, apply = rule
-    _require_transition(track.status, allowed_from, new_status)
+    job = (await session.execute(select(Job).where(col(Job.id) == track.job_id))).scalar_one()
+    _require_transition(track.status, new_status, job.status)
+    apply = rule[1]
     apply(track, req)
 
     track.status = new_status
