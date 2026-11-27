@@ -5,6 +5,7 @@
 	import { dashboard } from '$lib/stores/dashboard';
 	import { setRippingEnabled } from '$lib/api/config';
 	import { isoPickerMode, showIsoPicker } from '$lib/stores/iso-picker';
+	import { rippingToggleLabel } from '$lib/layout/ripping-toggle';
 	import Glyph from '$lib/components/shared/Glyph.svelte';
 	import Flyout from '$lib/components/shared/Flyout.svelte';
 	import FlyoutItem from '$lib/components/shared/FlyoutItem.svelte';
@@ -46,14 +47,20 @@
 		if (togglingPause) return;
 		togglingPause = true;
 		const newValue = !$dashboard.ripping_enabled;
-		dashboard.update((d) => ({ ...d, ripping_enabled: newValue }));
+		const previousHold = $dashboard.hold_for_review;
+		// Pausing from the header also switches Review first on (setRippingEnabled).
+		dashboard.update((d) => ({ ...d, ripping_enabled: newValue, hold_for_review: !newValue }));
 		try {
 			const config = await setRippingEnabled(newValue);
 			// The reply is the saved state, newer than any poll in flight.
-			dashboard.update((d) => ({ ...d, ripping_enabled: !config.ripping_paused }));
+			dashboard.update((d) => ({
+				...d,
+				ripping_enabled: !config.ripping_paused,
+				hold_for_review: config.hold_for_review
+			}));
 		} catch {
 			// Revert on failure — next poll will also reconcile
-			dashboard.update((d) => ({ ...d, ripping_enabled: !newValue }));
+			dashboard.update((d) => ({ ...d, ripping_enabled: !newValue, hold_for_review: previousHold }));
 		} finally {
 			togglingPause = false;
 		}
@@ -75,7 +82,7 @@
 			<span class="toggle" aria-hidden="true">
 				<span class="toggle-thumb"></span>
 			</span>
-			{$dashboard.ripping_enabled ? 'Auto-Start' : 'Paused'}
+			{rippingToggleLabel($dashboard.ripping_enabled, $dashboard.hold_for_review)}
 		</button>
 	{/if}
 	<!-- Quick actions menu -->

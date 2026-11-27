@@ -10,6 +10,7 @@ export const emptyDashboard: DashboardData = {
 	preparing: [],
 	notification_count: 0,
 	ripping_enabled: true,
+	hold_for_review: false,
 	makemkv_key_valid: null,
 	makemkv_key_checked_at: null,
 	transcoder_online: true,

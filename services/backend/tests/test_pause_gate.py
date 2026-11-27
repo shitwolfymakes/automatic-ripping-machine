@@ -13,6 +13,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from arm_backend.db import get_session
+from arm_backend.identify_flow import pause_refuses_new_jobs
 from arm_backend.jwt_utils import issue_access_token
 from arm_backend.metadata.base import MetadataResult
 from arm_backend.routers import jobs as jobs_router
@@ -250,3 +251,24 @@ def test_manual_trigger_not_paused_succeeds() -> None:
         )
     assert r.status_code == 202
     assert any(e["event_type"] == "manual.trigger" for e in hub.events)
+
+
+# ---------------------------------------------------------------------------
+# pause_refuses_new_jobs: the shared predicate, one test per branch
+# ---------------------------------------------------------------------------
+
+
+def test_pause_refuses_new_jobs_without_config() -> None:
+    assert pause_refuses_new_jobs(None) is False
+
+
+def test_pause_refuses_new_jobs_not_paused() -> None:
+    assert pause_refuses_new_jobs(_config(ripping_paused=False)) is False
+
+
+def test_pause_refuses_new_jobs_paused_with_review_first() -> None:
+    assert pause_refuses_new_jobs(_config(ripping_paused=True, hold_for_review=True)) is False
+
+
+def test_pause_refuses_new_jobs_paused_without_review_first() -> None:
+    assert pause_refuses_new_jobs(_config(ripping_paused=True, hold_for_review=False)) is True
