@@ -123,8 +123,22 @@ class BdPlaylist(BaseModel):
     clip_seconds: list[float]
     duration_seconds: int
     chapter_count: int
-    # True when any PlayItem has angles; only the primary angle's clip is listed.
-    multi_angle: bool = False
+    # One list per extra angle (angle 2, 3, ...), parallel to `clips`: the clip
+    # each PlayItem plays in that angle. An item without angles repeats its own
+    # clip. Empty for a single-angle playlist.
+    angle_clips: list[list[int]] = Field(default_factory=list)
+    # Dependent-view (3D) clips named by MVC SubPaths, in play order, every
+    # angle included. Empty for 2D.
+    mvc_clips: list[int] = Field(default_factory=list)
+
+
+class BdClip(BaseModel):
+    """One Blu-ray clip (`BDMV/CLIPINF/<number>.clpi` + `BDMV/STREAM/<number>.m2ts`)."""
+
+    number: int
+    seconds: float  # CLPI sequence info: the clip's whole presentation time
+    size_bytes: int | None = None  # the .m2ts size from the STREAM listing; None when unlisted
+    mvc: bool = False  # CLPI declares an MVC dependent-view video stream (a 3D dependent clip)
 
 
 class ScanFailure(BaseModel):
@@ -150,6 +164,8 @@ class ScanResult(BaseModel):
     # Blu-ray playlists read from BDMV/PLAYLIST before makemkvcon ran; empty
     # on other media or when the read failed.
     playlists: list[BdPlaylist] = Field(default_factory=list)
+    # Per-clip length, size and 3D marker from BDMV/CLIPINF and BDMV/STREAM.
+    clips: list[BdClip] = Field(default_factory=list)
 
     # Set when MakeMKV could not scan the disc; the backend then fails the job with this as its reason.
     failure: ScanFailure | None = None
