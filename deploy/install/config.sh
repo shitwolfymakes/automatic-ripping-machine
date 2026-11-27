@@ -125,6 +125,18 @@ prepare_storage() {
     fi
 }
 
+# The host folder mounted at /staging: the chosen one, else `.staging` inside
+# raw, the same default the backend computes.
+staging_host_path() {
+    printf '%s' "${STAGING_PATH:-${RAW_PATH}/.staging}"
+}
+
+# Staging must exist before the stack starts, or Docker creates it as root and
+# the backend cannot write to it.
+prepare_staging() {
+    prepare_storage "$(staging_host_path)"
+}
+
 # The ISO library is only ever read (the backend mounts it read-only), so unlike
 # the other folders it need not be writable: a read-only NAS share is fine.
 prepare_iso_library() {
@@ -151,13 +163,11 @@ choose_storage() {
     warn_raw_network_fs "${RAW_PATH}"
     prepare_storage "${MEDIA_PATH}"
     prepare_iso_library "${ISO_PATH}"
-    if [[ -n "${STAGING_PATH}" ]]; then
-        prepare_storage "${STAGING_PATH}"
-    fi
+    prepare_staging
     okline "raw rips:       ${RAW_PATH}"
     okline "finished media: ${MEDIA_PATH}"
     okline "ISO library:    ${ISO_PATH}"
-    okline "staging:        ${STAGING_PATH:-${RAW_PATH}/.staging (default)}"
+    okline "staging:        $(staging_host_path)"
 }
 
 # A remote transcoder reads staged tracks from storage it shares with this

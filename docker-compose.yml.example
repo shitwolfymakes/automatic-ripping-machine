@@ -122,9 +122,9 @@ services:
       - ./arm/logs:/logs
       - ./arm/media:/media
       - ./arm/raw:/raw
-      # Staging: unset, it is a subfolder of /raw (the backend then uses the
-      # /raw path so a stage can be a hard link); set, it is shared storage.
-      - ${ARM_HOST_STAGING_PATH:-./arm/raw/.staging}:/staging
+      # Staging: unset, it is a subfolder of the raw folder (the backend then
+      # uses the /raw path so a stage can be a hard link); set, it is shared storage.
+      - ${ARM_HOST_STAGING_PATH:-${ARM_HOST_RAW_PATH:-./arm/raw}/.staging}:/staging
       # Rip from ISO (optional): read-only; the backend browses it and mounts
       # only the chosen .iso into each one-shot ripper it spawns.
       - ${ARM_HOST_ISO_LIBRARY_PATH:-./arm/iso-library}:/ingress:ro
