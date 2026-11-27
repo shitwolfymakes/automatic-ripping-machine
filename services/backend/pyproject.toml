@@ -16,7 +16,7 @@ dependencies = [
     "argon2-cffi>=23.1",
     "pyjwt>=2.9",
     "docker[ssh]>=7.1",
-    "apprise>=1.9",
+    "apprise>=2.3,<3",
     "psutil>=7.0",
     # Real dependency, not just docker[ssh]'s transitive pull: transcode_dispatcher.py
     # imports paramiko.ssh_exception.SSHException directly to detect dead SSH
