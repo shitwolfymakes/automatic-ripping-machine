@@ -566,6 +566,36 @@ async def test_backup_session_applied_before_the_rip_still_parks(tmp_path: Path)
     assert outcome.tasks == []
 
 
+@pytest.mark.asyncio
+async def test_parked_backup_session_on_a_job_ripped_as_titles_is_a_media_mismatch_at_drain(
+    tmp_path: Path,
+) -> None:
+    """Applied before the rip, the backup session parks; the rip then runs as
+    titles. The drain (resolve fan-out, rip-complete, redrain) must refuse it
+    like the post-rip apply does, not file title_t01.mkv as an extension-less
+    "Iron Man (2008)" file."""
+    _set_media_root(tmp_path)
+    db = FakeSession()
+    job = _seed(db)  # ripped, one VIDEO_TITLE track
+    _add_backup_session(db)
+    parked = SessionApplication(
+        id="sap_backup",
+        session_id="ses_builtin_bd_backup",
+        job_id=job.id,
+        status=SessionApplicationStatus.WAITING_IDENTIFY,
+        overwrite=False,
+    )
+    db.rows["session_applications"] = [parked]
+    hub = CapturingHub()
+
+    outcomes = await fan_out_waiting_identify_applications(db, job=job, hub=hub)  # type: ignore[arg-type]
+
+    assert [(o.skipped_reason, o.tasks) for o in outcomes] == [("media_mismatch", [])]
+    assert outcomes[0].error_detail is not None and "no backup track" in outcomes[0].error_detail
+    assert parked.status == SessionApplicationStatus.WAITING_IDENTIFY
+    assert db.rows["transcode_tasks"] == []
+
+
 def test_media_mismatch_detail_survives_raw_string_media_type() -> None:
     """A forward-compat row can load `media_type` as a raw `str` instead
     of a `MediaType` member. `media_mismatch_detail` must render it via
