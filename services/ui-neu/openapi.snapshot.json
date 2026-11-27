@@ -17849,7 +17849,10 @@
           "edition",
           "duplicate",
           "decoy",
-          "variant"
+          "variant",
+          "angle",
+          "subset",
+          "view"
         ],
         "title": "TitleClass",
         "description": "What the classifier (arm_common.title_classes) decides about one scanned\nBlu-ray title."
