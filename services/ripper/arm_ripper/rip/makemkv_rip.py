@@ -106,18 +106,18 @@ def _mkv_all_command(device_path: str, output_dir: Path, minlength_seconds: int)
     ]
 
 
-def _mkv_title_command(device_path: str, output_dir: Path, title: int) -> list[str]:
+def _mkv_title_command(device_path: str, output_dir: Path, title: int, minlength_seconds: int) -> list[str]:
     """The `makemkvcon mkv … <title>` argv for one source title.
 
-    No `--minlength`: MakeMKV numbers titles after its minimum-length filter, and the scan's `info` runs under
-    MakeMKV's own setting. Passing ARM's minimum here would number the titles differently from the scan once the
-    two differ, and `title` would name another title. The caller has already picked `title` by ARM's minimum.
+    Carries `--minlength` explicitly: MakeMKV numbers titles after its minimum-length filter, so `title` names the
+    right one only under the minimum the caller picked it by, and a global `settings.conf` must not decide it.
     """
     return [
         "makemkvcon",
         "mkv",
         "--robot",
         "--progress=-stdout",
+        f"--minlength={minlength_seconds}",
         makemkv_source_url(device_path),
         str(title),
         str(output_dir),
@@ -215,7 +215,7 @@ async def rip_disc(
     the overall error (see run_makemkvcon).
 
     `title` rips only that source title (`mkv … <title>`) instead of `all`,
-    without `--minlength` (see `_mkv_title_command`); the caller passes
+    under the same `--minlength` (see `_mkv_title_command`); the caller passes
     `eligible_source_indexes=[title]`, so its one output file pairs with it
     positionally like any `mkv all` output.
 
@@ -230,8 +230,14 @@ async def rip_disc(
         cmd = _mkv_all_command(device_path, output_dir, minlength_seconds)
         logger.info("makemkvcon mkv all device=%s outdir=%s minlength=%ds", device_path, output_dir, minlength_seconds)
     else:
-        cmd = _mkv_title_command(device_path, output_dir, title)
-        logger.info("makemkvcon mkv title %d device=%s outdir=%s", title, device_path, output_dir)
+        cmd = _mkv_title_command(device_path, output_dir, title, minlength_seconds)
+        logger.info(
+            "makemkvcon mkv title %d device=%s outdir=%s minlength=%ds",
+            title,
+            device_path,
+            output_dir,
+            minlength_seconds,
+        )
 
     state = ParserState()
     error = await run_makemkvcon(

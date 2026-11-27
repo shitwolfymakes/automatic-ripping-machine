@@ -18,7 +18,7 @@ import pytest
 import arm_ripper.eject as eject_module
 import arm_ripper.disc_rip as disc_rip_module
 import arm_ripper.raw_dir as raw_dir_module
-from arm_common import DiscType, JobStatus
+from arm_common import DiscType, JobStatus, RipInvocation
 from arm_common.enums import TrackKind, TrackStatus
 from arm_common.schemas import JobView, RipStartResponse, TrackView
 from arm_ripper.drive_handle import DriveHandle
@@ -641,11 +641,12 @@ async def test_a_restart_resume_keeps_the_settled_title_and_rips_the_rest_per_ti
         job_id=_JOB,
         disc_type=DiscType.BLURAY,
         device_path="/dev/sr0",
-        rip_start=RipStartResponse(job_id=_JOB, rip_preset_id="rpr", tracks=tracks),
+        rip_start=RipStartResponse(
+            job_id=_JOB, rip_preset_id="rpr", tracks=tracks, rip_invocation=RipInvocation.PER_TITLE
+        ),
     )
 
     client: _Client = env["client"]
-    # 20 of the 120 bytes `mkv all` would read are left: 16.7% <= 50%.
     assert len(calls) == 1
     assert calls[0]["skip_track_ids"] == {"trk_0"}
     assert calls[0]["per_title"] is True
@@ -658,7 +659,7 @@ async def test_a_restart_resume_keeps_the_settled_title_and_rips_the_rest_per_ti
     assert client.completed == [_JOB]
 
 
-async def test_a_restart_resume_with_most_of_the_disc_left_uses_mkv_all(monkeypatch, env) -> None:
+async def test_a_restart_resume_in_mkv_all_mode_reads_the_whole_disc_again(monkeypatch, env) -> None:
     raw: Path = env["raw"]
     tracks = [_settled(0, raw, expected=10), _sized(1, 100)]
 
@@ -667,7 +668,9 @@ async def test_a_restart_resume_with_most_of_the_disc_left_uses_mkv_all(monkeypa
         job_id=_JOB,
         disc_type=DiscType.BLURAY,
         device_path="/dev/sr0",
-        rip_start=RipStartResponse(job_id=_JOB, rip_preset_id="rpr", tracks=tracks),
+        rip_start=RipStartResponse(
+            job_id=_JOB, rip_preset_id="rpr", tracks=tracks, rip_invocation=RipInvocation.MKV_ALL
+        ),
     )
 
     assert calls[0]["skip_track_ids"] == {"trk_0"}
@@ -704,3 +707,42 @@ async def test_a_fresh_rip_reads_the_whole_disc_into_the_job_folder(monkeypatch,
     assert calls[0]["skip_track_ids"] == set()
     assert calls[0]["per_title"] is False
     assert calls[0]["output_dir"] == env["raw"]
+
+
+async def test_a_fresh_rip_in_per_title_mode_goes_per_title_into_the_job_folder(monkeypatch, env) -> None:
+    tracks = [_sized(0, 100), _sized(1, 10)]
+
+    calls = _script(monkeypatch, [_rip_unsettled])
+    await env["controller"]._execute_rip(
+        job_id=_JOB,
+        disc_type=DiscType.BLURAY,
+        device_path="/dev/sr0",
+        rip_start=RipStartResponse(
+            job_id=_JOB, rip_preset_id="rpr", tracks=tracks, rip_invocation=RipInvocation.PER_TITLE
+        ),
+    )
+
+    assert calls[0]["skip_track_ids"] == set()
+    assert calls[0]["per_title"] is True
+    assert calls[0]["output_dir"] == env["raw"]
+
+
+async def test_a_drive_drop_resume_stays_per_title_in_per_title_mode(monkeypatch, env) -> None:
+    tracks = [_track(0), _track(1), _track(2)]
+
+    async def first(**kw: Any) -> None:
+        await _ok(kw, tracks[0], "Disc_t00.mkv")
+        await _drive_drops(env, kw, back_on="/dev/sr1")
+
+    calls = _script(monkeypatch, [first, _rip_unsettled])
+    await env["controller"]._execute_rip(
+        job_id=_JOB,
+        disc_type=DiscType.BLURAY,
+        device_path="/dev/sr0",
+        rip_start=RipStartResponse(
+            job_id=_JOB, rip_preset_id="rpr", tracks=tracks, rip_invocation=RipInvocation.PER_TITLE
+        ),
+    )
+
+    assert [c["per_title"] for c in calls] == [True, True]
+    assert calls[1]["skip_track_ids"] == {"trk_0"}
