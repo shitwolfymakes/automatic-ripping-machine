@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import pytest
 
-from arm_backend.crash_recovery import _sweep, reset_job_for_recovery
+from arm_backend.crash_recovery import _sweep, reset_job_for_recovery, should_recover
 from arm_common import (
     DiscType,
     Job,
@@ -101,7 +101,7 @@ async def test_sweep_no_ripping_jobs_returns_zero() -> None:
     db.rows["jobs"] = [_make_job(job_id="job_01JZXR7K3M5Q8N4VWA00000007", status=JobStatus.RIPPED)]
     db.rows["tracks"] = []
 
-    swept = await _sweep(db)  # type: ignore[arg-type]
+    swept = await _sweep(db, frozenset())  # type: ignore[arg-type]
 
     assert swept == 0
     assert db.committed == 0
@@ -120,7 +120,7 @@ async def test_sweep_resets_only_ripping_jobs() -> None:
         _make_track(track_id="trk_c", job_id="job_01JZXR7K3M5Q8N4VWA00000004", status=TrackStatus.DONE, attempts=1),
     ]
 
-    swept = await _sweep(db)  # type: ignore[arg-type]
+    swept = await _sweep(db, frozenset())  # type: ignore[arg-type]
 
     assert swept == 2
     assert ripping_a.resumed_from_crash is True
@@ -131,3 +131,50 @@ async def test_sweep_resets_only_ripping_jobs() -> None:
     assert ripped_track.status == TrackStatus.DONE
     assert ripped_track.attempts == 1
     assert db.committed == 1
+
+
+def test_should_recover_only_when_the_jobs_ripper_is_not_live() -> None:
+    job = _make_job()  # drive_id drv_x
+    assert should_recover(job, frozenset()) is True
+    assert should_recover(job, frozenset({"drv_other"})) is True
+    assert should_recover(job, frozenset({"drv_x"})) is False
+    job.drive_id = None
+    assert should_recover(job, frozenset({"drv_x"})) is True
+
+
+@pytest.mark.asyncio
+async def test_sweep_leaves_a_job_with_a_live_ripper_alone() -> None:
+    """A backend restart while the ripper keeps ripping: the adopted drive's
+    RIPPING job must keep its in-progress track and not be stamped crashed."""
+    db = FakeSession()
+    live = _make_job(job_id="job_01JZXR7K3M5Q8N4VWA00000008")
+    live.drive_id = "drv_live"
+    gone = _make_job(job_id="job_01JZXR7K3M5Q8N4VWA00000009")
+    gone.drive_id = "drv_gone"
+    db.rows["jobs"] = [live, gone]
+    live_track = _make_track(track_id="trk_live", job_id=live.id, status=TrackStatus.IN_PROGRESS, attempts=1)
+    gone_track = _make_track(track_id="trk_gone", job_id=gone.id, status=TrackStatus.IN_PROGRESS, attempts=1)
+    db.rows["tracks"] = [live_track, gone_track]
+
+    swept = await _sweep(db, frozenset({"drv_live"}))  # type: ignore[arg-type]
+
+    assert swept == 1
+    assert live.resumed_from_crash is False
+    assert live_track.status == TrackStatus.IN_PROGRESS
+    assert live_track.attempts == 1
+    assert gone.resumed_from_crash is True
+    assert gone_track.status == TrackStatus.QUEUED
+    assert gone_track.attempts == 2
+
+
+@pytest.mark.asyncio
+async def test_sweep_skipping_every_job_commits_nothing() -> None:
+    db = FakeSession()
+    job = _make_job()
+    db.rows["jobs"] = [job]
+    db.rows["tracks"] = [_make_track(track_id="trk_1", job_id=job.id, status=TrackStatus.IN_PROGRESS)]
+
+    swept = await _sweep(db, frozenset({"drv_x"}))  # type: ignore[arg-type]
+
+    assert swept == 0
+    assert db.committed == 0

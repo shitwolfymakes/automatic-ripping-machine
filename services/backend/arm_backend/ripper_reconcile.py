@@ -19,6 +19,12 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+def adopted_drive_ids(summary: ReconcileSummary | None) -> frozenset[str]:
+    """The drives whose ripper container was already running and was adopted;
+    empty when the reconcile could not list the daemon (`None`)."""
+    return frozenset(summary.adopted) if summary is not None else frozenset()
+
+
 async def reconcile_enrolled_rippers(
     manager: RipperManager, session_factory: Any, *, hub: WSHub
 ) -> ReconcileSummary | None:

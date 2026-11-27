@@ -1914,9 +1914,34 @@ def test_update_track_failed_without_last_error() -> None:
     assert r.json()["status"] == "failed"
 
 
-def test_update_track_bad_to_done_409() -> None:
+def test_update_track_queued_to_done_accepted_for_ripping_job() -> None:
+    """A track the backend reset to queued (restart recovery) while its ripper
+    kept ripping: the ripper's done report is accepted, not 409."""
+    db = FakeSession()
+    hub = _Hub()
+    app = _track_app(db, _track("trk_1", status=TrackStatus.QUEUED), hub=hub)
+    body = {"status": "done", "output_path": "/m/a.mkv", "size_bytes": 99}
+    with TestClient(app) as client:
+        r = client.patch("/api/ripper/tracks/trk_1", json=body, headers=_OWNER_HEADERS)
+    assert r.status_code == 200
+    assert r.json()["status"] == "done"
+    assert r.json()["output_path"] == "/m/a.mkv"
+    assert any(e["event_type"] == "track.completed" for e in hub.events)
+
+
+def test_update_track_queued_to_done_409_when_job_not_ripping() -> None:
     db = FakeSession()
     app = _track_app(db, _track("trk_1", status=TrackStatus.QUEUED))
+    db.rows["jobs"] = [_job(status=JobStatus.RIPPED)]
+    with TestClient(app) as client:
+        r = client.patch("/api/ripper/tracks/trk_1", json={"status": "done"}, headers=_OWNER_HEADERS)
+    assert r.status_code == 409
+    assert "queued -> done" in r.json()["detail"]
+
+
+def test_update_track_done_to_done_409() -> None:
+    db = FakeSession()
+    app = _track_app(db, _track("trk_1", status=TrackStatus.DONE))
     with TestClient(app) as client:
         r = client.patch("/api/ripper/tracks/trk_1", json={"status": "done"}, headers=_OWNER_HEADERS)
     assert r.status_code == 409
@@ -1936,9 +1961,18 @@ def test_update_track_failed_emits_failed() -> None:
     assert any(e["event_type"] == "track.failed" for e in hub.events)
 
 
-def test_update_track_bad_to_failed_409() -> None:
+def test_update_track_queued_to_failed_accepted_for_ripping_job() -> None:
     db = FakeSession()
     app = _track_app(db, _track("trk_1", status=TrackStatus.QUEUED))
+    with TestClient(app) as client:
+        r = client.patch("/api/ripper/tracks/trk_1", json={"status": "failed"}, headers=_OWNER_HEADERS)
+    assert r.status_code == 200
+    assert r.json()["status"] == "failed"
+
+
+def test_update_track_done_to_failed_409() -> None:
+    db = FakeSession()
+    app = _track_app(db, _track("trk_1", status=TrackStatus.DONE))
     with TestClient(app) as client:
         r = client.patch("/api/ripper/tracks/trk_1", json={"status": "failed"}, headers=_OWNER_HEADERS)
     assert r.status_code == 409
