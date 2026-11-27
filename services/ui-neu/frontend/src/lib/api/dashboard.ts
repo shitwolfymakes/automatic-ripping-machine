@@ -57,6 +57,8 @@ export interface DashboardData {
 	preparing: IsoPreparing[];
 	notification_count: number;
 	ripping_enabled: boolean;
+	// Config hold_for_review (Review first): paused discs park for review instead of being refused.
+	hold_for_review: boolean;
 	makemkv_key_valid: boolean | null;
 	makemkv_key_checked_at: string | null;
 	transcoder_online: boolean;
@@ -75,6 +77,7 @@ export const STICKY_FIELDS = [
 	'drives',
 	'notification_count',
 	'ripping_enabled',
+	'hold_for_review',
 	'review_wait_seconds'
 ] as const satisfies readonly (keyof DashboardData)[];
 
@@ -205,6 +208,7 @@ export async function fetchDashboardSnapshot(): Promise<DashboardSnapshot> {
 		preparing,
 		notification_count: notifications === null ? null : (notifications.unseen ?? 0),
 		ripping_enabled: config === null ? null : !config.ripping_paused,
+		hold_for_review: config === null ? null : config.hold_for_review,
 		review_wait_seconds: config === null ? null : (config.manual_wait_seconds ?? 60),
 		makemkv_key_valid: config?.makemkv_key_valid ?? null,
 		makemkv_key_checked_at: config?.makemkv_key_checked_at ?? null,

@@ -13,6 +13,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from arm_backend.db import get_session
+from arm_backend.identify_flow import pause_refuses_new_jobs
 from arm_backend.jwt_utils import issue_access_token
 from arm_backend.metadata.base import MetadataResult
 from arm_backend.routers import jobs as jobs_router
@@ -64,13 +65,14 @@ class _Dispatcher:
         return self.result
 
 
-def _config(*, ripping_paused: bool = False) -> Config:
+def _config(*, ripping_paused: bool = False, hold_for_review: bool = False) -> Config:
     return Config(
         id=1,
         auto_transcode_on_idle=False,
         auto_rip_on_insert=True,
         block_on_miss=False,
         ripping_paused=ripping_paused,
+        hold_for_review=hold_for_review,
         default_retention_policy=RetentionPolicy.PRUNE_AFTER_SESSION,
     )
 
@@ -193,12 +195,30 @@ def test_manual_trigger_paused_returns_409() -> None:
     db = FakeSession()
     db.rows["drives"] = [_drive_row(media=DriveMediaStatus.LOADED)]
     db.rows["jobs"] = []
-    db.rows["config"] = [_config(ripping_paused=True)]
+    db.rows["config"] = [_config(ripping_paused=True, hold_for_review=False)]
     app, token = _make_jobs_app(db)
     with TestClient(app) as client:
         r = client.post("/api/jobs/manual", json={"drive_id": "drv_x"}, headers=_auth(token))
     assert r.status_code == 409
     assert "paused" in r.json()["detail"]
+
+
+# ---------------------------------------------------------------------------
+# Gate 2: manual_trigger — paused with Review first on -> 202 (identify then holds the disc)
+# ---------------------------------------------------------------------------
+
+
+def test_manual_trigger_paused_with_review_first_is_accepted() -> None:
+    db = FakeSession()
+    hub = _Hub()
+    db.rows["drives"] = [_drive_row(media=DriveMediaStatus.LOADED)]
+    db.rows["jobs"] = []
+    db.rows["config"] = [_config(ripping_paused=True, hold_for_review=True)]
+    app, token = _make_jobs_app(db, hub)
+    with TestClient(app) as client:
+        r = client.post("/api/jobs/manual", json={"drive_id": "drv_x"}, headers=_auth(token))
+    assert r.status_code == 202
+    assert any(e["event_type"] == "manual.trigger" for e in hub.events)
 
 
 # ---------------------------------------------------------------------------
@@ -231,3 +251,24 @@ def test_manual_trigger_not_paused_succeeds() -> None:
         )
     assert r.status_code == 202
     assert any(e["event_type"] == "manual.trigger" for e in hub.events)
+
+
+# ---------------------------------------------------------------------------
+# pause_refuses_new_jobs: the shared predicate, one test per branch
+# ---------------------------------------------------------------------------
+
+
+def test_pause_refuses_new_jobs_without_config() -> None:
+    assert pause_refuses_new_jobs(None) is False
+
+
+def test_pause_refuses_new_jobs_not_paused() -> None:
+    assert pause_refuses_new_jobs(_config(ripping_paused=False)) is False
+
+
+def test_pause_refuses_new_jobs_paused_with_review_first() -> None:
+    assert pause_refuses_new_jobs(_config(ripping_paused=True, hold_for_review=True)) is False
+
+
+def test_pause_refuses_new_jobs_paused_without_review_first() -> None:
+    assert pause_refuses_new_jobs(_config(ripping_paused=True, hold_for_review=False)) is True
