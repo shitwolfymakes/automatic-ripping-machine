@@ -11,7 +11,7 @@ attribute per-title outcomes. Confirms:
   - MSG:5003 captures per-title failure reason; the matching file is
     absent from the output dir, so the title comes back FAILED with
     that reason rather than "produced no .mkv".
-  - Successful titles produce title_tNN.mkv, get sha256+size
+  - Successful titles produce title_tNN.mkv, get size
     populated, and come back ok=True.
   - Tracks not announced in the stream but present on disk are still
     attributed (PRGT-miss safety net).
@@ -20,7 +20,6 @@ attribute per-title outcomes. Confirms:
 from __future__ import annotations
 
 import asyncio
-import hashlib
 from pathlib import Path
 from typing import Any
 
@@ -122,7 +121,6 @@ async def test_rip_disc_attributes_files_to_eligible_source_indexes(monkeypatch,
     assert set(result.titles.keys()) == {0, 2}
     assert result.titles[0].ok is True
     assert result.titles[0].size_bytes == len(content_main)
-    assert result.titles[0].sha256 == hashlib.sha256(content_main).hexdigest()
     assert result.titles[0].output_path == tmp_path / "Movie Title_t00.mkv"
     # Source title 2 mapped positionally to the second output file.
     assert result.titles[2].ok is True
@@ -1019,7 +1017,7 @@ async def test_exit_error_nonzero_without_stderr_reports_the_exit_code(stderr):
 
 
 def test_mkv_all_command_for_a_device(tmp_path):
-    assert makemkv_rip._mkv_command("/dev/sr0", tmp_path, 120, None) == [
+    assert makemkv_rip._mkv_all_command("/dev/sr0", tmp_path, 120) == [
         "makemkvcon",
         "mkv",
         "--robot",
@@ -1034,7 +1032,7 @@ def test_mkv_all_command_for_a_device(tmp_path):
 def test_mkv_all_command_for_an_iso_file(tmp_path):
     iso = tmp_path / "movie.iso"
     iso.write_bytes(b"")
-    assert makemkv_rip._mkv_command(str(iso), tmp_path, 300, None) == [
+    assert makemkv_rip._mkv_all_command(str(iso), tmp_path, 300) == [
         "makemkvcon",
         "mkv",
         "--robot",
@@ -1047,15 +1045,40 @@ def test_mkv_all_command_for_an_iso_file(tmp_path):
 
 
 def test_mkv_all_command_has_all_exactly_once_right_before_the_output_dir(tmp_path):
-    cmd = makemkv_rip._mkv_command("/dev/sr0", tmp_path, 120, None)
+    cmd = makemkv_rip._mkv_all_command("/dev/sr0", tmp_path, 120)
     assert cmd.count("all") == 1
     assert cmd[-2:] == ["all", str(tmp_path)]
 
 
-def test_mkv_command_for_one_title_names_it_in_place_of_all(tmp_path):
-    cmd = makemkv_rip._mkv_command("/dev/sr0", tmp_path, 120, 7)
-    assert "all" not in cmd
-    assert cmd[-2:] == ["7", str(tmp_path)]
+def test_mkv_title_command_names_the_title_and_passes_no_minlength(tmp_path):
+    """MakeMKV numbers titles after its minimum-length filter, so a `--minlength` other than the one the scan's
+    `info` ran under would make the id name another title."""
+    assert makemkv_rip._mkv_title_command("/dev/sr0", tmp_path, 7) == [
+        "makemkvcon",
+        "mkv",
+        "--robot",
+        "--progress=-stdout",
+        "dev:/dev/sr0",
+        "7",
+        str(tmp_path),
+    ]
+
+
+@pytest.mark.asyncio
+async def test_rip_disc_for_one_title_leaves_out_minlength(monkeypatch, tmp_path):
+    captured: dict[str, Any] = {}
+    fake = _FakeProc([b'MSG:5036,0,2,"done","%1 %2","0","titles"\n'])
+
+    async def fake_create_subprocess_exec(*args: Any, **_kwargs: Any) -> _FakeProc:
+        captured["argv"] = args
+        return fake
+
+    monkeypatch.setattr(makemkv_rip.asyncio, "create_subprocess_exec", fake_create_subprocess_exec)
+
+    await rip_disc(device_path="/dev/sr0", output_dir=tmp_path, minlength_seconds=900, title=3)
+
+    assert not any(arg.startswith("--minlength") for arg in captured["argv"])
+    assert list(captured["argv"][-2:]) == ["3", str(tmp_path)]
 
 
 def _pending_state(**titles: tuple[bool, bool]) -> makemkv_stream.ParserState:
@@ -1107,44 +1130,31 @@ async def test_finish_pending_titles_without_a_callback_still_marks_done():
     assert state.titles[1].done_emitted
 
 
-async def test_attribute_outputs_pairs_eligible_indexes_with_files_in_rip_order(tmp_path):
+def test_attribute_outputs_pairs_eligible_indexes_with_files_in_rip_order(tmp_path):
     first = _write_title_file(tmp_path, 0, b"a" * 10)
     second = _write_title_file(tmp_path, 1, b"b" * 20)
-    out = await makemkv_rip._attribute_outputs(tmp_path, [4, 7], hash_outputs=False)
+    out = makemkv_rip._attribute_outputs(tmp_path, [4, 7])
     assert set(out) == {4, 7}
     assert out[4].ok and out[4].output_path == first and out[4].size_bytes == 10
     assert out[7].ok and out[7].output_path == second and out[7].size_bytes == 20
 
 
-async def test_attribute_outputs_leaves_extra_files_unclaimed(tmp_path):
+def test_attribute_outputs_leaves_extra_files_unclaimed(tmp_path):
     _write_title_file(tmp_path, 0)
     _write_title_file(tmp_path, 1)
-    out = await makemkv_rip._attribute_outputs(tmp_path, [3], hash_outputs=False)
+    out = makemkv_rip._attribute_outputs(tmp_path, [3])
     assert list(out) == [3]
 
 
-async def test_attribute_outputs_omits_eligible_indexes_without_a_file(tmp_path):
+def test_attribute_outputs_omits_eligible_indexes_without_a_file(tmp_path):
     _write_title_file(tmp_path, 0)
-    out = await makemkv_rip._attribute_outputs(tmp_path, [3, 5], hash_outputs=False)
+    out = makemkv_rip._attribute_outputs(tmp_path, [3, 5])
     assert list(out) == [3]
 
 
-async def test_attribute_outputs_hashes_when_asked(tmp_path):
-    path = _write_title_file(tmp_path, 0, b"hash me")
-    out = await makemkv_rip._attribute_outputs(tmp_path, [0], hash_outputs=True)
-    assert out[0].sha256 == await makemkv_rip.sha256_file(path)
-    assert out[0].sha256 is not None
-
-
-async def test_attribute_outputs_leaves_sha256_unset_without_hashing(tmp_path):
+def test_attribute_outputs_with_no_eligible_indexes_is_empty(tmp_path):
     _write_title_file(tmp_path, 0)
-    out = await makemkv_rip._attribute_outputs(tmp_path, [0], hash_outputs=False)
-    assert out[0].sha256 is None
-
-
-async def test_attribute_outputs_with_no_eligible_indexes_is_empty(tmp_path):
-    _write_title_file(tmp_path, 0)
-    assert await makemkv_rip._attribute_outputs(tmp_path, [], hash_outputs=True) == {}
+    assert makemkv_rip._attribute_outputs(tmp_path, []) == {}
 
 
 def test_output_files_in_rip_order_skips_files_without_a_title_suffix(tmp_path):

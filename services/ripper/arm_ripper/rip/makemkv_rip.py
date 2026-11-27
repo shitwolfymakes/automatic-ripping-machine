@@ -35,7 +35,6 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
-from arm_ripper.rip.hashing import sha256_file
 from arm_ripper.rip.makemkv_process import run_makemkvcon
 from arm_ripper.rip.makemkv_stream import (
     OnDiscProgress,
@@ -93,8 +92,8 @@ class RipDiscResult:
     titles: dict[int, RipResult]
 
 
-def _mkv_command(device_path: str, output_dir: Path, minlength_seconds: int, title: int | None) -> list[str]:
-    """The `makemkvcon mkv` argv: every title of the disc in one invocation (`all`), or the one source `title`."""
+def _mkv_all_command(device_path: str, output_dir: Path, minlength_seconds: int) -> list[str]:
+    """The `makemkvcon mkv … all` argv: every title at or above `minlength_seconds`, in one invocation."""
     return [
         "makemkvcon",
         "mkv",
@@ -102,12 +101,30 @@ def _mkv_command(device_path: str, output_dir: Path, minlength_seconds: int, tit
         "--progress=-stdout",
         f"--minlength={minlength_seconds}",
         makemkv_source_url(device_path),
-        "all" if title is None else str(title),
+        "all",
         str(output_dir),
     ]
 
 
-async def _attribute_outputs(output_dir: Path, eligible: list[int], hash_outputs: bool) -> dict[int, RipResult]:
+def _mkv_title_command(device_path: str, output_dir: Path, title: int) -> list[str]:
+    """The `makemkvcon mkv … <title>` argv for one source title.
+
+    No `--minlength`: MakeMKV numbers titles after its minimum-length filter, and the scan's `info` runs under
+    MakeMKV's own setting. Passing ARM's minimum here would number the titles differently from the scan once the
+    two differ, and `title` would name another title. The caller has already picked `title` by ARM's minimum.
+    """
+    return [
+        "makemkvcon",
+        "mkv",
+        "--robot",
+        "--progress=-stdout",
+        makemkv_source_url(device_path),
+        str(title),
+        str(output_dir),
+    ]
+
+
+def _attribute_outputs(output_dir: Path, eligible: list[int]) -> dict[int, RipResult]:
     """Pair each eligible source index with the output file in its rip position.
 
     Files past the eligible list stay unclaimed.
@@ -126,12 +143,10 @@ async def _attribute_outputs(output_dir: Path, eligible: list[int], hash_outputs
 
     for source_idx, file_path in zip(eligible, output_files):
         size = file_path.stat().st_size
-        digest = await sha256_file(file_path) if hash_outputs else None
         titles_out[source_idx] = RipResult(
             ok=True,
             output_path=file_path,
             size_bytes=size,
-            sha256=digest,
         )
     return titles_out
 
@@ -177,7 +192,6 @@ async def rip_disc(
     on_title_progress: OnTitleProgress | None = None,
     on_disc_progress: OnDiscProgress | None = None,
     on_title_done: OnTitleDone | None = None,
-    hash_outputs: bool = True,
     stop: asyncio.Event | None = None,
     title: int | None = None,
 ) -> RipDiscResult:
@@ -200,13 +214,10 @@ async def rip_disc(
     `stop`, when set mid-rip, kills makemkvcon and returns STOPPED_ERROR as
     the overall error (see run_makemkvcon).
 
-    `title` rips only that source title (`mkv … <title>`) instead of `all`;
-    the caller passes `eligible_source_indexes=[title]`, so its one output
-    file pairs with it positionally like any `mkv all` output.
-
-    `hash_outputs=False` leaves `sha256` unset on every result: the
-    dispatcher hashes each title itself as soon as it is written, so the
-    pass overlaps the rip instead of re-reading every file after it.
+    `title` rips only that source title (`mkv … <title>`) instead of `all`,
+    without `--minlength` (see `_mkv_title_command`); the caller passes
+    `eligible_source_indexes=[title]`, so its one output file pairs with it
+    positionally like any `mkv all` output.
 
     Returns a `RipDiscResult` whose `titles` dict maps source title
     index to a RipResult. The dispatcher cross-references this with
@@ -215,14 +226,12 @@ async def rip_disc(
     and are FAILED.
     """
     output_dir.mkdir(parents=True, exist_ok=True)
-    cmd = _mkv_command(device_path, output_dir, minlength_seconds, title)
-    logger.info(
-        "makemkvcon mkv %s device=%s outdir=%s minlength=%ds",
-        "all" if title is None else f"title {title}",
-        device_path,
-        output_dir,
-        minlength_seconds,
-    )
+    if title is None:
+        cmd = _mkv_all_command(device_path, output_dir, minlength_seconds)
+        logger.info("makemkvcon mkv all device=%s outdir=%s minlength=%ds", device_path, output_dir, minlength_seconds)
+    else:
+        cmd = _mkv_title_command(device_path, output_dir, title)
+        logger.info("makemkvcon mkv title %d device=%s outdir=%s", title, device_path, output_dir)
 
     state = ParserState()
     error = await run_makemkvcon(
@@ -243,7 +252,7 @@ async def rip_disc(
     await finish_pending_titles(state, on_title_done)
 
     eligible = eligible_source_indexes or []
-    titles_out = await _attribute_outputs(output_dir, eligible, hash_outputs)
+    titles_out = _attribute_outputs(output_dir, eligible)
 
     titles_out.update(_failed_titles(state, eligible, titles_out))
 

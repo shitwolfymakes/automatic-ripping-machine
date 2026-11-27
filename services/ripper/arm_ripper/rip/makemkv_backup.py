@@ -30,9 +30,7 @@ async def rip_backup(device_path: str, output_dir: Path, on_progress: OnDiscProg
     """Back up the disc in `device_path` to `output_dir/backup`, decrypted.
 
     Success needs a clean exit and `backup/BDMV/index.bdmv`. The result's
-    `size_bytes` is the tree's file total; there is no sha256 (MakeMKV checks
-    the content as it decrypts, and re-reading up to 100 GB to hash it would
-    double the time).
+    `size_bytes` is the tree's file total.
     """
     output_dir.mkdir(parents=True, exist_ok=True)
     target = output_dir / BACKUP_DIRNAME

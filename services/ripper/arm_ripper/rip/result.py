@@ -12,5 +12,4 @@ class RipResult:
     output_path: Path | None = None
     size_bytes: int | None = None
     duration_seconds: int | None = None
-    sha256: str | None = None
     error: str | None = None

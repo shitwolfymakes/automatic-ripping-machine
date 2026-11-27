@@ -981,13 +981,6 @@ describe('rip progress', () => {
 		expect(section.querySelector('.mono')).not.toBeNull();
 	});
 
-	it('says the files are being verified once the rip is done copying', async () => {
-		loadJobPage(ripping());
-		const section = await screen.findByTestId('job-rip-progress');
-		emitRip({ progress_pct: 100, phase: 'verifying' });
-		expect(await within(section).findByRole('heading', { name: 'Verifying ripped files' })).toBeInTheDocument();
-	});
-
 	it('shows no rip section and does not subscribe when the job is not ripping', async () => {
 		loadJobPage();
 		await heading('Test Movie');

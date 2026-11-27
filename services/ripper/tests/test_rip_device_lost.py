@@ -342,7 +342,7 @@ async def test_a_finished_title_reports_every_result_field(
         path = Path(kw["output_dir"]) / "Disc_t00.mkv"
         path.write_bytes(b"x")
         await kw["on_track_start"](track)
-        result = RipResult(ok=True, output_path=path, size_bytes=5, sha256="abc", duration_seconds=7)
+        result = RipResult(ok=True, output_path=path, size_bytes=5, duration_seconds=7)
         await kw["on_track_done"](track, result)
 
     await _run_one_pass(env, monkeypatch, [track], one)
@@ -352,7 +352,6 @@ async def test_a_finished_title_reports_every_result_field(
             "status": TrackStatus.DONE,
             "output_path": str(env["raw"] / "Disc_t00.mkv"),
             "size_bytes": 5,
-            "sha256": "abc",
             "duration_seconds": 7,
         }
     ]
@@ -399,7 +398,7 @@ class _Ws:
 async def test_progress_publishes_the_percentage_and_transfer_stats(
     monkeypatch: pytest.MonkeyPatch, env: dict[str, Any]
 ) -> None:
-    """Progress goes to the job's topic as a percentage, plus byte detail, a rounded rate and phase when given."""
+    """Progress goes to the job's topic as a percentage, plus byte detail, and a rounded rate when given."""
     track = _track(0)
     ws = _Ws()
     env["controller"]._ws = ws
@@ -407,7 +406,7 @@ async def test_progress_publishes_the_percentage_and_transfer_stats(
     async def one(**kw: Any) -> None:
         await kw["on_track_start"](track)
         await kw["on_track_progress"](track, 0.25)
-        copying = TransferStats(bytes_done=1, bytes_total=4, rate_bps=2.4, phase="copy")
+        copying = TransferStats(bytes_done=1, bytes_total=4, rate_bps=2.4)
         await kw["on_track_progress"](track, 0.5, copying)
         await kw["on_track_progress"](track, 0.75, TransferStats(bytes_done=2, bytes_total=4, rate_bps=None))
         await kw["on_track_done"](track, RipResult(ok=True))
@@ -423,7 +422,6 @@ async def test_progress_publishes_the_percentage_and_transfer_stats(
             "bytes_done": 1,
             "bytes_total": 4,
             "rate_bps": 2,
-            "phase": "copy",
         },
         {"track_id": "trk_0", "progress_pct": 75.0, "bytes_done": 2, "bytes_total": 4, "rate_bps": None},
     ]
@@ -454,14 +452,13 @@ def test_resumable_is_false_for_an_iso_source(tmp_path: Path) -> None:
 
 def test_done_fields_carries_every_reported_field_in_order() -> None:
     """A result with every field becomes a DONE patch holding all of them, in a fixed key order."""
-    result = RipResult(ok=True, output_path=Path("/x/a.mkv"), size_bytes=5, sha256="abc", duration_seconds=7)
+    result = RipResult(ok=True, output_path=Path("/x/a.mkv"), size_bytes=5, duration_seconds=7)
     fields = disc_rip_module._done_fields(result)
-    assert list(fields) == ["status", "output_path", "size_bytes", "sha256", "duration_seconds"]
+    assert list(fields) == ["status", "output_path", "size_bytes", "duration_seconds"]
     assert fields == {
         "status": TrackStatus.DONE,
         "output_path": "/x/a.mkv",
         "size_bytes": 5,
-        "sha256": "abc",
         "duration_seconds": 7,
     }
 
@@ -476,17 +473,16 @@ def test_progress_payload_without_stats_is_the_percentage_only() -> None:
     assert disc_rip_module._progress_payload("trk_0", 0.256, None) == {"track_id": "trk_0", "progress_pct": 25.6}
 
 
-def test_progress_payload_with_stats_adds_bytes_rounded_rate_and_phase() -> None:
-    """A copy's stats add its byte counts, the rate rounded to whole bytes, and the phase, in a fixed order."""
-    stats = {"bytes_done": 1, "bytes_total": 4, "rate_bps": 2.6, "phase": "copy"}
+def test_progress_payload_with_stats_adds_bytes_and_rounded_rate() -> None:
+    """A copy's stats add its byte counts, and the rate rounded to whole bytes, in a fixed order."""
+    stats = {"bytes_done": 1, "bytes_total": 4, "rate_bps": 2.6}
     payload = disc_rip_module._progress_payload("trk_0", 0.5, stats)  # type: ignore[arg-type]
-    assert list(payload) == ["track_id", "progress_pct", "bytes_done", "bytes_total", "rate_bps", "phase"]
+    assert list(payload) == ["track_id", "progress_pct", "bytes_done", "bytes_total", "rate_bps"]
     assert payload["rate_bps"] == 3
-    assert payload["phase"] == "copy"
 
 
-def test_progress_payload_with_no_rate_or_phase_leaves_the_rate_none_and_omits_phase() -> None:
-    """Stats with an unknown rate and no phase give a None rate and no phase key."""
+def test_progress_payload_with_no_rate_leaves_the_rate_none() -> None:
+    """Stats with an unknown rate give a None rate."""
     stats = {"bytes_done": 2, "bytes_total": 4, "rate_bps": None}
     payload = disc_rip_module._progress_payload("trk_0", 0.75, stats)  # type: ignore[arg-type]
     assert payload == {

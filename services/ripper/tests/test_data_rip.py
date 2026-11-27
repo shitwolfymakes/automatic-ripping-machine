@@ -39,11 +39,7 @@ def _patch_dd(monkeypatch: pytest.MonkeyPatch, chunks: list[bytes], calls: list[
         out = Path(next(a for a in cmd if a.startswith("of="))[3:])
         return _FakeProc(out, chunks, rc)
 
-    async def fake_sha(_p: Path) -> str:
-        return "sha"
-
     monkeypatch.setattr(data_rip.asyncio, "create_subprocess_exec", fake_exec)
-    monkeypatch.setattr(data_rip, "sha256_file", fake_sha)
     monkeypatch.setattr(data_rip, "PROGRESS_INTERVAL_SECONDS", 0.01)
 
 

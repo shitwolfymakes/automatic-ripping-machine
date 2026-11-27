@@ -78,15 +78,10 @@ async def test_rip_backup_runs_one_backup_decrypt_command(monkeypatch, tmp_path)
     ]
 
 
-async def test_rip_backup_success_reports_the_folder_size_and_no_sha(monkeypatch, tmp_path):
+async def test_rip_backup_success_reports_the_folder_size(monkeypatch, tmp_path):
     _stub(monkeypatch, _FakeProc([]), [], writes_to=tmp_path)
     result = await rip_backup("/dev/sr0", tmp_path)
-    assert (result.ok, result.output_path, result.size_bytes, result.sha256) == (
-        True,
-        tmp_path / BACKUP_DIRNAME,
-        100,
-        None,
-    )
+    assert (result.ok, result.output_path, result.size_bytes) == (True, tmp_path / BACKUP_DIRNAME, 100)
 
 
 async def test_rip_backup_reports_disc_progress_without_a_save_phase_marker(monkeypatch, tmp_path):

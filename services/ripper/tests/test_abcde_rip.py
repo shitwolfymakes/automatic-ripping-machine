@@ -7,7 +7,7 @@ each track finished reading, the test arranges for the matching
 fires its `on_track_done` callback. Covers:
 
   - Streaming happy path: each callback fires once, in stream order,
-    with a populated RipResult (size + sha256).
+    with a populated RipResult (size).
   - Race tolerance: a track-done log line arrives before the WAV file
     is on disk; the post-wait sweep catches it.
   - abcde executable missing: synthetic FileNotFoundError → every
@@ -25,7 +25,6 @@ fires its `on_track_done` callback. Covers:
 from __future__ import annotations
 
 import asyncio
-import hashlib
 from pathlib import Path
 from typing import Any
 
@@ -126,12 +125,11 @@ def _done_line(track: int) -> str:
 async def test_rip_cd_streams_per_track_callbacks_in_order(monkeypatch, tmp_path):
     """Happy path. Each of 3 tracks: the done-line arrives, the WAV
     appears immediately, the callback fires. By end of stream all three
-    are reported with size + sha256."""
+    are reported with size."""
     # Pre-write the WAVs so they're already on disk when the done-line
     # is parsed (simulates a fast `move` action).
     paths = [_write_track_wav(tmp_path, i) for i in (1, 2, 3)]
     expected_sizes = [p.stat().st_size for p in paths]
-    expected_shas = [hashlib.sha256(p.read_bytes()).hexdigest() for p in paths]
 
     _stub_subprocess(
         monkeypatch,
@@ -163,9 +161,6 @@ async def test_rip_cd_streams_per_track_callbacks_in_order(monkeypatch, tmp_path
         (2, True, expected_sizes[1]),
         (3, True, expected_sizes[2]),
     ]
-    assert results[1].sha256 == expected_shas[0]
-    assert results[2].sha256 == expected_shas[1]
-    assert results[3].sha256 == expected_shas[2]
     assert results[1].output_path == tmp_path / "track01.wav"
 
 
@@ -544,7 +539,6 @@ async def test_cd_tracks_finalize_records_the_wav_and_fires_the_callback_once(tm
 
     assert first.ok is True
     assert first.size_bytes == 3
-    assert first.sha256 == hashlib.sha256(b"abc").hexdigest()
     assert tracks.results[1] is first
     assert calls == [(1, first)]
 

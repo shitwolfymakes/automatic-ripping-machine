@@ -73,7 +73,6 @@ class CompleteTaskRequest(BaseModel):
     output_path: str
     size_bytes: int | None = Field(default=None, ge=0)
     duration_seconds: int | None = Field(default=None, ge=0)
-    sha256: str | None = None
 
 
 class FailTaskRequest(BaseModel):

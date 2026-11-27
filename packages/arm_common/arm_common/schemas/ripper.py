@@ -138,7 +138,6 @@ class TrackUpdateRequest(BaseModel):
     status: TrackStatus
     output_path: str | None = None
     size_bytes: int | None = None
-    sha256: str | None = None
     duration_seconds: int | None = None
     last_error: str | None = None
 
