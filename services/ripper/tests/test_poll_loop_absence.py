@@ -27,9 +27,15 @@ class _Controller:
     def __init__(self) -> None:
         self.inserted: list[str] = []
         self.idle = True
+        self.scan_cancels = 0
+        self.scan_running = True
 
     def is_idle(self) -> bool:
         return self.idle
+
+    def cancel_scan(self) -> bool:
+        self.scan_cancels += 1
+        return self.scan_running
 
     async def handle_disc_inserted(self, device: str) -> None:
         self.inserted.append(device)
@@ -382,3 +388,35 @@ async def test_a_failed_device_path_update_is_logged_and_swallowed(exc, caplog) 
         await drive_poller._report_node(_FailingNodeClient(exc), "drv_1", "/dev/sr0")  # type: ignore[arg-type]
     records = [r for r in caplog.records if r.levelno == logging.WARNING]
     assert [r.getMessage() for r in records] == [f"device-path update failed: {exc}"]
+
+
+@pytest.mark.parametrize("gone", [DriveState.TRAY_OPEN, DriveState.NO_DISC])
+async def test_tray_leaving_disc_ok_cancels_the_scan(monkeypatch, caplog, gone) -> None:
+    caplog.set_level(logging.INFO, logger="arm_ripper")
+    s = Script(monkeypatch, [(SR0, DriveState.DISC_OK), (SR0, gone)])
+    await s.run()
+    assert s.controller.scan_cancels == 1
+    assert "scan cancelled" in caplog.text
+
+
+async def test_tray_left_with_no_scan_running_is_quiet(monkeypatch, caplog) -> None:
+    caplog.set_level(logging.INFO, logger="arm_ripper")
+    s = Script(monkeypatch, [(SR0, DriveState.DISC_OK), (SR0, DriveState.TRAY_OPEN)])
+    s.controller.scan_running = False
+    await s.run()
+    assert s.controller.scan_cancels == 1
+    assert "scan cancelled" not in caplog.text
+
+
+@pytest.mark.parametrize(
+    "ticks",
+    [
+        [DriveState.NO_DISC, DriveState.TRAY_OPEN],
+        [DriveState.DISC_OK, DriveState.DISC_OK],
+        [DriveState.DISC_OK, DriveState.NOT_READY],
+    ],
+)
+async def test_other_transitions_do_not_cancel_the_scan(monkeypatch, ticks) -> None:
+    s = Script(monkeypatch, [(SR0, t) for t in ticks])
+    await s.run()
+    assert s.controller.scan_cancels == 0
