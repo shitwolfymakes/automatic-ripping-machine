@@ -23,6 +23,11 @@ VIRTUAL_LABEL_KEY = "arm.virtual"
 SPEC_HASH_LABEL_KEY = "arm.spec_hash"
 _DEVICE_CGROUP_RULES = ["b 11:* rmw", "c 21:* rmw"]  # sr* block + sg* char majors
 _HOST_DISK_MOUNT = "/host-disk"
+# One named volume shared by every ripper (optical and virtual) for MakeMKV's
+# ~/.MakeMKV: downloaded keys, the SDF cache and settings.conf survive a
+# recreated container. Docker creates it on the first `containers.run`.
+MAKEMKV_VOLUME = "arm-makemkv"
+_MAKEMKV_DIR = "/home/arm/.MakeMKV"
 # Optical-only env: a virtual (ISO) ripper has no device, no /dev/disk and no cdrom group.
 _OPTICAL_ONLY_ENV = ("ARM_DRIVE_DEV", "ARM_HOST_DISK_ROOT", "ARM_DRIVE_BY_ID", "CDROM_GID")
 
@@ -98,6 +103,7 @@ def container_spec(settings: Settings, drive: Drive) -> dict[str, Any]:
         s.ARM_HOST_LOGS_PATH: {"bind": "/logs", "mode": "rw"},
         str(certs_root / "arm-ca.crt"): {"bind": "/etc/ssl/arm/arm-ca.crt", "mode": "ro"},
         "/dev/disk": {"bind": _HOST_DISK_MOUNT, "mode": "ro"},
+        MAKEMKV_VOLUME: {"bind": _MAKEMKV_DIR, "mode": "rw"},
     }
     spec: dict[str, Any] = {
         "image": s.ARM_RIPPER_IMAGE,
