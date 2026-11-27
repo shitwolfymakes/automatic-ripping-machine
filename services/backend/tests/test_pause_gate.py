@@ -64,13 +64,14 @@ class _Dispatcher:
         return self.result
 
 
-def _config(*, ripping_paused: bool = False) -> Config:
+def _config(*, ripping_paused: bool = False, hold_for_review: bool = False) -> Config:
     return Config(
         id=1,
         auto_transcode_on_idle=False,
         auto_rip_on_insert=True,
         block_on_miss=False,
         ripping_paused=ripping_paused,
+        hold_for_review=hold_for_review,
         default_retention_policy=RetentionPolicy.PRUNE_AFTER_SESSION,
     )
 
@@ -193,12 +194,30 @@ def test_manual_trigger_paused_returns_409() -> None:
     db = FakeSession()
     db.rows["drives"] = [_drive_row(media=DriveMediaStatus.LOADED)]
     db.rows["jobs"] = []
-    db.rows["config"] = [_config(ripping_paused=True)]
+    db.rows["config"] = [_config(ripping_paused=True, hold_for_review=False)]
     app, token = _make_jobs_app(db)
     with TestClient(app) as client:
         r = client.post("/api/jobs/manual", json={"drive_id": "drv_x"}, headers=_auth(token))
     assert r.status_code == 409
     assert "paused" in r.json()["detail"]
+
+
+# ---------------------------------------------------------------------------
+# Gate 2: manual_trigger — paused with Review first on -> 202 (identify then holds the disc)
+# ---------------------------------------------------------------------------
+
+
+def test_manual_trigger_paused_with_review_first_is_accepted() -> None:
+    db = FakeSession()
+    hub = _Hub()
+    db.rows["drives"] = [_drive_row(media=DriveMediaStatus.LOADED)]
+    db.rows["jobs"] = []
+    db.rows["config"] = [_config(ripping_paused=True, hold_for_review=True)]
+    app, token = _make_jobs_app(db, hub)
+    with TestClient(app) as client:
+        r = client.post("/api/jobs/manual", json={"drive_id": "drv_x"}, headers=_auth(token))
+    assert r.status_code == 202
+    assert any(e["event_type"] == "manual.trigger" for e in hub.events)
 
 
 # ---------------------------------------------------------------------------
