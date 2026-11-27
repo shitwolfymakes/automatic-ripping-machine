@@ -3,6 +3,7 @@
 	import StatusBadge from '$lib/components/shared/StatusBadge.svelte';
 	import TrackTitleSearch from '$lib/components/match/TrackTitleSearch.svelte';
 	import { formatFps } from '$lib/transcode/fps';
+	import { tickMeaning, tickTitle } from '$lib/jobs/rip-plan';
 	import { trackKindLabel, trackSizeLabel } from '$lib/jobs/track-fields';
 	import { formatTrackLength } from '$lib/utils/format';
 	import { isAdmin } from '$lib/stores/auth';
@@ -36,6 +37,8 @@
 		excludeError = null,
 		ontitleapplied
 	}: Props = $props();
+
+	let meaning = $derived(tickMeaning(track, job));
 
 	// `checked={!track.excluded}` writes the input only when the value changes,
 	// and a failed save reloads the same value, so the box would keep the
@@ -149,7 +152,8 @@
 				type="checkbox"
 				checked={!track.excluded}
 				onchange={toggleIncluded}
-				title="Include this track in transcode output (the disc still rips in full)"
+				title={tickTitle(meaning)}
+				disabled={meaning === 'not-ripped'}
 				class="job-detail-track-checkbox"
 			/>
 			{#if excludeError}<span class="field-error job-detail-track-exclude-error" role="alert">{excludeError}</span>{/if}

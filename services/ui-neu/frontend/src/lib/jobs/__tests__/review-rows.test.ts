@@ -18,6 +18,7 @@ describe('review-rows mappers', () => {
 			index: 3,
 			durationSeconds: 60,
 			sourceLabel: 'o.mkv',
+			sizeLabel: '-',
 			trackId: 'trk_9',
 			title: 'Main',
 			year: 2001,
@@ -61,6 +62,7 @@ describe('review-rows mappers', () => {
 			index: 2,
 			durationSeconds: 100,
 			sourceLabel: 'x.mkv',
+			sizeLabel: '-',
 			trackId: null,
 			title: null,
 			year: null,
@@ -69,6 +71,15 @@ describe('review-rows mappers', () => {
 			role: null,
 			excluded: false
 		});
+	});
+	it('sizes a track by its actual size, else the scan estimate', () => {
+		const base = { id: 't', index: 0, source_ref: 's' };
+		expect(trackToRow({ ...base, size_bytes: 2048 } as any).sizeLabel).toBe('2 KB');
+		expect(trackToRow({ ...base, expected_size_bytes: 2048 } as any).sizeLabel).toBe('~2 KB');
+	});
+	it('sizes a scanned title by its estimate', () => {
+		expect(scanTitleToRow({ index: 0, duration_seconds: 1, size_bytes: 2048 } as any).sizeLabel).toBe('~2 KB');
+		expect(scanTitleToRow({ index: 0, duration_seconds: 1, size_bytes: null } as any).sizeLabel).toBe('-');
 	});
 	it('scanTitleToRow tolerates a missing source_file', () => {
 		const r = scanTitleToRow({ index: 0, duration_seconds: 10 } as any);

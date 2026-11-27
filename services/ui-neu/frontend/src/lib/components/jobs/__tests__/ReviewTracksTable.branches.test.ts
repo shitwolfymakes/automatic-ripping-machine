@@ -61,7 +61,7 @@ describe('ReviewTracksTable header', () => {
 		expect(screen.getByRole('heading', { name: 'Tracks (2)' })).toBeInTheDocument();
 		expect(screen.getByRole('columnheader', { name: 'Title' })).toBeInTheDocument();
 		expect(screen.getByRole('columnheader', { name: 'Episode' })).toBeInTheDocument();
-		expect(screen.getAllByRole('columnheader')).toHaveLength(7);
+		expect(screen.getAllByRole('columnheader')).toHaveLength(8);
 	});
 
 	it('titles a scan list "Scanned titles (N)"', () => {
@@ -74,7 +74,7 @@ describe('ReviewTracksTable header', () => {
 		expect(screen.getByRole('columnheader', { name: 'Name' })).toBeInTheDocument();
 		expect(screen.queryByRole('columnheader', { name: 'Title' })).toBeNull();
 		expect(screen.queryByRole('columnheader', { name: 'Episode' })).toBeNull();
-		expect(screen.getAllByRole('columnheader')).toHaveLength(5);
+		expect(screen.getAllByRole('columnheader')).toHaveLength(6);
 		expect(screen.queryByTitle('Search title')).toBeNull();
 	});
 
@@ -120,7 +120,7 @@ describe('ReviewTracksTable title cell', () => {
 
 	it('shows "-" for a scanned title, in the title, episode and include cells', () => {
 		renderTable({ scanTitles: [scan({ index: 3 })] });
-		expect(screen.getAllByText('-')).toHaveLength(3);
+		expect(screen.getAllByText('-')).toHaveLength(4);
 		expect(screen.queryByTitle('Search title')).toBeNull();
 		expect(screen.queryByRole('checkbox')).toBeNull();
 	});

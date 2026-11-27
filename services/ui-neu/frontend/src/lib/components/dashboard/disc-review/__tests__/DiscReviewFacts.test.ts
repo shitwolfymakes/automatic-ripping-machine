@@ -11,11 +11,11 @@
 // type), so the row always shows.
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { renderComponent, screen, fireEvent, cleanup, within } from '$lib/testing/render';
-import type { JobView } from '$lib/types/api.gen';
+import type { JobView, TrackView } from '$lib/types/api.gen';
 import { readJobMetadata } from '$lib/jobs/metadata';
 import type { EpisodeStatus } from '$lib/episodes/status';
 import type { SourceRow } from '$lib/jobs/review-card';
-import { createJob } from '../../../../__fixtures__/job';
+import { createJob, createTrack } from '../../../../__fixtures__/job';
 import DiscReviewFacts from '../DiscReviewFacts.svelte';
 
 const SOURCE: SourceRow = { label: 'Drive', value: 'Drive A' };
@@ -27,6 +27,8 @@ interface FactsOptions {
 	isPostRip?: boolean;
 	episodeRow?: EpisodeStatus | null;
 	sourceRow?: SourceRow;
+	tracks?: TrackView[];
+	isReviewGate?: boolean;
 	appliedSession?: string | null;
 	onopenseason?: () => void;
 	onopenepisodes?: () => void;
@@ -42,6 +44,8 @@ function renderFacts(job: JobView, options: FactsOptions = {}) {
 		isPostRip: false,
 		episodeRow: null,
 		sourceRow: SOURCE,
+		tracks: [],
+		isReviewGate: false,
 		appliedSession: null,
 		onopenseason: () => {},
 		onopenepisodes: () => {},
@@ -347,6 +351,49 @@ describe('DiscReviewFacts', () => {
 		it('is hidden when no session is applied', () => {
 			renderFacts(createJob(), { appliedSession: null });
 			expect(screen.queryByText('Session', { selector: 'dt' })).toBeNull();
+		});
+	});
+
+	describe('Rip row', () => {
+		const GB = 1024 ** 3;
+		const four = [0, 1, 2, 3].map((i) =>
+			createTrack({ id: `t${i}`, index: i, expected_size_bytes: 10 * GB, excluded: i > 1 })
+		);
+		const gate = (rip_invocation: JobView['rip_invocation']) =>
+			createJob({ status: 'awaiting_review', rip_invocation });
+
+		it('says what a per-title rip writes, without a warning', () => {
+			renderFacts(gate('per_title'), { tracks: four, isReviewGate: true });
+			expect(screen.getByTestId('rip-row')).toHaveTextContent('Rips 2 of 4 titles, about 20 GB');
+			expect(screen.queryByTestId('rip-warning')).toBeNull();
+		});
+
+		it('warns that mkv all still rips the unticked titles', () => {
+			renderFacts(gate('mkv_all'), { tracks: four, isReviewGate: true });
+			expect(screen.getByTestId('rip-row')).toHaveTextContent('Rips all 4 titles, about 40 GB. 2 transcode.');
+			const warning = screen.getByTestId('rip-warning');
+			expect(warning).toHaveClass('alert', 'alert-warning');
+			expect(warning).toHaveTextContent(
+				'All 4 titles still rip (about 40 GB). Unticked titles are only left out of the transcode.'
+			);
+		});
+
+		it('has no warning when mkv all has every title ticked', () => {
+			const ticked = four.map((t) => ({ ...t, excluded: false }));
+			renderFacts(gate('mkv_all'), { tracks: ticked, isReviewGate: true });
+			expect(screen.getByTestId('rip-row')).toBeInTheDocument();
+			expect(screen.queryByTestId('rip-warning')).toBeNull();
+		});
+
+		it('is hidden off the review gate', () => {
+			renderFacts(gate('mkv_all'), { tracks: four, isReviewGate: false });
+			expect(screen.queryByTestId('rip-row')).toBeNull();
+			expect(screen.queryByTestId('rip-warning')).toBeNull();
+		});
+
+		it('is hidden for a disc without video titles', () => {
+			renderFacts(gate('mkv_all'), { tracks: [createTrack({ kind: 'audio_track' })], isReviewGate: true });
+			expect(screen.queryByTestId('rip-row')).toBeNull();
 		});
 	});
 });
