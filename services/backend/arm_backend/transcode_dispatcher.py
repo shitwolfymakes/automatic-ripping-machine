@@ -143,9 +143,14 @@ class _SpawnPass:
         # when an encode task is actually ready to spawn.
         self.host_probe = None
 
-        self.encode_slots = await self._free_encode_slots()
+        # Spawned on an earlier pass, not yet claimed: still QUEUED, but its
+        # container exists. It is neither spawned again (#642) nor gives its
+        # encode slot away; `sweep_unclaimed_spawns` handles one that never claims.
+        awaiting_claim = await self._dispatcher._still_awaiting_claim(self._db)
+        self.encode_slots = await self._free_encode_slots() - len(awaiting_claim)
         for task_id in await self._queued_task_ids():
-            await self._handle_queued(task_id)
+            if task_id not in awaiting_claim:
+                await self._handle_queued(task_id)
         if self.held_encode:
             logger.debug(
                 "%d encode task(s) held (enabled=%s docker=%s)",
@@ -338,6 +343,9 @@ class _SpawnPass:
             # thread doesn't put any DB access off the loop.
             await asyncio.to_thread(self._dispatcher._spawn_container, task, assignment=assignment)
             started = True
+            # Recorded before the commit: even if the GPU-claim commit fails,
+            # the container exists and must not be spawned a second time.
+            self._dispatcher._awaiting_claim[task_id] = self._dispatcher._clock()
             self.spawned += 1
             self._dispatcher.last_spawn_error = None
             # Commit this task's GPU claim promptly, per-task, right
@@ -470,6 +478,11 @@ class TranscodeDispatcher:
         # querying live; it is only ever stale for the window between a GPU
         # being enabled and the next tick or claim.
         self._enabled_gpu_vendors: set[GpuVendor] = set()
+        # Spawned transcoders that have not claimed their task yet: task id ->
+        # spawn time on `_clock`. Kept in-process like `claimed_gpu_ids`; after
+        # a restart `watch_restart_claims` re-adds the ones still holding a GPU.
+        self._awaiting_claim: dict[str, float] = {}
+        self._clock: Callable[[], float] = time.monotonic
 
     @property
     def docker_client(self) -> HealingDockerClient | None:
@@ -499,6 +512,11 @@ class TranscodeDispatcher:
             self._settings.ARM_TRANSCODE_IMAGE,
             self._tick_interval,
         )
+        try:
+            async with self._db_factory() as db:
+                await self.watch_restart_claims(db)
+        except Exception as exc:  # never keep the loop from starting
+            logger.exception("could not pick up GPU claims left by a restart: %s", exc)
         while not self._stop.is_set():
             try:
                 await self._tick()
@@ -514,6 +532,7 @@ class TranscodeDispatcher:
         async with self._db_factory() as db:
             await self._refresh_enabled_gpu_vendors(db)
             await self.sweeps.sweep_stale_claims(db)
+            await self.sweep_unclaimed_spawns(db)
             await self.sweeps.sweep_orphaned_applications(db)
             await db.commit()
             await self.spawn_pending(db)
@@ -532,6 +551,113 @@ class TranscodeDispatcher:
         `run()`'s per-tick catch-all) and never affects `ok`."""
         all_gpus = (await db.execute(select(Gpu))).scalars().all()
         self._enabled_gpu_vendors = _enabled_vendors(all_gpus)
+
+    # --- spawned, not yet claimed -----------------------------------------------
+
+    async def _still_awaiting_claim(self, db: AsyncSession) -> set[str]:
+        """The tracked spawns whose task is still QUEUED. Forgets the rest: a
+        task that was claimed, finished, failed or deleted needs no watching."""
+        if not self._awaiting_claim:
+            return set()
+        rows = (
+            (await db.execute(select(TranscodeTask).where(col(TranscodeTask.id).in_(tuple(self._awaiting_claim)))))
+            .scalars()
+            .all()
+        )
+        queued = {r.id for r in rows if r.status == TranscodeTaskStatus.QUEUED}
+        for task_id in set(self._awaiting_claim) - queued:
+            del self._awaiting_claim[task_id]
+        return queued
+
+    async def watch_restart_claims(self, db: AsyncSession) -> None:
+        """After a restart, treat every QUEUED task still holding a GPU as
+        spawned now. Its transcoder may have outlived the restart and claim
+        shortly; if it never does, `sweep_unclaimed_spawns` frees the GPU after
+        the stale threshold instead of leaving it BUSY for good (#251)."""
+        claimants = [
+            g.claimed_by_task_id
+            for g in (await db.execute(select(Gpu).where(col(Gpu.status) == GpuStatus.BUSY))).scalars().all()
+            if g.claimed_by_task_id is not None
+        ]
+        if not claimants:
+            return
+        tasks = (
+            (await db.execute(select(TranscodeTask).where(col(TranscodeTask.id).in_(tuple(claimants))))).scalars().all()
+        )
+        now = self._clock()
+        for task in tasks:
+            if task.status == TranscodeTaskStatus.QUEUED:
+                self._awaiting_claim.setdefault(task.id, now)
+
+    async def sweep_unclaimed_spawns(self, db: AsyncSession) -> int:
+        """Recover spawns still unclaimed after ARM_TRANSCODE_STALE_THRESHOLD_SECONDS.
+
+        A transcoder claims within seconds of starting; one that has not (it
+        cannot reach the backend: a wrong URL, a certificate without that
+        address, DNS) would otherwise hold its GPU forever, and on a single-GPU
+        host every other task would wait behind it (#251). Each one is stopped,
+        its GPU released and the attempt counted, ending the task at
+        ARM_TRANSCODE_MAX_ATTEMPTS. Returns how many were recovered.
+        """
+        threshold = self._settings.ARM_TRANSCODE_STALE_THRESHOLD_SECONDS
+        now = self._clock()
+        overdue = [t for t in await self._still_awaiting_claim(db) if now - self._awaiting_claim[t] > threshold]
+        for task_id in overdue:
+            del self._awaiting_claim[task_id]
+            try:
+                await self._recover_unclaimed_spawn(db, task_id, threshold)
+            except Exception as exc:
+                # Never abort the tick; the next tick's spawn pass retries the task.
+                logger.exception("could not recover unclaimed transcode spawn task_id=%s: %s", task_id, exc)
+                await db.rollback()
+        return len(overdue)
+
+    async def _queued_task(self, db: AsyncSession, task_id: str, *, lock: bool) -> TranscodeTask | None:
+        """Fresh load of `task_id`, or None once it is no longer QUEUED (claimed,
+        finished or gone). `lock` holds its row lock until the next commit."""
+        query = select(TranscodeTask).where(col(TranscodeTask.id) == task_id)
+        if lock:
+            query = query.with_for_update()
+        task = (await db.execute(query.execution_options(populate_existing=True))).scalar_one_or_none()
+        if task is None or task.status != TranscodeTaskStatus.QUEUED:
+            return None
+        return task
+
+    async def _recover_unclaimed_spawn(self, db: AsyncSession, task_id: str, threshold: float) -> None:
+        """Stop an overdue spawn, then requeue or fail its task. The stop takes
+        seconds and holds no row lock; the task is re-read under its lock after
+        it, so a claim that committed during the stop keeps the task."""
+        if await self._queued_task(db, task_id, lock=False) is None:
+            return  # claimed (or gone) since the check
+        reason = (
+            f"transcoder never claimed the task within {threshold:g} s of starting (can it reach the backend?); "
+            f"see its log arm-transcode-{task_id[-12:]}.log"
+        )
+        self.last_spawn_error = reason
+        logger.warning("transcode spawn unclaimed, stopping it task_id=%s: %s", task_id, reason)
+        # Stop it first, so a late claim cannot race the next spawn of the task.
+        await asyncio.to_thread(self._stop_task_containers, task_id)
+        task = await self._queued_task(db, task_id, lock=True)
+        if task is None:
+            logger.warning("transcode task claimed while its unclaimed spawn was stopping task_id=%s", task_id)
+            await db.rollback()  # drop the row lock before the next recovery's stop
+            return
+        await release_gpu_for_task(db, task_id)
+        task.attempts = (task.attempts or 0) + 1
+        if task.attempts >= self._settings.ARM_TRANSCODE_MAX_ATTEMPTS:
+            await self._fail_queued_task(db, task, f"{reason} (attempts={task.attempts})")
+            return
+        await db.commit()
+
+    def _stop_task_containers(self, task_id: str) -> None:
+        """Stop any container still running for `task_id`; best effort. Blocking."""
+        if self._docker_client is None:
+            return
+        try:
+            for container in self._docker_client.containers.list(filters={"label": f"{_DOCKER_LABEL_KEY}={task_id}"}):
+                container.stop(timeout=5)
+        except Exception as exc:
+            logger.warning("could not stop the unclaimed transcoder task_id=%s: %s", task_id, exc)
 
     # --- spawn loop ---------------------------------------------------------
 
