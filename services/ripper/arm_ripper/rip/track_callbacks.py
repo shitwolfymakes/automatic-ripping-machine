@@ -1,7 +1,7 @@
 """The callbacks a rip reports each track's lifecycle through, and the byte-level detail a progress report can carry."""
 
 from collections.abc import Awaitable, Callable
-from typing import NotRequired, Protocol, TypedDict
+from typing import Protocol, TypedDict
 
 from arm_common.schemas import TrackView
 
@@ -17,8 +17,6 @@ class TransferStats(TypedDict):
     bytes_done: int
     bytes_total: int | None
     rate_bps: float | None
-    # "verifying" while the ripped files are hashed after makemkvcon exits.
-    phase: NotRequired[str]
 
 
 class OnTrackProgress(Protocol):

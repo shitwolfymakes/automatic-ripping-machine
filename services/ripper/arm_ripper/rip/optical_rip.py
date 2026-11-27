@@ -16,8 +16,7 @@ from arm_ripper.rip.makemkv_rip import (
     rip_disc,
 )
 from arm_ripper.rip.result import RipResult
-from arm_ripper.rip.title_hasher import OnHashed, TitleHasher
-from arm_ripper.rip.track_callbacks import OnTrackDone, OnTrackProgress, OnTrackStart, TransferStats
+from arm_ripper.rip.track_callbacks import OnTrackDone, OnTrackProgress, OnTrackStart
 
 # Log under the dispatcher's name: these lines have always come from that logger.
 logger = logging.getLogger("arm_ripper.rip.dispatcher")
@@ -138,7 +137,6 @@ class _OpticalRip:
         # streamer's mid-rip on_title_done callback. The post-rip
         # attribution loop skips these to avoid double-PATCHing.
         self._done_emitted: set[int] = set(skipped)
-        self._hasher = TitleHasher()
 
     def _drive_dropped(self) -> bool:
         """The drive left the bus under this rip. The first time
@@ -191,35 +189,10 @@ class _OpticalRip:
             return
         await self._on_track_progress(first_track, fraction)
 
-    def _finalise_after_hash(self, track: TrackView, result: RipResult) -> OnHashed:
-        async def then(digest: str | None) -> None:
-            await self._on_track_done(
-                track,
-                RipResult(
-                    ok=True,
-                    output_path=result.output_path,
-                    size_bytes=result.size_bytes,
-                    duration_seconds=result.duration_seconds,
-                    sha256=digest,
-                ),
-            )
-
-        return then
-
-    async def _on_verify_progress(self, done: int, total: int, rate: float | None) -> None:
-        first_track = _first_eligible_track(self._track_by_index, self._eligible)
-        if self._on_track_progress is None or first_track is None:
-            return
-        stats: TransferStats = {"bytes_done": done, "bytes_total": total, "rate_bps": rate, "phase": "verifying"}
-        await self._on_track_progress(first_track, min(done / total, 1.0) if total else 0.0, stats)
-
     async def _on_title_done(self, title_idx: int) -> None:
         """Mid-rip per-title finalisation. Stat the .mkv produced for
-        this title's output position and hand it to the background
-        hasher, which PATCHes the Track DONE with size, output_path and
-        sha256 once the file is hashed. The hash never runs on the
-        streamer: a 27 GB main feature would block it for minutes and
-        starve the next title's PRGC of attention.
+        this title's output position and PATCH the Track DONE with its
+        size and output_path as soon as makemkvcon has closed the file.
 
         Files are matched positionally to `eligible_source_indexes`
         (same convention as the post-rip attribution loop): the file
@@ -254,7 +227,7 @@ class _OpticalRip:
             duration_seconds=track.duration_seconds or track.expected_duration_seconds,
         )
         self._done_emitted.add(title_idx)
-        self._hasher.submit(file_path, size, self._finalise_after_hash(track, result))
+        await self._on_track_done(track, result)
 
     async def _ensure_started(self, title_idx: int, track: TrackView) -> None:
         """Guarantee on_track_start has fired for this track before any
@@ -268,52 +241,41 @@ class _OpticalRip:
 
     async def run(self) -> None:
         """Run makemkvcon once, then report every selected track exactly once."""
-        try:
-            disc_result = await rip_disc(
-                device_path=self._device_path,
-                output_dir=self._output_dir,
-                minlength_seconds=self._min_length_seconds,
-                eligible_source_indexes=self._eligible,
-                on_title_start=self._on_title_start,
-                on_title_progress=self._on_title_progress,
-                on_disc_progress=self._on_disc_progress,
-                on_title_done=self._on_title_done,
-                hash_outputs=False,
-                stop=self._stop,
-                title=self._title,
-            )
-            _delete_skipped_outputs(self._output_dir, self._eligible, self._skipped)
-            if disc_result.overall_error is None and self._drive_dropped():
-                # makemkvcon exited on its own after the drive dropped: a title
-                # not finalised above may be cut short, so none of them count.
-                disc_result = RipDiscResult(overall_error=STOPPED_ERROR, titles={})
+        disc_result = await rip_disc(
+            device_path=self._device_path,
+            output_dir=self._output_dir,
+            minlength_seconds=self._min_length_seconds,
+            eligible_source_indexes=self._eligible,
+            on_title_start=self._on_title_start,
+            on_title_progress=self._on_title_progress,
+            on_disc_progress=self._on_disc_progress,
+            on_title_done=self._on_title_done,
+            stop=self._stop,
+            title=self._title,
+        )
+        _delete_skipped_outputs(self._output_dir, self._eligible, self._skipped)
+        if disc_result.overall_error is None and self._drive_dropped():
+            # makemkvcon exited on its own after the drive dropped: a title
+            # not finalised above may be cut short, so none of them count.
+            disc_result = RipDiscResult(overall_error=STOPPED_ERROR, titles={})
 
-            if disc_result.overall_error is not None:
-                await self._fail_unfinished(disc_result.overall_error)
-                return
+        if disc_result.overall_error is not None:
+            await self._fail_unfinished(disc_result.overall_error)
+            return
 
-            await self._attribute(disc_result)
-
-            await self._hasher.finish(self._on_verify_progress)
-        except BaseException:
-            # Abandoned mid-rip (CancelledError) or a PATCH that gave up: stop
-            # hashing files that are about to be wiped.
-            self._hasher.cancel()
-            raise
+        await self._attribute(disc_result)
 
     async def _attribute(self, disc_result: RipDiscResult) -> None:
-        """Report each selected track the live path didn't finish, from rip_disc's per-title results; hand each good
-        file to the hasher."""
+        """Report each selected track the live path didn't finish, from rip_disc's per-title results."""
         # Per-title attribution for tracks the live path didn't already
         # finalise (e.g. below-minlength tracks MakeMKV skipped, or
         # eligible tracks that didn't produce a file). Tracks already in
-        # `done_emitted` were handed to the hasher by `_on_title_done`
+        # `done_emitted` were reported by `_on_title_done`
         # mid-rip and are skipped here to avoid double-PATCHing.
         # - If rip_disc reports a result for it: use that. (Includes
         #   ok=False for eligible titles that didn't render — the live
         #   path can't report failures since it's only triggered by PRGC
-        #   transitions on successful saves.) A successful file goes to
-        #   the hasher like a live one.
+        #   transitions on successful saves.)
         # - Otherwise: the track was below `min_length_seconds`, so MakeMKV
         #   never attempted it. FAILED with a clear reason so the operator
         #   can lower minlength and retry.
@@ -345,20 +307,17 @@ class _OpticalRip:
                     duration_seconds=track.duration_seconds or track.expected_duration_seconds,
                 )
             self._done_emitted.add(title_idx)
-            self._hasher.submit(output_path, result.size_bytes or 0, self._finalise_after_hash(track, result))
+            await self._on_track_done(track, result)
 
     async def _fail_unfinished(self, error: str) -> None:
-        """Fail every selected track the live path didn't finish with the rip-level error, once the files already handed
-        to the hasher are hashed."""
+        """Fail every selected track the live path didn't finish with the rip-level error."""
         # Rip-level failure — mark every selected track FAILED with the
         # disc-level error so the operator knows what happened. Each
         # track must transit IN_PROGRESS first per the backend's state
-        # machine. Tracks already handed to the hasher via the live
-        # path (titles that finalised before the rip aborted) are
-        # PATCHed DONE once hashed — partial success is still success
-        # for those files.
+        # machine. Tracks the live path already reported DONE (titles
+        # that finalised before the rip aborted) stay done — partial
+        # success is still success for those files.
         logger.warning("rip_disc failed: %s", error)
-        await self._hasher.finish(self._on_verify_progress)
         for title_idx, track in self._track_by_index.items():
             if title_idx in self._done_emitted:
                 continue

@@ -293,7 +293,6 @@ async def complete(
             "output_path": task.output_path,
             "size_bytes": req.size_bytes,
             "duration_seconds": req.duration_seconds,
-            "sha256": req.sha256,
         },
         job_id=job_id,
         track_id=task.source_track_id,

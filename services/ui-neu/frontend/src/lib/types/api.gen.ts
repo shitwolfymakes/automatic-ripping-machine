@@ -471,10 +471,6 @@ export type CompleteTaskRequest = {
      * Duration Seconds
      */
     duration_seconds?: number | null;
-    /**
-     * Sha256
-     */
-    sha256?: string | null;
 };
 
 /**
@@ -5584,10 +5580,6 @@ export type TrackUpdateRequest = {
      * Size Bytes
      */
     size_bytes?: number | null;
-    /**
-     * Sha256
-     */
-    sha256?: string | null;
     /**
      * Duration Seconds
      */

@@ -1884,7 +1884,7 @@ def test_update_track_done_emits_completed() -> None:
     db = FakeSession()
     hub = _Hub()
     app = _track_app(db, _track("trk_1", status=TrackStatus.IN_PROGRESS), hub=hub)
-    body = {"status": "done", "output_path": "/m/a.mkv", "size_bytes": 99, "sha256": "ab", "duration_seconds": 42}
+    body = {"status": "done", "output_path": "/m/a.mkv", "size_bytes": 99, "duration_seconds": 42}
     with TestClient(app) as client:
         r = client.patch("/api/ripper/tracks/trk_1", json=body, headers=_OWNER_HEADERS)
     assert r.status_code == 200

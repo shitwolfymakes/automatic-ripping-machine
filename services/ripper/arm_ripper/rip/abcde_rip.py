@@ -8,7 +8,6 @@ from collections.abc import Awaitable, Callable
 from pathlib import Path
 from tempfile import NamedTemporaryFile
 
-from arm_ripper.rip.hashing import sha256_file
 from arm_ripper.rip.result import RipResult
 
 logger = logging.getLogger("arm_ripper.rip.abcde")
@@ -112,7 +111,7 @@ class _CdTracks:
         self._seen_done: set[int] = set()
 
     async def finalize(self, idx: int) -> None:
-        """Stat + hash the produced WAV; fire callback once."""
+        """Stat the produced WAV; fire callback once."""
         if idx in self.results:
             return
         wav_path = self._output_dir / f"track{idx:02d}.wav"
@@ -123,8 +122,7 @@ class _CdTracks:
         except OSError as exc:  # pragma: no cover — race window after exists() returned True
             logger.warning("stat failed track=%d path=%s err=%s", idx, wav_path, exc)
             return
-        digest = await sha256_file(wav_path)
-        result = RipResult(ok=True, output_path=wav_path, size_bytes=size, sha256=digest)
+        result = RipResult(ok=True, output_path=wav_path, size_bytes=size)
         self.results[idx] = result
         if self._on_track_done is not None:
             await self._on_track_done(idx, result)
@@ -208,7 +206,7 @@ async def rip_cd(
 
     abcde rips the entire disc in one pass; we stream its stdout so that as
     soon as each `trackNN.wav` file appears on disk we can build a per-track
-    `RipResult` (size + sha256) and fire `on_track_done`. The dispatcher
+    `RipResult` (size) and fire `on_track_done`. The dispatcher
     plumbs that callback into the per-track WS lifecycle so the UI sees
     tracks tick from IN_PROGRESS to DONE one at a time, rather than the
     whole disc flipping together at the end.

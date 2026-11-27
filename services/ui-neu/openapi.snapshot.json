@@ -8638,17 +8638,6 @@
               }
             ],
             "title": "Duration Seconds"
-          },
-          "sha256": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Sha256"
           }
         },
         "type": "object",
@@ -18161,17 +18150,6 @@
               }
             ],
             "title": "Size Bytes"
-          },
-          "sha256": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Sha256"
           },
           "duration_seconds": {
             "anyOf": [

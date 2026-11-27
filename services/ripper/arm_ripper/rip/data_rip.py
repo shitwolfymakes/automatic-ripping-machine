@@ -5,7 +5,6 @@ import os
 from collections.abc import Awaitable, Callable
 from pathlib import Path
 
-from arm_ripper.rip.hashing import sha256_file
 from arm_ripper.rip.result import RipResult
 from arm_ripper.rip.subprocess_cleanup import kill_if_running
 from arm_ripper.source import is_iso_source
@@ -139,5 +138,4 @@ async def rip_data(device_path: str, output_dir: Path, on_progress: OnDataProgre
     if on_progress is not None:
         with contextlib.suppress(Exception):
             await on_progress(size, total or size)
-    digest = await sha256_file(output_path)
-    return RipResult(ok=True, output_path=output_path, size_bytes=size, sha256=digest)
+    return RipResult(ok=True, output_path=output_path, size_bytes=size)
