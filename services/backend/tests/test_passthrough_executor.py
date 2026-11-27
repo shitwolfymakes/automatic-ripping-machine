@@ -12,7 +12,6 @@ rollups cannot tell the difference.
 from __future__ import annotations
 
 import errno
-import hashlib
 from pathlib import Path
 from typing import Any
 
@@ -717,7 +716,7 @@ async def test_copy_publishes_progress_while_it_runs(tmp_path: Path, monkeypatch
         seen_pct.append(db.rows["transcode_tasks"][0].progress_pct)
         output_path.parent.mkdir(parents=True, exist_ok=True)
         input_path.rename(output_path)
-        return PlaceResult(size=100, sha256="0" * 64, linked=True)
+        return PlaceResult(size=100, linked=True)
 
     monkeypatch.setattr(mod, "transcode_none", _slow_copy)
     ok = await execute_passthrough_task(db, task, hub, _settings(MEDIA_ROOT=str(media_root)))
@@ -758,7 +757,7 @@ async def test_a_failing_progress_publish_does_not_strand_the_task(tmp_path: Pat
         progress_tried.wait(5)
         output_path.parent.mkdir(parents=True, exist_ok=True)
         input_path.rename(output_path)
-        return PlaceResult(size=100, sha256="0" * 64, linked=True)
+        return PlaceResult(size=100, linked=True)
 
     monkeypatch.setattr(mod, "transcode_none", _slow_copy)
     ok = await execute_passthrough_task(db, task, hub, _settings(MEDIA_ROOT=str(tmp_path / "media")))
@@ -856,17 +855,7 @@ def _file_case(tmp_path: Path, data: bytes = b"data") -> tuple[Path, Path, Any]:
     return raw, tmp_path / "media", db
 
 
-async def test_success_writes_track_sha256(tmp_path: Path) -> None:
-    raw, media_root, db = _file_case(tmp_path, b"some bytes")
-    hub, _sent = _hub_with_recorder()
-
-    ok = await execute_passthrough_task(db, db.rows["transcode_tasks"][0], hub, _settings(MEDIA_ROOT=str(media_root)))
-
-    assert ok is True
-    assert db.rows["tracks"][0].sha256 == hashlib.sha256(b"some bytes").hexdigest()
-
-
-async def test_cross_fs_copy_writes_track_sha256(tmp_path: Path, monkeypatch: Any) -> None:
+async def test_cross_fs_copy_moves_the_file(tmp_path: Path, monkeypatch: Any) -> None:
     from arm_common import fileops
 
     raw, media_root, db = _file_case(tmp_path, b"copied bytes")
@@ -882,26 +871,12 @@ async def test_cross_fs_copy_writes_track_sha256(tmp_path: Path, monkeypatch: An
 
     assert ok is True and not raw.exists()
     assert (media_root / "Title (2020)" / "t0.mkv").read_bytes() == b"copied bytes"
-    assert db.rows["tracks"][0].sha256 == hashlib.sha256(b"copied bytes").hexdigest()
 
 
-async def test_disc_backup_leaves_sha256_unset(tmp_path: Path) -> None:
-    raw = _backup_dir(tmp_path / "raw" / "job1" / "backup")
-    db = _db(track_output_path=str(raw), task_output_path="Iron Man (2008)", track_kind=TrackKind.DISC_BACKUP)
-    hub, _sent = _hub_with_recorder()
-
-    ok = await execute_passthrough_task(
-        db, db.rows["transcode_tasks"][0], hub, _settings(MEDIA_ROOT=str(tmp_path / "m"))
-    )
-
-    assert ok is True and db.rows["tracks"][0].sha256 is None
-
-
-async def test_failed_move_leaves_sha256_unchanged(tmp_path: Path, monkeypatch: Any) -> None:
+async def test_failed_move_fails_the_task(tmp_path: Path, monkeypatch: Any) -> None:
     import arm_backend.passthrough_executor as mod
 
     _raw, media_root, db = _file_case(tmp_path)
-    db.rows["tracks"][0].sha256 = "old"
     hub, _sent = _hub_with_recorder()
 
     def _boom(_i: Path, _o: Path, **_kw: Any) -> PlaceResult:
@@ -910,14 +885,22 @@ async def test_failed_move_leaves_sha256_unchanged(tmp_path: Path, monkeypatch: 
     monkeypatch.setattr(mod, "transcode_none", _boom)
     ok = await execute_passthrough_task(db, db.rows["transcode_tasks"][0], hub, _settings(MEDIA_ROOT=str(media_root)))
 
-    assert ok is False and db.rows["tracks"][0].sha256 == "old"
+    assert ok is False
 
 
-async def test_cancel_leaves_sha256_unchanged(tmp_path: Path, monkeypatch: Any) -> None:
+async def test_cancel_during_a_cross_fs_copy_fails_the_task_and_keeps_the_source(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
     import arm_backend.passthrough_executor as mod
+    from arm_common import fileops
 
-    _raw, media_root, db = _file_case(tmp_path)
-    db.rows["tracks"][0].sha256 = "old"
+    raw, media_root, db = _file_case(tmp_path)
+
+    def _exdev(a: object, b: object) -> None:
+        raise OSError(errno.EXDEV, "Invalid cross-device link")
+
+    monkeypatch.setattr(fileops.os, "link", _exdev)
+    monkeypatch.setattr(fileops.os, "rename", _exdev)
     hub, _sent = _hub_with_recorder()
     real = mod.transcode_none
 
@@ -927,8 +910,8 @@ async def test_cancel_leaves_sha256_unchanged(tmp_path: Path, monkeypatch: Any) 
 
     monkeypatch.setattr(mod, "transcode_none", _cancel_then_move)
     ok = await execute_passthrough_task(db, db.rows["transcode_tasks"][0], hub, _settings(MEDIA_ROOT=str(media_root)))
-
-    assert ok is False and db.rows["tracks"][0].sha256 == "old"
+    assert ok is False and raw.exists()
+    assert ok is False
 
 
 async def test_track_deleted_mid_move_still_completes_task(tmp_path: Path, monkeypatch: Any) -> None:
@@ -949,7 +932,7 @@ async def test_track_deleted_mid_move_still_completes_task(tmp_path: Path, monke
     assert ok is True and task.status == TranscodeTaskStatus.DONE
 
 
-def test_link_path_reports_hash_progress(tmp_path: Path) -> None:
+def test_link_path_moves_without_reading(tmp_path: Path) -> None:
     from arm_backend.passthrough_executor import _CopyProgress, _move_and_chown
     import threading
 
@@ -958,7 +941,7 @@ def test_link_path_reports_hash_progress(tmp_path: Path) -> None:
     raw.write_bytes(b"x" * 100)
     progress = _CopyProgress()
 
-    size, sha256 = _move_and_chown(raw, tmp_path / "media" / "t0.mkv", _settings(), False, threading.Event(), progress)
+    size = _move_and_chown(raw, tmp_path / "media" / "t0.mkv", _settings(), False, threading.Event(), progress)
 
-    assert (size, sha256) == (100, hashlib.sha256(b"x" * 100).hexdigest())
-    assert progress.total == 100 and progress.done == 100
+    assert size == 100
+    assert progress.total == 100 and progress.done == 0
