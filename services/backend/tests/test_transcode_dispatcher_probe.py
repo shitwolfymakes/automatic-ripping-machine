@@ -711,6 +711,35 @@ def test_backend_url_that_does_not_resolve(monkeypatch) -> None:
     )
 
 
+def _capture_getaddrinfo(monkeypatch) -> list[tuple[object, object]]:
+    from arm_backend import docker_probe
+
+    seen: list[tuple[object, object]] = []
+
+    def _fail(host, port, **kw):
+        seen.append((host, port))
+        raise OSError("Name or service not known")
+
+    monkeypatch.setattr(docker_probe.socket, "getaddrinfo", _fail)
+    return seen
+
+
+def test_backend_url_without_a_host_resolves_the_empty_host(monkeypatch) -> None:
+    from arm_backend import docker_probe
+
+    seen = _capture_getaddrinfo(monkeypatch)
+    ok, _ = docker_probe.probe_backend_url("https:///api")
+    assert ok is False and seen == [("", 443)]
+
+
+def test_http_backend_url_without_a_port_defaults_to_80(monkeypatch) -> None:
+    from arm_backend import docker_probe
+
+    seen = _capture_getaddrinfo(monkeypatch)
+    ok, _ = docker_probe.probe_backend_url("http://arm.example")
+    assert ok is False and seen == [("arm.example", 80)]
+
+
 def test_backend_url_with_a_bad_port_fails_the_probe_without_raising() -> None:
     """`probe()` promises never to raise; a typo in the URL
     must read as a failed check, not abort every spawn tick."""

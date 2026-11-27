@@ -794,14 +794,14 @@ class TranscodeDispatcher:
         self._probe.invalidate()
         return self.probe()
 
-    def _spawn_container(self, task: TranscodeTask, *, assignment: GpuAssignment | None = None) -> Any:
+    def _spawn_container(self, task: TranscodeTask, *, assignment: GpuAssignment) -> Any:
         backend_url = backend_url_for_spawn(self._settings)
-        gpu = assignment.gpu if assignment is not None else None
+        gpu = assignment.gpu
         gpu_vendor = gpu.vendor if gpu is not None else None
         env = {
             **task_env(self._settings, task, backend_url),
             **container_identity_env(self._settings, gpu_vendor),
-            **gpu_env(gpu, assignment.encoder if assignment is not None else None),
+            **gpu_env(gpu, assignment.encoder),
         }
         volumes = task_volumes(self._settings)
         extra_run_kwargs = gpu_run_kwargs(gpu) if gpu is not None else {}
