@@ -4,7 +4,7 @@ from typing import Any, Literal
 import httpx
 
 from arm_backend.config import settings
-from arm_backend.metadata.base import LookupError, LookupTimeout, MetadataResult
+from arm_backend.metadata.base import LookupError, LookupTimeout, MetadataResult, json_object
 from arm_backend.metadata.years import year_from
 
 logger = logging.getLogger("arm_backend.metadata.omdb")
@@ -54,8 +54,7 @@ class OMDBClient:
         if r.status_code != 200:
             raise LookupError(f"omdb status={r.status_code}")
 
-        body: dict[str, Any] = r.json()
-        return body
+        return json_object(r, "omdb")
 
     async def lookup_by_title(
         self,

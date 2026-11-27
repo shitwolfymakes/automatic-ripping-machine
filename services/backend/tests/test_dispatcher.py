@@ -122,6 +122,35 @@ async def test_dispatcher_all_miss_returns_none():
     assert result is None
 
 
+@respx.mock
+async def test_dispatcher_cd_with_an_html_reply_from_musicbrainz_is_a_miss_not_a_crash():
+    """A proxy error page answering 200 is one provider's error: identify
+    ends without a match instead of raising (which answered the ripper 500
+    and left it retrying with the drive held)."""
+    respx.get("https://musicbrainz.org/ws/2/discid/abc123").mock(
+        return_value=httpx.Response(200, text="<html>Proxy error</html>")
+    )
+    async with httpx.AsyncClient() as client:
+        dispatcher = MetadataDispatcher(client)
+        scan = ScanResult(disc_type=DiscType.CD, musicbrainz_disc_id="abc123")
+        result = await dispatcher.identify(scan, _config())
+    assert result is None
+    assert [(a["source"], a["outcome"]) for a in dispatcher.last_attempts] == [("musicbrainz", "error")]
+
+
+@respx.mock
+async def test_dispatcher_html_reply_from_one_provider_does_not_stop_the_walk():
+    respx.get("https://api.themoviedb.org/3/search/movie").mock(return_value=httpx.Response(200, json={"results": []}))
+    respx.get("https://api.themoviedb.org/3/search/tv").mock(return_value=httpx.Response(200, json={"results": []}))
+    respx.get("https://www.omdbapi.com/").mock(return_value=httpx.Response(200, text="<html>captive portal</html>"))
+    async with httpx.AsyncClient() as client:
+        dispatcher = MetadataDispatcher(client)
+        scan = ScanResult(disc_type=DiscType.DVD, volume_label="OBSCURE_TITLE")
+        result = await dispatcher.identify(scan, _config(episode_sources=["tmdb"]))
+    assert result is None
+    assert ("omdb", "error") in [(a["source"], a["outcome"]) for a in dispatcher.last_attempts]
+
+
 async def test_dispatcher_data_short_circuits():
     async with httpx.AsyncClient() as client:
         dispatcher = MetadataDispatcher(client)
