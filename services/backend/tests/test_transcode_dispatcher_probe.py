@@ -804,6 +804,15 @@ def test_backend_url_detail_never_carries_credentials_when_invalid() -> None:
     assert detail.startswith("backend URL https://***@host:84a3 is not a valid URL")
 
 
+def test_backend_url_detail_never_carries_a_password_fragment_when_the_password_breaks_parsing() -> None:
+    """An unencoded `#` ends the host part at `hun`, and urlsplit's port error quotes it."""
+    from arm_backend import docker_probe
+
+    ok, detail = docker_probe.probe_backend_url("https://admin:hun#ter2@arm.example:8443")
+    assert ok is False
+    assert detail == "backend URL *** is not a valid URL"
+
+
 def test_local_spawn_never_checks_the_backend_url() -> None:
     d = _make_dispatcher()
     d._docker.ping.return_value = True

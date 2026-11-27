@@ -96,8 +96,10 @@ def probe_backend_url(url: str) -> tuple[bool, str | None]:
         parts = urlsplit(url)
         host = parts.hostname or ""
         port = parts.port or (443 if parts.scheme == "https" else 80)
-    except ValueError as exc:
-        return False, f"backend URL {shown} is not a valid URL: {exc}"
+    except ValueError:
+        # Not `{exc}`: urlsplit's port error quotes the text after the
+        # first `:` of the host part, which can be part of a password.
+        return False, f"backend URL {shown} is not a valid URL"
     try:
         address = socket.getaddrinfo(host, port, type=socket.SOCK_STREAM)[0][4][0]
     except OSError as exc:

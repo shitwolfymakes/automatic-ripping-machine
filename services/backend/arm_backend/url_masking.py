@@ -11,6 +11,8 @@ def strip_userinfo(url: str) -> str:
         # Unparseable: fail closed, the raw string may carry credentials.
         return "***"
     if "@" not in parts.netloc:
-        return url
+        # An `@` outside the host part means urlsplit cut the userinfo short
+        # (an unencoded `#`, `/` or `?` in it, or no scheme): fail closed.
+        return "***" if "@" in url else url
     host = parts.netloc.rsplit("@", 1)[1]
     return urlunsplit(parts._replace(netloc=f"***@{host}"))
