@@ -690,19 +690,25 @@ def test_resolve_ripped_placeholder_promotes_to_ripped_and_runs_after_rip(signin
     assert any(e["event_type"] == "session.queued" for e in hub.events)
 
 
+@pytest.mark.parametrize("job_status", [JobStatus.RIPPED, JobStatus.RIPPED_PARTIAL])
 @pytest.mark.parametrize(("flags", "expect_after_rip"), [({"unidentified": True}, True), ({}, False)])
-def test_resolve_unidentified_partial_rip_runs_after_rip(
-    signing_key: bytes, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, flags: dict, expect_after_rip: bool
+def test_resolve_unidentified_ripped_job_runs_after_rip(
+    signing_key: bytes,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    job_status: JobStatus,
+    flags: dict,
+    expect_after_rip: bool,
 ) -> None:
-    """Rip-complete skips after_rip for an unidentified RIPPED_PARTIAL
-    job, so resolve must run it (auto-apply of the pending/default session as
-    well as the drain), not only the parked-application fan-out. An
-    identified partial rip already had after_rip at rip-complete."""
+    """Identifying a ripped disc that was still unidentified clears the flag
+    and runs the after-rip step once, so auto-apply (which waited on the
+    flag) can now queue the routed session under the right name. An
+    identified rip already had its after-rip step at rip-complete."""
     import arm_backend.identity.resolve_service as resolve_service
 
     db = FakeSession()
     hub = _CapturingHub()
-    _seed(db, job_status=JobStatus.RIPPED_PARTIAL)
+    _seed(db, job_status=job_status)
     db.rows["jobs"][0].metadata_json = {"flags": flags}
     calls: list[str] = []
 
@@ -724,5 +730,6 @@ def test_resolve_unidentified_partial_rip_runs_after_rip(
             headers=_auth(token),
         )
     assert r.status_code == 200, r.text
-    assert r.json()["job"]["status"] == "ripped_partial"
+    assert r.json()["job"]["status"] == job_status.value
+    assert r.json()["job"]["metadata_json"]["flags"]["unidentified"] is False
     assert calls == (["after_rip"] if expect_after_rip else ["fan_out"])

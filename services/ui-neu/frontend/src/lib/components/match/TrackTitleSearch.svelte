@@ -43,19 +43,30 @@
 	let editYear = $state('');
 	let editType = $state<'movie' | 'series'>('movie');
 	let editPosterUrl = $state('');
-
-	$effect(() => {
-		if (detail) {
-			editTitle = detail.title;
-			editYear = detail.year != null ? String(detail.year) : '';
-			editType = isSeriesKind(detail.kind) ? 'series' : 'movie';
-			editPosterUrl = detail.poster_url ?? '';
-		}
-	});
+	let editEdition = $state('');
+	// Set by hand: the edit fields open without a search result.
+	let byHand = $state(false);
 
 	const TEXT_SEARCH: SearchMessages = { empty: 'No results found.', failed: 'Search failed' };
 
+	function openByHand() {
+		detail = null;
+		results = [];
+		editTitle = query.trim();
+		editYear = yearInput.trim();
+		editType = isSeries ? 'series' : 'movie';
+		editPosterUrl = '';
+		editEdition = track.edition ?? '';
+		byHand = true;
+	}
+
+	function closeEditor() {
+		detail = null;
+		byHand = false;
+	}
+
 	async function handleSearch() {
+		byHand = false;
 		const imdb = imdbInput.trim();
 		if (imdb) {
 			results = [];
@@ -63,7 +74,9 @@
 			await search.run(
 				() => fetchMediaDetail(imdb),
 				IMDB_LOOKUP,
-				(found) => (detail = found[0] ?? null)
+				(found) => {
+					if (found[0]) handleSelect(found[0]);
+				}
 			);
 			return;
 		}
@@ -76,8 +89,15 @@
 		);
 	}
 
+	// Fills the edit fields once, when a result is opened, so a reload that
+	// hands in a new track object leaves what the operator typed alone.
 	function handleSelect(result: MetadataCandidate) {
 		detail = result;
+		editTitle = result.title;
+		editYear = result.year != null ? String(result.year) : '';
+		editType = isSeriesKind(result.kind) ? 'series' : 'movie';
+		editPosterUrl = result.poster_url ?? '';
+		editEdition = track.edition ?? '';
 	}
 
 	async function applyFromDetail() {
@@ -91,7 +111,8 @@
 					title: editTitle,
 					year: editYear,
 					type: editType,
-					posterUrl: editPosterUrl
+					posterUrl: editPosterUrl,
+					edition: editEdition
 				})
 			);
 			feedback = { type: 'success', message: 'Track title updated' };
@@ -179,6 +200,7 @@
 		>
 			{search.searching ? '...' : 'Search'}
 		</button>
+		<button type="button" onclick={openByHand} class="btn track-title-search-action-btn">Set by hand</button>
 	</div>
 
 	<!-- Track output options: custom filename + (series) episode -->
@@ -210,7 +232,7 @@
 	{/if}
 
 	<!-- Detail / Edit -->
-	{#if detail}
+	{#if detail || byHand}
 		<div class="stack-sm stack">
 			<div class="grid grid-cols-2 gap-2">
 				<label class="field col-span-2">
@@ -229,6 +251,10 @@
 					</select>
 				</label>
 				<label class="field col-span-2">
+					<span class="field-label track-title-search-tiny-label">Edition</span>
+					<input type="text" bind:value={editEdition} />
+				</label>
+				<label class="field col-span-2">
 					<span class="field-label track-title-search-tiny-label">Poster URL</span>
 					<input type="text" bind:value={editPosterUrl} placeholder="https://..." />
 				</label>
@@ -242,16 +268,8 @@
 				>
 					{applying ? 'Applying...' : 'Apply'}
 				</button>
-				{#if results.length > 0}
-					<button
-						type="button"
-						onclick={() => {
-							detail = null;
-						}}
-						class="btn btn-ghost track-title-search-back-btn"
-					>
-						Back
-					</button>
+				{#if results.length > 0 || byHand}
+					<button type="button" onclick={closeEditor} class="btn btn-ghost track-title-search-back-btn"> Back </button>
 				{/if}
 				{#if feedback}
 					<span class="track-title-search-feedback" data-tone={feedback.type}>{feedback.message}</span>

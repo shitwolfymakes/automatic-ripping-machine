@@ -443,25 +443,36 @@ describe('Defaults view auto-apply', () => {
 				type: 'bool',
 				editable: true,
 				enum_values: null
+			},
+			{
+				key: 'miss_media_type',
+				group: 'Defaults',
+				tier: 'operator',
+				label: 'Treat unidentified video discs as',
+				help: 'Starts as this type.',
+				type: 'enum',
+				editable: true,
+				enum_values: ['movie', 'tv'],
+				enum_labels: { movie: 'Movie', tv: 'TV' }
 			}
 		]
 	} as SettingsGroup;
 	const LABEL = 'Apply these defaults automatically after each rip';
 
-	async function openDefaults(ontoggle = vi.fn()) {
+	async function openDefaults(onsave = vi.fn()) {
 		renderComponent(SessionsArea, {
-			props: { defaultsGroup: DEFAULTS, config: { auto_transcode_on_idle: false }, ontoggle }
+			props: { defaultsGroup: DEFAULTS, config: { auto_transcode_on_idle: false, miss_media_type: 'movie' }, onsave }
 		});
 		await screen.findByText('ses Alpha');
 		await fireEvent.click(screen.getByRole('tab', { name: 'Defaults' }));
-		return ontoggle;
+		return onsave;
 	}
 
 	afterEach(() => setTranscoderEnabled(true));
 
 	it('shows auto-apply as a switch above the matrix that reports its key and value, with no Save button', async () => {
 		setTranscoderEnabled(true);
-		const ontoggle = await openDefaults();
+		const onsave = await openDefaults();
 		const toggle = await screen.findByRole('switch', { name: LABEL });
 		const cell = await screen.findByLabelText('Movie, Any disc');
 		const heading = screen.getByRole('heading', { name: 'Defaults' });
@@ -475,7 +486,51 @@ describe('Defaults view auto-apply', () => {
 		expect(lede.compareDocumentPosition(cell) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 		expect(screen.queryByRole('button', { name: 'Save' })).not.toBeInTheDocument();
 		await fireEvent.click(toggle);
-		expect(ontoggle).toHaveBeenCalledWith('auto_transcode_on_idle', true);
+		expect(onsave).toHaveBeenCalledWith('auto_transcode_on_idle', true);
+	});
+
+	it('shows an enum Defaults field as a select that saves the chosen option', async () => {
+		setTranscoderEnabled(true);
+		const onsave = await openDefaults();
+		const select = await screen.findByRole('combobox', { name: 'Treat unidentified video discs as' });
+		expect(select).toHaveValue('movie');
+		expect(
+			within(select)
+				.getAllByRole('option')
+				.map((o) => o.textContent)
+		).toEqual(['Movie', 'TV']);
+		expect(screen.getByTestId('defaults-auto-apply')).toContainElement(select);
+		await fireEvent.change(select, { target: { value: 'tv' } });
+		expect(onsave).toHaveBeenCalledWith('miss_media_type', 'tv');
+	});
+
+	it('renders an enum Defaults field with no options and no saved value as an empty select', async () => {
+		setTranscoderEnabled(true);
+		const bare = { ...DEFAULTS.fields[1], enum_values: null, enum_labels: null };
+		renderComponent(SessionsArea, {
+			props: { defaultsGroup: { ...DEFAULTS, fields: [bare] }, config: {}, onsave: vi.fn() }
+		});
+		await screen.findByText('ses Alpha');
+		await fireEvent.click(screen.getByRole('tab', { name: 'Defaults' }));
+		const select = await screen.findByRole('combobox', { name: 'Treat unidentified video discs as' });
+		expect(within(select).queryAllByRole('option')).toHaveLength(0);
+		expect((select as HTMLSelectElement).value).toBe('');
+	});
+
+	it('falls back to the raw value for an enum option that has no label', async () => {
+		setTranscoderEnabled(true);
+		const unlabelled = { ...DEFAULTS.fields[1], enum_labels: null };
+		renderComponent(SessionsArea, {
+			props: { defaultsGroup: { ...DEFAULTS, fields: [unlabelled] }, config: {}, onsave: vi.fn() }
+		});
+		await screen.findByText('ses Alpha');
+		await fireEvent.click(screen.getByRole('tab', { name: 'Defaults' }));
+		const select = await screen.findByRole('combobox', { name: 'Treat unidentified video discs as' });
+		expect(
+			within(select)
+				.getAllByRole('option')
+				.map((o) => o.textContent)
+		).toEqual(['movie', 'tv']);
 	});
 
 	it('hides auto-apply on a ripper-only deployment and keeps the matrix', async () => {
@@ -483,6 +538,18 @@ describe('Defaults view auto-apply', () => {
 		await openDefaults();
 		expect(await screen.findByLabelText('Movie, Any disc')).toBeInTheDocument();
 		expect(screen.queryByRole('switch', { name: LABEL })).not.toBeInTheDocument();
+		expect(screen.getByRole('combobox', { name: 'Treat unidentified video discs as' })).toBeInTheDocument();
+	});
+
+	it('leaves out the Defaults panel on a ripper-only deployment when auto-apply is its only field', async () => {
+		setTranscoderEnabled(false);
+		renderComponent(SessionsArea, {
+			props: { defaultsGroup: { ...DEFAULTS, fields: [DEFAULTS.fields[0]] }, config: {}, onsave: vi.fn() }
+		});
+		await screen.findByText('ses Alpha');
+		await fireEvent.click(screen.getByRole('tab', { name: 'Defaults' }));
+		expect(await screen.findByLabelText('Movie, Any disc')).toBeInTheDocument();
+		expect(screen.queryByTestId('defaults-auto-apply')).not.toBeInTheDocument();
 	});
 });
 

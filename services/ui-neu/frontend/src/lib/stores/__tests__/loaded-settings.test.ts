@@ -102,6 +102,90 @@ describe('LoadedSettings', () => {
 		});
 	});
 
+	describe('saveSetting', () => {
+		it('saves a string value, showing it at once, and rolls it back when the save fails', async () => {
+			const loaded = await loadedWith({ miss_media_type: 'movie' });
+			mockSave.mockRejectedValueOnce(new Error('fail'));
+			const failing = loaded.saveSetting('miss_media_type', 'tv');
+			expect(loaded.settings?.config.miss_media_type).toBe('tv');
+			await failing;
+			expect(mockSave).toHaveBeenCalledWith({ miss_media_type: 'tv' });
+			expect(loaded.settings?.config.miss_media_type).toBe('movie');
+			mockSave.mockResolvedValueOnce(undefined as never);
+			await loaded.saveSetting('miss_media_type', 'tv');
+			expect(loaded.settings?.config.miss_media_type).toBe('tv');
+			expect(loaded.isSaving('miss_media_type')).toBe(false);
+		});
+	});
+
+	describe('saveSetting while the same key is saving', () => {
+		const KEY = 'miss_media_type';
+
+		function held() {
+			let resolve!: () => void;
+			let reject!: (e: unknown) => void;
+			mockSave.mockReturnValueOnce(
+				new Promise<never>((res, rej) => {
+					resolve = res as () => void;
+					reject = rej;
+				})
+			);
+			return { resolve, reject };
+		}
+
+		it('saves a change made during the save once it settles, so config and server end on what is shown', async () => {
+			const loaded = await loadedWith({ miss_media_type: 'movie' });
+			const first = held();
+			mockSave.mockResolvedValue(undefined as never);
+			const pending = loaded.saveSetting(KEY, 'tv');
+			await loaded.saveSetting(KEY, 'movie');
+			expect(loaded.settings?.config.miss_media_type).toBe('movie');
+			expect(mockSave).toHaveBeenCalledTimes(1);
+			first.resolve();
+			await pending;
+			expect(mockSave.mock.calls).toEqual([[{ miss_media_type: 'tv' }], [{ miss_media_type: 'movie' }]]);
+			expect(loaded.settings?.config.miss_media_type).toBe('movie');
+			expect(loaded.isSaving(KEY)).toBe(false);
+		});
+
+		it('sends only the latest of several changes made during the save', async () => {
+			const loaded = await loadedWith({ miss_media_type: 'movie' });
+			const first = held();
+			mockSave.mockResolvedValue(undefined as never);
+			const pending = loaded.saveSetting(KEY, 'tv');
+			await loaded.saveSetting(KEY, 'movie');
+			await loaded.saveSetting(KEY, 'tv');
+			first.resolve();
+			await pending;
+			expect(mockSave.mock.calls).toEqual([[{ miss_media_type: 'tv' }], [{ miss_media_type: 'tv' }]]);
+			expect(loaded.settings?.config.miss_media_type).toBe('tv');
+		});
+
+		it('keeps the later change when the first save fails and the later one lands', async () => {
+			const loaded = await loadedWith({ miss_media_type: 'movie' });
+			const first = held();
+			mockSave.mockResolvedValue(undefined as never);
+			const pending = loaded.saveSetting(KEY, 'tv');
+			await loaded.saveSetting(KEY, 'music');
+			first.reject(new Error('fail'));
+			await pending;
+			expect(mockSave).toHaveBeenLastCalledWith({ miss_media_type: 'music' });
+			expect(loaded.settings?.config.miss_media_type).toBe('music');
+		});
+
+		it('rolls back to the last saved value when the later save fails', async () => {
+			const loaded = await loadedWith({ miss_media_type: 'movie' });
+			const first = held();
+			mockSave.mockRejectedValue(new Error('fail'));
+			const pending = loaded.saveSetting(KEY, 'tv');
+			await loaded.saveSetting(KEY, 'music');
+			first.resolve();
+			await pending;
+			expect(loaded.settings?.config.miss_media_type).toBe('tv');
+			expect(loaded.isSaving(KEY)).toBe(false);
+		});
+	});
+
 	describe('toggleSetting', () => {
 		const KEY = 'notifications_enabled';
 
@@ -147,18 +231,6 @@ describe('LoadedSettings', () => {
 			mockSave.mockRejectedValue(new Error('fail'));
 			await loaded.toggleSetting(KEY, true);
 			expect(loaded.settings?.config.notifications_enabled).toBe(false);
-		});
-
-		it('ignores a second call for the same key while its save is in flight', async () => {
-			const loaded = await loadedWith({ notifications_enabled: false });
-			let resolve!: () => void;
-			mockSave.mockReturnValue(new Promise<never>((r) => (resolve = r as () => void)));
-			const first = loaded.toggleSetting(KEY, true);
-			await loaded.toggleSetting(KEY, false);
-			expect(mockSave).toHaveBeenCalledTimes(1);
-			expect(loaded.settings?.config.notifications_enabled).toBe(true);
-			resolve();
-			await first;
 		});
 
 		it('saves another key while one is in flight', async () => {

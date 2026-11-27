@@ -162,6 +162,34 @@ describe('TrackTitleSearch', () => {
 			});
 		});
 
+		it('opens a picked result with the track edition and keeps it on Apply', async () => {
+			mockSearchMetadata.mockResolvedValue({ candidates: [createCandidate({ title: 'Picked' })] });
+			renderComponent(TrackTitleSearch, {
+				props: { jobId: 'job_3', track: createTrack({ id: 'trk_5', edition: 'Extended' }) }
+			});
+			await fireEvent.click(screen.getByText('Search'));
+			await waitFor(() => expect(screen.getByText('Picked')).toBeInTheDocument());
+			await fireEvent.click(screen.getByText('Picked'));
+			expect(screen.getByLabelText('Edition')).toHaveValue('Extended');
+			await fireEvent.click(screen.getByText('Apply'));
+			await waitFor(() => expect(mockUpdateTrack).toHaveBeenCalledTimes(1));
+			expect(mockUpdateTrack.mock.calls[0][2]).toMatchObject({ edition: 'Extended' });
+		});
+
+		it('keeps a typed title and edition when the parent passes a new track object', async () => {
+			mockSearchMetadata.mockResolvedValue({ candidates: [createCandidate({ title: 'Picked' })] });
+			const track = createTrack({ id: 'trk_5', edition: 'Extended' });
+			const { rerender } = renderComponent(TrackTitleSearch, { props: { jobId: 'job_3', track } });
+			await fireEvent.click(screen.getByText('Search'));
+			await waitFor(() => expect(screen.getByText('Picked')).toBeInTheDocument());
+			await fireEvent.click(screen.getByText('Picked'));
+			await fireEvent.input(screen.getByLabelText('Title'), { target: { value: 'Typed Title' } });
+			await fireEvent.input(screen.getByLabelText('Edition'), { target: { value: 'Typed Cut' } });
+			await rerender({ jobId: 'job_3', track: { ...track } });
+			expect(screen.getByLabelText('Title')).toHaveValue('Typed Title');
+			expect(screen.getByLabelText('Edition')).toHaveValue('Typed Cut');
+		});
+
 		it('applying with Type=Series sends role: episode', async () => {
 			mockSearchMetadata.mockResolvedValue({
 				candidates: [createCandidate({ title: 'Picked Show', kind: 'series' })]
@@ -201,6 +229,77 @@ describe('TrackTitleSearch', () => {
 			await fireEvent.click(screen.getByRole('button', { name: /search/i }));
 			await waitFor(() => expect(screen.getByText(/No results/i)).toBeInTheDocument());
 			expect(screen.queryByText('Set manually')).not.toBeInTheDocument();
+		});
+	});
+
+	describe('Set by hand', () => {
+		it('opens the edit fields with no search and saves title, year and edition without imdb or poster', async () => {
+			renderComponent(TrackTitleSearch, {
+				props: { jobId: 'job_3', track: createTrack({ id: 'trk_5', title: null, source_ref: 'title_02.mkv' }) }
+			});
+			expect(screen.queryByText('Apply')).not.toBeInTheDocument();
+			await fireEvent.click(screen.getByRole('button', { name: 'Set by hand' }));
+			expect(mockSearchMetadata).not.toHaveBeenCalled();
+			await fireEvent.input(screen.getByLabelText('Title'), { target: { value: ' The Mole People ' } });
+			await fireEvent.input(screen.getByLabelText('Year'), { target: { value: '1956' } });
+			await fireEvent.input(screen.getByLabelText('Edition'), { target: { value: " Director's Cut " } });
+			await fireEvent.click(screen.getByText('Apply'));
+			await waitFor(() => {
+				expect(mockUpdateTrack).toHaveBeenCalledWith('job_3', 'trk_5', {
+					title: 'The Mole People',
+					year: 1956,
+					role: 'main',
+					poster_url: undefined,
+					edition: "Director's Cut"
+				});
+			});
+		});
+
+		it('starts from the search fields, the track kind and the track edition', async () => {
+			renderComponent(TrackTitleSearch, {
+				props: {
+					jobId: 'job_3',
+					track: createTrack({ title: 'Show', year: 2001, role: 'episode', edition: 'Directors Cut' })
+				}
+			});
+			await fireEvent.click(screen.getByRole('button', { name: 'Set by hand' }));
+			expect(screen.getByLabelText('Title')).toHaveValue('Show');
+			expect(screen.getByLabelText('Year')).toHaveValue('2001');
+			expect(screen.getByLabelText('Type')).toHaveValue('series');
+			expect(screen.getByLabelText('Edition')).toHaveValue('Directors Cut');
+		});
+
+		it('opens with an empty edition for a track that has none', async () => {
+			renderComponent(TrackTitleSearch, { props: { jobId: 'job_3', track: createTrack({ edition: null }) } });
+			await fireEvent.click(screen.getByRole('button', { name: 'Set by hand' }));
+			expect(screen.getByLabelText('Edition')).toHaveValue('');
+		});
+
+		it('sends a null edition when the stored one is blanked', async () => {
+			renderComponent(TrackTitleSearch, {
+				props: { jobId: 'job_3', track: createTrack({ id: 'trk_5', title: 'Alien', edition: 'Directors Cut' }) }
+			});
+			await fireEvent.click(screen.getByRole('button', { name: 'Set by hand' }));
+			await fireEvent.input(screen.getByLabelText('Edition'), { target: { value: '' } });
+			await fireEvent.click(screen.getByText('Apply'));
+			await waitFor(() => expect(mockUpdateTrack).toHaveBeenCalledTimes(1));
+			expect(mockUpdateTrack.mock.calls[0][2]).toMatchObject({ edition: null });
+		});
+
+		it('Back closes the form', async () => {
+			renderComponent(TrackTitleSearch, { props: { jobId: 'job_3', track: createTrack() } });
+			await fireEvent.click(screen.getByRole('button', { name: 'Set by hand' }));
+			await fireEvent.click(screen.getByText('Back'));
+			expect(screen.queryByText('Apply')).not.toBeInTheDocument();
+		});
+
+		it('a search closes the form', async () => {
+			mockSearchMetadata.mockResolvedValue({ candidates: [createCandidate({ title: 'Found' })] });
+			renderComponent(TrackTitleSearch, { props: { jobId: 'job_3', track: createTrack() } });
+			await fireEvent.click(screen.getByRole('button', { name: 'Set by hand' }));
+			await fireEvent.click(screen.getByRole('button', { name: 'Search' }));
+			await waitFor(() => expect(screen.getByText('Found')).toBeInTheDocument());
+			expect(screen.queryByText('Apply')).not.toBeInTheDocument();
 		});
 	});
 

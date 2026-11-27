@@ -444,3 +444,112 @@ async def test_after_rip_promoted_parked_application_suppresses_drive_default(tm
     queued_events = [e for e in hub.events if e["event_type"] == "session.queued"]
     assert len(queued_events) == 1
     assert queued_events[0]["payload"]["session_id"] == "ses_y"
+
+
+async def _rip_to_completion(db: FakeSession, job: Job, hub: CapturingHub) -> None:
+    from arm_backend.routers.ripper import rip_complete
+    from arm_common.schemas import JobCompleteRequest
+
+    await rip_complete(JobCompleteRequest(), job=job, session=db, hub=hub)  # type: ignore[arg-type]
+
+
+@pytest.mark.asyncio
+async def test_miss_released_by_start_auto_applies_after_the_rip(tmp_path: Path) -> None:
+    """Start counts a parked miss as matched: once it rips, auto-apply
+    queues the routed session."""
+    from arm_backend.routers.jobs import _start_held_job
+
+    _set_media_root(tmp_path)
+    db = FakeSession()
+    job = _seed(db, job_status=JobStatus.AWAITING_REVIEW)
+    job.metadata_json = {"flags": {"unidentified": True}}
+    job.resumed_from_crash = False
+    hub = CapturingHub()
+
+    await _start_held_job(db, hub, job)  # type: ignore[arg-type]
+    await _rip_to_completion(db, job, hub)
+
+    assert job.status == JobStatus.RIPPED
+    apps = [r for r in db.added if isinstance(r, SessionApplication)]
+    assert [a.session_id for a in apps] == ["ses_x"]
+
+
+@pytest.mark.asyncio
+async def test_miss_released_by_countdown_waits_for_a_match(tmp_path: Path) -> None:
+    """A miss the countdown released rips still unidentified: rip-complete
+    finishes it ripped but queues nothing unattended."""
+    _set_media_root(tmp_path)
+    db = FakeSession()
+    job = _seed(db, job_status=JobStatus.RIPPING)
+    job.metadata_json = {"flags": {"unidentified": True}}
+    job.resumed_from_crash = False
+    hub = CapturingHub()
+
+    await _rip_to_completion(db, job, hub)
+
+    assert job.status == JobStatus.RIPPED
+    assert not [r for r in db.added if isinstance(r, SessionApplication)]
+
+
+def _second_session(db: FakeSession, session_id: str) -> None:
+    db.rows["sessions"].append(
+        Session(
+            id=session_id,
+            name="Hand picked",
+            media_type=MediaType.MOVIE,
+            is_builtin=False,
+            rip_preset_id="rpr_x",
+            transcode_preset_id="tpr_x",
+            output_path_template="{title} ({year})/hand/{title} - {transcode_slug}.{ext}",
+        )
+    )
+
+
+@pytest.mark.asyncio
+async def test_resolve_after_a_hand_apply_does_not_auto_apply_the_routed_session(tmp_path: Path) -> None:
+    """A session applied by hand to a ripped, still unidentified disc is the
+    operator's choice: identifying the disc later runs the after-rip step,
+    but auto-apply adds no routed session next to it."""
+    from arm_backend.identity.resolve_service import resolve_identity
+    from arm_common.schemas import ResolveRequest
+
+    _set_media_root(tmp_path)
+    db = FakeSession()
+    job = _seed(db)
+    job.metadata_json = {"flags": {"unidentified": True}}
+    job.resumed_from_crash = False
+    _second_session(db, "ses_hand")
+    hub = CapturingHub()
+
+    await apply_session_internal(  # type: ignore[arg-type]
+        db, job=job, session_id="ses_hand", overwrite=False, created_by_user_id=None, source="manual", hub=hub
+    )
+    await resolve_identity(db, job, ResolveRequest(title="Iron Man", year=2008), hub=hub, stage_runner=None)  # type: ignore[arg-type]
+
+    apps = [r for r in db.added if isinstance(r, SessionApplication)]
+    assert [a.session_id for a in apps] == ["ses_hand"]
+
+
+@pytest.mark.asyncio
+async def test_auto_apply_ignores_a_cancelled_application(tmp_path: Path) -> None:
+    """A cancelled application is no longer the operator's choice for the
+    job, so the routed session still auto-applies."""
+    _set_media_root(tmp_path)
+    db = FakeSession()
+    job = _seed(db)
+    _second_session(db, "ses_hand")
+    db.rows["session_applications"] = [
+        SessionApplication(
+            id="sap_cancelled",
+            session_id="ses_hand",
+            job_id=job.id,
+            status=SessionApplicationStatus.CANCELLED,
+            overwrite=False,
+        )
+    ]
+    hub = CapturingHub()
+
+    await maybe_auto_apply_session(db, job, hub)  # type: ignore[arg-type]
+
+    apps = [r for r in db.added if isinstance(r, SessionApplication)]
+    assert [a.session_id for a in apps] == ["ses_x"]
