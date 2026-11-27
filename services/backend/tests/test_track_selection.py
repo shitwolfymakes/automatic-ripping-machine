@@ -4,10 +4,10 @@ import pytest
 
 from arm_backend.track_selection import (
     ALL_TRACKS_MIN_SECONDS,
-    MAIN_FEATURE_MIN_SECONDS,
     select_tracks,
     select_tracks_for_review,
 )
+from arm_common.title_classes import MAIN_FEATURE_MIN_SECONDS
 from arm_common import (
     DiscType,
     IdentificationMode,
