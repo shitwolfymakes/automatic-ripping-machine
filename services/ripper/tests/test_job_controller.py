@@ -33,6 +33,7 @@ from arm_ripper.eject import Ejector
 from arm_ripper.job_controller import JobController
 from arm_ripper.resolution_wait import ResolutionWaiter
 from arm_ripper.makemkv_prep import MakeMKVPrep
+from arm_ripper.scan.makemkv import ScanFailureReason
 
 
 def _job(status: JobStatus, *, title: str | None = None) -> Job:
@@ -1320,6 +1321,108 @@ async def test_scan_retry_propagates_scanerror(monkeypatch):
     monkeypatch.setattr(disc_scan_module, "scan_disc", _scan)
     with pytest.raises(disc_scan_module.ScanError):
         await disc_scan_module._scan_with_ready_retry("/dev/sr0")
+
+
+def _scan_of(disc_type: DiscType) -> ScanResult:
+    return ScanResult(disc_type=disc_type, volume_label="X", titles=[])
+
+
+async def test_scan_retry_never_rescans_a_data_disc(monkeypatch):
+    """A real data disc has no titles by nature: scanned once, not five times."""
+    monkeypatch.setattr(disc_scan_module.asyncio, "sleep", _noop_async)
+    calls = {"n": 0}
+
+    async def _scan(device_path):
+        calls["n"] += 1
+        return _scan_of(DiscType.DATA)
+
+    monkeypatch.setattr(disc_scan_module, "scan_disc", _scan)
+    monkeypatch.setattr(disc_scan_module, "read_drive_status", lambda _p: DriveState.DISC_OK)
+
+    out = await disc_scan_module._scan_with_ready_retry("/dev/sr0")
+    assert out.disc_type is DiscType.DATA
+    assert calls["n"] == 1
+
+
+async def test_scan_retry_never_rescans_an_audio_cd(monkeypatch):
+    calls = {"n": 0}
+
+    async def _scan(device_path):
+        calls["n"] += 1
+        return _scan_of(DiscType.CD)
+
+    monkeypatch.setattr(disc_scan_module, "scan_disc", _scan)
+
+    await disc_scan_module._scan_with_ready_retry("/dev/sr0")
+    assert calls["n"] == 1
+
+
+async def test_scan_retry_never_retries_a_makemkv_failure(monkeypatch):
+    """An undecryptable disc propagates at once: no five scans of up to 20 minutes each."""
+    calls = {"n": 0}
+    failure = disc_scan_module.MakemkvScanFailed(ScanFailureReason.VOLUME_KEY_UNKNOWN, "no key", ("MSG:3303",))
+
+    async def _scan(device_path):
+        calls["n"] += 1
+        raise failure
+
+    monkeypatch.setattr(disc_scan_module, "scan_disc", _scan)
+    with pytest.raises(disc_scan_module.MakemkvScanFailed):
+        await disc_scan_module._scan_with_ready_retry("/dev/sr0")
+    assert calls["n"] == 1
+
+
+@pytest.mark.parametrize(
+    ("disc_type", "titles", "expected"),
+    [
+        (DiscType.BLURAY, [], True),
+        (DiscType.DVD, [], True),
+        (DiscType.UNKNOWN, [], True),
+        (DiscType.DATA, [], False),
+        (DiscType.CD, [], False),
+        (DiscType.BLURAY, [ScanTitle(index=0, duration_seconds=60)], False),
+    ],
+)
+def test_worth_rescanning(disc_type, titles, expected):
+    assert disc_scan_module._worth_rescanning(ScanResult(disc_type=disc_type, titles=titles)) is expected
+
+
+async def test_scan_or_none_logs_reason_detail_and_tail_then_ends_the_pipeline(monkeypatch, caplog):
+    failure = disc_scan_module.MakemkvScanFailed(
+        ScanFailureReason.VOLUME_KEY_UNKNOWN,
+        "makemkvcon reported volume_key_unknown",
+        ("MSG:3303,key unknown", "TCOUNT:0"),
+        DiscType.BLURAY,
+    )
+
+    async def _scan(device_path):
+        raise failure
+
+    monkeypatch.setattr(disc_scan_module, "scan_disc", _scan)
+    with caplog.at_level(logging.ERROR, logger="arm_ripper.job_controller"):
+        assert await disc_scan_module.scan_or_none("/dev/sr0") is None
+
+    assert [r.getMessage() for r in caplog.records] == [
+        "scan failed device=/dev/sr0 reason=volume_key_unknown disc_type=bluray "
+        "detail=makemkvcon reported volume_key_unknown",
+        "makemkvcon: MSG:3303,key unknown",
+        "makemkvcon: TCOUNT:0",
+    ]
+
+
+async def test_scan_or_none_logs_an_unknown_disc_type_as_none(monkeypatch, caplog):
+    failure = disc_scan_module.MakemkvScanFailed(ScanFailureReason.TIMED_OUT, "timed out", ())
+
+    async def _scan(device_path):
+        raise failure
+
+    monkeypatch.setattr(disc_scan_module, "scan_disc", _scan)
+    with caplog.at_level(logging.ERROR, logger="arm_ripper.job_controller"):
+        assert await disc_scan_module.scan_or_none("/dev/sr0") is None
+
+    assert [r.getMessage() for r in caplog.records] == [
+        "scan failed device=/dev/sr0 reason=timed_out disc_type=None detail=timed out"
+    ]
 
 
 async def test_run_command_kill_survives_process_lookup_error(monkeypatch):

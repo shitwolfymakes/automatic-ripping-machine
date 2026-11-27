@@ -5,13 +5,13 @@ from arm_common.schemas import ScanResult
 
 from arm_ripper import iso_extract, prepare
 from arm_ripper.scan.data import scan_data
-from arm_ripper.scan.makemkv import ScanError, scan_disc as scan_makemkv
+from arm_ripper.scan.makemkv import MakemkvScanFailed, ScanError, scan_disc as scan_makemkv
 from arm_ripper.scan.musicbrainz_disc import scan_cd
 from arm_ripper.source import is_iso_source
 
 logger = logging.getLogger("arm_ripper.scan")
 
-__all__ = ["ScanError", "scan"]
+__all__ = ["MakemkvScanFailed", "ScanError", "scan"]
 
 
 async def _scan_extracted(device_path: str) -> ScanResult | None:
@@ -57,14 +57,49 @@ async def scan(device_path: str) -> ScanResult:
         await prepare.finish()
 
 
-async def _scan(device_path: str) -> ScanResult:
+async def _makemkv_or_failure(device_path: str) -> ScanResult | MakemkvScanFailed | None:
+    """MakeMKV's scan; its typed failure when it ran and failed (the caller decides what that means), None when
+    it could not run at all."""
     try:
-        result = await scan_makemkv(device_path)
+        return await scan_makemkv(device_path)
+    except MakemkvScanFailed as e:
+        logger.info("makemkv scan failed device=%s reason=%s err=%s", device_path, e.reason.value, e)
+        return e
     except ScanError as e:
         logger.info("makemkv scan failed device=%s err=%s", device_path, e)
-        result = None
+        return None
 
-    if result is not None and result.titles:
+
+async def _fallback(device_path: str, mkv_result: ScanResult | MakemkvScanFailed | None) -> ScanResult:
+    """What a disc that is neither MakeMKV-readable nor an audio CD is.
+
+    A MakeMKV failure on a video disc (undecryptable, unopenable, timed out, expired) is re-raised: such a disc
+    is never a data disc, so it must not reach blkid or the data-copy rip. Only a scan that ran and found
+    nothing (or could not run) falls back to the volume label.
+    """
+    if isinstance(mkv_result, MakemkvScanFailed):
+        raise mkv_result
+
+    data = await scan_data(device_path)
+    if mkv_result is not None:
+        # makemkv ran but found nothing rippable — promote to DATA via blkid for label.
+        if data.volume_label:
+            return data
+        return ScanResult(disc_type=DiscType.UNKNOWN, volume_label=mkv_result.volume_label)
+
+    logger.info(
+        "scan complete device=%s disc_type=%s volume=%s",
+        device_path,
+        data.disc_type.value,
+        data.volume_label,
+    )
+    return data
+
+
+async def _scan(device_path: str) -> ScanResult:
+    result = await _makemkv_or_failure(device_path)
+
+    if isinstance(result, ScanResult) and result.titles:
         logger.info(
             "scan complete device=%s disc_type=%s volume=%s titles=%d",
             device_path,
@@ -89,18 +124,4 @@ async def _scan(device_path: str) -> ScanResult:
         )
         return cd
 
-    if result is not None:
-        # makemkv ran but found nothing rippable — promote to DATA via blkid for label.
-        data = await scan_data(device_path)
-        if data.volume_label:
-            return data
-        return ScanResult(disc_type=DiscType.UNKNOWN, volume_label=result.volume_label)
-
-    data = await scan_data(device_path)
-    logger.info(
-        "scan complete device=%s disc_type=%s volume=%s",
-        device_path,
-        data.disc_type.value,
-        data.volume_label,
-    )
-    return data
+    return await _fallback(device_path, result)

@@ -3,9 +3,10 @@
 import asyncio
 import logging
 
+from arm_common import DiscType
 from arm_common.schemas import ScanResult
 from arm_ripper.drive_poll import DriveErrorKind, DriveState, classify_drive_error, read_drive_status
-from arm_ripper.scan import ScanError, scan as scan_disc
+from arm_ripper.scan import MakemkvScanFailed, ScanError, scan as scan_disc
 from arm_ripper.source import is_file_source
 
 # The moved code keeps the job controller's logger name so existing log filters and log text stay the same.
@@ -27,6 +28,9 @@ async def scan_or_none(device_path: str) -> ScanResult | None:
     the pipeline). Any other OSError propagates."""
     try:
         return await _scan_with_ready_retry(device_path)
+    except MakemkvScanFailed as e:
+        _log_scan_failure(device_path, e)
+        return None
     except ScanError as e:
         logger.error("scan failed device=%s err=%s", device_path, e)
         return None
@@ -37,8 +41,31 @@ async def scan_or_none(device_path: str) -> ScanResult | None:
         return None
 
 
+def _log_scan_failure(device_path: str, failure: MakemkvScanFailed) -> None:
+    """Side effect: log why MakeMKV could not scan the disc, then its last output, one line each."""
+    logger.error(
+        "scan failed device=%s reason=%s disc_type=%s detail=%s",
+        device_path,
+        failure.reason.value,
+        failure.disc_type.value if failure.disc_type else None,
+        failure.detail,
+    )
+    for line in failure.tail:
+        logger.error("makemkvcon: %s", line)
+
+
+# Zero titles from these may be a drive still settling; DATA and CD have no titles by nature.
+_RESCANNABLE_DISC_TYPES = frozenset({DiscType.BLURAY, DiscType.DVD, DiscType.UNKNOWN})
+
+
+def _worth_rescanning(result: ScanResult) -> bool:
+    """Pure: whether a scan can come out differently on a retry: a video (or unidentified) disc with no titles.
+    A data or audio-CD result is what the disc is."""
+    return not result.titles and result.disc_type in _RESCANNABLE_DISC_TYPES
+
+
 async def _scan_with_ready_retry(device_path: str) -> ScanResult:
-    """Scan the disc, retrying when a DISC_OK drive yields zero titles.
+    """Scan the disc, retrying when a DISC_OK drive yields zero titles on a video disc.
 
     A `DISC_OK` drive that scans to zero titles is almost certainly not
     data-ready yet (the medium reports present via ioctl before the first
@@ -55,7 +82,7 @@ async def _scan_with_ready_retry(device_path: str) -> ScanResult:
     for attempt in range(1, SCAN_NOT_READY_MAX_ATTEMPTS + 1):
         result = await scan_disc(device_path)
         last = result
-        if result.titles:
+        if not _worth_rescanning(result):
             return result
 
         # An ISO file has no drive to settle: the CDROM_DRIVE_STATUS ioctl

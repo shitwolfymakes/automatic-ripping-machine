@@ -74,13 +74,10 @@ def test_scan_data_iso_without_layout_is_data(tmp_path: Path) -> None:
 
 
 @pytest.mark.usefixtures("blkid_label")
-def test_scan_data_device_node_is_never_sniffed(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    def _boom(_path: str) -> DiscType | None:
-        raise AssertionError("sniff must not run for a device node")
-
-    monkeypatch.setattr(data_module, "sniff_video_image", _boom)
-    out = asyncio.run(data_module.scan_data("/dev/sr0"))
-    assert out.disc_type is DiscType.DATA
+def test_scan_data_block_device_with_bdmv_is_bluray(tmp_path: Path) -> None:
+    """The layout sniff reads any path, so a physical Blu-ray whose volume label blkid can read is not DATA."""
+    out = asyncio.run(data_module.scan_data(_image(tmp_path, "BDMV".encode("utf-16-be"))))
+    assert out.disc_type is DiscType.BLURAY
 
 
 class _HangingProc:
@@ -178,7 +175,7 @@ def test_sniffed_video_type_logs_found_layout(tmp_path: Path, caplog: pytest.Log
         kind = asyncio.run(data_module._sniffed_video_type(path))
     assert kind is DiscType.BLURAY
     assert [r.getMessage() for r in caplog.records] == [
-        f"image {path} carries a bluray layout; classifying as bluray with no titles"
+        f"{path} carries a bluray layout; classifying as bluray with no titles"
     ]
 
 
@@ -189,9 +186,13 @@ def test_sniffed_video_type_none_without_layout(tmp_path: Path, caplog: pytest.L
     assert caplog.records == []
 
 
-def test_sniffed_video_type_skips_sniff_for_device_node(monkeypatch: pytest.MonkeyPatch) -> None:
-    def _boom(_path: str) -> DiscType | None:
-        raise AssertionError("sniff must not run for a device node")
+def test_sniffed_video_type_reads_a_device_node(monkeypatch: pytest.MonkeyPatch) -> None:
+    seen: list[str] = []
 
-    monkeypatch.setattr(data_module, "sniff_video_image", _boom)
-    assert asyncio.run(data_module._sniffed_video_type("/dev/sr0")) is None
+    def _sniff(path: str) -> DiscType | None:
+        seen.append(path)
+        return DiscType.BLURAY
+
+    monkeypatch.setattr(data_module, "sniff_video_image", _sniff)
+    assert asyncio.run(data_module._sniffed_video_type("/dev/sr0")) is DiscType.BLURAY
+    assert seen == ["/dev/sr0"]
