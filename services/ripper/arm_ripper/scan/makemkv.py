@@ -20,8 +20,9 @@ logger = logging.getLogger("arm_ripper.scan.makemkv")
 # this long, or has been running this long in total.
 SCAN_IDLE_TIMEOUT_SECONDS = 180.0
 SCAN_MAX_SECONDS = 1200.0
-# makemkvcon prints the disc's CINFO block after `TCOUNT:0`; wait this long for
-# it to go quiet, then kill instead of waiting for it to give up on its own.
+# makemkvcon keeps printing the disc's CINFO (after `TCOUNT:0`) or title blocks
+# (after a successful end of output) and can then linger for minutes before it
+# exits; wait this long for the output to go quiet, then kill instead of waiting.
 SCAN_TERMINAL_GRACE_SECONDS = 5.0
 # Non-progress lines kept (stdout and stderr, in arrival order) for a failure report.
 SCAN_TAIL_LINES = 60
@@ -33,6 +34,9 @@ _PIPE_COUNT = 2  # stdout and stderr
 # work and the only fix is rebuilding against a fresher upstream tarball.
 MAKEMKV_EXPIRED_PREFIX = b"MSG:5021,"
 TCOUNT_ZERO_LINE = "TCOUNT:0"
+TCOUNT_PREFIX = "TCOUNT:"
+# "Operation successfully completed": makemkvcon has finished enumerating the disc.
+OPERATION_COMPLETED_PREFIX = "MSG:5011,"
 # Disc-open failure messages. The code and text come from the issue report.
 VOLUME_KEY_UNKNOWN_PREFIX = "MSG:3303,"
 DISC_OPEN_FAILED_TEXT = "failed to open disc"
@@ -90,6 +94,8 @@ def _classify_from_titles(titles: list[ScanTitle]) -> DiscType:
 class _EventKind(StrEnum):
     EXPIRED = "expired"
     TCOUNT_ZERO = "tcount_zero"
+    TCOUNT_TITLES = "tcount_titles"
+    COMPLETED = "completed"
     REASON = "reason"
     PROGRESS = "progress"
     OTHER = "other"
@@ -110,6 +116,10 @@ def _classify_line(line: str) -> _LineEvent:
         return _LineEvent(_EventKind.EXPIRED)
     if line.strip() == TCOUNT_ZERO_LINE:
         return _LineEvent(_EventKind.TCOUNT_ZERO)
+    if line.startswith(TCOUNT_PREFIX):
+        return _LineEvent(_EventKind.TCOUNT_TITLES)
+    if line.startswith(OPERATION_COMPLETED_PREFIX):
+        return _LineEvent(_EventKind.COMPLETED)
     if line.startswith(VOLUME_KEY_UNKNOWN_PREFIX):
         return _LineEvent(_EventKind.REASON, ScanFailureReason.VOLUME_KEY_UNKNOWN)
     if line.startswith("MSG:") and DISC_OPEN_FAILED_TEXT in line.lower():
@@ -127,6 +137,14 @@ def _on_tcount_zero(watch: "_ScanWatch", _event: _LineEvent) -> None:
     watch.tcount_zero = True
 
 
+def _on_tcount_titles(watch: "_ScanWatch", _event: _LineEvent) -> None:
+    watch.titles_seen = True
+
+
+def _on_completed(watch: "_ScanWatch", _event: _LineEvent) -> None:
+    watch.completed = True
+
+
 def _on_reason(watch: "_ScanWatch", event: _LineEvent) -> None:
     watch.reason = watch.reason or event.reason
 
@@ -138,6 +156,8 @@ def _on_other(_watch: "_ScanWatch", _event: _LineEvent) -> None:
 _EVENT_HANDLERS: dict[_EventKind, Callable[["_ScanWatch", _LineEvent], None]] = {
     _EventKind.EXPIRED: _on_expired,
     _EventKind.TCOUNT_ZERO: _on_tcount_zero,
+    _EventKind.TCOUNT_TITLES: _on_tcount_titles,
+    _EventKind.COMPLETED: _on_completed,
     _EventKind.REASON: _on_reason,
     _EventKind.PROGRESS: _on_other,
     _EventKind.OTHER: _on_other,
@@ -155,6 +175,8 @@ class _ScanWatch:
     reason: ScanFailureReason | None = None
     expired: bool = False
     tcount_zero: bool = False
+    titles_seen: bool = False
+    completed: bool = False
     timed_out: bool = False
 
     def observe(self, line: str, now: float) -> None:
@@ -164,14 +186,24 @@ class _ScanWatch:
             self.tail.append(line)
         _EVENT_HANDLERS[event.kind](self, event)
 
+    @property
+    def scan_complete(self) -> bool:
+        """Pure: makemkvcon reported a successful end of output and a (non-zero) title count."""
+        return self.completed and self.titles_seen
+
+    @property
+    def finished(self) -> bool:
+        """Pure: the scan's output is over, whether or not makemkvcon has exited yet."""
+        return self.tcount_zero or self.scan_complete
+
     def deadline(self) -> float:
         """Pure: the monotonic time at which to stop waiting (idle window or the hard ceiling)."""
-        window = SCAN_TERMINAL_GRACE_SECONDS if self.tcount_zero else SCAN_IDLE_TIMEOUT_SECONDS
+        window = SCAN_TERMINAL_GRACE_SECONDS if self.finished else SCAN_IDLE_TIMEOUT_SECONDS
         return min(self.last_line_at + window, self.started_at + SCAN_MAX_SECONDS)
 
     def expire(self) -> None:
-        """The deadline passed. After TCOUNT:0 that is the normal end of the scan, otherwise a timeout."""
-        self.timed_out = not self.tcount_zero
+        """The deadline passed. Once the output is over that is the normal end of the scan, otherwise a timeout."""
+        self.timed_out = not self.finished
 
 
 @dataclass(frozen=True)
@@ -282,6 +314,8 @@ def _failure_of(run: _InfoRun) -> MakemkvScanFailed | None:
     watch = run.watch
     if watch.expired:
         return _failed(ScanFailureReason.MAKEMKV_EXPIRED, _EXPIRED_DETAIL, watch)
+    if watch.scan_complete:
+        return None
     if watch.reason and (watch.tcount_zero or watch.timed_out or run.returncode != 0):
         return _failed(watch.reason, f"makemkvcon reported {watch.reason.value}", watch)
     if watch.timed_out:

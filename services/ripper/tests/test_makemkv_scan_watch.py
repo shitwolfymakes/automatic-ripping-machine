@@ -58,8 +58,10 @@ class _FakeClock:
         ('MSG:5021,131332,1,"too old"', _EventKind.EXPIRED, None),
         ("TCOUNT:0", _EventKind.TCOUNT_ZERO, None),
         ("TCOUNT:0\r", _EventKind.TCOUNT_ZERO, None),
-        ("TCOUNT:2", _EventKind.OTHER, None),
-        ("TCOUNT:10", _EventKind.OTHER, None),
+        ("TCOUNT:2", _EventKind.TCOUNT_TITLES, None),
+        ("TCOUNT:10", _EventKind.TCOUNT_TITLES, None),
+        ('MSG:5011,0,0,"Operation successfully completed"', _EventKind.COMPLETED, None),
+        ('MSG:3025,0,1,"see MSG:5011, nothing"', _EventKind.OTHER, None),
         ('MSG:3303,0,1,"Volume key unknown"', _EventKind.REASON, ScanFailureReason.VOLUME_KEY_UNKNOWN),
         ('MSG:5010,0,0,"Failed to open disc"', _EventKind.REASON, ScanFailureReason.DISC_OPEN_FAILED),
         ('MSG:5010,0,0,"FAILED TO OPEN DISC"', _EventKind.REASON, ScanFailureReason.DISC_OPEN_FAILED),
@@ -147,6 +149,22 @@ def test_deadline_never_passes_the_hard_ceiling() -> None:
     assert watch.deadline() == mk.SCAN_MAX_SECONDS
 
 
+def test_deadline_shrinks_to_the_grace_window_once_output_completed_with_titles() -> None:
+    watch = _fresh()
+    watch.observe('MSG:5011,0,0,"Operation successfully completed"', 10.0)
+    watch.observe("TCOUNT:4", 11.0)
+
+    assert watch.deadline() == 11.0 + mk.SCAN_TERMINAL_GRACE_SECONDS
+
+
+@pytest.mark.parametrize("line", ['MSG:5011,0,0,"Operation successfully completed"', "TCOUNT:4"])
+def test_either_completion_signal_alone_keeps_the_idle_window(line: str) -> None:
+    watch = _fresh()
+    watch.observe(line, 1.0)
+
+    assert watch.deadline() == 1.0 + mk.SCAN_IDLE_TIMEOUT_SECONDS
+
+
 def test_expire_is_a_timeout_unless_tcount_zero_was_seen() -> None:
     quiet, terminal = _fresh(), _fresh()
     terminal.observe("TCOUNT:0", 1.0)
@@ -215,6 +233,19 @@ def test_failure_of_timeout_without_reason() -> None:
 
 def test_failure_of_tcount_zero_without_reason_is_the_empty_result_even_when_we_killed_it() -> None:
     assert _failure_of(_InfoRun(_watch_of("TCOUNT:0"), -9)) is None
+
+
+def test_failure_of_complete_output_killed_by_us_is_not_a_failure_even_with_an_earlier_reason() -> None:
+    watch = _watch_of("MSG:3303,0,1,key", "MSG:5011,0,0,ok", "TCOUNT:4")
+
+    assert _failure_of(_InfoRun(watch, -9)) is None
+
+
+def test_failure_of_completed_without_a_title_count_still_follows_the_exit_code() -> None:
+    failure = _failure_of(_InfoRun(_watch_of("MSG:5011,0,0,ok"), -9))
+
+    assert failure is not None
+    assert failure.reason is ScanFailureReason.MAKEMKV_ERROR
 
 
 def test_failure_of_clean_exit_is_not_a_failure() -> None:
@@ -410,6 +441,42 @@ async def test_watch_tcount_zero_keeps_cinfo_within_the_grace_then_ends_normally
     assert (watch.tcount_zero, watch.timed_out) == (True, False)
 
 
+_UHD_SILENT_START = 170.0  # the real capture: HK download, then 170 s with no output at all
+
+
+@pytest.mark.parametrize(("idle", "survives"), [(180.0, True), (120.0, False)])
+def test_a_170s_silence_before_any_titles_survives_the_default_idle_window_but_not_a_120s_one(
+    monkeypatch: pytest.MonkeyPatch, idle: float, survives: bool
+) -> None:
+    monkeypatch.setattr(mk, "SCAN_IDLE_TIMEOUT_SECONDS", idle)
+    watch = _fresh()
+    watch.observe('MSG:3338,0,0,"Downloading latest HK ..."', 17.0)
+
+    assert (watch.deadline() > 17.0 + _UHD_SILENT_START) is survives
+
+
+async def test_watch_complete_output_ends_normally_after_the_grace_keeping_the_trailing_blocks() -> None:
+    clock = _FakeClock()
+    watch = _fresh(193.0)
+    queue = _queue_of(
+        _Chunk(True, 'MSG:5011,0,0,"Operation successfully completed"'),
+        _Chunk(True, "TCOUNT:4"),
+        _Chunk(True, 'CINFO:1,6206,"Blu-ray disc"'),
+        _Chunk(True, 'TINFO:0,9,0,"2:31:10"'),
+    )
+    reads = iter(
+        [193.0] * 8 + [193.0 + mk.SCAN_TERMINAL_GRACE_SECONDS + 1]
+    )  # four lines (two reads each), then the grace lapses
+
+    def _clock() -> float:
+        clock.now = next(reads)
+        return clock.now
+
+    assert await _watch(queue, watch, _clock) is False
+    assert len(watch.stdout) == 4
+    assert (watch.scan_complete, watch.timed_out) == (True, False)
+
+
 # ---- _run_info with a fake subprocess -------------------------------------------------------
 
 
@@ -517,6 +584,18 @@ async def test_run_info_terminal_tcount_zero_kills_after_the_grace(monkeypatch: 
     assert run.watch.timed_out is False
 
 
+async def test_run_info_complete_output_kills_a_process_that_never_exits(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(mk, "SCAN_TERMINAL_GRACE_SECONDS", 0.05)
+    proc = _Proc(_Lines(_fixture_lines("makemkvcon_uhd_slow_exit.txt")), _Hang())
+    _spawn(monkeypatch, proc)
+
+    run = await _run_info("/dev/sr0")
+
+    assert proc.killed is True
+    assert (run.watch.scan_complete, run.watch.timed_out) == (True, False)
+    assert run.watch.stdout[-1].startswith("SINFO:")
+
+
 async def test_run_info_ignores_a_process_that_is_already_gone_when_killed(monkeypatch: pytest.MonkeyPatch) -> None:
     class _Gone(_Proc):
         def kill(self) -> None:
@@ -533,12 +612,12 @@ async def test_run_info_ignores_a_process_that_is_already_gone_when_killed(monke
 # ---- scan_disc end to end on the key-unknown fixture ----------------------------------------
 
 
-async def _no_probe(_device: str, *, bluray: bool) -> DiscProbe:
-    return DiscProbe(crc64=None)
-
-
 def _fixture_lines(name: str) -> list[bytes]:
     return (FIXTURES / name).read_bytes().splitlines(keepends=True)
+
+
+async def _no_probe(_device: str, *, bluray: bool) -> DiscProbe:
+    return DiscProbe(crc64=None)
 
 
 @pytest.mark.parametrize("returncode", [0, 1])
@@ -574,3 +653,32 @@ async def test_scan_disc_ignores_progress_lines_in_a_good_scan(monkeypatch: pyte
     result = await scan_disc("/dev/sr0")
 
     assert (result.volume_label, len(result.titles)) == ("LBL", 1)
+
+
+async def test_scan_disc_complete_output_with_a_process_that_never_exits_is_a_success(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(mk, "probe_disc", _no_probe)
+    monkeypatch.setattr(mk, "SCAN_TERMINAL_GRACE_SECONDS", 0.05)
+    proc = _Proc(_Lines(_fixture_lines("makemkvcon_uhd_slow_exit.txt")), _Hang())
+    _spawn(monkeypatch, proc)
+
+    result = await scan_disc("/dev/sr0")
+
+    assert proc.killed is True
+    assert len(result.titles) == 4
+    assert result.volume_label == "UHD_TEST_DISC"
+
+
+async def test_scan_disc_operation_completed_without_a_title_count_waits_for_the_idle_timeout(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(mk, "probe_disc", _no_probe)
+    monkeypatch.setattr(mk, "SCAN_TERMINAL_GRACE_SECONDS", 0.01)
+    monkeypatch.setattr(mk, "SCAN_IDLE_TIMEOUT_SECONDS", 0.3)
+    _spawn(monkeypatch, _Proc(_Lines([b"MSG:5011,0,0,ok\n"]), _Hang()))
+
+    with pytest.raises(MakemkvScanFailed) as excinfo:
+        await scan_disc("/dev/sr0")
+
+    assert excinfo.value.reason is ScanFailureReason.TIMED_OUT
