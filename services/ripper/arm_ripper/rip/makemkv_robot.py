@@ -1,6 +1,7 @@
 """Parsers for makemkvcon's --robot output lines (PRGV, PRGT, PRGC and MSG)."""
 
 import re
+from dataclasses import dataclass
 
 _PRGV_RE = re.compile(r"^PRGV:(\d+),(\d+),(\d+)$")
 PRGT_RE = re.compile(r'^PRGT:(\d+),(\d+),"(.*)"$')
@@ -28,6 +29,10 @@ _DIAGNOSTIC_MSG_CODES = frozenset({1002, 3032, 5003, 5037})
 # failure reason; we don't need a success code because file existence
 # in the output dir is the source of truth for "title saved ok".
 TITLE_FAIL_CODE = 5003
+
+# The end-of-run summary: 5036 "Copy complete. N titles saved." and 5037 "Copy complete. N titles saved, M failed."
+# MakeMKV prints no per-title "saved" message, so this is the only completion message a run gives.
+COPY_COMPLETE_CODES = frozenset({5036, 5037})
 
 
 def parse_progress_line(line: str) -> float | None:
@@ -150,3 +155,28 @@ def extract_title_index_from_msg5003(args: list[str]) -> int | None:
         except ValueError:
             continue
     return None
+
+
+@dataclass(frozen=True)
+class CopyComplete:
+    """The counts in a makemkvcon end-of-run summary."""
+
+    saved: int
+    failed: int
+
+
+def parse_copy_complete(line: str) -> CopyComplete | None:
+    """The saved and failed counts of a MSG:5036/5037 end-of-run line; None for any other line, or when the counts
+    cannot be read (a run that cannot be read as complete is not treated as one)."""
+    parsed = parse_msg_args(line)
+    if parsed is None or parsed[0] not in COPY_COMPLETE_CODES:
+        return None
+    code, args = parsed
+    wanted = 2 if code == 5037 else 1
+    try:
+        counts = [int(a) for a in args[:wanted]]
+    except ValueError:
+        return None
+    if len(counts) < wanted:
+        return None
+    return CopyComplete(saved=counts[0], failed=counts[1] if code == 5037 else 0)

@@ -32,6 +32,7 @@ from arm_backend.identity.pipeline import resolve_job
 from arm_backend.identity.proposals import preferred_titles, record_preset
 from arm_backend.identity.stage_runner import EpisodeStageRunner
 from arm_backend.routers._deps import get_hub, get_stage_runner
+from arm_backend.rip_settings import resolve_end_on_completion
 from arm_backend.rip_snapshot import skip_unticked
 from arm_backend.track_selection import DiscBackupNeedsBluray, select_tracks
 from arm_backend.ws import WSHub
@@ -417,8 +418,16 @@ async def _job_tracks(session: AsyncSession, job_id: str) -> Sequence[Track]:
     )
 
 
-def _rip_start_response(
-    job: Job, preset_id: str, tracks: Sequence[Track], min_length_seconds: int | None
+async def _end_on_completion(session: AsyncSession, job: Job) -> bool:
+    """The job's end-on-completion setting: its drive's override, else the global. Resolved on every rip-start and
+    resume, so turning it off reaches the next resume of a job that misbehaves."""
+    cfg = (await session.execute(select(Config).where(col(Config.id) == CONFIG_SINGLETON_ID))).scalar_one_or_none()
+    drive = (await session.execute(select(Drive).where(col(Drive.id) == job.drive_id))).scalar_one_or_none()
+    return resolve_end_on_completion(cfg, drive)
+
+
+async def _rip_start_response(
+    session: AsyncSession, job: Job, preset_id: str, tracks: Sequence[Track], min_length_seconds: int | None
 ) -> RipStartResponse:
     return RipStartResponse(
         job_id=job.id,
@@ -426,6 +435,7 @@ def _rip_start_response(
         tracks=[TrackView.model_validate(t) for t in tracks],
         min_length_seconds=min_length_seconds,
         rip_invocation=settings.ARM_RIP_INVOCATION,
+        end_on_completion_message=await _end_on_completion(session, job),
     )
 
 
@@ -546,7 +556,7 @@ async def rip_start(
         await skip_unticked(session, job, settings.ARM_RIP_INVOCATION)
         await _ensure_ripping(session, job)
         await session.commit()
-        return _rip_start_response(job, preset_id, existing, min_length_seconds)
+        return await _rip_start_response(session, job, preset_id, existing, min_length_seconds)
 
     _require_startable(job)
     scan = _scan_of(job)
@@ -569,7 +579,7 @@ async def rip_start(
     if stage_runner is not None and is_tv_candidate(job, new_tracks):
         stage_runner.schedule(job.id)
 
-    return _rip_start_response(job, preset_id, refreshed, min_length_seconds)
+    return await _rip_start_response(session, job, preset_id, refreshed, min_length_seconds)
 
 
 @router.post("/jobs/{job_id}/resume", response_model=RipStartResponse)
@@ -612,7 +622,7 @@ async def resume(
     )
     await session.commit()
 
-    return _rip_start_response(job, preset_id, refreshed, min_length_seconds)
+    return await _rip_start_response(session, job, preset_id, refreshed, min_length_seconds)
 
 
 @router.get(

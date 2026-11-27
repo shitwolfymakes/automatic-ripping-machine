@@ -12,6 +12,7 @@ from arm_ripper.drive_handle import DriveHandle
 from arm_ripper.drive_poll import DriveErrorKind, DriveState, classify_drive_error, read_drive_status
 from arm_ripper.eject import Ejector
 from arm_ripper.rip import RipResult, rip_all
+from arm_ripper.rip.options import RipOptions
 from arm_ripper.rip.track_callbacks import TransferStats
 from arm_ripper.source import is_file_source
 from arm_ripper.ws_client import WSClient
@@ -131,7 +132,10 @@ class DiscRip:
         self._rip_path = device_path
         self._rip_dir = self._output_dir
         self._skip: set[str] = {t.id for t in settled} | _skipped_ids(self._tracks)
-        self._per_title = rip_start.rip_invocation is RipInvocation.PER_TITLE
+        self._options = RipOptions(
+            per_title=rip_start.rip_invocation is RipInvocation.PER_TITLE,
+            end_on_completion=rip_start.end_on_completion_message,
+        )
         self._resumes = 0
 
     async def _on_track_start(self, track: TrackView) -> None:
@@ -292,7 +296,7 @@ class DiscRip:
                 stop=self._lost if self._resumable else None,
                 skip_track_ids=self._skip,
                 drive_lost=(functools.partial(self._drive_gone, self._rip_path) if self._resumable else None),
-                per_title=self._per_title,
+                options=self._options,
             )
         finally:
             if watcher is not None:

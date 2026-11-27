@@ -99,6 +99,8 @@ class Drive(SQLModel, table=True):
     rip_speed: int | None = Field(default=None)
     drive_mode: DriveMode | None = Field(sa_column=enum_column(DriveMode, "drive_mode", nullable=True))
     uhd_capable: bool | None = Field(default=None)
+    # NULL follows Config.rip_end_on_completion_message.
+    rip_end_on_completion_message: bool | None = Field(default=None)
     prescan_cache_mb: int | None = Field(default=None)
     prescan_timeout: int | None = Field(default=None)
     prescan_retries: int | None = Field(default=None)

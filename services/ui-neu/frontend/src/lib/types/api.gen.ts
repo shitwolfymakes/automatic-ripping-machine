@@ -674,6 +674,10 @@ export type ConfigUpdateRequest = {
      */
     block_on_miss?: boolean | null;
     /**
+     * Rip End On Completion Message
+     */
+    rip_end_on_completion_message?: boolean | null;
+    /**
      * Community Keydb Enabled
      */
     community_keydb_enabled?: boolean | null;
@@ -814,6 +818,10 @@ export type ConfigView = {
      * Block On Miss
      */
     block_on_miss: boolean;
+    /**
+     * Rip End On Completion Message
+     */
+    rip_end_on_completion_message: boolean;
     /**
      * Community Keydb Enabled
      */
@@ -1192,6 +1200,10 @@ export type Drive = {
      */
     uhd_capable?: boolean | null;
     /**
+     * Rip End On Completion Message
+     */
+    rip_end_on_completion_message?: boolean | null;
+    /**
      * Prescan Cache Mb
      */
     prescan_cache_mb?: number | null;
@@ -1425,6 +1437,10 @@ export type DriveUpdateRequest = {
      */
     uhd_capable?: boolean | null;
     /**
+     * Rip End On Completion Message
+     */
+    rip_end_on_completion_message?: boolean | null;
+    /**
      * Prescan Cache Mb
      */
     prescan_cache_mb?: number | null;
@@ -1489,6 +1505,10 @@ export type DriveView = {
      * Uhd Capable
      */
     uhd_capable: boolean | null;
+    /**
+     * Rip End On Completion Message
+     */
+    rip_end_on_completion_message: boolean | null;
     /**
      * Prescan Cache Mb
      */
@@ -4496,6 +4516,10 @@ export type RipStartResponse = {
      */
     min_length_seconds?: number | null;
     rip_invocation?: RipInvocation;
+    /**
+     * End On Completion Message
+     */
+    end_on_completion_message: boolean;
 };
 
 /**

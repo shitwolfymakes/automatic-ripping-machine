@@ -22,6 +22,7 @@ function drive(over: Partial<DriveView> = {}): DriveView {
 		rip_speed: null,
 		drive_mode: null,
 		uhd_capable: null,
+		rip_end_on_completion_message: null,
 		prescan_cache_mb: null,
 		prescan_timeout: null,
 		prescan_retries: null,
@@ -155,6 +156,21 @@ describe('DrivesSettings', () => {
 		render({ drives: [mainDrive()], settings: settingsData({ config: { auto_rip_on_insert: false } as never }) });
 		await fireEvent.click(screen.getByTitle('Drive settings'));
 		expect(screen.getByRole('combobox', { name: 'Rip mode' })).toHaveTextContent('Default (Manual)');
+	});
+
+	it('names the global end-on-completion setting in the drive panel, Off when it is absent', async () => {
+		render({ drives: [mainDrive()], settings: settingsData({ config: {} as never }) });
+		await fireEvent.click(screen.getByTitle('Drive settings'));
+		expect(screen.getByTestId('drive-end-on-completion').querySelector('option')).toHaveTextContent('Default (Off)');
+	});
+
+	it('names an On global end-on-completion setting in the drive panel', async () => {
+		render({
+			drives: [mainDrive()],
+			settings: settingsData({ config: { rip_end_on_completion_message: true } as never })
+		});
+		await fireEvent.click(screen.getByTitle('Drive settings'));
+		expect(screen.getByTestId('drive-end-on-completion').querySelector('option')).toHaveTextContent('Default (On)');
 	});
 
 	it('takes the prescan defaults from arm_config', async () => {

@@ -36,6 +36,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from arm_ripper.rip.makemkv_process import run_makemkvcon
+from arm_ripper.rip.makemkv_settle import RunWatch
 from arm_ripper.rip.makemkv_stream import (
     OnDiscProgress,
     OnTitleDone,
@@ -194,6 +195,7 @@ async def rip_disc(
     on_title_done: OnTitleDone | None = None,
     stop: asyncio.Event | None = None,
     title: int | None = None,
+    end_on_completion: bool = False,
 ) -> RipDiscResult:
     """Rip every title with duration ≥ `minlength_seconds` from the disc
     in `device_path` to `output_dir`. Single makemkvcon invocation; the
@@ -219,6 +221,9 @@ async def rip_disc(
     `eligible_source_indexes=[title]`, so its one output file pairs with it
     positionally like any `mkv all` output.
 
+    `end_on_completion` ends makemkvcon once it has said the copy is complete and its output files are closed, instead
+    of waiting for it to exit (see run_makemkvcon); the titles are attributed as for any other end.
+
     Returns a `RipDiscResult` whose `titles` dict maps source title
     index to a RipResult. The dispatcher cross-references this with
     the user's track selection: titles in the dict with ok=True got
@@ -233,6 +238,13 @@ async def rip_disc(
         cmd = _mkv_title_command(device_path, output_dir, title)
         logger.info("makemkvcon mkv title %d device=%s outdir=%s", title, device_path, output_dir)
 
+    eligible = eligible_source_indexes or []
+    watch = RunWatch(
+        output_dir=output_dir,
+        outputs=lambda: output_files_in_rip_order(output_dir),
+        expected_files=len(eligible),
+        end_on_completion=end_on_completion and bool(eligible),
+    )
     state = ParserState()
     error = await run_makemkvcon(
         cmd,
@@ -245,13 +257,13 @@ async def rip_disc(
         ),
         eligible_source_indexes=eligible_source_indexes,
         stop=stop,
+        watch=watch,
     )
     if error is not None:
         return RipDiscResult(overall_error=error, titles={})
 
     await finish_pending_titles(state, on_title_done)
 
-    eligible = eligible_source_indexes or []
     titles_out = _attribute_outputs(output_dir, eligible)
 
     titles_out.update(_failed_titles(state, eligible, titles_out))

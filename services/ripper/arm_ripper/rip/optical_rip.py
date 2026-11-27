@@ -19,6 +19,8 @@ from arm_ripper.rip.makemkv_rip import (
     output_files_in_rip_order,
     rip_disc,
 )
+from arm_ripper.rip.makemkv_settle import suspect_output
+from arm_ripper.rip.options import RipOptions
 from arm_ripper.rip.result import RipResult
 from arm_ripper.rip.title_retry import rip_title_with_retry
 from arm_ripper.rip.track_callbacks import OnTrackDone, OnTrackProgress, OnTrackStart, TransferStats
@@ -124,9 +126,11 @@ class _OpticalRip:
         stop: asyncio.Event | None,
         drive_lost: Callable[[], bool] | None,
         title: int | None = None,
+        end_on_completion: bool = False,
     ) -> None:
         self._device_path = device_path
         self._title = title
+        self._end_on_completion = end_on_completion
         self._output_dir = output_dir
         self._track_by_index = track_by_index
         self._eligible = eligible
@@ -152,6 +156,12 @@ class _OpticalRip:
             logger.warning("drive dropped off the bus mid-rip; stopping makemkvcon")
             self._stop.set()
         return self._stop.is_set()
+
+    def _audit(self, title_idx: int, track: TrackView, path: Path, size: int) -> None:
+        """Log a finished output that looks short or unfinalised. Only logs: a failed check never fails the title."""
+        problems = suspect_output(path, size, track.expected_size_bytes)
+        if problems:
+            logger.warning("title %d output %s looks suspect: %s", title_idx, path.name, "; ".join(problems))
 
     async def _on_title_start(self, title_idx: int) -> None:
         track = self._track_by_index.get(title_idx)
@@ -224,6 +234,7 @@ class _OpticalRip:
         if found is None:
             return
         file_path, size = found
+        self._audit(title_idx, track, file_path, size)
         await self._ensure_started(title_idx, track)
         result = RipResult(
             ok=True,
@@ -257,6 +268,7 @@ class _OpticalRip:
             on_title_done=self._on_title_done,
             stop=self._stop,
             title=self._title,
+            end_on_completion=self._end_on_completion,
         )
         _delete_skipped_outputs(self._output_dir, self._eligible, self._skipped)
         if disc_result.overall_error is None and self._drive_dropped():
@@ -304,6 +316,8 @@ class _OpticalRip:
             # (null until a previous rip set it — usually null here);
             # `track.expected_duration_seconds` is the scan-time estimate
             # populated by `select_tracks` at rip-start.
+            if result.size_bytes is not None:
+                self._audit(title_idx, track, output_path, result.size_bytes)
             if result.duration_seconds is None:
                 result = RipResult(
                     ok=True,
@@ -342,12 +356,13 @@ async def rip_optical(
     stop: asyncio.Event | None = None,
     skip_track_ids: Collection[str] = (),
     drive_lost: Callable[[], bool] | None = None,
-    per_title: bool = False,
+    options: RipOptions = RipOptions(),
 ) -> None:
     """Single-invocation DVD/BD rip with per-title attribution.
 
-    `per_title` (`ARM_RIP_INVOCATION=per_title`) instead runs one `mkv … <title>` per ticked (not SKIPPED), unsettled eligible
-    title, each into its own folder.
+    `options.per_title` (`ARM_RIP_INVOCATION=per_title`) instead runs one `mkv … <title>` per ticked (not SKIPPED),
+    unsettled eligible title, each into its own folder. `options.end_on_completion` ends each makemkvcon run once it
+    is complete and its files are closed, instead of at its exit.
 
     The makemkvcon invocation rips every title ≥ minlength to
     `output_dir`. We map title_index → TrackView via `source_ref` and
@@ -384,7 +399,7 @@ async def rip_optical(
     # drive dropped off the bus): makemkvcon rips them again, as `mkv all`
     # does, but they get no callbacks and their new files are deleted.
     skipped = {idx for idx, t in track_by_index.items() if t.id in skip_track_ids}
-    if per_title:
+    if options.per_title:
         await _rip_each_title(
             device_path=device_path,
             output_dir=output_dir,
@@ -397,6 +412,7 @@ async def rip_optical(
             min_length_seconds=min_length_seconds,
             stop=stop,
             drive_lost=drive_lost,
+            end_on_completion=options.end_on_completion,
         )
         return
     await _OpticalRip(
@@ -411,6 +427,7 @@ async def rip_optical(
         min_length_seconds=min_length_seconds,
         stop=stop,
         drive_lost=drive_lost,
+        end_on_completion=options.end_on_completion,
     ).run()
 
 
@@ -438,6 +455,7 @@ class _TitleRun:
     min_length_seconds: int
     stop: asyncio.Event | None
     drive_lost: Callable[[], bool] | None
+    end_on_completion: bool
 
     async def attempt(self, on_done: OnTrackDone) -> None:
         """Run makemkvcon once for the title, reporting its result through `on_done`."""
@@ -454,6 +472,7 @@ class _TitleRun:
             stop=self.stop,
             drive_lost=self.drive_lost,
             title=self.title,
+            end_on_completion=self.end_on_completion,
         ).run()
 
 
@@ -523,6 +542,7 @@ async def _rip_each_title(
     min_length_seconds: int,
     stop: asyncio.Event | None,
     drive_lost: Callable[[], bool] | None,
+    end_on_completion: bool,
 ) -> None:
     """One `mkv … <title>` per selected, unsettled eligible title, each into `output_dir/title-NN`, in source order.
 
@@ -556,6 +576,7 @@ async def _rip_each_title(
             min_length_seconds=min_length_seconds,
             stop=stop,
             drive_lost=drive_lost,
+            end_on_completion=end_on_completion,
         )
         await rip_title_with_retry(
             track=track_by_index[idx],

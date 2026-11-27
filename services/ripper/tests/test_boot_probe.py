@@ -83,7 +83,7 @@ class FakeBackendClient:
         self.resume_calls.append(job_id)
         if self.resume_raises is not None:
             raise self.resume_raises
-        return RipStartResponse(job_id=job_id, rip_preset_id="rpr_x", tracks=[])
+        return RipStartResponse(end_on_completion_message=False, job_id=job_id, rip_preset_id="rpr_x", tracks=[])
 
 
 class FakeController:

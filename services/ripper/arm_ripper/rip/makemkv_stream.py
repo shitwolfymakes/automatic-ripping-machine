@@ -5,6 +5,7 @@ Reads each output line, keeps per-title state and fires the rip callbacks.
 
 import asyncio
 import logging
+import time
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from typing import Any
@@ -13,7 +14,9 @@ from arm_ripper.rip.makemkv_robot import (
     PRGT_RE,
     QUOTED_ARG_RE,
     TITLE_FAIL_CODE,
+    CopyComplete,
     extract_title_index_from_msg5003,
+    parse_copy_complete,
     parse_diagnostic_msg,
     parse_msg_args,
     parse_prgc_save_position,
@@ -84,6 +87,14 @@ class ParserState:
     # this is seen so a 6-hour RIP_TIMEOUT_SECONDS doesn't run out.
     # See docs/user/MakeMKV-Ripper.md § Failure modes.
     binary_expired: bool = False
+    # When each line arrived, on `clock`, so a run can tell how long its output has been quiet and when it said it was
+    # complete. `completed` is set the first time the run says so, by MSG:5036/5037 or by the save reaching 100 %.
+    clock: Callable[[], float] = field(default=time.monotonic, compare=False)
+    last_line_at: float | None = field(default=None, compare=False)
+    copy_complete: CopyComplete | None = None
+    copy_complete_at: float | None = None
+    save_full_at: float | None = None
+    completed: asyncio.Event = field(default_factory=asyncio.Event, compare=False)
 
 
 async def _call_safely(label: str, callback: Callable[..., Awaitable[None]], *args: Any) -> None:
@@ -151,6 +162,7 @@ class _LineParser:
             self._apply_save_position,
             self._apply_title_line,
             self._apply_milestone,
+            self._apply_copy_complete,
             self._apply_msg,
         ):
             if await apply(line):
@@ -188,6 +200,7 @@ class _LineParser:
         totals = parse_progress_totals(line)
         if totals is not None:
             cur_frac, tot_frac = totals
+            self._note_save_full(cur_frac)
             if self._state.current_title is not None and self._callbacks.on_title_progress is not None:
                 await _call_safely(
                     "title progress", self._callbacks.on_title_progress, self._state.current_title, cur_frac
@@ -198,6 +211,13 @@ class _LineParser:
                 await _call_safely("disc progress", self._callbacks.on_disc_progress, tot_frac)
             return True
         return False
+
+    def _note_save_full(self, cur_frac: float) -> None:
+        """The first PRGV of the save phase with `current` at `max`: record when the save reached 100 %."""
+        in_save_phase = self._state.save_phase_started or self._state.current_title is not None
+        if cur_frac >= 1.0 and in_save_phase and self._state.save_full_at is None:
+            self._state.save_full_at = self._state.last_line_at
+            self._state.completed.set()
 
     async def _apply_save_position(self, line: str) -> bool:
         """PRGC:5017: map the output position to its source title and start it, ending the previous one."""
@@ -251,6 +271,16 @@ class _LineParser:
             return True
         return False
 
+    async def _apply_copy_complete(self, line: str) -> bool:
+        """MSG:5036/5037, the first time it appears: record the run's own word that it is complete. Never takes the
+        line (5037 is also a diagnostic), so the MSG handler still sees it."""
+        done = parse_copy_complete(line)
+        if done is not None and self._state.copy_complete is None:
+            self._state.copy_complete = done
+            self._state.copy_complete_at = self._state.last_line_at
+            self._state.completed.set()
+        return False
+
     async def _apply_msg(self, line: str) -> bool:
         """A MSG line: keep diagnostics, capture a MSG:5003 title failure, and log it at debug."""
         if line.startswith("MSG:"):
@@ -300,6 +330,7 @@ async def stream_output(
         # the backend's tailer. ~30 k lines per BD rip; gated on
         # ARM_LOG_LEVEL=debug so it's free in INFO-mode operation.
         logger.debug("makemkv-raw: %s", line)
+        state.last_line_at = state.clock()
         await parser.feed(line)
 
 

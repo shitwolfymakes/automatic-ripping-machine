@@ -11,7 +11,7 @@
 		prescanOverrideCount,
 		startRipBlockedReason
 	} from '$lib/drives/drives';
-	import type { PrescanKey } from '$lib/drives/settings';
+	import type { GlobalRipSettings, PrescanKey } from '$lib/drives/settings';
 	import DriveSettingsPanel from './DriveSettingsPanel.svelte';
 	import DriveCardHeader from './DriveCardHeader.svelte';
 	import Glyph from '../../shared/Glyph.svelte';
@@ -34,10 +34,12 @@
 		globalDefaults: Partial<Record<PrescanKey, number>>;
 		/** The global auto-rip default a drive with no mode of its own follows. */
 		globalAutoRip: boolean;
+		/** The global rip settings a drive with no override of its own follows. */
+		globalRip: GlobalRipSettings;
 	}
 
 	// DriveCard applies the defaults, so every prop but onupdate is required here.
-	let { drive, onupdate, globalDefaults, sessions, transcodePresets, globalAutoRip }: Props = $props();
+	let { drive, onupdate, globalDefaults, sessions, transcodePresets, globalAutoRip, globalRip }: Props = $props();
 
 	const isDetached = $derived(isDriveDetached(drive));
 	const startRipBlocked = $derived(startRipBlockedReason(drive));
@@ -219,7 +221,14 @@
 	{/if}
 
 	<!-- Drive settings slide-over -->
-	<DriveSettingsPanel {drive} bind:open={showSettings} sessions={defaultPickerSessions} {globalDefaults} {onupdate} />
+	<DriveSettingsPanel
+		{drive}
+		bind:open={showSettings}
+		sessions={defaultPickerSessions}
+		{globalDefaults}
+		{globalRip}
+		{onupdate}
+	/>
 </div>
 
 <ConfirmDialog

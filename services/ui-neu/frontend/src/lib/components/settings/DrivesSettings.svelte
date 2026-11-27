@@ -42,6 +42,7 @@
 							sessions={options.sessions}
 							transcodePresets={options.transcodePresets}
 							globalAutoRip={settings?.config?.auto_rip_on_insert !== false}
+							globalRip={{ rip_end_on_completion_message: settings?.config?.rip_end_on_completion_message === true }}
 							onupdate={() => onrefresh()}
 							globalDefaults={{
 								prescan_cache_mb: Number(settings?.arm_config?.PRESCAN_CACHE_MB) || 1,

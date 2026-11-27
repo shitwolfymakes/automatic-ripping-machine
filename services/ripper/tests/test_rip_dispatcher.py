@@ -221,6 +221,7 @@ def _stub_rip_disc(
         on_title_done: Any | None = None,
         stop: Any | None = None,
         title: int | None = None,
+        end_on_completion: bool = False,
     ) -> RipDiscResult:
         if captured is not None:
             captured["title"] = title
@@ -1706,3 +1707,83 @@ def test_effective_disc_type_keeps_the_scan_type_for_mixed_kinds() -> None:
 
 def test_effective_disc_type_keeps_the_scan_type_without_tracks() -> None:
     assert _effective_disc_type(DiscType.DVD, []) == DiscType.DVD
+
+
+# --- the audit of a finished output ------------------------------------------
+
+_CLOSED_MKV = bytes.fromhex("1a45dfa3") + b"\x84abcd" + bytes.fromhex("18538067") + b"\x88" + b"x" * 8
+
+
+def _audited_track(expected: int) -> TrackView:
+    return _track(0).model_copy(update={"expected_size_bytes": expected})
+
+
+async def _rip_one_and_collect(monkeypatch, tmp_path, *, live: bool, expected: int) -> None:
+    out = tmp_path / "Disc_t00.mkv"
+    out.write_bytes(_CLOSED_MKV)
+    fake = RipDiscResult(
+        overall_error=None, titles={0: RipResult(ok=True, output_path=out, size_bytes=out.stat().st_size)}
+    )
+    _stub_rip_disc(monkeypatch, fake, fire_per_title_start=True, fire_per_title_done=live)
+
+    async def on_start(track: TrackView) -> None:
+        pass
+
+    async def on_done(track: TrackView, result: RipResult) -> None:
+        pass
+
+    await rip_all(
+        disc_type=DiscType.DVD,
+        device_path="/dev/sr0",
+        tracks=[_audited_track(expected)],
+        output_dir=tmp_path,
+        on_track_start=on_start,
+        on_track_done=on_done,
+        min_length_seconds=600,
+    )
+
+
+def _suspect(caplog: pytest.LogCaptureFixture) -> list[str]:
+    return [r.getMessage() for r in caplog.records if "looks suspect" in r.getMessage()]
+
+
+@pytest.mark.parametrize("live", [True, False], ids=["live", "post-rip"])
+async def test_a_finished_output_far_short_of_the_scan_is_logged_as_suspect(monkeypatch, tmp_path, caplog, live):
+    caplog.set_level(logging.WARNING, logger="arm_ripper.rip.dispatcher")
+    await _rip_one_and_collect(monkeypatch, tmp_path, live=live, expected=len(_CLOSED_MKV) * 2)
+    (message,) = _suspect(caplog)
+    assert "Disc_t00.mkv" in message and "under 90%" in message
+
+
+@pytest.mark.parametrize("live", [True, False], ids=["live", "post-rip"])
+async def test_a_closed_output_of_the_expected_size_is_not_logged(monkeypatch, tmp_path, caplog, live):
+    caplog.set_level(logging.WARNING, logger="arm_ripper.rip.dispatcher")
+    await _rip_one_and_collect(monkeypatch, tmp_path, live=live, expected=len(_CLOSED_MKV))
+    assert _suspect(caplog) == []
+
+
+async def test_a_finished_output_with_no_recorded_size_is_not_audited(monkeypatch, tmp_path, caplog):
+    caplog.set_level(logging.WARNING, logger="arm_ripper.rip.dispatcher")
+    out = tmp_path / "Disc_t00.mkv"
+    out.write_bytes(b"\x00" * 8)
+    fake = RipDiscResult(overall_error=None, titles={0: RipResult(ok=True, output_path=out, size_bytes=None)})
+    _stub_rip_disc(monkeypatch, fake, fire_per_title_start=True, fire_per_title_done=False)
+    done: list[bool] = []
+
+    async def on_start(track: TrackView) -> None:
+        pass
+
+    async def on_done(track: TrackView, result: RipResult) -> None:
+        done.append(result.ok)
+
+    await rip_all(
+        disc_type=DiscType.DVD,
+        device_path="/dev/sr0",
+        tracks=[_audited_track(100)],
+        output_dir=tmp_path,
+        on_track_start=on_start,
+        on_track_done=on_done,
+        min_length_seconds=600,
+    )
+    assert done == [True]
+    assert _suspect(caplog) == []

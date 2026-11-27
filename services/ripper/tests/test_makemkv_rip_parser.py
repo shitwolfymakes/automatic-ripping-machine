@@ -2,7 +2,9 @@
 
 from arm_ripper.rip.makemkv_process import compose_error
 from arm_ripper.rip.makemkv_robot import (
+    CopyComplete,
     extract_title_index_from_msg5003,
+    parse_copy_complete,
     parse_diagnostic_msg,
     parse_msg_args,
     parse_prgc_save_position,
@@ -221,3 +223,26 @@ def test_prgc_save_position_returns_none_for_non_prgc_lines():
     assert parse_prgc_save_position('MSG:5003,0,2,"Failed to save title 2"') is None
     assert parse_prgc_save_position("") is None
     assert parse_prgc_save_position("garbage") is None
+
+
+def test_copy_complete_5036_has_no_failures():
+    line = 'MSG:5036,0,2,"Copy complete. 2 titles saved.","Copy complete. %1 titles saved.","2"'
+    assert parse_copy_complete(line) == CopyComplete(saved=2, failed=0)
+
+
+def test_copy_complete_5037_carries_saved_and_failed():
+    line = (
+        'MSG:5037,260,2,"Copy complete. 1 titles saved, 1 failed.","Copy complete. %1 titles saved, %2 failed.","1","1"'
+    )
+    assert parse_copy_complete(line) == CopyComplete(saved=1, failed=1)
+
+
+def test_copy_complete_ignores_other_messages():
+    assert parse_copy_complete('MSG:5005,0,1,"1 titles saved.","%1 titles saved.","1"') is None
+    assert parse_copy_complete("PRGV:1,1,1") is None
+
+
+def test_copy_complete_with_unreadable_counts_is_none():
+    assert parse_copy_complete('MSG:5036,0,1,"Copy complete.","Copy complete."') is None
+    assert parse_copy_complete('MSG:5036,0,2,"x","y","many"') is None
+    assert parse_copy_complete('MSG:5037,0,2,"x","y","1","few"') is None

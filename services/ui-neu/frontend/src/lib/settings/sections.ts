@@ -105,6 +105,11 @@ const SECTIONS: Record<string, SettingsSection[]> = {
 			keys: ['hold_for_review', 'manual_wait_seconds']
 		},
 		{
+			title: 'Disc reading',
+			blurb: 'How MakeMKV reads a DVD or Blu-ray.',
+			keys: ['rip_end_on_completion_message']
+		},
+		{
 			title: 'Decryption data',
 			blurb: 'Key material MakeMKV needs for protected discs, refreshed in the background.',
 			keys: ['community_keydb_enabled', 'makemkv_sdf_enabled']

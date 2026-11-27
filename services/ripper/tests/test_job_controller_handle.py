@@ -100,6 +100,8 @@ async def test_post_rip_eject_uses_the_handles_current_node(monkeypatch, tmp_pat
         job_id="job_1",
         disc_type=DiscType.DVD,
         device_path="/dev/sr0",
-        rip_start=RipStartResponse(job_id="job_1", rip_preset_id="rp_1", tracks=[], min_length_seconds=None),
+        rip_start=RipStartResponse(
+            end_on_completion_message=False, job_id="job_1", rip_preset_id="rp_1", tracks=[], min_length_seconds=None
+        ),
     )
     assert ejected == ["/dev/sr1"]
