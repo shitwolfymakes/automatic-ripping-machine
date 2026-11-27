@@ -53,6 +53,7 @@ _TINFO_FIELDS: dict[int, tuple[str, Callable[[str], int | str | list[int] | None
     8: ("chapter_count", _to_int),
     9: ("duration_seconds", _parse_duration),
     11: ("size_bytes", _to_int),
+    15: ("angle", _to_int),
     16: ("source_file", str),
     25: ("segment_count", _to_int),
     26: ("segment_map", _parse_segment_map),
@@ -102,6 +103,7 @@ def _scan_title(idx: int, entry: dict[str, object]) -> ScanTitle | None:
     segment_count_obj = entry.get("segment_count")
     segment_map_obj = entry.get("segment_map")
     playlist_name_obj = entry.get("playlist_name")
+    angle_obj = entry.get("angle")
     return ScanTitle(
         index=idx,
         duration_seconds=duration_obj,
@@ -110,6 +112,7 @@ def _scan_title(idx: int, entry: dict[str, object]) -> ScanTitle | None:
         source_file=source_obj if isinstance(source_obj, str) else None,
         segment_count=segment_count_obj if isinstance(segment_count_obj, int) else None,
         segment_map=segment_map_obj if isinstance(segment_map_obj, list) else None,
+        angle=angle_obj if isinstance(angle_obj, int) else None,
         playlist_name=playlist_name_obj if isinstance(playlist_name_obj, str) else None,
     )
 
