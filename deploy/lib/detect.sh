@@ -161,3 +161,32 @@ refresh_arm_gpus() {
         arm_say "ARM_GPUS changed. The backend only reads it while the GPU list is empty: delete the rows in Settings > GPUs, then restart the backend to re-seed."
     fi
 }
+
+# The filesystem type of <path>, read from its nearest existing ancestor (the
+# folder may not be created yet). Prints nothing when it cannot be read.
+fs_type_of() {
+    local dir="$1"
+    while [[ -n "${dir}" && ! -d "${dir}" ]]; do
+        dir="$(dirname "${dir}")"
+        [[ "${dir}" == "/" ]] && break
+    done
+    stat -f -c %T "${dir:-/}" 2>/dev/null || true
+}
+
+# rc 0 when <fs type> is a network filesystem, as `stat -f` names it.
+is_network_fs() {
+    case "$1" in
+        nfs|nfs4|cifs|smb2|smbfs|fuse.sshfs|9p) return 0 ;;
+    esac
+    return 1
+}
+
+# Warn (never refuse) when the raw folder is on a network filesystem: raw rips
+# are written once and read back in full, so a network mount caps them at network speed.
+warn_raw_network_fs() {
+    local raw="$1" fstype
+    [[ -n "${raw}" ]] || return 0
+    fstype="$(fs_type_of "${raw}")"
+    is_network_fs "${fstype}" || return 0
+    arm_warn "raw folder ${raw} is on a network filesystem (${fstype}); rips will run at network speed. Put raw on a local disk on this host."
+}

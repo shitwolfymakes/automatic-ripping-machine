@@ -14,9 +14,12 @@ can also run unattended.
                           full: rip and transcode on this host (default)
                           ripper-only: rip here, never transcode here
                           offload: rip here, transcode on another host over ssh
-  --raw-path <dir>        folder for raw rips, ideally on a fast local disk
+  --raw-path <dir>        folder for raw rips, local disk on this host; never a network share
                           (default: <arm>/raw)
   --media-path <dir>      folder for finished media (default: <arm>/media)
+  --staging-path <dir>    folder the transcoder reads staged tracks from; shared
+                          storage on both hosts with offload (required there)
+                          (default: <raw>/.staging, staged by hard link)
   --iso-library-path <dir>
                           folder of .iso files to rip from (default: <arm>/iso-library)
   --yes                   accept every host change: Docker, the NVIDIA toolkit,
@@ -36,7 +39,7 @@ can also run unattended.
 USAGE
 }
 
-# The folders the stack expects. raw/ and media/ are created by choose_storage
+# The folders the stack expects. raw/, media/ and staging are created by choose_storage
 # because they may live elsewhere.
 ensure_layout() {
     mkdir -p "${ARM_DIR}"/{certs,db,logs,backups,scripts,iso-library} "${ARM_STATE_DIR}" || return 1
@@ -152,12 +155,13 @@ cmd_install() {
     set -- "${args[@]+"${args[@]}"}"
     while [[ $# -gt 0 ]]; do
         case "$1" in
-            --profile|--raw-path|--media-path|--iso-library-path|--image-prefix|--release-repo|--offload-host|--offload-backend-url|--offload-uidgid)
+            --profile|--raw-path|--media-path|--staging-path|--iso-library-path|--image-prefix|--release-repo|--offload-host|--offload-backend-url|--offload-uidgid)
                 [[ $# -ge 2 ]] || err "$1 needs a value"
                 case "$1" in
                     --profile)             PROFILE_ARG="$2" ;;
                     --raw-path)            RAW_ARG="$2" ;;
                     --media-path)          MEDIA_ARG="$2" ;;
+                    --staging-path)        STAGING_ARG="$2" ;;
                     --iso-library-path)    ISO_ARG="$2" ;;
                     --image-prefix)        IMAGE_PREFIX_ARG="$2" ;;
                     --release-repo)        release_repo="$2" ;;

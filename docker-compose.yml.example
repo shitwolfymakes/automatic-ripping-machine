@@ -43,6 +43,7 @@ services:
       dockerfile: services/backend/Dockerfile
     container_name: armv3-backend
     restart: unless-stopped
+    stop_grace_period: 30s
     logging: *default-logging
     depends_on:
       arm-db:
@@ -80,6 +81,7 @@ services:
       # reports "not configured". See ARM_HOST_ISO_LIBRARY_PATH in .env.example.
       ARM_HOST_ISO_LIBRARY_PATH: ${ARM_HOST_ISO_LIBRARY_PATH:-}
       ARM_HOST_MEDIA_PATH: ${ARM_HOST_MEDIA_PATH:-${PWD}/arm/media}
+      ARM_HOST_STAGING_PATH: ${ARM_HOST_STAGING_PATH:-}
       ARM_HOST_LOGS_PATH: ${ARM_HOST_LOGS_PATH:-${PWD}/arm/logs}
       ARM_HOST_CERTS_PATH: ${ARM_HOST_CERTS_PATH:-${PWD}/arm/certs}
       ARM_DOCKER_NETWORK: ${ARM_DOCKER_NETWORK:-armv3_default}
@@ -120,6 +122,9 @@ services:
       - ./arm/logs:/logs
       - ./arm/media:/media
       - ./arm/raw:/raw
+      # Staging: unset, it is a subfolder of /raw (the backend then uses the
+      # /raw path so a stage can be a hard link); set, it is shared storage.
+      - ${ARM_HOST_STAGING_PATH:-./arm/raw/.staging}:/staging
       # Rip from ISO (optional): read-only; the backend browses it and mounts
       # only the chosen .iso into each one-shot ripper it spawns.
       - ${ARM_HOST_ISO_LIBRARY_PATH:-./arm/iso-library}:/ingress:ro
