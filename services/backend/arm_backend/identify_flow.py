@@ -24,7 +24,7 @@ from arm_backend.identity.apply import apply_identity_result, suggest_identity
 from arm_backend.identity.episode_stage import is_tv_candidate
 from arm_backend.identity.hints import hint_is_tv, hint_title
 from arm_backend.identity.pipeline import resolve_job, run_disc_hints
-from arm_backend.identity.proposals import put_source, record_preset
+from arm_backend.identity.proposals import preferred_titles, put_source, record_preset
 from arm_backend.identity.sources.base import Source
 from arm_backend.identity.sources.registry import auto_apply_for, enabled_hint_sources
 from arm_backend.identity.sources.thediscdb import (
@@ -78,7 +78,7 @@ async def _persist_review_tracks(db: AsyncSession, job: Job, scan: ScanResult) -
     }
     added: list[Track] = []
     try:
-        review_tracks = select_tracks_for_review(job.id, scan, preset)
+        review_tracks = select_tracks_for_review(job.id, scan, preset, preferred=preferred_titles(job))
     except DiscBackupNeedsBluray as exc:
         logger.warning("skipping review tracks for job_id=%s: %s", job.id, exc)
         return

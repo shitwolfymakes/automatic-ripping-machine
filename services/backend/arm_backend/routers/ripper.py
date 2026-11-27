@@ -27,7 +27,7 @@ from arm_backend.rip_preset_resolution import (
 from arm_backend.constants import CONFIG_SINGLETON_ID
 from arm_backend.identity.episode_stage import is_tv_candidate
 from arm_backend.identity.pipeline import resolve_job
-from arm_backend.identity.proposals import record_preset
+from arm_backend.identity.proposals import preferred_titles, record_preset
 from arm_backend.identity.stage_runner import EpisodeStageRunner
 from arm_backend.routers._deps import get_hub, get_stage_runner
 from arm_backend.track_selection import DiscBackupNeedsBluray, select_tracks
@@ -505,7 +505,7 @@ async def _select_or_fail(
     # whatever the scan found, so it never lands in the no-titles handling
     # below; a FOLDER preset on anything but a Blu-ray is refused here.
     try:
-        new_tracks = select_tracks(job.id, scan, preset)
+        new_tracks = select_tracks(job.id, scan, preset, preferred=preferred_titles(job))
     except DiscBackupNeedsBluray as exc:
         # Fail the job with the reason on its event: the ripper gives up on a
         # 4xx, and the job would otherwise sit IDENTIFIED with nothing to say why.

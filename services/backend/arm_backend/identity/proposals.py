@@ -10,7 +10,7 @@ from typing import Any
 
 from pydantic import ValidationError
 
-from arm_common import Job, Track
+from arm_common import Job, Track, TrackRole
 from arm_common.schemas.identity import (
     JOB_CLAIM_FIELDS,
     TRACK_CLAIM_FIELDS,
@@ -38,6 +38,15 @@ def claims_of(job: Job) -> IdentityClaims:
     except ValidationError as e:
         logger.warning("identity_claims invalid job_id=%s; treating as empty: %s", job.id, e)
         return IdentityClaims()
+
+
+def preferred_titles(job: Job) -> frozenset[int]:
+    """Indices of the titles TheDiscDB calls the main movie in the job's stored
+    claims; empty before that source has run."""
+    source = claims_of(job).sources.get("thediscdb")
+    if source is None:
+        return frozenset()
+    return frozenset(int(ref) for ref, claim in source.tracks.items() if claim.role == TrackRole.MAIN)
 
 
 def _store(job: Job, claims: IdentityClaims) -> None:
