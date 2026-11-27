@@ -211,6 +211,15 @@ it('clone calls cloneSession then reloads', async () => {
 	await waitFor(() => expect(fetchSessions).toHaveBeenCalledTimes(2));
 });
 
+it('clone numbers the copy when a copy of that name already exists', async () => {
+	vi.mocked(fetchSessions).mockResolvedValue([makeSession(), makeSession('s2', 'ses Alpha (copy)')]);
+	vi.mocked(cloneSession).mockResolvedValue(makeSession('s3', 'ses Alpha (copy 2)') as any);
+	renderComponent(SessionsArea);
+	await screen.findByText('ses Alpha (copy)');
+	await fireEvent.click(screen.getAllByRole('button', { name: /clone/i })[0]);
+	await waitFor(() => expect(cloneSession).toHaveBeenCalledWith('s1', { name: 'ses Alpha (copy 2)' }));
+});
+
 it('inline rip create form opens over the builder', async () => {
 	renderComponent(SessionsArea);
 	await screen.findByText('ses Alpha');
