@@ -127,7 +127,8 @@ async def test_run_script_timeout(tmp_path: Path) -> None:
 def _alive(pid: int) -> bool:
     try:
         state = Path(f"/proc/{pid}/stat").read_text().rsplit(")", 1)[1].split()[0]
-    except FileNotFoundError:
+    except FileNotFoundError, ProcessLookupError:
+        # The process can be reaped between opening its stat file and reading it.
         return False
     return state != "Z"
 
