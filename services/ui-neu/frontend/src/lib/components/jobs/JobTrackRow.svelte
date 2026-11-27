@@ -2,6 +2,8 @@
 	import PosterImage from '$lib/components/shared/PosterImage.svelte';
 	import StatusBadge from '$lib/components/shared/StatusBadge.svelte';
 	import TrackTitleSearch from '$lib/components/match/TrackTitleSearch.svelte';
+	import TrackStageRow from '$lib/components/jobs/TrackStageRow.svelte';
+	import { showsStageLine, waitingForFiles } from '$lib/jobs/staging';
 	import { formatFps } from '$lib/transcode/fps';
 	import { trackKindLabel, trackSizeLabel } from '$lib/jobs/track-fields';
 	import { formatTrackLength } from '$lib/utils/format';
@@ -22,6 +24,8 @@
 		/** Why this track's last include toggle failed, or null. */
 		excludeError?: string | null;
 		ontitleapplied: () => void;
+		/** A failed staging copy was re-queued. */
+		onstageretried: () => void;
 	}
 
 	let {
@@ -34,7 +38,8 @@
 		oncloseedit,
 		onexcludedchange,
 		excludeError = null,
-		ontitleapplied
+		ontitleapplied,
+		onstageretried
 	}: Props = $props();
 
 	// `checked={!track.excluded}` writes the input only when the value changes,
@@ -168,7 +173,11 @@
 	</td>
 	<!-- Transcode outcome (— when no transcode task yet) -->
 	<td class="table-cell" data-label="Transcode">
-		{#if track.transcode_status}
+		{#if waitingForFiles(track)}
+			<span class="job-detail-track-faint" title="The encode starts once the staged copy is ready"
+				>Waiting for files</span
+			>
+		{:else if track.transcode_status}
 			<span class="flex items-center gap-1">
 				<StatusBadge status={track.transcode_status} />
 				{#if track.transcode_status === 'in_progress' && track.transcode_fps != null}
@@ -189,6 +198,9 @@
 			{track.last_error}
 		</td>
 	</tr>
+{/if}
+{#if track.stage && showsStageLine(track.stage)}
+	<TrackStageRow jobId={job.id} trackId={track.id} stage={track.stage} onretried={onstageretried} />
 {/if}
 {#if editing}
 	<tr>

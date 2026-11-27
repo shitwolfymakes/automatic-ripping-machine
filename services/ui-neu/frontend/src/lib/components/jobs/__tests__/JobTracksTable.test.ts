@@ -31,6 +31,7 @@ const setRole = (authStore as unknown as { __setRole: (r: string | null) => void
 
 const onexcludedchange = vi.fn();
 const ontitleapplied = vi.fn();
+const onstageretried = vi.fn();
 
 interface Overrides {
 	tracksAreSeries?: boolean;
@@ -46,7 +47,8 @@ function renderTable(tracks: TrackView[], overrides: Overrides = {}) {
 		previewByTrack: new Map((overrides.previews ?? []).map((p) => [p.track_id, p])),
 		onexcludedchange,
 		excludeError: overrides.excludeError,
-		ontitleapplied
+		ontitleapplied,
+		onstageretried
 	});
 }
 

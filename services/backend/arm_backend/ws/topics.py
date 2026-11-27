@@ -6,10 +6,13 @@ from __future__ import annotations
 from typing import Any
 
 
+_PROGRESS_PREFIXES = ("ripper.progress.", "transcode.progress.", "staging.progress.")
+
+
 def is_progress_topic(topic: str) -> bool:
-    """Whether the topic is a ripper or transcode progress stream, which is
+    """Whether the topic is a ripper, transcode or staging progress stream, which is
     never persisted."""
-    return topic.startswith("ripper.progress.") or topic.startswith("transcode.progress.")
+    return topic.startswith(_PROGRESS_PREFIXES)
 
 
 def progress_scope(topic: str, payload: dict[str, Any]) -> tuple[str | None, str | None]:

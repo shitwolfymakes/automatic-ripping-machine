@@ -14,3 +14,4 @@ from fastapi import Path as PathParam
 from arm_common.ulid import id_pattern
 
 JobIdParam = Annotated[str, PathParam(pattern=id_pattern("job"))]
+TrackIdParam = Annotated[str, PathParam(pattern=id_pattern("trk"))]

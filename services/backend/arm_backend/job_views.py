@@ -15,6 +15,7 @@ from arm_common import (
     SessionApplication,
     SessionApplicationStatus,
     Track,
+    TrackStage,
     TrackStatus,
     TranscodeTaskStatus,
 )
@@ -26,6 +27,7 @@ from arm_common.schemas import (
     JobView,
     PreviousRipView,
     RipProgressSummary,
+    TrackStageView,
     TrackView,
     TranscodeProgressSummary,
 )
@@ -252,9 +254,18 @@ def _latest_task_by_track(tasks: list[TranscodeTask]) -> dict[str, TranscodeTask
     return latest_task
 
 
-def _track_view(track: Track, latest_task: dict[str, TranscodeTask]) -> TrackView:
-    """The TrackView of a track, with the status and frame rate of its latest transcode task."""
+async def _stages_by_track(session: AsyncSession, job_id: str) -> dict[str, TrackStage]:
+    """The job's stage rows by track id."""
+    rows = (await session.execute(select(TrackStage).where(col(TrackStage.job_id) == job_id))).scalars().all()
+    return {row.track_id: row for row in rows}
+
+
+def _track_view(track: Track, latest_task: dict[str, TranscodeTask], stages: dict[str, TrackStage]) -> TrackView:
+    """The TrackView of a track, with its staging copy and the status and frame rate of its latest transcode task."""
     tv = TrackView.model_validate(track)
+    stage = stages.get(track.id)
+    if stage is not None:
+        tv.stage = TrackStageView.model_validate(stage)
     task = latest_task.get(track.id)
     if task is not None:
         tv.transcode_status = task.status
@@ -288,9 +299,10 @@ async def job_detail_view(session: AsyncSession, job: Job) -> JobDetailView:
     )
     job_view.parked_session_ids = _parked_session_ids(sas)
     latest_task = _latest_task_by_track(job_tasks)
+    stages = await _stages_by_track(session, job.id)
     return JobDetailView(
         job=job_view,
-        tracks=[_track_view(t, latest_task) for t in tracks],
+        tracks=[_track_view(t, latest_task, stages) for t in tracks],
         fingerprints=[DiscFingerprintView.model_validate(fp) for fp in fingerprints],
         previous_rip=await _previous_rip_view(session, job),
     )

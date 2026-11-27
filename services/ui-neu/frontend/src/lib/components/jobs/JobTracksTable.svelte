@@ -11,6 +11,7 @@
 		/** The last include toggle that failed, shown on its track's row. */
 		excludeError?: { trackId: string; message: string } | null;
 		ontitleapplied: () => void;
+		onstageretried: () => void;
 	}
 
 	let {
@@ -20,7 +21,8 @@
 		previewByTrack,
 		onexcludedchange,
 		excludeError = null,
-		ontitleapplied
+		ontitleapplied,
+		onstageretried
 	}: Props = $props();
 
 	let editingTrackId = $state<string | null>(null);
@@ -73,6 +75,7 @@
 						{onexcludedchange}
 						excludeError={excludeError?.trackId === track.id ? excludeError.message : null}
 						ontitleapplied={handleTrackTitleApply}
+						{onstageretried}
 					/>
 				{/each}
 			</tbody>

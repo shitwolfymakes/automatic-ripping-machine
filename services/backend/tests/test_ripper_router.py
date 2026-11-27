@@ -1892,6 +1892,20 @@ def test_update_track_done_emits_completed() -> None:
     assert any(e["event_type"] == "track.completed" for e in hub.events)
 
 
+def test_update_track_done_hands_the_track_to_early_staging(monkeypatch: pytest.MonkeyPatch) -> None:
+    staged: list[str] = []
+
+    async def stage(_db: Any, _hub: Any, track: Track) -> None:
+        staged.append(track.id)
+
+    monkeypatch.setattr(ripper_router, "stage_finished_track", stage)
+    db = FakeSession()
+    app = _track_app(db, _track("trk_1", status=TrackStatus.IN_PROGRESS), hub=_Hub())
+    with TestClient(app) as client:
+        client.patch("/api/ripper/tracks/trk_1", json={"status": "done"}, headers=_OWNER_HEADERS)
+    assert staged == ["trk_1"]
+
+
 def test_update_track_done_without_optional_fields() -> None:
     """status=done with no output_path/size/sha/duration — every `is not
     None` guard takes its false branch."""

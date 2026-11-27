@@ -1456,6 +1456,65 @@
         }
       }
     },
+    "/api/jobs/{job_id}/tracks/{track_id}/stage/retry": {
+      "post": {
+        "tags": [
+          "jobs"
+        ],
+        "summary": "Retry Track Stage",
+        "description": "Re-queue a FAILED staging copy with a fresh attempt budget and wake the stager.",
+        "operationId": "retry_track_stage_api_jobs__job_id__tracks__track_id__stage_retry_post",
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^job_[0-9A-HJKMNP-TV-Z]{26}$",
+              "title": "Job Id"
+            }
+          },
+          {
+            "name": "track_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^trk_[0-9A-HJKMNP-TV-Z]{26}$",
+              "title": "Track Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TrackStageView"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/jobs/{job_id}/abandon": {
       "post": {
         "tags": [
@@ -17393,6 +17452,18 @@
         "title": "SourceSummary",
         "description": "One source's claims for a job, display-shaped."
       },
+      "StageStatus": {
+        "type": "string",
+        "enum": [
+          "pending",
+          "copying",
+          "staged",
+          "failed",
+          "stalled"
+        ],
+        "title": "StageStatus",
+        "description": "Where one track's copy from /raw to staging stands."
+      },
       "StatsResponse": {
         "properties": {
           "uptime_seconds": {
@@ -18094,6 +18165,74 @@
         ],
         "title": "TrackSelection"
       },
+      "TrackStageView": {
+        "properties": {
+          "status": {
+            "$ref": "#/components/schemas/StageStatus"
+          },
+          "bytes_durable": {
+            "type": "integer",
+            "title": "Bytes Durable"
+          },
+          "source_size": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Size"
+          },
+          "linked": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Linked"
+          },
+          "attempts": {
+            "type": "integer",
+            "title": "Attempts"
+          },
+          "last_error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Error"
+          },
+          "staged_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Staged At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status",
+          "bytes_durable",
+          "attempts"
+        ],
+        "title": "TrackStageView",
+        "description": "A track's staging copy (raw to /staging): the state the job page shows beside the track."
+      },
       "TrackStatus": {
         "type": "string",
         "enum": [
@@ -18447,6 +18586,16 @@
               }
             ],
             "title": "Identity Provenance"
+          },
+          "stage": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TrackStageView"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "type": "object",
