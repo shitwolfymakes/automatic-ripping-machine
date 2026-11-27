@@ -1,0 +1,6 @@
+[
+{"index":0,"duration_seconds":287,"chapter_count":1,"size_bytes":308000000,"source_file":"00102.mpls","segment_count":1,"segment_map":[100],"playlist_name":null,"angle":null,"stereo_3d":false},
+{"index":1,"duration_seconds":9807,"chapter_count":16,"size_bytes":42500000000,"source_file":"00334.mpls","segment_count":2,"segment_map":[364,368],"playlist_name":null,"angle":1,"stereo_3d":true},
+{"index":2,"duration_seconds":9807,"chapter_count":16,"size_bytes":42400000000,"source_file":"00334.mpls","segment_count":2,"segment_map":[366,368],"playlist_name":null,"angle":2,"stereo_3d":true},
+{"index":3,"duration_seconds":9698,"chapter_count":1,"size_bytes":42000000000,"source_file":"00342.mpls","segment_count":1,"segment_map":[368],"playlist_name":null,"angle":null,"stereo_3d":true}
+]
