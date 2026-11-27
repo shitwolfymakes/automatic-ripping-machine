@@ -9,6 +9,12 @@ import type {
 } from '$lib/types/api.gen';
 import { checkDetail, checkLabel, pathDetail, pathState } from '$lib/dashboard/system-health';
 
+// Shown beside the copy button and as the report's first line: values are
+// shown in full, so the user is told what to edit out before sharing.
+export const REPORT_SHARING_NOTICE =
+	'Review this report before you share it publicly: it shows host paths, usernames, hostnames, ' +
+	'LAN addresses, drive serials and file names. Edit out anything you do not want to share.';
+
 // Collapse line breaks so one value stays on one line.
 function oneLine(v: string): string {
 	return v.replace(/\r?\n|\r/g, '\\n');
@@ -92,6 +98,8 @@ export function buildDeploymentReport(
 	now: Date
 ): string {
 	const out: string[] = [
+		`> ${REPORT_SHARING_NOTICE}`,
+		'',
 		`## ARM deployment report | ${env.version} | ${now.toISOString()}`,
 		'',
 		'**Summary**',

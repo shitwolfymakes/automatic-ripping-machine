@@ -181,6 +181,20 @@ describe('SystemSettings', () => {
 		expect(screen.getByTestId('diag-level-arm-ripper')).toHaveTextContent('INFO');
 	});
 
+	it('tells the user what the report contains beside the copy button', () => {
+		renderSystem();
+		expect(screen.getByTestId('report-sharing-notice')).toHaveTextContent(
+			'Review this report before you share it publicly: it shows host paths, usernames, hostnames, LAN addresses, drive serials and file names. Edit out anything you do not want to share.'
+		);
+	});
+
+	it('drops the sharing notice with the copy button for a guest', async () => {
+		vi.mocked(fetchSystemEnvironment).mockRejectedValueOnce(new ApiError(403, 'forbidden', null));
+		renderSystem();
+		await screen.findByTestId('environment-forbidden');
+		expect(screen.queryByTestId('report-sharing-notice')).not.toBeInTheDocument();
+	});
+
 	it('copies a report from the loaded environment and the health result of the last system check', async () => {
 		vi.mocked(fetchSystemDiagnostics).mockResolvedValueOnce(health);
 		const writeText = stubClipboard();

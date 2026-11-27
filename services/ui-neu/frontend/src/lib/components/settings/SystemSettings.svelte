@@ -9,7 +9,7 @@
 	import { fetchSystemDiagnostics, fetchSystemEnvironment } from '$lib/api/system';
 	import { fetchDiagnostics } from '$lib/api/diagnostics';
 	import { ApiError } from '$lib/api/client';
-	import { buildDeploymentReport } from '$lib/settings/deployment-report';
+	import { buildDeploymentReport, REPORT_SHARING_NOTICE } from '$lib/settings/deployment-report';
 	import type {
 		DiagnosticsServiceView,
 		SystemDiagnosticsResponse,
@@ -59,6 +59,9 @@
 				<CopyReportButton {getReport} />
 			{/if}
 		</div>
+		{#if !envForbidden}
+			<p class="alert alert-info" data-testid="report-sharing-notice">{REPORT_SHARING_NOTICE}</p>
+		{/if}
 
 		{#if env}
 			<p class="settings-page-system-summary" data-testid="system-summary">

@@ -90,10 +90,13 @@ const health: SystemDiagnosticsResponse = {
 const logLevels: DiagnosticsServiceView[] = [{ name: 'arm-ripper', log_level: 'debug' }];
 
 describe('buildDeploymentReport', () => {
-	it('starts with version and timestamp', () => {
-		expect(buildDeploymentReport(makeEnv(), null, [], now).split('\n')[0]).toBe(
-			'## ARM deployment report | v3.1.0 | 2026-11-20T12:00:00.000Z'
+	it('opens with the sharing notice, then version and timestamp', () => {
+		const [notice, blank, heading] = buildDeploymentReport(makeEnv(), null, [], now).split('\n');
+		expect(notice).toBe(
+			'> Review this report before you share it publicly: it shows host paths, usernames, hostnames, LAN addresses, drive serials and file names. Edit out anything you do not want to share.'
 		);
+		expect(blank).toBe('');
+		expect(heading).toBe('## ARM deployment report | v3.1.0 | 2026-11-20T12:00:00.000Z');
 	});
 
 	it('renders a summary', () => {
