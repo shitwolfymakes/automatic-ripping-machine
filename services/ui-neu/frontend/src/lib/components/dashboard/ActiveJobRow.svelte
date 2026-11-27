@@ -133,7 +133,7 @@
 					>
 					{#if job.disc_type}
 						<span class="inline-flex items-center gap-0.5 job-active-row-disc-pill">
-							<DiscTypeIcon disctype={job.disc_type} size="h-3 w-3" />
+							<DiscTypeIcon disctype={job.disc_type} size="h-3 w-3" decorative />
 							{discTypeLabel(job.disc_type)}
 						</span>
 					{/if}
@@ -197,7 +197,14 @@
 		<!-- Expanded detail -->
 		{#if expanded}
 			<div transition:slide={{ duration: 200 }} class="job-active-row-expanded">
-				<ActiveJobRowDetails {job} {typeConfig} {active} stageWords={ripStageWords(live.rip?.phase ?? null)} />
+				<ActiveJobRowDetails
+					{job}
+					{typeConfig}
+					{active}
+					stageWords={ripStageWords(live.rip?.phase ?? null)}
+					{sample}
+					colorVar={accentVar}
+				/>
 			</div>
 		{/if}
 	</div>

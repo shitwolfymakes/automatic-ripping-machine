@@ -98,7 +98,7 @@
 		<td class="table-cell" data-label="Disc">
 			{#if job.disc_type}
 				<span class="inline-flex items-center gap-1">
-					<DiscTypeIcon disctype={job.disc_type} size="h-4 w-4" />
+					<DiscTypeIcon disctype={job.disc_type} size="h-4 w-4" decorative />
 					{discTypeLabel(job.disc_type)}
 				</span>
 			{/if}
