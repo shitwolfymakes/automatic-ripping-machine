@@ -19,13 +19,10 @@ from arm_common.schemas import DiscFingerprintInput  # noqa: E402
 import arm_ripper.scan.makemkv as makemkv_mod  # noqa: E402
 from arm_ripper.scan.disc_probe import DiscProbe  # noqa: E402
 from arm_ripper.scan.makemkv import (
-    MakemkvBinaryExpiredError,
+    MakemkvScanFailed,
     ScanError,
+    ScanFailureReason,
     _fingerprints,
-    _InfoRun,
-    _raise_for_failure,
-    _read_info_stderr,
-    _read_info_stdout,
     scan_disc,
 )  # noqa: E402
 
@@ -112,47 +109,57 @@ async def test_binary_missing_raises_scan_error_chained(monkeypatch: pytest.Monk
     assert excinfo.value.__cause__ is original
 
 
-async def test_timeout_kills_reaps_and_suppresses_cause(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_idle_timeout_kills_reaps_and_reports_timed_out(monkeypatch: pytest.MonkeyPatch) -> None:
     proc = _Proc(_HangingStream())
     _spawn(monkeypatch, proc)
-    monkeypatch.setattr(makemkv_mod, "SCAN_TIMEOUT_SECONDS", 0.05)
+    monkeypatch.setattr(makemkv_mod, "SCAN_IDLE_TIMEOUT_SECONDS", 0.05)
 
-    with pytest.raises(ScanError) as excinfo:
+    with pytest.raises(MakemkvScanFailed) as excinfo:
         await scan_disc("/dev/sr0")
 
-    assert str(excinfo.value) == "makemkvcon timed out after 0.05s"
-    assert excinfo.value.__cause__ is None
-    assert excinfo.value.__suppress_context__ is True
+    assert excinfo.value.reason is ScanFailureReason.TIMED_OUT
     assert proc.killed is True
     assert proc.waited is True
 
 
-async def test_nonzero_exit_reports_stripped_stderr(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_nonzero_exit_reports_last_output_line_and_tail(monkeypatch: pytest.MonkeyPatch) -> None:
     _spawn(monkeypatch, _Proc(_Stream(b"stdout text\n"), stderr=b"  disc read failed \n", returncode=3))
 
-    with pytest.raises(ScanError) as excinfo:
+    with pytest.raises(MakemkvScanFailed) as excinfo:
         await scan_disc("/dev/sr0")
 
-    assert str(excinfo.value) == "makemkvcon exited 3: disc read failed"
+    assert excinfo.value.reason is ScanFailureReason.MAKEMKV_ERROR
+    assert excinfo.value.detail == "makemkvcon exited 3:   disc read failed "
+    assert excinfo.value.tail == ("stdout text", "  disc read failed ")
 
 
-async def test_nonzero_exit_with_empty_stderr_uses_first_200_stdout_chars(monkeypatch: pytest.MonkeyPatch) -> None:
-    stdout = b"a" * 200 + b"b" * 50
-    _spawn(monkeypatch, _Proc(_Stream(stdout), stderr=b"", returncode=1))
+async def test_nonzero_exit_without_output_has_empty_detail_tail(monkeypatch: pytest.MonkeyPatch) -> None:
+    _spawn(monkeypatch, _Proc(_Stream(b""), stderr=b"", returncode=1))
 
-    with pytest.raises(ScanError) as excinfo:
+    with pytest.raises(MakemkvScanFailed) as excinfo:
         await scan_disc("/dev/sr0")
 
-    assert str(excinfo.value) == "makemkvcon exited 1: " + "a" * 200
+    assert str(excinfo.value) == "makemkvcon exited 1: "
+    assert excinfo.value.tail == ()
 
 
-async def test_nonzero_exit_with_whitespace_stderr_falls_back_to_stdout(monkeypatch: pytest.MonkeyPatch) -> None:
-    _spawn(monkeypatch, _Proc(_Stream(b"  out line\n"), stderr=b" \n\t", returncode=2))
+async def test_scan_command_asks_for_progress_on_stdout(monkeypatch: pytest.MonkeyPatch) -> None:
+    seen: list[tuple[Any, ...]] = []
 
-    with pytest.raises(ScanError) as excinfo:
-        await scan_disc("/dev/sr0")
+    async def _factory(*args: Any, **_kw: Any) -> _Proc:
+        seen.append(args)
+        return _Proc(_Stream(b'CINFO:1,6206,"DVD disc"\n'))
 
-    assert str(excinfo.value) == "makemkvcon exited 2:   out line\n"
+    monkeypatch.setattr(makemkv_mod.asyncio, "create_subprocess_exec", _factory)
+    monkeypatch.setattr(makemkv_mod, "probe_disc", _noop_probe)
+
+    await scan_disc("/dev/sr0")
+
+    assert "--progress=-stdout" in seen[0]
+
+
+async def _noop_probe(_device: str, *, bluray: bool) -> DiscProbe:
+    return DiscProbe(crc64=None)
 
 
 async def test_all_three_fingerprints_in_fixed_order(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -233,65 +240,3 @@ def test_fingerprints_only_thediscdb() -> None:
     probe = DiscProbe(crc64=None, thediscdb="tdb", matrix256="")
 
     assert _fingerprints(probe) == [DiscFingerprintInput(algo="thediscdb", value="tdb")]
-
-
-def test_raise_for_failure_expired_wins_over_nonzero_exit() -> None:
-    run = _InfoRun(stdout=b"out", stderr=b"err", expired=True, returncode=1)
-
-    with pytest.raises(MakemkvBinaryExpiredError):
-        _raise_for_failure(run)
-
-
-def test_raise_for_failure_returns_none_on_clean_exit() -> None:
-    assert _raise_for_failure(_InfoRun(stdout=b"out", stderr=b"", expired=False, returncode=0)) is None
-
-
-def test_raise_for_failure_nonzero_exit_reports_stripped_stderr() -> None:
-    run = _InfoRun(stdout=b"out", stderr=b"  boom \n", expired=False, returncode=3)
-
-    with pytest.raises(ScanError) as excinfo:
-        _raise_for_failure(run)
-
-    assert str(excinfo.value) == "makemkvcon exited 3: boom"
-
-
-def test_raise_for_failure_nonzero_exit_without_stderr_reports_first_200_stdout_chars() -> None:
-    run = _InfoRun(stdout=b"x" * 250, stderr=b"", expired=False, returncode=2)
-
-    with pytest.raises(ScanError) as excinfo:
-        _raise_for_failure(run)
-
-    assert str(excinfo.value) == "makemkvcon exited 2: " + "x" * 200
-
-
-class _KillCountingProc(_Proc):
-    def __init__(self, stdout: Any, stderr: bytes = b"") -> None:
-        super().__init__(stdout, stderr)
-        self.kills = 0
-
-    def kill(self) -> None:
-        self.kills += 1
-        super().kill()
-
-
-async def test_read_info_stdout_without_expiry_joins_lines_and_does_not_kill() -> None:
-    proc = _KillCountingProc(_Stream(b"line one\nline two\n"))
-
-    stdout, expired = await _read_info_stdout(proc)  # type: ignore[arg-type]
-
-    assert (stdout, expired, proc.kills) == (b"line one\nline two\n", False, 0)
-
-
-async def test_read_info_stdout_kills_once_on_expiry_and_keeps_draining() -> None:
-    data = b"MSG:5021,a\nMSG:5021,b\nlater line\n"
-    proc = _KillCountingProc(_Stream(data))
-
-    stdout, expired = await _read_info_stdout(proc)  # type: ignore[arg-type]
-
-    assert (stdout, expired, proc.kills) == (data, True, 1)
-
-
-async def test_read_info_stderr_returns_joined_bytes() -> None:
-    proc = _KillCountingProc(_Stream(b""), stderr=b"err one\nerr two\n")
-
-    assert await _read_info_stderr(proc) == b"err one\nerr two\n"  # type: ignore[arg-type]

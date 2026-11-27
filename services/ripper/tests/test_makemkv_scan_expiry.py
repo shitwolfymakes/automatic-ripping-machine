@@ -5,7 +5,7 @@ MakeMKV beta binaries carry a hard-coded 60-day kill-switch from their
 release date. When upstream is between betas, every `makemkvcon info`
 emits `MSG:5021,131332,1,"application version is too old"` and either
 exits instantly (`info disc:9999`) or — for an `iso:/big.iso` source —
-spins for the full SCAN_TIMEOUT_SECONDS before our timeout kills it.
+spins for the full scan ceiling before our timeout kills it.
 The guard streams stdout line-by-line so the second case becomes a
 deterministic ~few-second failure with a distinct error type.
 
@@ -20,8 +20,9 @@ import pytest
 
 import arm_ripper.scan.makemkv as makemkv_mod
 from arm_ripper.scan.makemkv import (
-    MakemkvBinaryExpiredError,
+    MakemkvScanFailed,
     ScanError,
+    ScanFailureReason,
     scan_disc,
 )
 
@@ -89,8 +90,8 @@ async def _stub_probe(monkeypatch: pytest.MonkeyPatch) -> None:
 @pytest.mark.asyncio
 async def test_msg_5021_raises_binary_expired_error(monkeypatch: pytest.MonkeyPatch) -> None:
     """When MSG:5021 appears on stdout, scan_disc raises the distinct
-    `MakemkvBinaryExpiredError` subtype and kills the subprocess so the
-    SCAN_TIMEOUT_SECONDS ceiling doesn't fire."""
+    `MakemkvScanFailed(MAKEMKV_EXPIRED)` and kills the subprocess so the
+    scan timeouts don't fire."""
     await _stub_probe(monkeypatch)
     proc = _stub_subprocess(
         monkeypatch,
@@ -106,19 +107,18 @@ async def test_msg_5021_raises_binary_expired_error(monkeypatch: pytest.MonkeyPa
         ),
     )
 
-    with pytest.raises(MakemkvBinaryExpiredError) as excinfo:
+    with pytest.raises(MakemkvScanFailed) as excinfo:
         await scan_disc("iso:/fake/big.iso")
 
     assert proc.killed is True
-    # Distinct, operator-actionable message — includes MSG:5021 reference
-    # and points at the docs.
+    assert excinfo.value.reason is ScanFailureReason.MAKEMKV_EXPIRED
     assert "MSG:5021" in str(excinfo.value)
-    assert "docs/user/MakeMKV-Ripper.md" in str(excinfo.value)
+    assert excinfo.value.tail[-1].startswith("MSG:5021,")
 
 
 @pytest.mark.asyncio
 async def test_msg_5021_is_a_scan_error_subtype(monkeypatch: pytest.MonkeyPatch) -> None:
-    """`MakemkvBinaryExpiredError` is a `ScanError`, so existing
+    """`MakemkvScanFailed` is a `ScanError`, so existing
     `except ScanError` handlers in the dispatcher still catch it
     (with the option to refine on the subtype if needed)."""
     await _stub_probe(monkeypatch)
