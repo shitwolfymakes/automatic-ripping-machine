@@ -41,14 +41,10 @@ def _summarize_rip_progress(tracks: list[Track]) -> RipProgressSummary:
     `Track.index` of the row in `IN_PROGRESS`. The dispatcher transitions
     one track at a time, so at most one is `IN_PROGRESS` per job; if more
     than one ever appeared (e.g. mid-rewrite of the dispatcher) we'd pick
-    the lowest-index one as a sane default. Only the selected tracks count: an unticked
-    (excluded) title is no rip work, even where `mkv all` still writes it, and neither is a
-    SKIPPED one (unticked at Start of a per-title rip, never read). Both are left out of the
-    total and the ordinals.
+    the lowest-index one as a sane default. SKIPPED tracks (unticked at Start of a
+    per-title rip, never read) are no rip work: they are left out of the total and the ordinals.
     """
-    sorted_tracks = sorted(
-        (t for t in tracks if not t.excluded and t.status != TrackStatus.SKIPPED), key=lambda t: t.index
-    )
+    sorted_tracks = sorted((t for t in tracks if t.status != TrackStatus.SKIPPED), key=lambda t: t.index)
     done = sum(1 for t in sorted_tracks if t.status == TrackStatus.DONE)
     failed = sum(1 for t in sorted_tracks if t.status == TrackStatus.FAILED)
     current_track_id: str | None = None

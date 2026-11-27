@@ -74,13 +74,13 @@ def _make_job(job_id: str, *, status: JobStatus, drive_id: str = "drv_x") -> Job
 
 def _make_track(track_id: str, *, job_id: str, index: int, status: TrackStatus, excluded: bool = False) -> Track:
     return Track(
-        excluded=excluded,
         id=track_id,
         job_id=job_id,
         kind=TrackKind.VIDEO_TITLE,
         index=index,
         source_ref=str(index),
         status=status,
+        excluded=excluded,
     )
 
 
@@ -232,8 +232,8 @@ def test_mixed_jobs_only_ripping_get_summary(signing_key: bytes) -> None:
     assert by_id["job_01JZXR7K3M5Q8N4VWA00000007"]["rip_progress"] is None
 
 
-def test_unticked_tracks_are_not_counted(signing_key: bytes) -> None:
-    """Unticked titles (which `mkv all` still writes) are left out of the count and the ordinals."""
+def test_unticked_tracks_the_rip_still_writes_are_counted(signing_key: bytes) -> None:
+    """`mkv all` writes unticked titles too, so they count as rip work; only SKIPPED titles (per_title) are left out."""
     db = FakeSession()
     _seed_admin(db)
     job_id = "job_01JZXR7K3M5Q8N4VWA00000002"
@@ -247,13 +247,8 @@ def test_unticked_tracks_are_not_counted(signing_key: bytes) -> None:
     app, token = _make_app(signing_key, db)
     with TestClient(app) as client:
         r = client.get("/api/jobs", headers=_auth(token))
-    assert r.json()[0]["rip_progress"] == {
-        "tracks_total": 1,
-        "tracks_done": 0,
-        "tracks_failed": 0,
-        "current_track_id": None,
-        "current_track_index": None,
-    }
+    progress = r.json()[0]["rip_progress"]
+    assert (progress["tracks_total"], progress["tracks_done"], progress["current_track_id"]) == (4, 1, "trk_2")
 
 
 def test_skipped_tracks_are_no_rip_work(signing_key: bytes) -> None:
