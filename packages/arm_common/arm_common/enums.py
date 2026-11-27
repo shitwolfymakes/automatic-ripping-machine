@@ -184,16 +184,12 @@ class TrackKind(StrEnum):
     DISC_BACKUP = "disc_backup"
 
 
-class ResumeMode(StrEnum):
-    """How a rip resumed after a restart or a lost drive reads the disc again.
+class RipInvocation(StrEnum):
+    """How a DVD/BD rip, fresh or resumed, reads the disc: one invocation over every title, or one per title."""
 
-    `auto` picks per resume by data (see `ResumePolicy`); the other two force one path.
-    """
-
-    AUTO = "auto"
-    # One `makemkvcon mkv … all` over the whole disc; settled titles' new files are deleted.
+    # One `makemkvcon mkv … all` over the whole disc; a resume deletes the new files of the settled titles.
     MKV_ALL = "mkv_all"
-    # One `makemkvcon mkv … <title>` per unsettled title.
+    # One `makemkvcon mkv … <title>` per selected, unsettled title.
     PER_TITLE = "per_title"
 
 

@@ -1051,15 +1051,15 @@ def test_mkv_all_command_has_all_exactly_once_right_before_the_output_dir(tmp_pa
 
 
 def test_mkv_title_command_names_the_title_and_passes_no_minlength(tmp_path):
-    """MakeMKV numbers titles after its minimum-length filter, so a `--minlength` other than the one the scan's
-    `info` ran under would make the id name another title."""
-    assert makemkv_rip._mkv_title_command("/dev/sr0", tmp_path, 7) == [
+    """MakeMKV numbers titles after its minimum-length filter; the scan's `info` runs without `--minlength`, so the
+    per-title command must not pass one either, or the id would name another title."""
+    assert makemkv_rip._mkv_title_command("/dev/sr0", tmp_path, 2) == [
         "makemkvcon",
         "mkv",
         "--robot",
         "--progress=-stdout",
         "dev:/dev/sr0",
-        "7",
+        "2",
         str(tmp_path),
     ]
 
@@ -1075,10 +1075,10 @@ async def test_rip_disc_for_one_title_leaves_out_minlength(monkeypatch, tmp_path
 
     monkeypatch.setattr(makemkv_rip.asyncio, "create_subprocess_exec", fake_create_subprocess_exec)
 
-    await rip_disc(device_path="/dev/sr0", output_dir=tmp_path, minlength_seconds=900, title=3)
+    await rip_disc(device_path="/dev/sr0", output_dir=tmp_path, minlength_seconds=60, title=2)
 
     assert not any(arg.startswith("--minlength") for arg in captured["argv"])
-    assert list(captured["argv"][-2:]) == ["3", str(tmp_path)]
+    assert list(captured["argv"][-3:]) == ["dev:/dev/sr0", "2", str(tmp_path)]
 
 
 def _pending_state(**titles: tuple[bool, bool]) -> makemkv_stream.ParserState:

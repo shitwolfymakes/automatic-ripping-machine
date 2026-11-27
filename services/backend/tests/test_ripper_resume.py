@@ -19,7 +19,7 @@ from arm_common import (
     DriveStatus,
     Job,
     JobStatus,
-    ResumeMode,
+    RipInvocation,
     Track,
     TrackKind,
     TrackStatus,
@@ -123,7 +123,7 @@ def test_resume_happy_path_resets_and_emits() -> None:
     assert resumed[0]["payload"]["resumed_from_crash"] is True
 
 
-def test_resume_returns_a_finished_track_as_done_with_the_resume_policy(tmp_path: Path, monkeypatch) -> None:
+def test_resume_returns_a_finished_track_as_done_with_the_rip_invocation(tmp_path: Path, monkeypatch) -> None:
     db = FakeSession()
     _seed(db)
     finished = tmp_path / "title_t00.mkv"
@@ -132,8 +132,7 @@ def test_resume_returns_a_finished_track_as_done_with_the_resume_policy(tmp_path
     track.status = TrackStatus.DONE
     track.output_path = str(finished)
     track.size_bytes = 16
-    monkeypatch.setattr(settings, "ARM_RESUME_MODE", ResumeMode.PER_TITLE)
-    monkeypatch.setattr(settings, "ARM_RESUME_PER_TITLE_MAX_REMAINING_PCT", 30)
+    monkeypatch.setattr(settings, "ARM_RIP_INVOCATION", RipInvocation.PER_TITLE)
     app = _make_app(db, hub=_CapturingHub())
     with TestClient(app) as client:
         r = client.post("/api/ripper/jobs/job_01JZXR7K3M5Q8N4VWA00000001/resume", headers=_service_headers())
@@ -141,7 +140,7 @@ def test_resume_returns_a_finished_track_as_done_with_the_resume_policy(tmp_path
     body = r.json()
     assert body["tracks"][0]["status"] == "done"
     assert body["tracks"][0]["attempts"] == 1
-    assert body["resume_policy"] == {"mode": "per_title", "per_title_max_remaining_pct": 30}
+    assert body["rip_invocation"] == "per_title"
 
 
 def test_resume_idempotent_does_not_inflate_attempts() -> None:
