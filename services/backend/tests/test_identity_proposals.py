@@ -2,12 +2,13 @@
 
 from datetime import datetime, timezone
 
-from arm_common import DiscType, Job, JobStatus, Track, TrackKind
+from arm_common import DiscType, Job, JobStatus, Track, TrackKind, TrackRole
 from arm_common.schemas.identity import JobClaim, SourceClaims, TrackClaim
 
 from arm_backend.identity.resolver import apply_resolution, resolve
 from arm_backend.identity.proposals import (
     forget_episode_sources,
+    preferred_titles,
     set_unsure,
     claims_of,
     clear_pin,
@@ -289,3 +290,19 @@ def test_forget_episode_sources_drops_sources_pin_and_unsure_but_keeps_manual_an
     # Any new episode result lifts the cleared mark.
     put_source(job, "episodes_tmdb", SourceClaims(run_at=NOW, status="ok"))
     assert claims_of(job).episodes_cleared is False
+
+
+def test_preferred_titles_are_thediscdb_main_movie_claims() -> None:
+    job = _job()
+    put_source(
+        job,
+        "thediscdb",
+        SourceClaims(
+            tracks={"0": TrackClaim(role=TrackRole.MAIN), "1": TrackClaim(role=TrackRole.EXTRA), "11": TrackClaim()}
+        ),
+    )
+    assert preferred_titles(job) == frozenset({0})
+
+
+def test_preferred_titles_empty_without_thediscdb_claims() -> None:
+    assert preferred_titles(_job()) == frozenset()

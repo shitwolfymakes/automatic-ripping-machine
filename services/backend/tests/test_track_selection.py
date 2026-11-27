@@ -1,5 +1,8 @@
 """Track-selection rule unit tests."""
 
+import json
+from pathlib import Path
+
 import pytest
 
 from arm_backend.track_selection import (
@@ -223,3 +226,105 @@ def test_review_folder_preset_persists_the_single_backup():
     scan = ScanResult(disc_type=DiscType.BLURAY, titles=[ScanTitle(index=0, duration_seconds=7200)])
     tracks = select_tracks_for_review("job_01JZXR7K3M5Q8N4VWA00000001", scan, _backup_preset())
     assert [(t.kind, t.excluded) for t in tracks] == [(TrackKind.DISC_BACKUP, False)]
+
+
+# --- Blu-ray title classification (#705) ---
+
+_JOB = "job_01JZXR7K3M5Q8N4VWA00000001"
+_DECOY_JSON = (
+    Path(__file__).resolve().parents[3] / "packages/arm_common/tests/fixtures/scan_titles/bd_decoy_playlists.json"
+)
+
+
+def _decoy_scan(disc_type: DiscType = DiscType.BLURAY) -> ScanResult:
+    titles = [ScanTitle.model_validate(t) for t in json.loads(_DECOY_JSON.read_text())]
+    return ScanResult(disc_type=disc_type, titles=titles)
+
+
+def _bd_title(index: int, duration: int, clips: list[int]) -> ScanTitle:
+    return ScanTitle(
+        index=index,
+        duration_seconds=duration,
+        source_file=f"{index:05d}.mpls",
+        segment_map=clips,
+        segment_count=len(clips),
+    )
+
+
+def _edition_scan() -> ScanResult:
+    theatrical = list(range(1, 21))
+    return ScanResult(
+        disc_type=DiscType.BLURAY,
+        titles=[
+            _bd_title(0, 100 * 60, theatrical),
+            _bd_title(1, 117 * 60, theatrical + [30, 31, 32, 33]),
+            _bd_title(2, 100 * 60, theatrical[::-1]),
+        ],
+    )
+
+
+def test_decoy_disc_main_feature_picks_real_feature_not_copy_disclaimer():
+    tracks = select_tracks(_JOB, _decoy_scan(), _preset(TrackSelection.MAIN_FEATURE))
+    assert [t.index for t in tracks] == [0]
+
+
+def test_decoy_disc_all_tracks_drops_decoys_and_variant():
+    tracks = select_tracks(_JOB, _decoy_scan(), _preset(TrackSelection.ALL_TRACKS))
+    assert [t.index for t in tracks] == [0, 1, 3, 4, 5, 6, 7, 8, 9, 10]
+
+
+def test_decoy_disc_archive_honours_classification():
+    tracks = select_tracks(_JOB, _decoy_scan(), _preset(TrackSelection.ARCHIVE))
+    assert len(tracks) == 10
+    assert 2 not in {t.index for t in tracks}
+
+
+def test_decoy_disc_review_persists_all_and_excludes_non_kept():
+    tracks = select_tracks_for_review(_JOB, _decoy_scan(), _preset(TrackSelection.ALL_TRACKS))
+    assert len(tracks) == 309
+    assert sum(1 for t in tracks if t.excluded) == 299
+
+
+def test_decoy_disc_as_dvd_is_unclassified():
+    tracks = select_tracks(_JOB, _decoy_scan(DiscType.DVD), _preset(TrackSelection.ALL_TRACKS))
+    assert len(tracks) == 309
+
+
+def test_preferred_breaks_the_tie_when_no_title_has_a_comment():
+    scan = _decoy_scan()
+    for t in scan.titles:
+        t.comment = None
+    tracks = select_tracks(_JOB, scan, _preset(TrackSelection.MAIN_FEATURE), preferred=frozenset({11}))
+    assert [t.index for t in tracks] == [11]
+
+
+def test_preferred_reaches_the_review_defaults():
+    scan = _decoy_scan()
+    for t in scan.titles:
+        t.comment = None
+    tracks = select_tracks_for_review(_JOB, scan, _preset(TrackSelection.MAIN_FEATURE), preferred=frozenset({11}))
+    assert {t.index for t in tracks if not t.excluded} == {11}
+
+
+def test_custom_allowlist_keeps_a_decoy():
+    preset = _preset(TrackSelection.CUSTOM)
+    preset.track_filters_json = {"title_indices": [11]}
+    tracks = select_tracks(_JOB, _decoy_scan(), preset)
+    assert [t.index for t in tracks] == [11]
+
+
+def test_custom_without_allowlist_filters_the_candidates():
+    preset = _preset(TrackSelection.CUSTOM)
+    preset.track_filters_json = {"min_duration_seconds": 3600}
+    tracks = select_tracks(_JOB, _decoy_scan(), preset)
+    assert [t.index for t in tracks] == [0]
+
+
+def test_main_feature_ticks_every_edition():
+    tracks = select_tracks(_JOB, _edition_scan(), _preset(TrackSelection.MAIN_FEATURE))
+    assert [t.index for t in tracks] == [0, 1]
+
+
+def test_all_tracks_ticks_every_edition_but_not_its_decoy():
+    tracks = select_tracks(_JOB, _edition_scan(), _preset(TrackSelection.ALL_TRACKS))
+    assert [t.index for t in tracks] == [0, 1]
