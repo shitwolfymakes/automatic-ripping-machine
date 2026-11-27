@@ -19,10 +19,11 @@ def roots(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> dict[str, Path]:
         "MEDIA": FileRoot(key="MEDIA", label="Media", path=str(media), writable=True),
         "RAW": FileRoot(key="RAW", label="Raw", path=str(raw), writable=True),
         "ISO": FileRoot(key="ISO", label="ISO", path=str(iso), writable=True),
+        "STAGING": FileRoot(key="STAGING", label="Staging", path=str(raw / ".staging"), writable=False),
         "LOG": FileRoot(key="LOG", label="Logs", path=str(log), writable=False),
     }
     monkeypatch.setattr(fb, "ROOTS", registry)
-    return {"MEDIA": media, "RAW": raw, "ISO": iso, "LOG": log}
+    return {"MEDIA": media, "RAW": raw, "ISO": iso, "LOG": log, "STAGING": raw / ".staging"}
 
 
 def test_resolve_normal_subpath(roots):
@@ -71,7 +72,7 @@ def test_require_writable_blocks_log(roots):
 
 def test_list_roots(roots):
     keys = {r.key for r in fb.list_roots()}
-    assert keys == {"MEDIA", "RAW", "ISO", "LOG"}
+    assert keys == {"MEDIA", "RAW", "ISO", "LOG", "STAGING"}
 
 
 def test_categorize_known_and_unknown():
@@ -348,3 +349,113 @@ def test_list_dir_existing_root_not_unavailable(roots):
     """A mounted root lists normally with unavailable False."""
     listing = fb.list_dir("MEDIA", "")
     assert listing.unavailable is False
+
+
+# --- D49(b): read-only STAGING root; RAW hides and protects the staging folder ---
+
+
+@pytest.fixture
+def staged(roots):
+    st = roots["STAGING"]
+    (st / "job1").mkdir(parents=True)
+    (st / "job1" / "t.mkv").write_bytes(b"x")
+    (roots["RAW"] / "rip").mkdir()
+    (roots["RAW"] / ".other").mkdir()
+    return roots
+
+
+def test_staging_root_is_listed_read_only(staged):
+    root = next(r for r in fb.list_roots() if r.key == "STAGING")
+    assert root.writable is False
+    listing = fb.list_dir("STAGING", "")
+    assert listing.readonly is True
+    assert [e.name for e in listing.entries] == ["job1"]
+    assert [e.name for e in fb.list_dir("STAGING", "job1").entries] == ["t.mkv"]
+
+
+@pytest.mark.parametrize(
+    "call",
+    [
+        lambda: fb.make_dir("STAGING", "", "x"),
+        lambda: fb.rename("STAGING", "job1", "x"),
+        lambda: fb.delete("STAGING", "job1"),
+        lambda: fb.move("STAGING", "job1", "MEDIA", ""),
+        lambda: fb.fix_permissions("STAGING", "job1"),
+    ],
+)
+def test_staging_root_refuses_every_write(staged, call):
+    with pytest.raises(fb.PathError) as ei:
+        call()
+    assert ei.value.code == "read_only_root"
+    assert (staged["STAGING"] / "job1" / "t.mkv").exists()
+
+
+def test_raw_listing_hides_only_the_staging_folder(staged):
+    names = [e.name for e in fb.list_dir("RAW", "").entries]
+    assert names == [".other", "rip"]
+
+
+@pytest.mark.parametrize(
+    "call",
+    [
+        lambda: fb.delete("RAW", ".staging/job1"),
+        lambda: fb.delete("RAW", ".staging"),
+        lambda: fb.rename("RAW", ".staging", "gone"),
+        lambda: fb.rename("RAW", ".staging/job1", "x"),
+        lambda: fb.make_dir("RAW", ".staging", "x"),
+        lambda: fb.make_dir("RAW", ".staging/job1", "x"),
+        lambda: fb.move("RAW", ".staging/job1", "MEDIA", ""),
+        lambda: fb.move("RAW", "rip", "RAW", ".staging/job1"),
+        lambda: fb.fix_permissions("RAW", ".staging/job1"),
+        lambda: fb.delete("RAW", "rip/../.staging/job1"),
+        lambda: fb.delete("RAW", ""),
+    ],
+)
+def test_raw_writes_into_staging_are_refused(staged, call):
+    with pytest.raises(fb.PathError) as ei:
+        call()
+    assert ei.value.code == "staging_protected"
+    assert (staged["STAGING"] / "job1" / "t.mkv").exists()
+
+
+def test_raw_writes_outside_staging_still_work(staged):
+    fb.make_dir("RAW", "", "new")
+    fb.rename("RAW", "new", "newer")
+    fb.delete("RAW", "newer")
+    fb.fix_permissions("RAW", "rip")
+    assert not (staged["RAW"] / "newer").exists()
+
+
+def test_raw_symlink_into_staging_is_refused(staged):
+    (staged["RAW"] / "alias").symlink_to(staged["STAGING"] / "job1")
+    with pytest.raises(fb.PathError) as ei:
+        fb.delete("RAW", "alias")
+    assert ei.value.code == "staging_protected"
+
+
+def test_separate_staging_leaves_raw_untouched(staged, monkeypatch, tmp_path):
+    other = tmp_path / "elsewhere"
+    other.mkdir()
+    monkeypatch.setitem(fb.ROOTS, "STAGING", fb.ROOTS["STAGING"].model_copy(update={"path": str(other)}))
+    assert [e.name for e in fb.list_dir("RAW", "").entries] == [".other", ".staging", "rip"]
+    fb.delete("RAW", ".staging/job1")
+
+
+def test_no_staging_root_registered_means_nothing_is_protected(staged, monkeypatch):
+    monkeypatch.delitem(fb.ROOTS, "STAGING")
+    fb.delete("RAW", ".staging/job1")
+
+
+def test_staging_path_predicates(tmp_path):
+    st = tmp_path / "raw" / ".staging"
+    assert fb.inside_staging(st, st) and fb.inside_staging(st / "a", st)
+    assert not fb.inside_staging(tmp_path / "raw", st)
+    assert fb.contains_staging(tmp_path / "raw", st) and fb.contains_staging(st / "a", st)
+    assert not fb.contains_staging(tmp_path / "raw" / "other", st)
+
+
+def test_real_registry_lists_staging_read_only_at_the_configured_staging_root():
+    from arm_backend.config import settings, staging_root
+
+    root = fb.ROOTS["STAGING"]
+    assert (root.label, root.writable, root.path) == ("Staging", False, str(staging_root(settings)))

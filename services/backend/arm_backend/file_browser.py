@@ -2,18 +2,20 @@ from __future__ import annotations
 
 import os
 import shutil
+from collections.abc import Callable
 from datetime import datetime, timezone
 from pathlib import Path
 
-from arm_backend.config import settings
+from arm_backend.config import settings, staging_root
 from arm_common.path_containment import safe_join
 from arm_common.schemas import DirectoryListing, FileEntry, FileRoot
 
 # Code-resident roots registry. LOG is the fixed /logs mount (browse-only);
-# the rest map to Settings path fields. Tests monkeypatch this dict.
+# STAGING is browse-only too: the stager writes it and transcodes read it. The rest map to Settings path fields. Tests monkeypatch this dict.
 ROOTS: dict[str, FileRoot] = {
     "MEDIA": FileRoot(key="MEDIA", label="Media", path=settings.MEDIA_ROOT, writable=True),
     "RAW": FileRoot(key="RAW", label="Raw rips", path=settings.RAW_ROOT, writable=True),
+    "STAGING": FileRoot(key="STAGING", label="Staging", path=str(staging_root(settings)), writable=False),
     "ISO": FileRoot(key="ISO", label="ISO library", path=settings.ISO_INGRESS_ROOT, writable=False),
     "LOG": FileRoot(key="LOG", label="Logs", path="/logs", writable=False),
 }
@@ -54,6 +56,28 @@ def resolve(root_key: str, subpath: str) -> Path:
 def require_writable(root_key: str) -> None:
     if not _root(root_key).writable:
         raise PathError("read_only_root")
+
+
+def inside_staging(path: Path, staging: Path) -> bool:
+    """True when `path` is the staging folder or anything under it (both already resolved)."""
+    return path.is_relative_to(staging)
+
+
+def contains_staging(path: Path, staging: Path) -> bool:
+    """True when `path` is the staging folder, an ancestor of it, or anything under it."""
+    return inside_staging(path, staging) or staging.is_relative_to(path)
+
+
+def _staging_dir() -> Path | None:
+    root = ROOTS.get("STAGING")
+    return None if root is None else Path(root.path).resolve()
+
+
+def _refuse_staging(path: Path, touches: Callable[[Path, Path], bool]) -> None:
+    """Writes must not reach the staging folder: the stager and waiting transcodes own it."""
+    staging = _staging_dir()
+    if staging is not None and touches(path, staging):
+        raise PathError("staging_protected")
 
 
 _CATEGORIES: dict[str, str] = {
@@ -107,7 +131,9 @@ def list_dir(root_key: str, subpath: str) -> DirectoryListing:
                 unavailable=True,
             )
         raise PathError("not_found")
-    entries = [entry_for(p) for p in sorted(target.iterdir(), key=lambda p: (p.is_file(), p.name.lower()))]
+    staging = _staging_dir()
+    children = (p for p in target.iterdir() if p.resolve() != staging)
+    entries = [entry_for(p) for p in sorted(children, key=lambda p: (p.is_file(), p.name.lower()))]
     if is_base:
         parent = None
     else:
@@ -138,6 +164,7 @@ def make_dir(root_key: str, subpath: str, name: str) -> tuple[str, str]:
     require_writable(root_key)
     validate_name(name)
     parent = resolve(root_key, subpath)
+    _refuse_staging(parent, inside_staging)
     if not parent.is_dir():
         raise PathError("not_found")
     new = parent / name
@@ -151,6 +178,7 @@ def rename(root_key: str, subpath: str, new_name: str) -> tuple[str, str]:
     require_writable(root_key)
     validate_name(new_name)
     target = resolve(root_key, subpath)
+    _refuse_staging(target, contains_staging)
     if not target.exists():
         raise PathError("not_found")
     dest = target.parent / new_name
@@ -166,9 +194,11 @@ def move(root_key: str, subpath: str, dest_root: str, dest_subpath: str) -> tupl
     if dest_meta is None or not dest_meta.writable:
         raise PathError("dest_not_writable")
     src = resolve(root_key, subpath)
+    _refuse_staging(src, contains_staging)
     if not src.exists():
         raise PathError("not_found")
     dest_dir = resolve(dest_root, dest_subpath)
+    _refuse_staging(dest_dir, inside_staging)
     if not dest_dir.is_dir():
         raise PathError("not_found")
     # Reject moving a directory into itself or its own subtree.
@@ -184,6 +214,7 @@ def move(root_key: str, subpath: str, dest_root: str, dest_subpath: str) -> tupl
 def delete(root_key: str, subpath: str) -> None:
     require_writable(root_key)
     target = resolve(root_key, subpath)
+    _refuse_staging(target, contains_staging)
     if not target.exists():
         raise PathError("not_found")
     if target.is_dir():
@@ -195,6 +226,7 @@ def delete(root_key: str, subpath: str) -> None:
 def fix_permissions(root_key: str, subpath: str) -> int:
     require_writable(root_key)
     target = resolve(root_key, subpath)
+    _refuse_staging(target, inside_staging)
     if not target.exists():
         raise PathError("not_found")
     fixed = 0
