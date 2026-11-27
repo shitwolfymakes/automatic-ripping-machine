@@ -19,10 +19,12 @@ import arm_ripper.raw_dir as raw_dir_module
 import arm_ripper.resolution_wait as resolution_wait_module
 import arm_ripper.makemkv_prep as makemkv_prep_module
 from arm_common import MediaType, DiscType, Job, JobStatus
+from arm_common.logging import _job_id as log_context_job_id
 from arm_common.schemas import (
     JobView,
     RipperConfigView,
     RipStartResponse,
+    ScanFailure,
     ScanResult,
     ScanTitle,
     TrackView,
@@ -33,7 +35,7 @@ from arm_ripper.eject import Ejector
 from arm_ripper.job_controller import JobController
 from arm_ripper.resolution_wait import ResolutionWaiter
 from arm_ripper.makemkv_prep import MakeMKVPrep
-from arm_ripper.scan.makemkv import ScanFailureReason
+from arm_common.enums import ScanFailureReason
 
 
 def _job(status: JobStatus, *, title: str | None = None) -> Job:
@@ -1411,7 +1413,7 @@ def test_worth_rescanning(disc_type, titles, expected):
     assert disc_scan_module._worth_rescanning(ScanResult(disc_type=disc_type, titles=titles)) is expected
 
 
-async def test_scan_or_none_logs_reason_detail_and_tail_then_ends_the_pipeline(monkeypatch, caplog):
+async def test_scan_or_none_turns_a_makemkv_failure_into_a_result_carrying_it(monkeypatch):
     failure = disc_scan_module.MakemkvScanFailed(
         ScanFailureReason.VOLUME_KEY_UNKNOWN,
         "makemkvcon reported volume_key_unknown",
@@ -1423,30 +1425,73 @@ async def test_scan_or_none_logs_reason_detail_and_tail_then_ends_the_pipeline(m
         raise failure
 
     monkeypatch.setattr(disc_scan_module, "scan_disc", _scan)
-    with caplog.at_level(logging.ERROR, logger="arm_ripper.job_controller"):
-        assert await disc_scan_module.scan_or_none("/dev/sr0") is None
+    result = await disc_scan_module.scan_or_none("/dev/sr0")
 
-    assert [r.getMessage() for r in caplog.records] == [
-        "scan failed device=/dev/sr0 reason=volume_key_unknown disc_type=bluray "
-        "detail=makemkvcon reported volume_key_unknown",
-        "makemkvcon: MSG:3303,key unknown",
-        "makemkvcon: TCOUNT:0",
-    ]
+    assert result is not None
+    assert result.disc_type is DiscType.BLURAY
+    assert result.titles == []
+    assert result.failure == ScanFailure(
+        reason=ScanFailureReason.VOLUME_KEY_UNKNOWN,
+        detail="makemkvcon reported volume_key_unknown",
+        output_tail=["MSG:3303,key unknown", "TCOUNT:0"],
+    )
 
 
-async def test_scan_or_none_logs_an_unknown_disc_type_as_none(monkeypatch, caplog):
+async def test_scan_or_none_reports_an_unknown_disc_type_when_the_failure_has_none(monkeypatch):
     failure = disc_scan_module.MakemkvScanFailed(ScanFailureReason.TIMED_OUT, "timed out", ())
 
     async def _scan(device_path):
         raise failure
 
     monkeypatch.setattr(disc_scan_module, "scan_disc", _scan)
-    with caplog.at_level(logging.ERROR, logger="arm_ripper.job_controller"):
-        assert await disc_scan_module.scan_or_none("/dev/sr0") is None
+    result = await disc_scan_module.scan_or_none("/dev/sr0")
 
-    assert [r.getMessage() for r in caplog.records] == [
-        "scan failed device=/dev/sr0 reason=timed_out disc_type=None detail=timed out"
+    assert result is not None
+    assert result.disc_type is DiscType.UNKNOWN
+    assert result.failure is not None
+    assert result.failure.output_tail == []
+
+
+class _JobIdOnRecords(logging.Handler):
+    """Records (message, job_id log context) for each record, read at emit time."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.rows: list[tuple[str, str | None]] = []
+
+    def emit(self, record: logging.LogRecord) -> None:
+        self.rows.append((record.getMessage(), log_context_job_id.get()))
+
+
+async def test_failed_scan_is_identified_logged_under_the_job_and_ejected(monkeypatch, eject_spy):
+    failure = disc_scan_module.MakemkvScanFailed(
+        ScanFailureReason.VOLUME_KEY_UNKNOWN, "no key", ("MSG:3303,key unknown", "TCOUNT:0"), DiscType.BLURAY
+    )
+
+    async def _scan(device_path):
+        raise failure
+
+    monkeypatch.setattr(disc_scan_module, "scan_disc", _scan)
+    client = FakeClient()
+    client.identify_responses.append(_job(JobStatus.FAILED))
+    controller = JobController(client, "drv_test")
+    handler = _JobIdOnRecords()
+    job_logger = logging.getLogger("arm_ripper.job_controller")
+    job_logger.addHandler(handler)
+    try:
+        await asyncio.wait_for(controller.handle_disc_inserted("/dev/sr0"), timeout=2.0)
+    finally:
+        job_logger.removeHandler(handler)
+
+    assert client.identify_calls[0].failure is not None
+    assert [row for row in handler.rows if row[0].startswith(("scan failed", "makemkvcon:"))] == [
+        ("scan failed device=/dev/sr0 reason=volume_key_unknown detail=no key", "job_test"),
+        ("makemkvcon: MSG:3303,key unknown", "job_test"),
+        ("makemkvcon: TCOUNT:0", "job_test"),
     ]
+    assert eject_spy == ["/dev/sr0"]
+    assert client.rip_start_calls == []
+    assert controller._active_job_id is None
 
 
 async def test_run_command_kill_survives_process_lookup_error(monkeypatch):

@@ -17,6 +17,7 @@ from arm_backend.config import settings
 from arm_backend.crash_recovery import reset_job_for_recovery
 from arm_backend.db import get_session
 from arm_backend.metadata import MetadataDispatcher
+from arm_backend.job_failure import fail_job
 from arm_backend.identify_flow import DiscAlreadyRippedError, IdentifyFlow, RippingPausedError, UnknownDriveError
 from arm_backend.rip_preset_resolution import (
     RipPresetUnavailable,
@@ -87,30 +88,6 @@ async def _virtual_source_drive(db: AsyncSession, job: Job) -> Drive | None:
         return None
     drive = (await db.execute(select(Drive).where(col(Drive.id) == job.drive_id))).scalar_one_or_none()
     return drive if drive is not None and drive.kind == DriveKind.VIRTUAL else None
-
-
-async def _fail_titleless_source(db: AsyncSession, hub: WSHub, job: Job, reason: str) -> None:
-    job.status = JobStatus.FAILED
-    job.ripped_at = datetime.now(timezone.utc)
-    db.add(job)
-    await cancel_parked_applications(db, job)
-    await hub.emit(
-        topic="ripper.events",
-        event_type="rip.failed",
-        payload={
-            "job_id": job.id,
-            "drive_id": job.drive_id,
-            "status": job.status.value,
-            "tracks_done": 0,
-            "tracks_failed": 0,
-            "tracks_total": 0,
-            "reason": reason,
-        },
-        job_id=job.id,
-        session=db,
-    )
-    await db.commit()
-    logger.warning("rip-start job_id=%s failed: %s", job.id, reason)
 
 
 def _rip_preset_or_http(exc: RipPresetUnavailable) -> HTTPException:
@@ -506,7 +483,7 @@ async def _select_or_fail(
     except DiscBackupNeedsBluray as exc:
         # Fail the job with the reason on its event: the ripper gives up on a
         # 4xx, and the job would otherwise sit IDENTIFIED with nothing to say why.
-        await _fail_titleless_source(session, hub, job, str(exc))
+        await fail_job(session, hub, job, str(exc))
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)) from exc
     virtual = None if new_tracks or scan.titles else await _virtual_source_drive(session, job)
     if virtual is not None:
@@ -516,7 +493,7 @@ async def _select_or_fail(
         # behind the operator's back (that filed the .iso where a movie was
         # expected). The ripper then exits and the watchdog retires the drive.
         reason = FOLDER_NO_TITLES if virtual.source_kind == DriveSourceKind.FOLDER else ISO_NO_TITLES
-        await _fail_titleless_source(session, hub, job, reason)
+        await fail_job(session, hub, job, reason)
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=reason)
     if not new_tracks:
         raise HTTPException(

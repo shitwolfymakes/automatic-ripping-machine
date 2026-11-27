@@ -255,6 +255,8 @@ class JobView(BaseModel):
     wait_start_time: datetime | None = None
     # Per-job review-gate pause: freezes this disc's countdown (UI shows paused).
     manual_pause: bool = False
+    # Why a FAILED job failed, in a sentence for the operator; None otherwise.
+    failure_reason: str | None = None
     # Populated only by the list endpoint for ripping jobs; None on
     # detail responses and on terminal/early-state jobs.
     rip_progress: RipProgressSummary | None = None

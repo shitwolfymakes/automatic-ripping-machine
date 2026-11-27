@@ -81,6 +81,8 @@ class Job(SQLModel, table=True):
     # Distinct from the global ripping_paused (whole-machine). Resume clears it
     # and restarts a fresh countdown.
     manual_pause: bool = Field(default=False, sa_column=Column(Boolean, nullable=False, server_default="false"))
+    # Free text: why the job FAILED, shown to the operator. Null for every other outcome.
+    failure_reason: str | None = Field(sa_column=Column(String, nullable=True))
     started_at: datetime | None = Field(sa_column=Column(DateTime(timezone=True), nullable=True))
     ripped_at: datetime | None = Field(sa_column=Column(DateTime(timezone=True), nullable=True))
     created_at: datetime | None = Field(sa_column=created_at_column())

@@ -25,6 +25,7 @@
 	import { jobLive } from '$lib/stores/job-live.svelte';
 	import { wsClient } from '$lib/api/ws';
 	import { identitySuggestionOf } from '$lib/jobs/review';
+	import { failureReasonOf } from '$lib/jobs/failure';
 	import IdentitySuggestionBanner from '$lib/components/jobs/IdentitySuggestionBanner.svelte';
 	import { isLive } from '$lib/jobs/status-groups';
 	import { applyNote, identifyNote } from '$lib/jobs/action-notes';
@@ -202,6 +203,15 @@
 							onaccepted={handleIdentified}
 							onsearch={() => (showIdentify = true)}
 						/>
+					</div>
+				{/if}
+
+				<!-- Why the job failed (a scan failure, or an ISO / folder with no titles). -->
+				{#if failureReasonOf(job)}
+					{@const failureReason = failureReasonOf(job)}
+					<div class="alert alert-danger" role="alert" data-testid="job-failure-reason">
+						<p class="alert-title">Failed</p>
+						<p class="alert-body">{failureReason}</p>
 					</div>
 				{/if}
 

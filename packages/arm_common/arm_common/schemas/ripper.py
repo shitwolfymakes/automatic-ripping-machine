@@ -2,7 +2,15 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-from arm_common.enums import DiscType, DriveMediaStatus, KeydbState, MakemkvKeyState, MakemkvSdfState, TrackStatus
+from arm_common.enums import (
+    DiscType,
+    DriveMediaStatus,
+    KeydbState,
+    MakemkvKeyState,
+    MakemkvSdfState,
+    ScanFailureReason,
+    TrackStatus,
+)
 
 
 class MakemkvKeyStatusReport(BaseModel):
@@ -119,6 +127,14 @@ class BdPlaylist(BaseModel):
     multi_angle: bool = False
 
 
+class ScanFailure(BaseModel):
+    """Why MakeMKV could not scan the disc: a typed reason, its detail line, and MakeMKV's last non-progress output."""
+
+    reason: ScanFailureReason
+    detail: str
+    output_tail: list[str] = Field(default_factory=list)
+
+
 class ScanResult(BaseModel):
     disc_type: DiscType
     volume_label: str | None = None
@@ -134,6 +150,9 @@ class ScanResult(BaseModel):
     # Blu-ray playlists read from BDMV/PLAYLIST before makemkvcon ran; empty
     # on other media or when the read failed.
     playlists: list[BdPlaylist] = Field(default_factory=list)
+
+    # Set when MakeMKV could not scan the disc; the backend then fails the job with this as its reason.
+    failure: ScanFailure | None = None
     raw: dict[str, Any] = Field(default_factory=dict)
 
 

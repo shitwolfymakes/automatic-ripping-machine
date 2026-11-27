@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import col, select
 
 from arm_backend import iso_prepare
+from arm_backend.job_failure import fail_job
 from arm_backend.disc_dedupe import find_previous_rips, find_reusable_job_for_disc
 from arm_backend.metadata import MetadataDispatcher
 from arm_backend.metadata.base import MetadataResult
@@ -50,7 +51,9 @@ from arm_common import (
 )
 from arm_common.enums import DriveKind, PreviouslyRippedAction
 from arm_common.models import Track
+from arm_common.enums import ScanFailureReason
 from arm_common.schemas import (
+    ScanFailure,
     flag_is_set,
     with_flags,
     IdentifyRequest,
@@ -94,6 +97,33 @@ async def _persist_review_tracks(db: AsyncSession, job: Job, scan: ScanResult) -
 
 # A miss stores at most this many dispatcher attempts (metadata_json.identify_attempts).
 MAX_IDENTIFY_ATTEMPTS = 20
+
+
+_VOLUME_KEY_UNKNOWN_TEXT = (
+    "MakeMKV could not decrypt this disc: its volume key is unknown and could not be downloaded. "
+    "MakeMKV fetches keys from its online server over HTTPS (TCP 443); check that your firewall or router allows "
+    "it, then re-insert the disc."
+)
+_FAILURE_TEXT: dict[ScanFailureReason, str] = {
+    ScanFailureReason.VOLUME_KEY_UNKNOWN: _VOLUME_KEY_UNKNOWN_TEXT,
+    ScanFailureReason.DISC_OPEN_FAILED: (
+        "MakeMKV could not open this disc. Check that it is clean and undamaged and that the drive can read it, "
+        "then re-insert it."
+    ),
+    ScanFailureReason.TIMED_OUT: (
+        "MakeMKV took too long to read this disc and was stopped. Re-insert the disc to try again; if it keeps "
+        "happening, check the disc and the drive."
+    ),
+    ScanFailureReason.MAKEMKV_EXPIRED: (
+        "This MakeMKV build has expired and refuses to scan discs. Update the ripper image to get a current one."
+    ),
+    ScanFailureReason.MAKEMKV_ERROR: ("MakeMKV could not scan this disc. The job log has MakeMKV's last output."),
+}
+
+
+def _failure_text(failure: ScanFailure) -> str:
+    """Pure: the sentence that tells the operator why the scan failed and what to try."""
+    return _FAILURE_TEXT[failure.reason]
 
 
 class UnknownDriveError(Exception):
@@ -249,6 +279,11 @@ class IdentifyFlow:
             self.already_identified = False
             self.prior_status = None
         return job
+
+    async def _fail_scan(self, job: Job, failure: ScanFailure) -> None:
+        """The disc could not be scanned: fail the job with the reason; there is nothing to fingerprint or identify."""
+        await fail_job(self.session, self.hub, job, _failure_text(failure))
+        await self.session.refresh(job)
 
     async def _persist_fingerprints(self, job: Job, scan: ScanResult) -> None:
         # Persist every fingerprint the ripper computed. The (job_id, algo)
@@ -584,6 +619,10 @@ class IdentifyFlow:
         self.previous = await self._apply_previously_ripped_policy(drive, cfg, scan)
 
         self.job = job = await self._reuse_or_create_job(drive, scan)
+
+        if scan.failure is not None:
+            await self._fail_scan(job, scan.failure)
+            return job
 
         await self._persist_fingerprints(job, scan)
 

@@ -12705,6 +12705,17 @@
             "title": "Manual Pause",
             "default": false
           },
+          "failure_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Failure Reason"
+          },
           "started_at": {
             "anyOf": [
               {
@@ -12767,6 +12778,7 @@
           "status",
           "resumed_from_crash",
           "wait_start_time",
+          "failure_reason",
           "started_at",
           "ripped_at",
           "created_at",
@@ -13419,6 +13431,17 @@
             "type": "boolean",
             "title": "Manual Pause",
             "default": false
+          },
+          "failure_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Failure Reason"
           },
           "rip_progress": {
             "anyOf": [
@@ -16235,6 +16258,42 @@
         "title": "RipperHeartbeatRequest",
         "description": "POST /api/ripper/heartbeat body. Each ripper sends one of these\nevery HEARTBEAT_INTERVAL_SECONDS so the backend can refuse manual-\ntrigger requests against drives whose tray is open / empty without\nwaiting for a doomed identify.\n\nNamed distinctly from the transcoder HeartbeatRequest because the\ntwo services post completely different payloads to different paths."
       },
+      "ScanFailure": {
+        "properties": {
+          "reason": {
+            "$ref": "#/components/schemas/ScanFailureReason"
+          },
+          "detail": {
+            "type": "string",
+            "title": "Detail"
+          },
+          "output_tail": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Output Tail"
+          }
+        },
+        "type": "object",
+        "required": [
+          "reason",
+          "detail"
+        ],
+        "title": "ScanFailure",
+        "description": "Why MakeMKV could not scan the disc: a typed reason, its detail line, and MakeMKV's last non-progress output."
+      },
+      "ScanFailureReason": {
+        "type": "string",
+        "enum": [
+          "volume_key_unknown",
+          "disc_open_failed",
+          "timed_out",
+          "makemkv_expired",
+          "makemkv_error"
+        ],
+        "title": "ScanFailureReason"
+      },
       "ScanResult": {
         "properties": {
           "disc_type": {
@@ -16303,6 +16362,16 @@
             },
             "type": "array",
             "title": "Playlists"
+          },
+          "failure": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ScanFailure"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "raw": {
             "additionalProperties": true,
