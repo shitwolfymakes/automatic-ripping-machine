@@ -16,9 +16,11 @@ from arm_ripper.drive_handle import DriveHandle  # noqa: E402
 class _Client:
     def __init__(self) -> None:
         self.beats: list[DriveMediaStatus] = []
+        self.scanning: list[bool] = []
 
-    async def heartbeat(self, *, drive_id: str, media_status: DriveMediaStatus) -> None:
+    async def heartbeat(self, *, drive_id: str, media_status: DriveMediaStatus, scanning: bool) -> None:
         self.beats.append(media_status)
+        self.scanning.append(scanning)
 
     async def get_current_job(self, drive_id: str):
         return None
@@ -27,6 +29,9 @@ class _Client:
 class _Controller:
     def is_idle(self) -> bool:
         return True
+
+    def is_scanning(self) -> bool:
+        return False
 
 
 async def _run(monkeypatch, handle: DriveHandle, beats: int) -> list[DriveMediaStatus]:
@@ -117,3 +122,22 @@ def test_media_status_probe_oserror_propagates(monkeypatch) -> None:
     monkeypatch.setattr(heartbeat, "is_file_source", lambda p: False)
     with pytest.raises(OSError, match="gone"):
         heartbeat._media_status("/dev/sr0")
+
+
+@pytest.mark.parametrize("scanning", [True, False])
+async def test_heartbeat_reports_whether_the_controller_is_scanning(monkeypatch, scanning: bool) -> None:
+    client = _Client()
+
+    class _Scanning(_Controller):
+        def is_scanning(self) -> bool:
+            return scanning
+
+    async def stop(_s: float) -> None:
+        raise asyncio.CancelledError
+
+    monkeypatch.setattr(heartbeat.asyncio, "sleep", stop)
+    monkeypatch.setattr(heartbeat, "probe_drive_media", lambda p: (DriveMediaStatus.LOADED, "fake"))
+    monkeypatch.setattr(heartbeat, "maybe_reacquire_current_job", lambda *a, **k: asyncio.sleep(0))
+    with pytest.raises(asyncio.CancelledError):
+        await heartbeat.heartbeat_loop(client, "drv_1", DriveHandle("/dev/sr0"), _Scanning())  # type: ignore[arg-type]
+    assert client.scanning == [scanning]

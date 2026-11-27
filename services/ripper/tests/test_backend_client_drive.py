@@ -10,6 +10,7 @@ os.environ.setdefault("ARM_SERVICE_TOKEN", "tok")
 import httpx
 import pytest
 
+from arm_common import DriveMediaStatus
 from arm_ripper.backend_client import BackendClient
 
 
@@ -217,3 +218,20 @@ def test_refusal_detail_raises_attribute_error_for_a_json_list_body() -> None:
 
     with pytest.raises(AttributeError):
         _refusal_detail(httpx.Response(404, json=["x"]))
+
+
+@pytest.mark.parametrize("scanning", [True, False])
+async def test_heartbeat_posts_the_scanning_flag(scanning: bool) -> None:
+    seen = {}
+
+    def handler(req: httpx.Request) -> httpx.Response:
+        seen["path"] = req.url.path
+        seen["body"] = json.loads(req.read())
+        return httpx.Response(204)
+
+    c = _client(handler)
+    await c.heartbeat(drive_id="drv_1", media_status=DriveMediaStatus.LOADED, scanning=scanning)
+    assert seen == {
+        "path": "/api/ripper/heartbeat",
+        "body": {"drive_id": "drv_1", "media_status": "loaded", "scanning": scanning},
+    }

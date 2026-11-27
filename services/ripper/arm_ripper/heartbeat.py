@@ -72,7 +72,7 @@ def _media_status(device_path: str | None) -> DriveMediaStatus:
 
 
 async def heartbeat_loop(client: BackendClient, drive_id: str, handle: DriveHandle, controller: JobController) -> None:
-    """Post the current media status to the backend every
+    """Post the current media status, and whether a pre-job scan is running, to the backend every
     HEARTBEAT_INTERVAL_SECONDS. Errors are logged + swallowed —
     the heartbeat is best-effort; a row that goes stale makes the
     manual-trigger pre-check refuse clicks until the next beat lands.
@@ -95,7 +95,7 @@ async def heartbeat_loop(client: BackendClient, drive_id: str, handle: DriveHand
         try:
             device_path = handle.current
             status = _media_status(device_path)
-            await client.heartbeat(drive_id=drive_id, media_status=status)
+            await client.heartbeat(drive_id=drive_id, media_status=status, scanning=controller.is_scanning())
             if device_path is not None:
                 await maybe_reacquire_current_job(
                     controller,

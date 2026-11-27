@@ -721,6 +721,30 @@ async def test_abandon_stale_job_during_other_rip_does_not_eject(eject_spy):
     other.cancel()
 
 
+async def test_scan_running_is_true_only_for_a_live_task_without_a_job():
+    live = asyncio.create_task(asyncio.sleep(3600))
+    done = asyncio.create_task(asyncio.sleep(0))
+    await done
+
+    assert jc_module.scan_running(live, None) is True
+    assert jc_module.scan_running(live, "job_1") is False
+    assert jc_module.scan_running(done, None) is False
+    assert jc_module.scan_running(None, None) is False
+    live.cancel()
+
+
+async def test_is_scanning_reads_the_claimed_task_and_job(eject_spy):
+    controller = JobController(FakeClient(), "drv_test", device_path="/dev/sr0")
+    assert controller.is_scanning() is False
+    scan = asyncio.create_task(asyncio.sleep(3600))
+    controller._active_task = scan
+
+    assert controller.is_scanning() is True
+    controller._active_job_id = "job_1"
+    assert controller.is_scanning() is False
+    scan.cancel()
+
+
 async def test_cancel_scan_cancels_a_claimed_task_with_no_job(eject_spy):
     controller = JobController(FakeClient(), "drv_test", device_path="/dev/sr0")
     scan = asyncio.create_task(asyncio.sleep(3600))
