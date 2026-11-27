@@ -33,6 +33,20 @@ describe('ripProgressFromTracks', () => {
 		});
 	});
 
+	it('counts unticked tracks that the rip still writes (mkv all): only skipped ones are left out', () => {
+		// Real tracks carry `excluded`; the count ignores it and leaves out only skipped tracks.
+		const tracks = [
+			{ id: 't0', index: 0, status: 'queued' as const, excluded: false },
+			{ id: 't1', index: 1, status: 'done' as const, excluded: true },
+			{ id: 't2', index: 2, status: 'in_progress' as const, excluded: true },
+			{ id: 't3', index: 3, status: 'queued' as const, excluded: true }
+		];
+		const summary = ripProgressFromTracks(tracks);
+		expect(summary.tracks_total).toBe(4);
+		expect(summary.tracks_done).toBe(1);
+		expect(summary.current_track_id).toBe('t2');
+	});
+
 	it('has no current track when none is in progress', () => {
 		const summary = ripProgressFromTracks([{ id: 't1', index: 1, status: 'done' }]);
 		expect(summary.current_track_id).toBeNull();
