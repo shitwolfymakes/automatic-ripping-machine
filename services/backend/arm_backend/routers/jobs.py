@@ -27,6 +27,7 @@ from arm_backend.log_reader import per_job_log_path
 from arm_backend.metadata.identity_payload import external_ids_of
 from arm_backend.path_template import TemplateValidationError
 from arm_backend.routers._deps import get_hub, get_stage_runner
+from arm_backend.rip_snapshot import skip_unticked
 from arm_backend.routers._params import JobIdParam
 from arm_backend.constants import CONFIG_SINGLETON_ID
 from arm_backend.ws import WSHub
@@ -257,7 +258,7 @@ async def rip_start_review(
 
 async def _start_held_job(db: AsyncSession, hub: WSHub, job: Job) -> None:
     """AWAITING_REVIEW -> RIPPING, plus the `rip.start` command that unblocks
-    the parked ripper. Commits. 422 when every track is excluded."""
+    the parked ripper. In a per-title rip the unticked titles become SKIPPED here: the ticks freeze at Start. Commits. 422 when every track is excluded."""
     tracks = list((await db.execute(select(Track).where(col(Track.job_id) == job.id))).scalars().all())
     if tracks and all(t.excluded for t in tracks):
         raise HTTPException(
@@ -265,6 +266,7 @@ async def _start_held_job(db: AsyncSession, hub: WSHub, job: Job) -> None:
             detail="at least one track must be kept (not excluded) to start the rip",
         )
 
+    await skip_unticked(db, job, settings.ARM_RIP_INVOCATION)
     job.status = JobStatus.RIPPING
     job.started_at = datetime.now(timezone.utc)
     db.add(job)

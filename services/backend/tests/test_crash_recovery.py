@@ -188,3 +188,18 @@ async def test_sweep_resets_only_ripping_jobs() -> None:
     assert ripped_track.status == TrackStatus.DONE
     assert ripped_track.attempts == 1
     assert db.committed == 1
+
+
+@pytest.mark.asyncio
+async def test_reset_leaves_a_skipped_track_skipped() -> None:
+    db = FakeSession()
+    job = _make_job()
+    db.rows["jobs"] = [job]
+    track = _make_track(track_id="trk_1", job_id=job.id, status=TrackStatus.SKIPPED, attempts=1)
+    db.rows["tracks"] = [track]
+
+    touched = await reset_job_for_recovery(db, job)  # type: ignore[arg-type]
+
+    assert touched == 0
+    assert track.status == TrackStatus.SKIPPED
+    assert track.attempts == 1

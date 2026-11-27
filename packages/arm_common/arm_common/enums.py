@@ -175,6 +175,8 @@ class TrackStatus(StrEnum):
     IN_PROGRESS = "in_progress"
     DONE = "done"
     FAILED = "failed"
+    # Unticked at Start in a per-title rip: never read, so no file will exist.
+    SKIPPED = "skipped"
 
 
 class TrackKind(StrEnum):

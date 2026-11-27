@@ -4,6 +4,7 @@ from pydantic import field_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 from arm_common import RipInvocation
+from arm_common.schemas.jobs import set_rip_invocation_source
 
 
 class Settings(BaseSettings):
@@ -270,3 +271,6 @@ def effective_transcode_capable(s: Settings) -> bool:
 
 
 settings = Settings()  # type: ignore[call-arg]  # fields loaded from env by pydantic-settings
+
+# Every JobView the backend builds (response or event) reports this install's rip invocation.
+set_rip_invocation_source(lambda: settings.ARM_RIP_INVOCATION)

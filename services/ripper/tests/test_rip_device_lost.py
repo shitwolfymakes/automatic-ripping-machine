@@ -746,3 +746,53 @@ async def test_a_drive_drop_resume_stays_per_title_in_per_title_mode(monkeypatch
 
     assert [c["per_title"] for c in calls] == [True, True]
     assert calls[1]["skip_track_ids"] == {"trk_0"}
+
+
+def _skipped(idx: int) -> TrackView:
+    return _sized(idx, 10).model_copy(update={"status": TrackStatus.SKIPPED, "excluded": True})
+
+
+async def test_a_skipped_title_is_settled_from_the_first_pass_of_a_fresh_rip(monkeypatch, env) -> None:
+    """The backend marked an unticked title SKIPPED at Start: it is never ripped or patched, and the rip is still
+    a fresh one (the job folder, no partial-file sweep), not a restart resume."""
+    raw: Path = env["raw"]
+    tracks = [_sized(0, 100), _skipped(1), _sized(2, 10)]
+    raw.mkdir(parents=True, exist_ok=True)
+    (raw / "Disc_t01.mkv").write_bytes(b"left alone")
+
+    calls = _script(monkeypatch, [_rip_unsettled])
+    await env["controller"]._execute_rip(
+        job_id=_JOB,
+        disc_type=DiscType.BLURAY,
+        device_path="/dev/sr0",
+        rip_start=RipStartResponse(
+            job_id=_JOB, rip_preset_id="rpr", tracks=tracks, rip_invocation=RipInvocation.PER_TITLE
+        ),
+    )
+
+    client: _Client = env["client"]
+    assert calls[0]["skip_track_ids"] == {"trk_1"}
+    assert calls[0]["output_dir"] == raw
+    assert (raw / "Disc_t01.mkv").exists()
+    assert client.statuses("trk_1") == []
+    for tid in ("trk_0", "trk_2"):
+        assert client.statuses(tid) == [TrackStatus.IN_PROGRESS, TrackStatus.DONE]
+    assert client.completed == [_JOB]
+
+
+async def test_a_restart_resume_keeps_a_skipped_title_settled_beside_a_done_one(monkeypatch, env) -> None:
+    raw: Path = env["raw"]
+    tracks = [_settled(0, raw, expected=100), _skipped(1), _sized(2, 10)]
+
+    calls = _script(monkeypatch, [_rip_unsettled])
+    await env["controller"]._execute_rip(
+        job_id=_JOB,
+        disc_type=DiscType.BLURAY,
+        device_path="/dev/sr0",
+        rip_start=RipStartResponse(
+            job_id=_JOB, rip_preset_id="rpr", tracks=tracks, rip_invocation=RipInvocation.PER_TITLE
+        ),
+    )
+
+    assert calls[0]["skip_track_ids"] == {"trk_0", "trk_1"}
+    assert calls[0]["output_dir"] == raw / "resume-1"

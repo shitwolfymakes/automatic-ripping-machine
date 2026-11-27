@@ -13344,6 +13344,9 @@
               }
             ]
           },
+          "rip_invocation": {
+            "$ref": "#/components/schemas/RipInvocation"
+          },
           "actions": {
             "$ref": "#/components/schemas/JobActions",
             "readOnly": true
@@ -18102,7 +18105,8 @@
           "queued",
           "in_progress",
           "done",
-          "failed"
+          "failed",
+          "skipped"
         ],
         "title": "TrackStatus"
       },

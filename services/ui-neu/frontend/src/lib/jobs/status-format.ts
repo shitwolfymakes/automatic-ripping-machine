@@ -96,6 +96,7 @@ const STATUS_LABELS: Record<string, string> = {
 	in_progress: 'In Progress',
 	done: 'Done',
 	cancelled: 'Cancelled',
+	skipped: 'Not ripped',
 	waiting_identify: 'Waiting to identify',
 	running: 'Running',
 	done_partial: 'Done (partial)'
