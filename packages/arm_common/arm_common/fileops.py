@@ -1,4 +1,4 @@
-"""Atomic output, the resumable hashing copier, and the TranscodeTool.NONE passthrough move.
+"""Atomic output, the resumable copier, and the TranscodeTool.NONE passthrough move.
 
 `atomic_output`: the transcoder writes `<final>.arm-inprogress`; on success
 the helper `fsync`s that file, renames it to `<final>`, then `fsync`s the
@@ -8,24 +8,24 @@ files are invisible. On failure (exception, SIGTERM, container kill), the
 partial file stays on disk for the Backend startup sweep.
 
 `copy_file_resumable`: the one copy primitive. It copies in chunks through
-`<dst>.arm-inprogress`, hashes the bytes as it reads them from the source,
-and (when the caller passes `on_checkpoint`) fsyncs and reports a durable
-checkpoint every `CHECKPOINT_BYTES` or `CHECKPOINT_SECONDS`. A later call
-with `resume_from` truncates the temp file to the checkpoint, re-reads the
-already-copied prefix of the source to rebuild the digest, and carries on.
-A source whose size or mtime changed (`SourceChanged`) is never placed. The
-finished file is fsynced, renamed into place, and the directory fsynced.
+`<dst>.arm-inprogress` and (when the caller passes `on_checkpoint`) fsyncs
+and reports a durable checkpoint every `CHECKPOINT_BYTES` or
+`CHECKPOINT_SECONDS`. A later call with `resume_from` truncates the temp file
+to the checkpoint and carries on from that offset of the source. A source
+whose size or mtime changed, or that did not yield exactly its stamped size
+(`SourceChanged`), is never placed. The finished file is fsynced, renamed
+into place, and the directory fsynced.
 
-`place_by_link` and `place_by_rename`: placement that copies no bytes. They
-hash the source once (one read), then hard-link or rename it into place;
-`LinkUnavailable` tells the caller to fall back to a copy.
+`place_by_link` and `place_by_rename`: placement that copies and reads no
+bytes. They hard-link or rename the source into place; `LinkUnavailable`
+tells the caller to fall back to a copy.
 
 `transcode_none`: used by ISO and data-copy sessions where there's no
 transcoding to do. Links the source into place, falls back to a rename when
 the link is refused for a reason other than EXDEV, and to a copy plus source
 removal across mount points (common when /raw is local and /media is a NAS
 share, and always with the stock compose layout's separate bind mounts). It
-returns the size and the SHA-256 of the source bytes. When the copy happens
+returns the size of the placed file. When the copy happens
 although source and destination sit on the same filesystem, it logs a hint
 that a single parent mount would make the move instant.
 
@@ -41,7 +41,6 @@ and the destination directories are fsynced once the move returns.
 from __future__ import annotations
 
 import errno
-import hashlib
 import logging
 import os
 import shutil
@@ -134,7 +133,6 @@ class SourceStamp:
 @dataclass(frozen=True)
 class PlaceResult:
     size: int
-    sha256: str  # hex digest of the source bytes as read
     linked: bool  # True when no bytes were copied (hard link or rename)
 
 
@@ -157,41 +155,6 @@ class LinkUnavailable(Exception):
 def _raise_if_cancelled(cancel: threading.Event | None, src: object) -> None:
     if cancel is not None and cancel.is_set():
         raise CopyCancelled(str(src))
-
-
-def _feed(
-    fin: BinaryIO,
-    hasher: hashlib._Hash,
-    limit: int | None,
-    cancel: threading.Event | None,
-    on_bytes: Callable[[int], None] | None,
-) -> int:
-    """Read `fin` (up to `limit` bytes, or to the end) into `hasher` in chunks; returns the bytes fed."""
-    fed = 0
-    while limit is None or fed < limit:
-        _raise_if_cancelled(cancel, fin.name)
-        want = COPY_CHUNK_BYTES if limit is None else min(COPY_CHUNK_BYTES, limit - fed)
-        chunk = fin.read(want)
-        if not chunk:
-            break
-        hasher.update(chunk)
-        fed += len(chunk)
-        if on_bytes is not None:
-            on_bytes(len(chunk))
-    return fed
-
-
-def hash_file(
-    path: Path,
-    *,
-    cancel: threading.Event | None = None,
-    on_bytes: Callable[[int], None] | None = None,
-) -> str:
-    """SHA-256 of `path`, read in `COPY_CHUNK_BYTES` chunks. Raises `CopyCancelled` when `cancel` is set."""
-    hasher = hashlib.sha256()
-    with path.open("rb") as fin:
-        _feed(fin, hasher, None, cancel, on_bytes)
-    return hasher.hexdigest()
 
 
 def is_placed(stamp: SourceStamp, dst: Path) -> bool:
@@ -238,12 +201,6 @@ def _open_temp(tmp: Path, resume_from: int, on_checkpoint: Callable[[int], None]
     return tmp.open("wb"), 0
 
 
-def _rehash_prefix(fin: BinaryIO, length: int, hasher: hashlib._Hash, cancel: threading.Event | None) -> None:
-    """Feed `src[0:length]` into the hasher: a resumed copy rebuilds its digest from the source."""
-    if length:
-        _feed(fin, hasher, length, cancel, None)
-
-
 class _CheckpointClock:
     """When a checkpoint is due: enough bytes since the last one, or enough seconds."""
 
@@ -270,13 +227,12 @@ def _checkpoint(fout: BinaryIO, offset: int, on_checkpoint: Callable[[int], None
 def _copy_chunks(
     fin: BinaryIO,
     fout: BinaryIO,
-    hasher: hashlib._Hash,
     start: int,
     cancel: threading.Event | None,
     on_bytes: Callable[[int], None] | None,
     ckpt: tuple[_CheckpointClock, Callable[[int], None]] | None,
 ) -> int:
-    """The read-hash-write loop; returns the final offset. Checkpoints when `ckpt` is given."""
+    """The read-write loop; returns the final offset. Checkpoints when `ckpt` is given."""
     offset = start
     while True:
         # Cancelled: the temp file stays and nothing is fsynced; the caller's last checkpoint is
@@ -285,7 +241,6 @@ def _copy_chunks(
         chunk = fin.read(COPY_CHUNK_BYTES)
         if not chunk:
             return offset
-        hasher.update(chunk)
         fout.write(chunk)
         offset += len(chunk)
         if on_bytes is not None:
@@ -323,7 +278,7 @@ def copy_file_resumable(
     on_checkpoint: Callable[[int], None] | None = None,
     clock: Callable[[], float] = time.monotonic,
 ) -> PlaceResult:
-    """Copy `src` to `dst` through `<dst>.arm-inprogress`, hashing the bytes as they are read.
+    """Copy `src` to `dst` through `<dst>.arm-inprogress`.
 
     With `on_checkpoint`, the temp file is fsynced and the durable offset reported every
     `CHECKPOINT_BYTES` or `CHECKPOINT_SECONDS`; `resume_from` (a reported offset) continues such a
@@ -335,16 +290,15 @@ def copy_file_resumable(
     stamp = _check_expected(src, expect, tmp)
     dst.parent.mkdir(parents=True, exist_ok=True)
     fout, start = _open_temp(tmp, resume_from, on_checkpoint)
-    hasher = hashlib.sha256()
     ckpt = (_CheckpointClock(clock), on_checkpoint) if on_checkpoint is not None else None
     with fout, src.open("rb") as fin:
-        _rehash_prefix(fin, start, hasher, cancel)
+        fin.seek(start)
         if start and on_bytes is not None:
             on_bytes(start)
-        offset = _copy_chunks(fin, fout, hasher, start, cancel, on_bytes, ckpt)
+        offset = _copy_chunks(fin, fout, start, cancel, on_bytes, ckpt)
         _verify_source_unchanged(src, stamp, offset, tmp)
         _finalise(src, fout, tmp, dst)
-    return PlaceResult(size=offset, sha256=hasher.hexdigest(), linked=False)
+    return PlaceResult(size=offset, linked=False)
 
 
 def _link_temp(src: Path, tmp: Path) -> None:
@@ -364,25 +318,14 @@ def _remove_source(src: Path) -> None:
     _fsync_dir(src.parent)
 
 
-def _hash_linked(src: Path, tmp: Path, cancel: threading.Event | None, on_bytes: Callable[[int], None] | None) -> str:
-    """Hash the source once; a cancel drops the link and keeps the source."""
-    try:
-        return hash_file(src, cancel=cancel, on_bytes=on_bytes)
-    except CopyCancelled:
-        tmp.unlink(missing_ok=True)
-        raise
-
-
 def place_by_link(
     src: Path,
     dst: Path,
     *,
     keep_source: bool,
     expect: SourceStamp | None = None,
-    cancel: threading.Event | None = None,
-    on_bytes: Callable[[int], None] | None = None,
 ) -> PlaceResult:
-    """Hard-link `src` to `dst` (through the temp name), hashing the source once; copies no bytes.
+    """Hard-link `src` to `dst` (through the temp name); copies and reads no bytes.
 
     Raises `LinkUnavailable` when the link is refused (the caller falls back to a copy), and
     `SourceChanged` when the source changed meanwhile (a re-rip writes a new inode, so the link would
@@ -393,12 +336,11 @@ def place_by_link(
     tmp.unlink(missing_ok=True)
     dst.parent.mkdir(parents=True, exist_ok=True)
     _link_temp(src, tmp)
-    digest = _hash_linked(src, tmp, cancel, on_bytes)
     _verify_source_unchanged(src, stamp, stamp.size, tmp)
     _commit_link(tmp, dst)
     if not keep_source:
         _remove_source(src)
-    return PlaceResult(size=stamp.size, sha256=digest, linked=True)
+    return PlaceResult(size=stamp.size, linked=True)
 
 
 def place_by_rename(
@@ -406,25 +348,21 @@ def place_by_rename(
     dst: Path,
     *,
     expect: SourceStamp | None = None,
-    cancel: threading.Event | None = None,
-    on_bytes: Callable[[int], None] | None = None,
 ) -> PlaceResult:
-    """Hash `src` once, then rename it to `dst`; copies no bytes.
+    """Rename `src` to `dst`; copies and reads no bytes.
 
     For when `os.link` is refused (EPERM from `fs.protected_hardlinks`) but a rename on the same
     mount works. Raises `LinkUnavailable` when the rename fails too.
     """
     tmp = inprogress_path(dst)
     stamp = _check_expected(src, expect, tmp)
-    digest = hash_file(src, cancel=cancel, on_bytes=on_bytes)
-    _verify_source_unchanged(src, stamp, stamp.size, tmp)
     dst.parent.mkdir(parents=True, exist_ok=True)
     try:
         os.rename(src, dst)
     except OSError as exc:
         raise LinkUnavailable(exc.errno, str(exc)) from exc
     _fsync_dir(dst.parent)
-    return PlaceResult(size=stamp.size, sha256=digest, linked=True)
+    return PlaceResult(size=stamp.size, linked=True)
 
 
 def _same_device_hint(src: Path, dst_dir: Path) -> None:
@@ -470,7 +408,7 @@ def _place_without_link(
     """Placement after a refused link: a rename unless the link failed across devices, else a copy."""
     if link_errno != errno.EXDEV:
         try:
-            return place_by_rename(src, dst, cancel=cancel, on_bytes=on_bytes)
+            return place_by_rename(src, dst)
         except LinkUnavailable as exc:
             logger.info("passthrough rename failed (%s); falling back to copy+remove", exc)
     return _copy_then_remove(src, dst, cancel, on_bytes)
@@ -483,15 +421,15 @@ def transcode_none(
     cancel: threading.Event | None = None,
     on_bytes: Callable[[int], None] | None = None,
 ) -> PlaceResult:
-    """Move-or-copy `input_path` → `output_path`. Returns the size and SHA-256 of the source bytes.
+    """Move-or-copy `input_path` → `output_path`. Returns the size of the placed file.
 
-    Hard-links first (no bytes copied, the source read once to hash it); a rename when the link is
+    Hard-links first (no bytes copied or read); a rename when the link is
     refused for a reason other than EXDEV; otherwise a copy through `<output>.arm-inprogress`, so a
     library scanner never sees a partial file. On `CopyCancelled` (or any copy error) the partial
     file is removed and the source is left where it was.
     """
     try:
-        result = place_by_link(input_path, output_path, keep_source=False, cancel=cancel, on_bytes=on_bytes)
+        result = place_by_link(input_path, output_path, keep_source=False)
     except LinkUnavailable as exc:
         logger.info("passthrough link failed (%s); falling back", exc)
         result = _place_without_link(input_path, output_path, exc.errno, cancel, on_bytes)
@@ -539,7 +477,7 @@ def move_tree(
             copying = True
             _same_device_hint(src, dst.parent)
         # The copier fsyncs each file before it lands, so it is durable before
-        # shutil.move removes the source tree. A folder has no single digest.
+        # shutil.move removes the source tree.
         copy_file_resumable(Path(s), Path(d), cancel=cancel, on_bytes=on_bytes)
 
     try:

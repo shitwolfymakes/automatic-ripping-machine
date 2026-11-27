@@ -1,9 +1,8 @@
-"""Atomic-rename context manager, resumable hashing copier and TranscodeTool.NONE passthrough move."""
+"""Atomic-rename context manager, resumable copier and TranscodeTool.NONE passthrough move."""
 
 from __future__ import annotations
 
 import errno
-import hashlib
 import os
 from pathlib import Path
 from unittest.mock import patch
@@ -22,7 +21,6 @@ from arm_common.fileops import (
     SourceStamp,
     atomic_output,
     copy_file_resumable,
-    hash_file,
     inprogress_path,
     is_placed,
     move_tree,
@@ -227,11 +225,7 @@ def test_directory_fsync_failure_does_not_fail_a_finished_rename(
     assert final.read_bytes() == b"x"
 
 
-# ---- resumable hashing copier ----------------------------------------------
-
-
-def _sha(data: bytes) -> str:
-    return hashlib.sha256(data).hexdigest()
+# ---- resumable copier ----------------------------------------------
 
 
 def _src(tmp_path: Path, data: bytes = b"0123456789abcdefghij", name: str = "raw/t0.mkv") -> Path:
@@ -270,29 +264,14 @@ def test_link_unavailable_carries_errno_and_is_not_an_oserror() -> None:
     assert exc.errno == errno.EXDEV and str(exc) == "boom" and not isinstance(exc, OSError)
 
 
-def test_hash_file_matches_sha256_and_reports_chunks(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(fileops, "COPY_CHUNK_BYTES", 6)
-    src = _src(tmp_path)
-    seen: list[int] = []
-    assert hash_file(src, on_bytes=seen.append) == _sha(src.read_bytes())
-    assert seen == [6, 6, 6, 2]
-
-
-def test_hash_file_stops_when_cancelled(tmp_path: Path) -> None:
-    cancel = threading.Event()
-    cancel.set()
-    with pytest.raises(CopyCancelled):
-        hash_file(_src(tmp_path), cancel=cancel)
-
-
-def test_copy_resumable_copies_hashes_and_keeps_mtime(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_copy_resumable_copies_and_keeps_mtime(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(fileops, "COPY_CHUNK_BYTES", 7)
     src = _src(tmp_path)
     os.utime(src, (1_000_000_000, 1_000_000_000))
     stamp = SourceStamp.of(src)
     dst = tmp_path / "media" / "out.mkv"
     result = copy_file_resumable(src, dst, expect=stamp)
-    assert result == PlaceResult(size=20, sha256=_sha(src.read_bytes()), linked=False)
+    assert result == PlaceResult(size=20, linked=False)
     assert dst.read_bytes() == src.read_bytes()
     assert not inprogress_path(dst).exists()
     assert is_placed(stamp, dst)
@@ -339,26 +318,56 @@ def test_truncate_and_resume(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) ->
     seen: list[int] = []
     result = copy_file_resumable(src, dst, resume_from=8, on_bytes=seen.append)
     assert dst.read_bytes() == src.read_bytes()
-    assert result.sha256 == _sha(src.read_bytes()) and result.size == 20
+    assert result.size == 20
     assert seen[0] == 8 and sum(seen) == 20
 
 
-def test_resume_hashes_prefix_from_source_not_temp(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    src = _src(tmp_path)
-    dst = tmp_path / "media" / "o.mkv"
-    dst.parent.mkdir()
-    inprogress_path(dst).write_bytes(b"X" * 8)  # a wrong prefix must not reach the digest
-    opened: list[tuple[str, str]] = []
+class _ReadLog:
+    """Wraps a source opened for reading; records the offset and size of every read."""
+
+    def __init__(self, fh: object, log: list[tuple[int, int]]) -> None:
+        self._fh = fh
+        self._log = log
+
+    def __enter__(self) -> _ReadLog:
+        return self
+
+    def __exit__(self, *exc: object) -> None:
+        self._fh.close()  # type: ignore[attr-defined]
+
+    def read(self, n: int = -1) -> bytes:
+        at = self._fh.tell()  # type: ignore[attr-defined]
+        data: bytes = self._fh.read(n)  # type: ignore[attr-defined]
+        self._log.append((at, len(data)))
+        return data
+
+    def __getattr__(self, name: str) -> object:
+        return getattr(self._fh, name)
+
+
+def _log_reads_of(monkeypatch: pytest.MonkeyPatch, src: Path) -> list[tuple[int, int]]:
+    """Record every read of `src` through `Path.open`."""
+    log: list[tuple[int, int]] = []
     real_open = Path.open
 
     def spy(self: Path, mode: str = "r", *a: object, **kw: object):  # type: ignore[no-untyped-def]
-        opened.append((self.name, mode))
-        return real_open(self, mode, *a, **kw)  # type: ignore[arg-type]
+        fh = real_open(self, mode, *a, **kw)  # type: ignore[arg-type]
+        return _ReadLog(fh, log) if self == src else fh
 
     monkeypatch.setattr(Path, "open", spy)
+    return log
+
+
+def test_resume_continues_from_the_prefix_without_reading_it(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    src = _src(tmp_path)
+    dst = tmp_path / "media" / "o.mkv"
+    dst.parent.mkdir()
+    inprogress_path(dst).write_bytes(src.read_bytes()[:8])
+    reads = _log_reads_of(monkeypatch, src)
     result = copy_file_resumable(src, dst, resume_from=8)
-    assert result.sha256 == _sha(src.read_bytes())
-    assert not any(n.endswith(INPROGRESS_SUFFIX) and "r" in m and "+" not in m for n, m in opened)
+    assert result == PlaceResult(size=20, linked=False)
+    assert reads[0][0] == 8 and sum(n for _at, n in reads) == 12
+    assert dst.read_bytes() == src.read_bytes()
 
 
 def test_resume_with_short_temp_restarts_and_reports_zero(tmp_path: Path) -> None:
@@ -368,7 +377,7 @@ def test_resume_with_short_temp_restarts_and_reports_zero(tmp_path: Path) -> Non
     inprogress_path(dst).write_bytes(b"abc")
     seen: list[int] = []
     result = copy_file_resumable(src, dst, resume_from=8, on_checkpoint=seen.append)
-    assert seen[:1] == [0] and dst.read_bytes() == src.read_bytes() and result.sha256 == _sha(src.read_bytes())
+    assert seen[:1] == [0] and dst.read_bytes() == src.read_bytes() and result.size == 20
 
 
 def test_resume_without_temp_restarts(tmp_path: Path) -> None:
@@ -437,7 +446,7 @@ def test_cancel_keeps_temp_and_does_not_fsync(tmp_path: Path, monkeypatch: pytes
     assert inprogress_path(dst).read_bytes() == src.read_bytes()[:8] and not dst.exists()
 
 
-def test_cancel_during_prefix_rehash_raises(tmp_path: Path) -> None:
+def test_cancel_on_resume_keeps_temp(tmp_path: Path) -> None:
     src = _src(tmp_path)
     dst = tmp_path / "o.mkv"
     inprogress_path(dst).write_bytes(src.read_bytes()[:8])
@@ -481,11 +490,11 @@ def test_crash_between_rename_and_commit_is_detectable(tmp_path: Path) -> None:
 # ---- link and rename placement ---------------------------------------------
 
 
-def test_place_by_link_keeps_source_and_hashes(tmp_path: Path) -> None:
+def test_place_by_link_keeps_source(tmp_path: Path) -> None:
     src = _src(tmp_path)
     dst = tmp_path / "media" / "o.mkv"
     result = place_by_link(src, dst, keep_source=True, expect=SourceStamp.of(src))
-    assert result == PlaceResult(size=20, sha256=_sha(src.read_bytes()), linked=True)
+    assert result == PlaceResult(size=20, linked=True)
     assert src.exists() and os.path.samefile(src, dst) and not inprogress_path(dst).exists()
 
 
@@ -523,34 +532,41 @@ def test_place_by_link_expect_mismatch(tmp_path: Path) -> None:
         place_by_link(src, tmp_path / "media" / "o.mkv", keep_source=True, expect=stamp)
 
 
-def test_place_by_link_source_changed_after_link(tmp_path: Path) -> None:
+def test_place_by_link_does_not_read_the_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    src = _src(tmp_path)
+    reads = _log_reads_of(monkeypatch, src)
+    place_by_link(src, tmp_path / "media" / "o.mkv", keep_source=True)
+    assert reads == []
+
+
+def test_place_by_link_source_changed_after_link(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     src = _src(tmp_path)
     dst = tmp_path / "media" / "o.mkv"
+    real_link = fileops._link_temp
 
-    def mutate(_n: int) -> None:
+    def link_then_touch(s: Path, tmp: Path) -> None:
+        real_link(s, tmp)
         os.utime(src, ns=(1, 1))
 
+    monkeypatch.setattr(fileops, "_link_temp", link_then_touch)
     with pytest.raises(SourceChanged):
-        place_by_link(src, dst, keep_source=False, on_bytes=mutate)
+        place_by_link(src, dst, keep_source=False)
     assert src.exists() and not dst.exists() and not inprogress_path(dst).exists()
 
 
-def test_place_by_link_cancel_removes_link_keeps_source(tmp_path: Path) -> None:
-    src = _src(tmp_path)
-    dst = tmp_path / "media" / "o.mkv"
-    cancel = threading.Event()
-    cancel.set()
-    with pytest.raises(CopyCancelled):
-        place_by_link(src, dst, keep_source=False, cancel=cancel)
-    assert src.exists() and list((tmp_path / "media").iterdir()) == []
-
-
-def test_place_by_rename_moves_and_hashes(tmp_path: Path) -> None:
+def test_place_by_rename_moves(tmp_path: Path) -> None:
     src = _src(tmp_path)
     dst = tmp_path / "media" / "o.mkv"
     result = place_by_rename(src, dst, expect=SourceStamp.of(src))
-    assert result == PlaceResult(size=20, sha256=_sha(b"0123456789abcdefghij"), linked=True)
+    assert result == PlaceResult(size=20, linked=True)
     assert not src.exists() and dst.exists()
+
+
+def test_place_by_rename_does_not_read_the_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    src = _src(tmp_path)
+    reads = _log_reads_of(monkeypatch, src)
+    place_by_rename(src, tmp_path / "media" / "o.mkv")
+    assert reads == []
 
 
 def test_place_by_rename_failure_raises_link_unavailable(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -621,15 +637,22 @@ def test_remove_source_unlinks(tmp_path: Path) -> None:
 # ---- transcode_none ---------------------------------------------------------
 
 
-def test_transcode_none_same_fs_links_and_hashes(tmp_path: Path) -> None:
+def test_transcode_none_same_fs_links(tmp_path: Path) -> None:
     src = _src(tmp_path, b"iso bytes", "raw/dump.iso")
     dst = tmp_path / "media" / "Movie (2024)" / "Movie (2024).iso"
     result = transcode_none(src, dst)
-    assert result == PlaceResult(size=9, sha256=_sha(b"iso bytes"), linked=True)
+    assert result == PlaceResult(size=9, linked=True)
     assert dst.read_bytes() == b"iso bytes" and not src.exists()
 
 
-def test_transcode_none_exdev_copies_hashes_and_removes_source(
+def test_transcode_none_same_fs_does_not_read_the_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    src = _src(tmp_path)
+    reads = _log_reads_of(monkeypatch, src)
+    transcode_none(src, tmp_path / "media" / "o.mkv")
+    assert reads == []
+
+
+def test_transcode_none_exdev_copies_and_removes_source(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
 ) -> None:
     monkeypatch.setattr(fileops, "COPY_CHUNK_BYTES", 4)
@@ -639,7 +662,7 @@ def test_transcode_none_exdev_copies_hashes_and_removes_source(
     chunks: list[int] = []
     with caplog.at_level("INFO", logger="arm_common.fileops"):
         result = transcode_none(src, dst, on_bytes=chunks.append)
-    assert result == PlaceResult(size=20, sha256=_sha(b"0123456789abcdefghij"), linked=False)
+    assert result == PlaceResult(size=20, linked=False)
     assert dst.read_bytes() == b"0123456789abcdefghij" and not src.exists()
     assert chunks == [4] * 5
     assert "share a filesystem" in caplog.text
@@ -653,7 +676,7 @@ def test_transcode_none_eperm_link_falls_back_to_rename(tmp_path: Path, monkeypa
     real_rename = os.rename
     monkeypatch.setattr(fileops.os, "rename", lambda a, b: (calls.append(a), real_rename(a, b))[1])
     result = transcode_none(src, dst)
-    assert len(calls) == 1 and result.linked and result.sha256 == _sha(dst.read_bytes())
+    assert len(calls) == 1 and result.linked
     assert not src.exists()
 
 
@@ -708,20 +731,6 @@ def test_transcode_none_copy_fsyncs_before_rename(tmp_path: Path, monkeypatch: p
     transcode_none(src, dst)
     inprogress = "title.iso" + INPROGRESS_SUFFIX
     assert ops == [("fsync", inprogress), ("replace", inprogress), ("fsync", "media")]
-
-
-def test_transcode_none_same_fs_reads_the_source_once(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    src = _src(tmp_path)
-    read_calls: list[str] = []
-    real_open = Path.open
-
-    def spy(self: Path, mode: str = "r", *a: object, **kw: object):  # type: ignore[no-untyped-def]
-        read_calls.append(f"{self.name}:{mode}")
-        return real_open(self, mode, *a, **kw)  # type: ignore[arg-type]
-
-    monkeypatch.setattr(Path, "open", spy)
-    transcode_none(src, tmp_path / "media" / "o.mkv")
-    assert read_calls == ["t0.mkv:rb"]
 
 
 def test_same_device_hint_is_silent_when_a_path_cannot_be_statted(

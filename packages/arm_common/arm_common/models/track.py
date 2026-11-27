@@ -62,7 +62,6 @@ class Track(SQLModel, table=True):
     attempts: int = Field(sa_column=Column(Integer, nullable=False, server_default="0"))
     output_path: str | None = Field(default=None)
     size_bytes: int | None = Field(sa_column=Column(BigInteger, nullable=True))
-    sha256: str | None = Field(default=None)
     duration_seconds: int | None = Field(sa_column=Column(Integer, nullable=True))
     last_error: str | None = Field(default=None)
     created_at: datetime | None = Field(sa_column=created_at_column())

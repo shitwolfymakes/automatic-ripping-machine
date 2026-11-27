@@ -144,9 +144,9 @@ class _PassthroughRun:
             # blocking I/O (see docstring).
             await self._db.commit()
 
-            size, sha256, error = await self._move_or_reject()
+            size, error = await self._move_or_reject()
 
-            return await self._finish(size, sha256, error)
+            return await self._finish(size, error)
 
     async def _lock_if_claimable(self) -> TranscodeTask | None:
         """Re-select the task row locked; None when it is gone or no longer QUEUED."""
@@ -230,22 +230,21 @@ class _PassthroughRun:
             session=self._db,
         )
 
-    async def _move_or_reject(self) -> tuple[int | None, str | None, str | None]:
-        """Move the file, or reject a task with no source or output path; returns (size, sha256, error)."""
+    async def _move_or_reject(self) -> tuple[int | None, str | None]:
+        """Move the file, or reject a task with no source or output path; returns (size, error)."""
         track = self._track
         if track is None or not self._track_output_path:
-            return None, None, "source track has no output_path on disk; rip not complete or raw deleted"
+            return None, "source track has no output_path on disk; rip not complete or raw deleted"
         if not self._task_output_path:
-            return None, None, "task has no output_path"
+            return None, "task has no output_path"
         return await self._move(
             track, Path(self._track_output_path), Path(self._settings.MEDIA_ROOT) / self._task_output_path
         )
 
-    async def _move(self, track: Track, source: Path, final: Path) -> tuple[int | None, str | None, str | None]:
-        """Move `source` to `final` in a worker thread with progress publishing; returns (size, sha256, error)."""
+    async def _move(self, track: Track, source: Path, final: Path) -> tuple[int | None, str | None]:
+        """Move `source` to `final` in a worker thread with progress publishing; returns (size, error)."""
         error: str | None = None
         size: int | None = None
-        sha256: str | None = None
         is_folder = track.kind == TrackKind.DISC_BACKUP
         cancel = _cancel_events[self._task_id] = threading.Event()
         progress = _CopyProgress(sizer=(lambda: tree_size(source)) if is_folder else None)
@@ -264,9 +263,7 @@ class _PassthroughRun:
         try:
             # Move and chown together in the worker thread: a backup
             # tree's chown walks every file, too much for the event loop.
-            size, sha256 = await asyncio.to_thread(
-                _move_and_chown, source, final, self._settings, is_folder, cancel, progress
-            )
+            size = await asyncio.to_thread(_move_and_chown, source, final, self._settings, is_folder, cancel, progress)
         except CopyCancelled:
             error = "cancelled"
             logger.info("passthrough task_id=%s cancelled mid-copy; source kept", self._task_id)
@@ -275,7 +272,7 @@ class _PassthroughRun:
         finally:
             _cancel_events.pop(self._task_id, None)
             await self._stop_publisher(publisher, stop_publisher)
-        return size, sha256, error
+        return size, error
 
     async def _stop_publisher(self, publisher: asyncio.Future[None], stop: asyncio.Event) -> None:
         """Stop the progress publisher and wait for it, logging rather than raising its failure."""
@@ -288,7 +285,7 @@ class _PassthroughRun:
         except Exception:
             logger.exception("passthrough progress publisher failed task_id=%s", self._task_id)
 
-    async def _finish(self, size: int | None, sha256: str | None, error: str | None) -> bool:
+    async def _finish(self, size: int | None, error: str | None) -> bool:
         """Write the terminal state and its events, commit, and return whether the task succeeded."""
         fresh_task = await self._refetch_task()
         await self._reload_application()
@@ -296,8 +293,6 @@ class _PassthroughRun:
             logger.info("passthrough task_id=%s deleted mid-move; skipping terminal update", self._task_id)
             return error is None
 
-        if error is None and sha256 is not None:
-            await self._record_sha256(sha256)
         event_type, payload_extra = await self._record_terminal(fresh_task, size, error)
         await self._announce_terminal(event_type, payload_extra)
         if self._application is not None:
@@ -327,16 +322,6 @@ class _PassthroughRun:
                 .execution_options(populate_existing=True)
             )
         ).scalar_one_or_none()
-
-    async def _record_sha256(self, sha256: str) -> None:
-        """Store the moved file's digest on the source track; a cascade-deleted track is skipped."""
-        track = (
-            await self._db.execute(
-                select(Track).where(col(Track.id) == self._source_track_id).execution_options(populate_existing=True)
-            )
-        ).scalar_one_or_none()
-        if track is not None:
-            track.sha256 = sha256
 
     async def _reload_application(self) -> None:
         """Reload the session application after the move, when there is one."""
@@ -494,17 +479,16 @@ def _move_and_chown(
     is_folder: bool,
     cancel: threading.Event,
     progress: _CopyProgress,
-) -> tuple[int, str | None]:
-    """Move a file (returning its size and SHA-256) or a folder (size, no digest), then chown."""
+) -> int:
+    """Move a file or a folder and return its size, then chown."""
     if is_folder:
-        size, sha256 = move_tree(source, final, cancel=cancel, on_bytes=progress.add), None
+        size = move_tree(source, final, cancel=cancel, on_bytes=progress.add)
     else:
         progress.total = source.stat().st_size
-        result = transcode_none(source, final, cancel=cancel, on_bytes=progress.add)
-        size, sha256 = result.size, result.sha256
+        size = transcode_none(source, final, cancel=cancel, on_bytes=progress.add).size
     if settings.ARM_TRANSCODE_PUID:
         _best_effort_chown(final, settings, tree=is_folder)
-    return size, sha256
+    return size
 
 
 def _best_effort_chown(final: Path, settings: Settings, *, tree: bool = False) -> None:
