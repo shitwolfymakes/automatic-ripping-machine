@@ -5,14 +5,13 @@ import functools
 import logging
 from pathlib import Path
 
-from arm_common import DiscType, TrackKind, TrackStatus, with_log_context
+from arm_common import DiscType, RipInvocation, TrackKind, TrackStatus, with_log_context
 from arm_common.schemas import RipStartResponse, TrackView
 from arm_ripper.backend_retry import BackendRetry
 from arm_ripper.drive_handle import DriveHandle
 from arm_ripper.drive_poll import DriveErrorKind, DriveState, classify_drive_error, read_drive_status
 from arm_ripper.eject import Ejector
 from arm_ripper.rip import RipResult, rip_all
-from arm_ripper.rip.resume_plan import log_resume_plan, plan_resume
 from arm_ripper.rip.track_callbacks import TransferStats
 from arm_ripper.source import is_file_source
 from arm_ripper.ws_client import WSClient
@@ -111,7 +110,6 @@ class DiscRip:
         self._output_dir = output_dir
         self._tracks = list(rip_start.tracks)
         self._resumable = _resumable(disc_type, device_path, self._tracks)
-        self._resume_policy = rip_start.resume_policy
         self._lost = asyncio.Event()
         # Track ids whose title the lost drive left unfinished, and the files
         # of every title that finished (kept across a resume). A rip resumed
@@ -127,7 +125,7 @@ class DiscRip:
         self._rip_path = device_path
         self._rip_dir = self._output_dir
         self._skip: set[str] = {t.id for t in settled}
-        self._per_title = False
+        self._per_title = rip_start.rip_invocation is RipInvocation.PER_TITLE
         self._resumes = 0
 
     async def _on_track_start(self, track: TrackView) -> None:
@@ -272,7 +270,7 @@ class DiscRip:
         await self._finish()
 
     async def _run_pass(self) -> None:
-        """One pass over the disc on its current node (`mkv all`, or per title on a resume that chose it), with a
+        """One pass over the disc on its current node (`mkv all`, or per title as `ARM_RIP_INVOCATION` says), with a
         watcher that stops makemkvcon if the drive leaves that node (resumable rips only)."""
         watcher = asyncio.create_task(self._watch_drive(self._rip_path)) if self._resumable else None
         try:
@@ -296,15 +294,14 @@ class DiscRip:
 
     def _prepare_restart_resume(self) -> None:
         """Set up the first pass of a rip resumed after a restart: drop the files no settled title owns, rip into a
-        fresh resume folder, and choose how to read the disc."""
+        fresh resume folder."""
         _remove_partial_outputs(self._output_dir, self._kept)
         self._rip_dir = _next_resume_dir(self._output_dir)
         logger.info("resuming after a restart; %d title(s) already settled", len(self._skip))
-        self._plan_resume()
 
     def _prepare_resume(self, returned: str) -> None:
         """Set up the next pass on the node the drive came back on: drop the partial files, skip every title already
-        settled, rip into a fresh resume folder, and choose how to read the disc."""
+        settled, and rip into a fresh resume folder."""
         self._resumes += 1
         _remove_partial_outputs(self._output_dir, self._kept)
         self._skip = {t.id for t in self._tracks} - self._unfinished
@@ -318,13 +315,6 @@ class DiscRip:
             len(self._tracks) - len(self._skip),
             self._resumes,
         )
-        self._plan_resume()
-
-    def _plan_resume(self) -> None:
-        """Choose `mkv all` or per title for the coming resume pass, and log why."""
-        plan = plan_resume(self._tracks, self._skip, self._min_length_seconds, self._resume_policy)
-        log_resume_plan(plan, self._resume_policy)
-        self._per_title = plan.per_title
 
     async def _finish(self) -> None:
         """Report rip-complete, then eject the drive at the node it is on now and give it a moment to settle."""

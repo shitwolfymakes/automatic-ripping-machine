@@ -109,9 +109,9 @@ def _mkv_all_command(device_path: str, output_dir: Path, minlength_seconds: int)
 def _mkv_title_command(device_path: str, output_dir: Path, title: int) -> list[str]:
     """The `makemkvcon mkv … <title>` argv for one source title.
 
-    No `--minlength`: MakeMKV numbers titles after its minimum-length filter, and the scan's `info` runs under
-    MakeMKV's own setting. Passing ARM's minimum here would number the titles differently from the scan once the
-    two differ, and `title` would name another title. The caller has already picked `title` by ARM's minimum.
+    No `--minlength`: MakeMKV numbers titles after its minimum-length filter, and the scan's `info` runs without
+    one, under MakeMKV's own setting. Passing a different minimum here would number the titles differently from the
+    scan, and `title` would name another title. The caller has already picked `title` by ARM's minimum.
     """
     return [
         "makemkvcon",
@@ -215,7 +215,7 @@ async def rip_disc(
     the overall error (see run_makemkvcon).
 
     `title` rips only that source title (`mkv … <title>`) instead of `all`,
-    without `--minlength` (see `_mkv_title_command`); the caller passes
+    numbered as the scan numbered it (see `_mkv_title_command`); the caller passes
     `eligible_source_indexes=[title]`, so its one output file pairs with it
     positionally like any `mkv all` output.
 

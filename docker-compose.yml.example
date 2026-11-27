@@ -101,9 +101,8 @@ services:
       # injects device access into each ephemeral transcoder. [] => CPU-only.
       ARM_GPUS: ${ARM_GPUS:-[]}
       ARM_RENDER_GID: ${ARM_RENDER_GID:-}
-      # How a resumed rip reads the disc again (see .env.example).
-      ARM_RESUME_MODE: ${ARM_RESUME_MODE:-auto}
-      ARM_RESUME_PER_TITLE_MAX_REMAINING_PCT: ${ARM_RESUME_PER_TITLE_MAX_REMAINING_PCT:-50}
+      # How a DVD/BD rip reads the disc (see .env.example).
+      ARM_RIP_INVOCATION: ${ARM_RIP_INVOCATION:-mkv_all}
       # NOTE: setting these 4 keys by hand is NOT enough for remote offload —
       # the backend also needs an ssh key mounted at /home/arm/.ssh (ro).
       # `armctl install` adds that volume to its generated host overlay; if

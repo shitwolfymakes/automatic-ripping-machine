@@ -15794,34 +15794,6 @@
         "title": "ResolveResponse",
         "description": "POST /api/jobs/{id}/resolve response. The job always reflects the\njust-applied identity (status flipped to `identified`); `fan_out` lists\nthe per-application outcomes from the parked-applications promotion\npass \u2014 empty when no session was applied to the job before resolve."
       },
-      "ResumeMode": {
-        "type": "string",
-        "enum": [
-          "auto",
-          "mkv_all",
-          "per_title"
-        ],
-        "title": "ResumeMode",
-        "description": "How a rip resumed after a restart or a lost drive reads the disc again.\n\n`auto` picks per resume by data (see `ResumePolicy`); the other two force one path."
-      },
-      "ResumePolicy": {
-        "properties": {
-          "mode": {
-            "$ref": "#/components/schemas/ResumeMode",
-            "default": "auto"
-          },
-          "per_title_max_remaining_pct": {
-            "type": "integer",
-            "maximum": 100.0,
-            "minimum": 0.0,
-            "title": "Per Title Max Remaining Pct",
-            "default": 50
-          }
-        },
-        "type": "object",
-        "title": "ResumePolicy",
-        "description": "How a resumed rip chooses between one `mkv all` and one invocation per unsettled title.\n\nIn `auto`, a resume rips per title when the unsettled titles' expected data is at most\n`per_title_max_remaining_pct` percent of what `mkv all` would read (every title at or above\nthe minimum length, settled and unselected ones included). Tunable while the defaults are dialled in."
-      },
       "RetentionPolicy": {
         "type": "string",
         "enum": [
@@ -15853,6 +15825,15 @@
         "type": "object",
         "title": "RipAgainResponse",
         "description": "POST /api/jobs/{id}/rip-again. `started_job_id` names a held copy of\nthis disc that was started; otherwise `armed` means the next identify of\nthe disc skips the previously-ripped check once."
+      },
+      "RipInvocation": {
+        "type": "string",
+        "enum": [
+          "mkv_all",
+          "per_title"
+        ],
+        "title": "RipInvocation",
+        "description": "How a DVD/BD rip, fresh or resumed, reads the disc: one invocation over every title, or one per title."
       },
       "RipPresetCreateRequest": {
         "properties": {
@@ -16122,8 +16103,9 @@
             ],
             "title": "Min Length Seconds"
           },
-          "resume_policy": {
-            "$ref": "#/components/schemas/ResumePolicy"
+          "rip_invocation": {
+            "$ref": "#/components/schemas/RipInvocation",
+            "default": "mkv_all"
           }
         },
         "type": "object",

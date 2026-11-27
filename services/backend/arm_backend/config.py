@@ -1,10 +1,9 @@
 from typing import Annotated, Literal
 
-from pydantic import Field, field_validator
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
-from arm_common import ResumeMode
-from arm_common.schemas import DEFAULT_RESUME_PER_TITLE_MAX_REMAINING_PCT
+from arm_common import RipInvocation
 
 
 class Settings(BaseSettings):
@@ -114,15 +113,11 @@ class Settings(BaseSettings):
     # public ARM logo URL to brand the notifications.
     ARM_NOTIFY_IMAGE_URL: str = ""
 
-    # How a resumed rip reads the disc again (after a restart, or a drive that
-    # dropped off the bus): `auto` rips only the unsettled titles when their
-    # expected data is at most ARM_RESUME_PER_TITLE_MAX_REMAINING_PCT percent of
-    # what one `mkv all` would read, else one `mkv all`. `mkv_all` and
-    # `per_title` force one path. Sent to the ripper in every rip-start/resume.
-    ARM_RESUME_MODE: ResumeMode = ResumeMode.AUTO
-    ARM_RESUME_PER_TITLE_MAX_REMAINING_PCT: Annotated[int, Field(ge=0, le=100)] = (
-        DEFAULT_RESUME_PER_TITLE_MAX_REMAINING_PCT
-    )
+    # How a DVD/BD rip reads the disc, fresh or resumed (after a restart, or a
+    # drive that dropped off the bus): `mkv_all` runs one `mkv all` over the
+    # whole disc, `per_title` one `mkv … <title>` per selected title behind a
+    # drive-readiness gate. Sent to the ripper in every rip-start/resume.
+    ARM_RIP_INVOCATION: RipInvocation = RipInvocation.MKV_ALL
 
     # Backend container's own host-side mount paths. Required to spawn
     # transcoders via the docker socket: paths in `client.containers.run`'s

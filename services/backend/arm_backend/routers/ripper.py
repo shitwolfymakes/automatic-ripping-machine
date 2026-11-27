@@ -63,7 +63,6 @@ from arm_common.schemas import (
     RegisterRequest,
     RipperConfigView,
     RipperHeartbeatRequest,
-    ResumePolicy,
     RipStartResponse,
     ScanResult,
     SdfStatusReport,
@@ -446,10 +445,7 @@ def _rip_start_response(
         rip_preset_id=preset_id,
         tracks=[TrackView.model_validate(t) for t in tracks],
         min_length_seconds=min_length_seconds,
-        resume_policy=ResumePolicy(
-            mode=settings.ARM_RESUME_MODE,
-            per_title_max_remaining_pct=settings.ARM_RESUME_PER_TITLE_MAX_REMAINING_PCT,
-        ),
+        rip_invocation=settings.ARM_RIP_INVOCATION,
     )
 
 

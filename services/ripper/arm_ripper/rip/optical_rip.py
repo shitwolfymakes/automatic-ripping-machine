@@ -1,13 +1,16 @@
-"""The DVD and Blu-ray rip: one makemkvcon run for the whole disc (or, on a resume, one per unsettled title),
-attributed back to the selected tracks."""
+"""The DVD and Blu-ray rip: one makemkvcon run for the whole disc, or one per selected title, attributed back to the
+selected tracks."""
 
 import asyncio
 import logging
 from collections.abc import Callable, Collection
+from dataclasses import dataclass
 from pathlib import Path
 
 from arm_common.schemas import TrackView
 
+from arm_ripper.drive_ready import ReadyOutcome, wait_until_readable
+from arm_ripper.rip.disc_progress import DiscProgress
 from arm_ripper.rip.makemkv_process import STOPPED_ERROR
 from arm_ripper.rip.makemkv_rip import (
     OUTPUT_FILE_RE,
@@ -16,7 +19,8 @@ from arm_ripper.rip.makemkv_rip import (
     rip_disc,
 )
 from arm_ripper.rip.result import RipResult
-from arm_ripper.rip.track_callbacks import OnTrackDone, OnTrackProgress, OnTrackStart
+from arm_ripper.rip.title_retry import rip_title_with_retry
+from arm_ripper.rip.track_callbacks import OnTrackDone, OnTrackProgress, OnTrackStart, TransferStats
 
 # Log under the dispatcher's name: these lines have always come from that logger.
 logger = logging.getLogger("arm_ripper.rip.dispatcher")
@@ -341,8 +345,8 @@ async def rip_optical(
 ) -> None:
     """Single-invocation DVD/BD rip with per-title attribution.
 
-    `per_title` (a resume that chose it, see `resume_plan`) instead runs one
-    `mkv … <title>` per unsettled eligible title, each into its own folder.
+    `per_title` (`ARM_RIP_INVOCATION=per_title`) instead runs one `mkv … <title>` per selected, unsettled eligible
+    title, each into its own folder.
 
     The makemkvcon invocation rips every title ≥ minlength to
     `output_dir`. We map title_index → TrackView via `source_ref` and
@@ -409,6 +413,102 @@ async def rip_optical(
     ).run()
 
 
+def _disc_wide(on_track_progress: OnTrackProgress | None, disc: DiscProgress, title: int) -> OnTrackProgress | None:
+    """`on_track_progress` reporting the disc-wide fraction for a title's own fraction; None when nothing listens."""
+    if on_track_progress is None:
+        return None
+
+    async def report(track: TrackView, fraction: float, stats: TransferStats | None = None, /) -> None:
+        await on_track_progress(track, disc.fraction(title, fraction), stats)
+
+    return report
+
+
+@dataclass(frozen=True)
+class _TitleRun:
+    """What one title's makemkvcon run needs; `attempt` runs it, as often as the retry asks."""
+
+    device_path: str
+    output_dir: Path
+    track: TrackView
+    title: int
+    on_track_start: OnTrackStart
+    on_track_progress: OnTrackProgress | None
+    min_length_seconds: int
+    stop: asyncio.Event | None
+    drive_lost: Callable[[], bool] | None
+
+    async def attempt(self, on_done: OnTrackDone) -> None:
+        """Run makemkvcon once for the title, reporting its result through `on_done`."""
+        await _OpticalRip(
+            device_path=self.device_path,
+            output_dir=self.output_dir,
+            track_by_index={self.title: self.track},
+            eligible=[self.title],
+            skipped=set(),
+            on_track_start=self.on_track_start,
+            on_track_done=on_done,
+            on_track_progress=self.on_track_progress,
+            min_length_seconds=self.min_length_seconds,
+            stop=self.stop,
+            drive_lost=self.drive_lost,
+            title=self.title,
+        ).run()
+
+
+async def _report_unreached(
+    titles: list[int],
+    track_by_index: dict[int, TrackView],
+    on_track_start: OnTrackStart,
+    on_track_done: OnTrackDone,
+    error: str,
+    *,
+    start: bool,
+) -> None:
+    """Report each of `titles`, which the loop never reached, as failed with `error`; `start` first moves a track
+    to in-progress, which a failure needs unless the caller leaves the title for a resume."""
+    for idx in titles:
+        track = track_by_index[idx]
+        if start:
+            await on_track_start(track)
+        await on_track_done(track, RipResult(ok=False, error=error))
+
+
+async def _give_up_on_drive(
+    titles: list[int],
+    outcome: ReadyOutcome,
+    track_by_index: dict[int, TrackView],
+    on_track_start: OnTrackStart,
+    on_track_done: OnTrackDone,
+) -> None:
+    """The drive will not deliver bytes for the remaining `titles`. One that has gone away is reported stopped, for the
+    caller's drop-and-resume path; any other is a failure of those titles."""
+    logger.warning("drive not ready (%s); %d title(s) not ripped", outcome.value, len(titles))
+    if outcome is ReadyOutcome.ABSENT:
+        await _report_unreached(titles, track_by_index, on_track_start, on_track_done, STOPPED_ERROR, start=False)
+        return
+    error = f"the drive was not ready to rip this title ({outcome.value})"
+    await _report_unreached(titles, track_by_index, on_track_start, on_track_done, error, start=True)
+
+
+async def _fail_below_minimum(
+    track_by_index: dict[int, TrackView],
+    eligible: list[int],
+    skipped: set[int],
+    min_length_seconds: int,
+    on_track_start: OnTrackStart,
+    on_track_done: OnTrackDone,
+) -> None:
+    """Fail each selected title MakeMKV would not rip (below the minimum length), as a full pass does."""
+    for idx, track in track_by_index.items():
+        if idx in skipped or idx in eligible:
+            continue
+        await on_track_start(track)
+        await on_track_done(
+            track, RipResult(ok=False, error=_no_output_error(idx, track, min_length_seconds, eligible))
+        )
+
+
 async def _rip_each_title(
     *,
     device_path: str,
@@ -423,39 +523,46 @@ async def _rip_each_title(
     stop: asyncio.Event | None,
     drive_lost: Callable[[], bool] | None,
 ) -> None:
-    """One `mkv … <title>` per unsettled eligible title, each into `output_dir/title-NN`, in source order.
+    """One `mkv … <title>` per selected, unsettled eligible title, each into `output_dir/title-NN`, in source order.
 
-    Settled titles are never read. Once `stop` is set (the drive dropped), the titles not yet reached are reported
-    stopped so the caller leaves them for its next resume. Selected titles MakeMKV would not rip (below the minimum
-    length) fail with the same reason a full pass gives them.
+    Settled and unselected titles are never read. Each title waits for the drive to be readable first, and one that
+    fails because the drive was not ready is tried once more. Progress is reported disc-wide. Once `stop` is set (the
+    drive dropped), the titles not yet reached are reported stopped so the caller leaves them for its next resume.
+    Selected titles MakeMKV would not rip (below the minimum length) fail with the same reason a full pass gives them.
     """
     pending = [idx for idx in eligible if idx not in skipped]
+    disc = DiscProgress({idx: track_by_index[idx].expected_size_bytes for idx in eligible}, skipped)
     for n, idx in enumerate(pending):
         if stop is not None and stop.is_set():
-            for rest in pending[n:]:
-                await on_track_done(track_by_index[rest], RipResult(ok=False, error=STOPPED_ERROR))
+            await _report_unreached(
+                pending[n:], track_by_index, on_track_start, on_track_done, STOPPED_ERROR, start=False
+            )
             return
-        await _OpticalRip(
+        outcome = await wait_until_readable(device_path)
+        if outcome is not ReadyOutcome.READY:
+            await _give_up_on_drive(pending[n:], outcome, track_by_index, on_track_start, on_track_done)
+            return
+        folder = output_dir / f"title-{idx:02d}"
+        title_run = _TitleRun(
             device_path=device_path,
-            output_dir=output_dir / f"title-{idx:02d}",
-            track_by_index={idx: track_by_index[idx]},
-            eligible=[idx],
-            skipped=set(),
+            output_dir=folder,
+            track=track_by_index[idx],
+            title=idx,
             on_track_start=on_track_start,
-            on_track_done=on_track_done,
-            on_track_progress=on_track_progress,
+            on_track_progress=_disc_wide(on_track_progress, disc, idx),
             min_length_seconds=min_length_seconds,
             stop=stop,
             drive_lost=drive_lost,
-            title=idx,
-        ).run()
-    for idx, track in track_by_index.items():
-        if idx in skipped or idx in eligible:
-            continue
-        await on_track_start(track)
-        await on_track_done(
-            track, RipResult(ok=False, error=_no_output_error(idx, track, min_length_seconds, eligible))
         )
+        await rip_title_with_retry(
+            track=track_by_index[idx],
+            device_path=device_path,
+            folder=folder,
+            run_attempt=title_run.attempt,
+            on_track_done=on_track_done,
+        )
+        disc.settle(idx)
+    await _fail_below_minimum(track_by_index, eligible, skipped, min_length_seconds, on_track_start, on_track_done)
 
 
 def _delete_skipped_outputs(output_dir: Path, eligible_source_indexes: list[int], skipped: set[int]) -> None:
