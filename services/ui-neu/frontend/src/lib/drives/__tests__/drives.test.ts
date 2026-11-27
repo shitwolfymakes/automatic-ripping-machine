@@ -11,7 +11,8 @@ import {
 	partitionDrives,
 	prescanOverrideCount,
 	serialLabel,
-	startRipBlockedReason
+	startRipBlockedReason,
+	cancelScanLabel
 } from '$lib/drives/drives';
 
 function drive(over: Partial<DriveView> = {}): DriveView {
@@ -169,5 +170,28 @@ describe('prescanOverrideCount', () => {
 		expect(
 			prescanOverrideCount(drive({ prescan_cache_mb: 1, prescan_timeout: 2, prescan_retries: 3, disc_enum_timeout: 4 }))
 		).toBe(4);
+	});
+});
+
+describe('cancelScanLabel', () => {
+	const job = { id: 'job_1', title: null, status: 'created' } as const;
+
+	it('offers the cancel while a disc is loaded and no job exists', () => {
+		expect(cancelScanLabel(drive({ media_status: 'loaded' }))).toBe('Cancel scan');
+	});
+	it.each(['no_disc', 'tray_open', 'not_ready', 'unknown', null] as const)(
+		'offers nothing for media status %s',
+		(media_status) => {
+			expect(cancelScanLabel(drive({ media_status }))).toBeNull();
+		}
+	);
+	it('offers nothing once the drive has a job', () => {
+		expect(cancelScanLabel(drive({ media_status: 'loaded', current_job: job }))).toBeNull();
+	});
+	it('offers nothing on a detached drive', () => {
+		expect(cancelScanLabel(drive({ media_status: 'loaded', status: 'offline', present: false }))).toBeNull();
+	});
+	it('offers nothing when the ripper is offline', () => {
+		expect(cancelScanLabel(drive({ media_status: 'loaded', status: 'offline', present: true }))).toBeNull();
 	});
 });

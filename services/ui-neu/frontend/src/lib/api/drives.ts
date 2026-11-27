@@ -35,3 +35,8 @@ export function unignoreDrive(driveId: string): Promise<DriveView> {
 export function unenrollDrive(driveId: string): Promise<void> {
 	return post<void>(`/api/drives/${driveId}/unenroll`);
 }
+
+/** Cancels the scan the drive's ripper runs before a job exists; 409 once the drive has a job. */
+export function cancelDriveScan(driveId: string): Promise<void> {
+	return post<void>(`/api/drives/${driveId}/cancel-scan`);
+}

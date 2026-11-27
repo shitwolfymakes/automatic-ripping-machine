@@ -6,16 +6,18 @@ import { setTranscoderEnabled } from '$lib/stores/config';
 import { GLYPH_PATHS } from '$lib/ui/glyph-names';
 vi.mock('$lib/api/drives', () => ({
 	updateDrive: vi.fn(() => Promise.resolve()),
-	unenrollDrive: vi.fn(() => Promise.resolve())
+	unenrollDrive: vi.fn(() => Promise.resolve()),
+	cancelDriveScan: vi.fn(() => Promise.resolve())
 }));
 vi.mock('$lib/api/jobs', () => ({
 	triggerManual: vi.fn(() => Promise.resolve({ drive_id: 'drv_1', session_id: null }))
 }));
 import { triggerManual } from '$lib/api/jobs';
 const triggerManualMock = vi.mocked(triggerManual);
-import { updateDrive, unenrollDrive } from '$lib/api/drives';
+import { updateDrive, unenrollDrive, cancelDriveScan } from '$lib/api/drives';
 const updateDriveMock = vi.mocked(updateDrive);
 const unenrollDriveMock = vi.mocked(unenrollDrive);
+const cancelDriveScanMock = vi.mocked(cancelDriveScan);
 
 function createDrive(overrides: Partial<Drive> = {}): Drive {
 	return {
@@ -207,6 +209,42 @@ describe('DriveCard', () => {
 			expect(screen.getByText('Save')).toBeInTheDocument();
 			await fireEvent.click(screen.getByText('Cancel'));
 			expect(screen.getByText('Rename')).toBeInTheDocument();
+		});
+	});
+
+	describe('cancel scan', () => {
+		it('is offered, with an accessible name, while a disc is loaded and there is no job', () => {
+			renderDrive({ media_status: 'loaded' });
+			expect(screen.getByRole('button', { name: 'Cancel scan' })).toBe(screen.getByTestId('drive-cancel-scan'));
+		});
+
+		it('is absent when there is no disc', () => {
+			renderDrive({ media_status: 'no_disc' });
+			expect(screen.queryByTestId('drive-cancel-scan')).not.toBeInTheDocument();
+		});
+
+		it('is absent once the drive has a job', () => {
+			renderDrive({ media_status: 'loaded', current_job: { id: 'job_1', title: 'X', status: 'created' } });
+			expect(screen.queryByTestId('drive-cancel-scan')).not.toBeInTheDocument();
+		});
+
+		it('cancels the scan and refreshes the drive list', async () => {
+			const onupdate = vi.fn();
+			renderComponent(DriveCard, {
+				props: { drive: createDrive({ media_status: 'loaded' }), sessions: [], onupdate }
+			});
+			await fireEvent.click(screen.getByTestId('drive-cancel-scan'));
+			await waitFor(() => expect(onupdate).toHaveBeenCalled());
+			expect(cancelDriveScanMock).toHaveBeenCalledWith('drv_1');
+		});
+
+		it('shows a failure inline', async () => {
+			cancelDriveScanMock.mockRejectedValueOnce(new Error('the drive has a job'));
+			renderDrive({ media_status: 'loaded' });
+			await fireEvent.click(screen.getByTestId('drive-cancel-scan'));
+			await waitFor(() =>
+				expect(screen.getByTestId('drive-cancel-scan-error')).toHaveTextContent('the drive has a job')
+			);
 		});
 	});
 

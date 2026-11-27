@@ -1,10 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 const unenrollDriveMock = vi.fn();
+const cancelDriveScanMock = vi.fn();
 const updateDriveMock = vi.fn();
 const triggerManualMock = vi.fn();
 vi.mock('$lib/api/drives', () => ({
 	unenrollDrive: (...a: unknown[]) => unenrollDriveMock(...a),
+	cancelDriveScan: (...a: unknown[]) => cancelDriveScanMock(...a),
 	updateDrive: (...a: unknown[]) => updateDriveMock(...a)
 }));
 vi.mock('$lib/api/jobs', () => ({
@@ -26,7 +28,7 @@ function deferred() {
 }
 
 beforeEach(() => {
-	for (const m of [unenrollDriveMock, updateDriveMock, triggerManualMock, refresh]) {
+	for (const m of [unenrollDriveMock, cancelDriveScanMock, updateDriveMock, triggerManualMock, refresh]) {
 		m.mockReset();
 	}
 });
@@ -216,5 +218,44 @@ describe('setMode', () => {
 		await expect(a.setMode('d1', 'auto')).resolves.toBeUndefined();
 		expect(refresh).not.toHaveBeenCalled();
 		expect(a.togglingMode).toBe(false);
+	});
+});
+
+describe('cancelScan', () => {
+	it('cancels the drive scan and refreshes', async () => {
+		const a = make();
+		await a.cancelScan('d1');
+		expect(cancelDriveScanMock).toHaveBeenCalledWith('d1');
+		expect(refresh).toHaveBeenCalledTimes(1);
+		expect(a.cancellingScan).toBe(false);
+		expect(a.cancelScanError).toBeNull();
+	});
+	it('ignores a second click while cancelling', async () => {
+		const d = deferred();
+		cancelDriveScanMock.mockReturnValue(d.promise);
+		const a = make();
+		const first = a.cancelScan('d1');
+		expect(a.cancellingScan).toBe(true);
+		await a.cancelScan('d1');
+		expect(cancelDriveScanMock).toHaveBeenCalledTimes(1);
+		d.resolve();
+		await first;
+		expect(a.cancellingScan).toBe(false);
+	});
+	it('reports the failure and clears the busy flag', async () => {
+		cancelDriveScanMock.mockRejectedValue(new Error('boom'));
+		const a = make();
+		await a.cancelScan('d1');
+		expect(a.cancelScanError).toBe('boom');
+		expect(a.cancellingScan).toBe(false);
+		expect(refresh).not.toHaveBeenCalled();
+	});
+	it('falls back to a generic message and clears an old error on retry', async () => {
+		cancelDriveScanMock.mockRejectedValueOnce('nope').mockResolvedValueOnce(undefined);
+		const a = make();
+		await a.cancelScan('d1');
+		expect(a.cancelScanError).toBe('Cancel scan failed');
+		await a.cancelScan('d1');
+		expect(a.cancelScanError).toBeNull();
 	});
 });

@@ -1,6 +1,7 @@
 """Drive listing + PATCH for `default_session_id` / `display_name`."""
 
 import asyncio
+import logging
 from datetime import datetime, timezone
 from typing import Literal
 
@@ -18,8 +19,9 @@ from arm_backend.drive_health import (
     scanner_findings,
 )
 from arm_backend.drive_scanner import PruneUnavailable
-from arm_backend.routers._deps import require_ripper_manager
+from arm_backend.routers._deps import get_hub, require_ripper_manager
 from arm_backend.ripper_manager import RipperManagerError
+from arm_backend.ws import WSHub
 from arm_common import Drive, DriveKind, DriveLifecycle, DriveStatus, Job, Session, User
 from arm_common.enums import NON_TERMINAL_JOB_STATUSES, TERMINAL_JOB_STATUSES
 from arm_common.models._columns import enum_value_str
@@ -31,6 +33,8 @@ from arm_common.schemas import (
     DriveUpdateRequest,
     DriveView,
 )
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/drives", tags=["drives"])
 
@@ -415,3 +419,22 @@ async def unenroll_drive(
         await db.commit()
         await db.refresh(drive)  # updated_at is server-generated (onupdate) and expired after the flush
         return await _view_for(db, drive)
+
+
+@router.post("/{drive_id}/cancel-scan", status_code=status.HTTP_204_NO_CONTENT)
+async def cancel_scan(
+    drive_id: str,
+    _: User = Depends(require_writer),
+    db: AsyncSession = Depends(get_session),
+    hub: WSHub = Depends(get_hub),
+) -> None:
+    """Tell the drive's ripper to cancel the scan it is running before a job exists. Refused (409) once the drive
+    has a job: that is abandoned from the job, not here. The ripper ignores the command when it is not scanning."""
+    await _load_drive(db, drive_id)
+    if await _live_job(db, drive_id) is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT, detail="the drive has a job; abandon the job to stop it"
+        )
+    await hub.emit(topic=f"ripper.commands.{drive_id}", event_type="scan.cancel", payload={}, session=db)
+    await db.commit()
+    logger.info("scan cancel drive_id=%s", drive_id)
