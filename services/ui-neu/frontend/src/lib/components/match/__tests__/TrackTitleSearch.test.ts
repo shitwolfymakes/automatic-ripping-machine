@@ -176,6 +176,20 @@ describe('TrackTitleSearch', () => {
 			expect(mockUpdateTrack.mock.calls[0][2]).toMatchObject({ edition: 'Extended' });
 		});
 
+		it('keeps a typed title and edition when the parent passes a new track object', async () => {
+			mockSearchMetadata.mockResolvedValue({ candidates: [createCandidate({ title: 'Picked' })] });
+			const track = createTrack({ id: 'trk_5', edition: 'Extended' });
+			const { rerender } = renderComponent(TrackTitleSearch, { props: { jobId: 'job_3', track } });
+			await fireEvent.click(screen.getByText('Search'));
+			await waitFor(() => expect(screen.getByText('Picked')).toBeInTheDocument());
+			await fireEvent.click(screen.getByText('Picked'));
+			await fireEvent.input(screen.getByLabelText('Title'), { target: { value: 'Typed Title' } });
+			await fireEvent.input(screen.getByLabelText('Edition'), { target: { value: 'Typed Cut' } });
+			await rerender({ jobId: 'job_3', track: { ...track } });
+			expect(screen.getByLabelText('Title')).toHaveValue('Typed Title');
+			expect(screen.getByLabelText('Edition')).toHaveValue('Typed Cut');
+		});
+
 		it('applying with Type=Series sends role: episode', async () => {
 			mockSearchMetadata.mockResolvedValue({
 				candidates: [createCandidate({ title: 'Picked Show', kind: 'series' })]

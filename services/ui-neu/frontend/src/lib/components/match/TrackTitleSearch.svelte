@@ -47,16 +47,6 @@
 	// Set by hand: the edit fields open without a search result.
 	let byHand = $state(false);
 
-	$effect(() => {
-		if (detail) {
-			editTitle = detail.title;
-			editYear = detail.year != null ? String(detail.year) : '';
-			editType = isSeriesKind(detail.kind) ? 'series' : 'movie';
-			editPosterUrl = detail.poster_url ?? '';
-			editEdition = track.edition ?? '';
-		}
-	});
-
 	const TEXT_SEARCH: SearchMessages = { empty: 'No results found.', failed: 'Search failed' };
 
 	function openByHand() {
@@ -84,7 +74,9 @@
 			await search.run(
 				() => fetchMediaDetail(imdb),
 				IMDB_LOOKUP,
-				(found) => (detail = found[0] ?? null)
+				(found) => {
+					if (found[0]) handleSelect(found[0]);
+				}
 			);
 			return;
 		}
@@ -97,8 +89,15 @@
 		);
 	}
 
+	// Fills the edit fields once, when a result is opened, so a reload that
+	// hands in a new track object leaves what the operator typed alone.
 	function handleSelect(result: MetadataCandidate) {
 		detail = result;
+		editTitle = result.title;
+		editYear = result.year != null ? String(result.year) : '';
+		editType = isSeriesKind(result.kind) ? 'series' : 'movie';
+		editPosterUrl = result.poster_url ?? '';
+		editEdition = track.edition ?? '';
 	}
 
 	async function applyFromDetail() {
