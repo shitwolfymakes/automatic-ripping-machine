@@ -25,14 +25,14 @@ FEATURE = 2 * 3600
 HOUR_41 = 6072
 
 
-def title(index, seconds, clips=None, source=None, comment=None):
+def title(index, seconds, clips=None, source=None, playlist_name=None):
     return ScanTitle(
         index=index,
         duration_seconds=seconds,
         source_file=source if source is not None else f"{index:05d}.mpls",
         segment_count=len(clips) if clips else None,
         segment_map=clips,
-        comment=comment,
+        playlist_name=playlist_name,
     )
 
 
@@ -64,13 +64,13 @@ def test_decoy_fixture_outcome():
 
 def test_decoy_fixture_without_comment_keeps_lowest_index():
     titles = decoy_titles()
-    titles[0] = titles[0].model_copy(update={"comment": None})
+    titles[0] = titles[0].model_copy(update={"playlist_name": None})
     assert_decoy_outcome(classify_titles(titles))
 
 
 def test_decoy_fixture_preferred_breaks_the_tie_without_comment():
     titles = decoy_titles()
-    titles[0] = titles[0].model_copy(update={"comment": None})
+    titles[0] = titles[0].model_copy(update={"playlist_name": None})
     verdicts = classify_titles(titles, preferred=frozenset({11}))
     assert verdicts[11].title_class is TitleClass.PRIMARY
     assert verdicts[0] == TitleVerdict(0, TitleClass.DECOY, 11)
@@ -147,7 +147,7 @@ def test_raw_stream_not_covered_stays_primary():
 def test_raw_stream_picks_the_commented_playlist():
     titles = [
         title(0, 7611, [294], "00801.mpls"),
-        title(1, 7611, [294, 295], "00802.mpls", comment="FPL_MainFeature"),
+        title(1, 7611, [294, 295], "00802.mpls", playlist_name="FPL_MainFeature"),
         title(2, 7611, None, "00294.m2ts"),
     ]
     verdicts = classify_titles(titles)
@@ -192,7 +192,7 @@ def test_raw_stream_uses_clip_seconds_when_known():
 
 def test_variant_with_clip_durations_instead_of_title_durations():
     base = title(0, 6000, [1, 2, 3])
-    disclaimer = title(1, 6000 + 500, [1, 2, 3, 9], comment="Copy Disclaimer")
+    disclaimer = title(1, 6000 + 500, [1, 2, 3, 9], playlist_name="Copy Disclaimer")
     # Title durations say +500 s (too long); the extra clip is only 60 s.
     assert classify_titles([base, disclaimer])[1].title_class in KEPT_CLASSES
     verdicts = classify_titles([base, disclaimer], clip_seconds={9: 60.0})
@@ -236,7 +236,7 @@ def test_variant_ties_take_the_lowest_index():
 def test_variant_of_a_decoy_group_representative_repoints_its_decoys():
     base = title(0, 5000, [1, 2, 3])
     # Group of two: rep (index 1, commented) is also a variant of base.
-    rep = title(1, 5060, [1, 2, 3, 9], comment="FPL_MainFeature")
+    rep = title(1, 5060, [1, 2, 3, 9], playlist_name="FPL_MainFeature")
     decoy = title(2, 5060, [9, 3, 2, 1])
     verdicts = classify_titles([base, rep, decoy])
     assert verdicts[1] == TitleVerdict(1, TitleClass.VARIANT, 0)
@@ -314,8 +314,8 @@ def test_unstructured_features_never_pair_as_editions():
 def test_pick_representative_rules():
     plain = title(3, 10, [1, 2])
     lower = title(1, 10, [2, 1])
-    commented = title(2, 10, [1, 3], comment="FPL")
-    other_commented = title(4, 10, [3, 1], comment="X")
+    commented = title(2, 10, [1, 3], playlist_name="FPL")
+    other_commented = title(4, 10, [3, 1], playlist_name="X")
     assert pick_representative([plain, lower], frozenset()) is lower
     assert pick_representative([plain, commented], frozenset({3})) is commented
     assert pick_representative([plain, lower], frozenset({3})) is plain

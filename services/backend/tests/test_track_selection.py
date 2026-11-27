@@ -10,7 +10,7 @@ from arm_backend.track_selection import (
     select_tracks,
     select_tracks_for_review,
 )
-from arm_common.title_classes import MAIN_FEATURE_MIN_SECONDS
+from arm_common.title_classes import MAIN_FEATURE_MIN_SECONDS, TitleClass
 from arm_common import (
     DiscType,
     IdentificationMode,
@@ -293,7 +293,7 @@ def test_decoy_disc_as_dvd_is_unclassified():
 def test_preferred_breaks_the_tie_when_no_title_has_a_comment():
     scan = _decoy_scan()
     for t in scan.titles:
-        t.comment = None
+        t.playlist_name = None
     tracks = select_tracks(_JOB, scan, _preset(TrackSelection.MAIN_FEATURE), preferred=frozenset({11}))
     assert [t.index for t in tracks] == [11]
 
@@ -301,7 +301,7 @@ def test_preferred_breaks_the_tie_when_no_title_has_a_comment():
 def test_preferred_reaches_the_review_defaults():
     scan = _decoy_scan()
     for t in scan.titles:
-        t.comment = None
+        t.playlist_name = None
     tracks = select_tracks_for_review(_JOB, scan, _preset(TrackSelection.MAIN_FEATURE), preferred=frozenset({11}))
     assert {t.index for t in tracks if not t.excluded} == {11}
 
@@ -328,3 +328,25 @@ def test_main_feature_ticks_every_edition():
 def test_all_tracks_ticks_every_edition_but_not_its_decoy():
     tracks = select_tracks(_JOB, _edition_scan(), _preset(TrackSelection.ALL_TRACKS))
     assert [t.index for t in tracks] == [0, 1]
+
+
+def test_review_tracks_carry_scan_fields_and_verdicts():
+    tracks = {t.index: t for t in select_tracks_for_review(_JOB, _decoy_scan(), _preset(TrackSelection.ALL_TRACKS))}
+    feature, variant, decoy = tracks[0], tracks[2], tracks[20]
+    assert (feature.source_file, feature.playlist_name) == ("00202.mpls", "FPL_MainFeature")
+    assert (feature.title_class, feature.title_class_ref) == (TitleClass.PRIMARY, None)
+    assert (variant.title_class, variant.title_class_ref) == (TitleClass.VARIANT, "0")
+    assert (decoy.title_class, decoy.title_class_ref) == (TitleClass.DECOY, "0")
+
+
+def test_selected_tracks_carry_verdicts_too():
+    tracks = select_tracks(_JOB, _decoy_scan(), _preset(TrackSelection.ARCHIVE))
+    assert {t.title_class for t in tracks} == {TitleClass.PRIMARY}
+    assert all(t.title_class_ref is None and t.source_file for t in tracks)
+
+
+def test_dvd_tracks_keep_source_file_but_have_no_verdict():
+    tracks = select_tracks(_JOB, _decoy_scan(DiscType.DVD), _preset(TrackSelection.ARCHIVE))
+    assert all(t.title_class is None and t.title_class_ref is None for t in tracks)
+    assert tracks[0].source_file == "00202.mpls"
+    assert tracks[0].playlist_name == "FPL_MainFeature"

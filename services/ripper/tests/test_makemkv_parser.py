@@ -171,7 +171,7 @@ def test_all_tinfo_fields_populate_the_title():
         source_file="00003.mpls",
         segment_count=2,
         segment_map=[41, 40],
-        comment="FPL_MainFeature",
+        playlist_name="FPL_MainFeature",
     )
     assert parse_makemkvcon_info(lines) == (None, [expected], None)
 
@@ -264,7 +264,7 @@ def test_scan_title_builds_the_exact_scan_title_from_a_full_entry():
         "source_file": "00002.mpls",
         "segment_count": 1,
         "segment_map": [12],
-        "comment": "SF_Trailer",
+        "playlist_name": "SF_Trailer",
     }
     assert _scan_title(2, entry) == ScanTitle(
         index=2,
@@ -274,7 +274,7 @@ def test_scan_title_builds_the_exact_scan_title_from_a_full_entry():
         source_file="00002.mpls",
         segment_count=1,
         segment_map=[12],
-        comment="SF_Trailer",
+        playlist_name="SF_Trailer",
     )
 
 
@@ -286,7 +286,7 @@ def test_scan_title_maps_wrongly_typed_optional_values_to_none():
         "source_file": 7,
         "segment_count": "1",
         "segment_map": "12",
-        "comment": 3,
+        "playlist_name": 3,
     }
     assert _scan_title(1, entry) == ScanTitle(index=1, duration_seconds=60)
 
@@ -399,10 +399,10 @@ def test_parses_blu_ray_with_decoy_playlists():
     assert feature.segment_count == 20
     assert feature.segment_map is not None
     assert feature.segment_map[:3] == [508, 501, 503]
-    assert feature.comment == "FPL_MainFeature"
+    assert feature.playlist_name == "FPL_MainFeature"
 
     with_disclaimer = titles[2]
-    assert with_disclaimer.comment == "Copy Disclaimer Playlist"
+    assert with_disclaimer.playlist_name == "Copy Disclaimer Playlist"
     assert set(with_disclaimer.segment_map or []) - set(feature.segment_map) == {2173}
 
     decoys = [t for t in titles if t.duration_seconds == feature.duration_seconds]
@@ -410,7 +410,7 @@ def test_parses_blu_ray_with_decoy_playlists():
     assert all(t.segment_count == len(t.segment_map or []) for t in titles)
     assert {frozenset(t.segment_map or []) for t in decoys} == {frozenset(feature.segment_map)}
     assert len({tuple(t.segment_map or []) for t in decoys}) == 299
-    assert [t.index for t in decoys if t.comment] == [0]
+    assert [t.index for t in decoys if t.playlist_name] == [0]
 
 
 def test_decoy_scan_titles_json_matches_parser():
