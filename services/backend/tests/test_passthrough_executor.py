@@ -11,6 +11,8 @@ rollups cannot tell the difference.
 
 from __future__ import annotations
 
+import errno
+import hashlib
 from pathlib import Path
 from typing import Any
 
@@ -26,6 +28,7 @@ from arm_common import (
     TranscodeTaskStatus,
 )
 from arm_common.enums import TrackKind
+from arm_common.fileops import PlaceResult
 from tests._fakes import FakeSession
 
 
@@ -151,7 +154,7 @@ async def test_claim_mirrors_claim_router_side_effects(tmp_path: Path, monkeypat
     seen_during_move: dict[str, Any] = {}
     real_transcode_none = mod.transcode_none
 
-    def _spy(input_path: Path, output_path: Path, **kwargs: Any) -> int:
+    def _spy(input_path: Path, output_path: Path, **kwargs: Any) -> PlaceResult:
         seen_during_move["app_status"] = application.status
         seen_during_move["progress_pct"] = task.progress_pct
         seen_during_move["events"] = [e["event_type"] for e in sent]
@@ -317,7 +320,7 @@ async def test_oserror_from_move_is_captured_as_last_error(tmp_path: Path, monke
 
     import arm_backend.passthrough_executor as mod
 
-    def _boom(_input: Path, _output: Path, **_kwargs: Any) -> int:
+    def _boom(_input: Path, _output: Path, **_kwargs: Any) -> PlaceResult:
         raise OSError("disk full")
 
     monkeypatch.setattr(mod, "transcode_none", _boom)
@@ -348,7 +351,7 @@ async def test_claim_is_committed_before_the_move_runs(tmp_path: Path, monkeypat
     commits_before_move: list[int] = []
     real_transcode_none = mod.transcode_none
 
-    def _spy_transcode_none(input_path: Path, output_path: Path, **kwargs: Any) -> int:
+    def _spy_transcode_none(input_path: Path, output_path: Path, **kwargs: Any) -> PlaceResult:
         commits_before_move.append(db.committed)
         return real_transcode_none(input_path, output_path, **kwargs)
 
@@ -379,7 +382,7 @@ async def test_row_deleted_mid_move_skips_terminal_update_cleanly(tmp_path: Path
 
     real_transcode_none = mod.transcode_none
 
-    def _delete_row_then_move(input_path: Path, output_path: Path, **kwargs: Any) -> int:
+    def _delete_row_then_move(input_path: Path, output_path: Path, **kwargs: Any) -> PlaceResult:
         # Simulate a concurrent cancel_running deleting the row (from a
         # different session) while this move is in flight.
         db.rows["transcode_tasks"] = [t for t in db.rows["transcode_tasks"] if t.id != task.id]
@@ -669,10 +672,10 @@ async def test_cancel_stops_an_in_flight_copy_and_keeps_the_raw_source(tmp_path:
     def _exdev(a: object, b: object) -> None:
         raise OSError(18, "Invalid cross-device link")
 
-    monkeypatch.setattr(fileops.os, "rename", _exdev)
+    monkeypatch.setattr(fileops.os, "link", _exdev)
     real_transcode_none = mod.transcode_none
 
-    def _cancel_then_move(input_path: Path, output_path: Path, **kwargs: Any) -> int:
+    def _cancel_then_move(input_path: Path, output_path: Path, **kwargs: Any) -> PlaceResult:
         assert mod.request_cancel("txt_1") is True  # what cancel_running does mid-copy
         return real_transcode_none(input_path, output_path, **kwargs)
 
@@ -704,7 +707,7 @@ async def test_copy_publishes_progress_while_it_runs(tmp_path: Path, monkeypatch
     monkeypatch.setattr(mod, "PROGRESS_INTERVAL_SECONDS", 0.01)
     seen_pct: list[int] = []
 
-    def _slow_copy(input_path: Path, output_path: Path, *, on_bytes: Any, **_kw: Any) -> int:
+    def _slow_copy(input_path: Path, output_path: Path, *, on_bytes: Any, **_kw: Any) -> PlaceResult:
         on_bytes(50)
         # Hold the copy at 50 % until the row shows it.
         for _ in range(500):
@@ -714,7 +717,7 @@ async def test_copy_publishes_progress_while_it_runs(tmp_path: Path, monkeypatch
         seen_pct.append(db.rows["transcode_tasks"][0].progress_pct)
         output_path.parent.mkdir(parents=True, exist_ok=True)
         input_path.rename(output_path)
-        return 100
+        return PlaceResult(size=100, sha256="0" * 64, linked=True)
 
     monkeypatch.setattr(mod, "transcode_none", _slow_copy)
     ok = await execute_passthrough_task(db, task, hub, _settings(MEDIA_ROOT=str(media_root)))
@@ -750,12 +753,12 @@ async def test_a_failing_progress_publish_does_not_strand_the_task(tmp_path: Pat
 
     monkeypatch.setattr(mod, "PROGRESS_INTERVAL_SECONDS", 0.01)
 
-    def _slow_copy(input_path: Path, output_path: Path, *, on_bytes: Any, **_kw: Any) -> int:
+    def _slow_copy(input_path: Path, output_path: Path, *, on_bytes: Any, **_kw: Any) -> PlaceResult:
         on_bytes(50)
         progress_tried.wait(5)
         output_path.parent.mkdir(parents=True, exist_ok=True)
         input_path.rename(output_path)
-        return 100
+        return PlaceResult(size=100, sha256="0" * 64, linked=True)
 
     monkeypatch.setattr(mod, "transcode_none", _slow_copy)
     ok = await execute_passthrough_task(db, task, hub, _settings(MEDIA_ROOT=str(tmp_path / "media")))
@@ -843,3 +846,119 @@ async def test_progress_publisher_stops_after_a_failed_write(monkeypatch: Any, c
 
     assert db.call_log[-1] == "rollback" and sent == []
     assert "progress write failed task_id=txt_1" in caplog.text
+
+
+def _file_case(tmp_path: Path, data: bytes = b"data") -> tuple[Path, Path, Any]:
+    raw = tmp_path / "raw" / "job1" / "t0.mkv"
+    raw.parent.mkdir(parents=True)
+    raw.write_bytes(data)
+    db = _db(track_output_path=str(raw), task_output_path="Title (2020)/t0.mkv")
+    return raw, tmp_path / "media", db
+
+
+async def test_success_writes_track_sha256(tmp_path: Path) -> None:
+    raw, media_root, db = _file_case(tmp_path, b"some bytes")
+    hub, _sent = _hub_with_recorder()
+
+    ok = await execute_passthrough_task(db, db.rows["transcode_tasks"][0], hub, _settings(MEDIA_ROOT=str(media_root)))
+
+    assert ok is True
+    assert db.rows["tracks"][0].sha256 == hashlib.sha256(b"some bytes").hexdigest()
+
+
+async def test_cross_fs_copy_writes_track_sha256(tmp_path: Path, monkeypatch: Any) -> None:
+    from arm_common import fileops
+
+    raw, media_root, db = _file_case(tmp_path, b"copied bytes")
+    hub, _sent = _hub_with_recorder()
+
+    def _exdev(a: object, b: object) -> None:
+        raise OSError(errno.EXDEV, "Invalid cross-device link")
+
+    monkeypatch.setattr(fileops.os, "link", _exdev)
+    monkeypatch.setattr(fileops.os, "rename", _exdev)
+
+    ok = await execute_passthrough_task(db, db.rows["transcode_tasks"][0], hub, _settings(MEDIA_ROOT=str(media_root)))
+
+    assert ok is True and not raw.exists()
+    assert (media_root / "Title (2020)" / "t0.mkv").read_bytes() == b"copied bytes"
+    assert db.rows["tracks"][0].sha256 == hashlib.sha256(b"copied bytes").hexdigest()
+
+
+async def test_disc_backup_leaves_sha256_unset(tmp_path: Path) -> None:
+    raw = _backup_dir(tmp_path / "raw" / "job1" / "backup")
+    db = _db(track_output_path=str(raw), task_output_path="Iron Man (2008)", track_kind=TrackKind.DISC_BACKUP)
+    hub, _sent = _hub_with_recorder()
+
+    ok = await execute_passthrough_task(
+        db, db.rows["transcode_tasks"][0], hub, _settings(MEDIA_ROOT=str(tmp_path / "m"))
+    )
+
+    assert ok is True and db.rows["tracks"][0].sha256 is None
+
+
+async def test_failed_move_leaves_sha256_unchanged(tmp_path: Path, monkeypatch: Any) -> None:
+    import arm_backend.passthrough_executor as mod
+
+    _raw, media_root, db = _file_case(tmp_path)
+    db.rows["tracks"][0].sha256 = "old"
+    hub, _sent = _hub_with_recorder()
+
+    def _boom(_i: Path, _o: Path, **_kw: Any) -> PlaceResult:
+        raise OSError("disk full")
+
+    monkeypatch.setattr(mod, "transcode_none", _boom)
+    ok = await execute_passthrough_task(db, db.rows["transcode_tasks"][0], hub, _settings(MEDIA_ROOT=str(media_root)))
+
+    assert ok is False and db.rows["tracks"][0].sha256 == "old"
+
+
+async def test_cancel_leaves_sha256_unchanged(tmp_path: Path, monkeypatch: Any) -> None:
+    import arm_backend.passthrough_executor as mod
+
+    _raw, media_root, db = _file_case(tmp_path)
+    db.rows["tracks"][0].sha256 = "old"
+    hub, _sent = _hub_with_recorder()
+    real = mod.transcode_none
+
+    def _cancel_then_move(i: Path, o: Path, **kw: Any) -> PlaceResult:
+        assert mod.request_cancel("txt_1") is True
+        return real(i, o, **kw)
+
+    monkeypatch.setattr(mod, "transcode_none", _cancel_then_move)
+    ok = await execute_passthrough_task(db, db.rows["transcode_tasks"][0], hub, _settings(MEDIA_ROOT=str(media_root)))
+
+    assert ok is False and db.rows["tracks"][0].sha256 == "old"
+
+
+async def test_track_deleted_mid_move_still_completes_task(tmp_path: Path, monkeypatch: Any) -> None:
+    import arm_backend.passthrough_executor as mod
+
+    _raw, media_root, db = _file_case(tmp_path)
+    hub, _sent = _hub_with_recorder()
+    task = db.rows["transcode_tasks"][0]
+    real = mod.transcode_none
+
+    def _delete_track_then_move(i: Path, o: Path, **kw: Any) -> PlaceResult:
+        db.rows["tracks"] = []  # the track was cascade-deleted while the file moved
+        return real(i, o, **kw)
+
+    monkeypatch.setattr(mod, "transcode_none", _delete_track_then_move)
+    ok = await execute_passthrough_task(db, task, hub, _settings(MEDIA_ROOT=str(media_root)))
+
+    assert ok is True and task.status == TranscodeTaskStatus.DONE
+
+
+def test_link_path_reports_hash_progress(tmp_path: Path) -> None:
+    from arm_backend.passthrough_executor import _CopyProgress, _move_and_chown
+    import threading
+
+    raw = tmp_path / "raw" / "t0.mkv"
+    raw.parent.mkdir(parents=True)
+    raw.write_bytes(b"x" * 100)
+    progress = _CopyProgress()
+
+    size, sha256 = _move_and_chown(raw, tmp_path / "media" / "t0.mkv", _settings(), False, threading.Event(), progress)
+
+    assert (size, sha256) == (100, hashlib.sha256(b"x" * 100).hexdigest())
+    assert progress.total == 100 and progress.done == 100

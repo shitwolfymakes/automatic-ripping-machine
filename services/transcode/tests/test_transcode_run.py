@@ -211,11 +211,18 @@ async def test_success(h: Harness) -> None:
     assert h.names()[-1] == "close"
 
 
-async def test_no_preset_uses_tool_none(h: Harness) -> None:
+async def test_none_tool_fails_task_passthrough_runs_in_backend(h: Harness) -> None:
+    h.response.transcode_preset = _handbrake_preset(preset_ref="x").model_copy(update={"tool": TranscodeTool.NONE})
+    assert await m.run() == 1
+    assert h.fail_kwargs == [(("t1",), {"last_error": "passthrough runs in the backend"})]
+    assert h.encoder_kwargs == {} and "complete" not in h.names()
+
+
+async def test_no_preset_fails_task_passthrough_runs_in_backend(h: Harness) -> None:
     h.response.transcode_preset = None  # type: ignore[assignment]
-    assert await m.run() == 0
-    assert h.encoder_kwargs["tool"] == TranscodeTool.NONE
-    assert h.encoder_kwargs["preset"] is None
+    assert await m.run() == 1
+    assert h.fail_kwargs == [(("t1",), {"last_error": "passthrough runs in the backend"})]
+    assert h.encoder_kwargs == {} and h.names()[-1] == "close"
 
 
 async def test_no_output_path_falls_back_to_media_root(h: Harness) -> None:
