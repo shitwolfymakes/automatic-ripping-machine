@@ -330,6 +330,7 @@
 		{#if sections.isOpen('info')}
 			<JobInfoForm
 				{job}
+				{isTv}
 				focusField={sections.infoFocus}
 				onsaved={(c) => {
 					if (isTv && (c.season || c.disc)) matching.start();
@@ -349,6 +350,7 @@
 						{tracks}
 						{scanTitles}
 						{isVideo}
+						{isTv}
 						{isMusic}
 						fileNames={reviewData.fileNames}
 						onrefresh={() => {

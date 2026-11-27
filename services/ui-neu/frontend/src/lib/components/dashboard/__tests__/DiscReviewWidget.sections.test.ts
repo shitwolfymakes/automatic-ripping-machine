@@ -377,14 +377,14 @@ describe('DiscReviewWidget sections', () => {
 
 		it("puts the preview's file names in the tracks table", async () => {
 			mockPreview.mockResolvedValue({ items: [{ track_id: 'trk_1', output_name: 'Kolchak S01E01.mkv' }] } as never);
-			renderCard({}, { tracks: withTrack });
+			renderCard({ media_type: 'tv' }, { tracks: withTrack });
 			await fireEvent.click(await screen.findByRole('button', { name: 'Info' }));
 			expect(await screen.findByTestId('track-generated-name')).toHaveTextContent('Kolchak S01E01.mkv');
 		});
 
 		it('shows no file names when the preview has no items', async () => {
 			mockPreview.mockResolvedValue({} as never);
-			renderCard({}, { tracks: withTrack });
+			renderCard({ media_type: 'tv' }, { tracks: withTrack });
 			await waitFor(() => expect(mockPreview).toHaveBeenCalled());
 			await new Promise((r) => setTimeout(r, 0));
 			await fireEvent.click(await screen.findByRole('button', { name: 'Info' }));

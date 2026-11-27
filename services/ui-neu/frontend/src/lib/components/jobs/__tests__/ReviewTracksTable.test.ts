@@ -29,6 +29,7 @@ describe('ReviewTracksTable', () => {
 				job: createJob({ media_type: 'tv' }),
 				tracks: [track({ expected_duration_seconds: 3093 })],
 				isVideo: true,
+				isTv: true,
 				isMusic: false
 			}
 		});
@@ -54,6 +55,7 @@ describe('ReviewTracksTable', () => {
 					track({ id: 'trk_6', index: 6, source_ref: '6', duration_seconds: 2990 })
 				],
 				isVideo: true,
+				isTv: true,
 				isMusic: false
 			}
 		});
@@ -73,6 +75,7 @@ describe('ReviewTracksTable', () => {
 				tracks: [track({ id: 'trk_0', role: 'episode', episode_number: 1, episode_name: 'The Ripper' })],
 				fileNames: new Map([['trk_0', 'Kolchak - S01E01 - The Ripper.mkv']]),
 				isVideo: true,
+				isTv: true,
 				isMusic: false
 			}
 		});
@@ -82,7 +85,13 @@ describe('ReviewTracksTable', () => {
 
 	it('the Include box leaves a track out of the output', async () => {
 		renderComponent(ReviewTracksTable, {
-			props: { job: createJob({ media_type: 'tv' }), tracks: [track({ id: 'trk_0' })], isVideo: true, isMusic: false }
+			props: {
+				job: createJob({ media_type: 'tv' }),
+				tracks: [track({ id: 'trk_0' })],
+				isVideo: true,
+				isTv: true,
+				isMusic: false
+			}
 		});
 		const box = screen.getByRole('checkbox', { name: 'Include track 0' });
 		expect(box).toBeChecked();

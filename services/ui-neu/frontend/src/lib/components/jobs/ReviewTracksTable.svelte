@@ -22,12 +22,13 @@
 		tracks: TrackView[];
 		scanTitles?: ScanTitle[];
 		isVideo: boolean;
+		isTv: boolean;
 		isMusic: boolean;
 		/** The generated file name per track id, when a session names them: shown as the episode. */
 		fileNames?: Map<string, string>;
 		onrefresh?: () => void;
 	}
-	let { job, tracks, scanTitles = [], isVideo, isMusic, fileNames = new Map(), onrefresh }: Props = $props();
+	let { job, tracks, scanTitles = [], isVideo, isTv, isMusic, fileNames = new Map(), onrefresh }: Props = $props();
 
 	// Materialized tracks always win; scanned titles are the pre-rip fallback.
 	let refIndex = $derived(refIndexOf(tracks));
@@ -109,7 +110,7 @@
 				<span class="review-tracks-table-faint">-</span>
 			{/if}
 		</td>
-		{#if isVideo}
+		{#if isTv}
 			<td class="table-cell">
 				{#if trackId && fileNames.get(trackId)}
 					<!-- A session names the track: the generated name is the episode. -->
@@ -215,7 +216,7 @@
 						<tr>
 							<th class="table-header">#</th>
 							<th class="table-header">{isMusic ? 'Name' : 'Title'}</th>
-							{#if isVideo}<th class="table-header">Episode</th>{/if}
+							{#if isTv}<th class="table-header">Episode</th>{/if}
 							<th class="table-header">Length</th>
 							<th class="table-header">Size</th>
 							<th class="table-header">Include</th>

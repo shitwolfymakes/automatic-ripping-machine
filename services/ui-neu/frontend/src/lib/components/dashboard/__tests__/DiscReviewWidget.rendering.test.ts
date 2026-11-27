@@ -274,9 +274,11 @@ describe('DiscReviewWidget', () => {
 
 		it('persists an episode-number edit via updateTrack bulk-PATCH', async () => {
 			mockFetchJob.mockResolvedValue(
-				detail({ disc_type: 'bluray' }, [createTrack({ id: 'trk_1', index: 0, source_ref: 't00.mkv', title: 'Ep' })])
+				detail({ disc_type: 'bluray', media_type: 'tv' }, [
+					createTrack({ id: 'trk_1', index: 0, source_ref: 't00.mkv', title: 'Ep' })
+				])
 			);
-			renderWidget({ id: 'job_3', disc_type: 'bluray' });
+			renderWidget({ id: 'job_3', disc_type: 'bluray', media_type: 'tv' });
 			// The tracks table lives at the bottom of the Info tab — open it first.
 			await waitFor(() => expect(screen.getByRole('button', { name: 'Info' })).toBeInTheDocument());
 			await fireEvent.click(screen.getByRole('button', { name: 'Info' }));
