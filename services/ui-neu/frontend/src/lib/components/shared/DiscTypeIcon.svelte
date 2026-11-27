@@ -2,9 +2,11 @@
 	interface Props {
 		disctype: string | null | undefined;
 		size?: string;
+		/** The disc type's name is written beside the icon: the icon adds no name of its own. */
+		decorative?: boolean;
 	}
 
-	let { disctype, size = 'h-6 w-6' }: Props = $props();
+	let { disctype, size = 'h-6 w-6', decorative = false }: Props = $props();
 
 	const iconMap: Record<string, { src: string; alt: string }> = {
 		dvd: { src: '/img/disc-dvd.svg', alt: 'DVD' },
@@ -17,4 +19,9 @@
 	let icon = $derived(iconMap[disctype ?? ''] ?? { src: '/img/disc-unknown.svg', alt: 'Unknown' });
 </script>
 
-<img src={icon.src} alt={icon.alt} class="{size} inline-block" title={icon.alt} />
+<img
+	src={icon.src}
+	alt={decorative ? '' : icon.alt}
+	class="{size} inline-block"
+	title={decorative ? undefined : icon.alt}
+/>

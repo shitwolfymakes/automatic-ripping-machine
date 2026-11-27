@@ -17,6 +17,14 @@ describe('DiscTypeIcon', () => {
 		expect(img).toHaveAttribute('src', src);
 	});
 
+	it('is decorative, with no name or tooltip of its own, beside its written label', () => {
+		const { container } = renderComponent(DiscTypeIcon, { props: { disctype: 'bluray', decorative: true } });
+		const img = container.querySelector('img');
+		expect(img).toHaveAttribute('alt', '');
+		expect(img).not.toHaveAttribute('title');
+		expect(img).toHaveAttribute('src', '/img/disc-bluray.svg');
+	});
+
 	it('renders null disctype as Unknown', () => {
 		renderComponent(DiscTypeIcon, { props: { disctype: null } });
 		const img = screen.getByAltText('Unknown');

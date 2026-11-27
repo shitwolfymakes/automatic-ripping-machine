@@ -66,7 +66,9 @@
 					<td class="job-active-row-detail-value">
 						{#if job.disc_type}
 							<span class="inline-flex items-center gap-1"
-								><DiscTypeIcon disctype={job.disc_type} size="h-3.5 w-3.5" />{discTypeLabel(job.disc_type)}</span
+								><DiscTypeIcon disctype={job.disc_type} size="h-3.5 w-3.5" decorative />{discTypeLabel(
+									job.disc_type
+								)}</span
 							>
 						{:else}
 							-

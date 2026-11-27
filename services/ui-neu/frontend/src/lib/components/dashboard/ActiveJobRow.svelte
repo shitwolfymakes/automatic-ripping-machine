@@ -133,7 +133,7 @@
 					>
 					{#if job.disc_type}
 						<span class="inline-flex items-center gap-0.5 job-active-row-disc-pill">
-							<DiscTypeIcon disctype={job.disc_type} size="h-3 w-3" />
+							<DiscTypeIcon disctype={job.disc_type} size="h-3 w-3" decorative />
 							{discTypeLabel(job.disc_type)}
 						</span>
 					{/if}
