@@ -76,12 +76,26 @@ def _apply_custom_filters(titles: list[ScanTitle], filters: TrackFilters) -> lis
     return candidates
 
 
+def _clip_seconds(scan: ScanResult) -> dict[int, float]:
+    """Seconds each clip plays, merged over every playlist and keyed by clip
+    number. A clip in several playlists takes the first playlist's value (disc
+    order). A playlist whose `clips` and `clip_seconds` lengths differ is
+    skipped whole, as its pairing cannot be trusted."""
+    merged: dict[int, float] = {}
+    for playlist in scan.playlists:
+        if len(playlist.clips) != len(playlist.clip_seconds):
+            continue
+        for clip, seconds in zip(playlist.clips, playlist.clip_seconds):
+            merged.setdefault(clip, seconds)
+    return merged
+
+
 def _classify(scan: ScanResult, preferred: frozenset[int]) -> dict[int, TitleVerdict]:
     """Verdicts for every title of a Blu-ray scan; `{}` for any other disc, which
     leaves every title a candidate."""
     if scan.disc_type != DiscType.BLURAY:
         return {}
-    return classify_titles(scan.titles, preferred=preferred)
+    return classify_titles(scan.titles, preferred=preferred, clip_seconds=_clip_seconds(scan))
 
 
 def _kept_titles(titles: list[ScanTitle], verdicts: dict[int, TitleVerdict]) -> list[ScanTitle]:
