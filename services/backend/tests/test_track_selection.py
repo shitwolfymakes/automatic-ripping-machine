@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 
 from arm_backend.track_selection import (
+    _clip_seconds,
     ALL_TRACKS_MIN_SECONDS,
     select_tracks,
     select_tracks_for_review,
@@ -20,7 +21,7 @@ from arm_common import (
     TrackKind,
     TrackSelection,
 )
-from arm_common.schemas import ScanResult, ScanTitle
+from arm_common.schemas import BdPlaylist, ScanResult, ScanTitle
 
 
 def _preset(rule: TrackSelection) -> RipPreset:
@@ -350,3 +351,43 @@ def test_dvd_tracks_keep_source_file_but_have_no_verdict():
     assert all(t.title_class is None and t.title_class_ref is None for t in tracks)
     assert tracks[0].source_file == "00202.mpls"
     assert tracks[0].playlist_name == "FPL_MainFeature"
+
+
+def _playlist(name: str, clips: list[int], seconds: list[float]) -> BdPlaylist:
+    return BdPlaylist(name=name, clips=clips, clip_seconds=seconds, duration_seconds=int(sum(seconds)), chapter_count=0)
+
+
+def test_clip_seconds_empty_without_playlists():
+    assert _clip_seconds(_edition_scan()) == {}
+
+
+def test_clip_seconds_one_playlist():
+    scan = _edition_scan().model_copy(update={"playlists": [_playlist("1.mpls", [1, 2], [10.0, 20.5])]})
+    assert _clip_seconds(scan) == {1: 10.0, 2: 20.5}
+
+
+def test_clip_seconds_first_playlist_wins_for_a_shared_clip():
+    playlists = [_playlist("1.mpls", [1, 2], [10.0, 20.0]), _playlist("2.mpls", [2, 3], [99.0, 30.0])]
+    scan = _edition_scan().model_copy(update={"playlists": playlists})
+    assert _clip_seconds(scan) == {1: 10.0, 2: 20.0, 3: 30.0}
+
+
+def test_clip_seconds_skips_a_playlist_with_mismatched_lists():
+    playlists = [_playlist("1.mpls", [1, 2, 3], [10.0, 20.0]), _playlist("2.mpls", [4], [40.0])]
+    scan = _edition_scan().model_copy(update={"playlists": playlists})
+    assert _clip_seconds(scan) == {4: 40.0}
+
+
+def _disclaimer_scan(playlists: list[BdPlaylist]) -> ScanResult:
+    # Title durations say the disclaimer cut adds 500 s; clip 9 is really 60 s.
+    titles = [_bd_title(0, 6000, [1, 2, 3]), _bd_title(1, 6500, [1, 2, 3, 9])]
+    return ScanResult(disc_type=DiscType.BLURAY, titles=titles, playlists=playlists)
+
+
+def test_clip_durations_turn_a_long_looking_cut_into_a_variant():
+    preset = _preset(TrackSelection.ARCHIVE)
+    without = select_tracks(_JOB, _disclaimer_scan([]), preset)
+    assert {t.index: t.title_class for t in without} == {0: TitleClass.EDITION, 1: TitleClass.EDITION}
+    playlist = _playlist("00001.mpls", [1, 2, 3, 9], [2000.0, 2000.0, 1940.0, 60.0])
+    with_clips = select_tracks(_JOB, _disclaimer_scan([playlist]), preset)
+    assert [(t.index, t.title_class) for t in with_clips] == [(0, TitleClass.PRIMARY)]
