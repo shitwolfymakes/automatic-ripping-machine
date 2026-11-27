@@ -12,6 +12,10 @@ import type { LogEntry } from '$lib/api/logs';
 // evaluated and reports no gap; only its true outcome is unreachable.
 // (The scroll check's null-view return, which a user can't reach here either,
 // lives in FollowScroll, whose own tests cover it.)
+// The coverage tool reports one open arm that is Svelte's: the terminal's
+// `class="{maxHeightClass} log-view-terminal"` compiles to
+// `(maxHeightClass) ?? ''`, and maxHeightClass has a default, so it is never
+// null.
 // jsdom does not implement isContentEditable (it is undefined on every
 // element), so the contentEditable test defines it on the element with
 // Object.defineProperty, as a browser reports it.
