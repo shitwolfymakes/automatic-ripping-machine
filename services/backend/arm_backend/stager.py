@@ -24,7 +24,7 @@ from enum import StrEnum
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from sqlalchemy import update
+from sqlalchemy import delete, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import col, select
 
@@ -54,6 +54,8 @@ logger = logging.getLogger("arm_backend.stager")
 IDLE_POLL_SECONDS = 5.0
 # How often a running copy's progress is published and its stall checked.
 PROGRESS_INTERVAL_SECONDS = 2.0
+# How long `cancel_job` waits for a copy to stop at its next chunk boundary.
+CANCEL_WAIT_SECONDS = 10.0
 SOURCE_MISSING = "raw source missing"
 _ERROR_CHARS = 300
 
@@ -298,6 +300,10 @@ class _StageRun:
         self.clock = clock
         self.cancel = cancel
         self.stalled = False
+        # Known once the row is read; `job_cancelled` means the job went away (delete or abandon).
+        self.job_id: str | None = None
+        self.job_cancelled = False
+        self.finished = asyncio.Event()
         self._db_factory = db_factory
 
     async def run(self) -> None:
@@ -309,6 +315,13 @@ class _StageRun:
                 await self._place()
         except _StageGone:
             logger.info("stage_id=%s deleted mid-run; nothing to record", self.stage_id)
+        finally:
+            self.finished.set()
+
+    def cancel_for_job(self) -> None:
+        """The job is gone: stop the copy at its next chunk boundary and discard what it wrote."""
+        self.job_cancelled = True
+        self.cancel.set()
 
     @contextlib.asynccontextmanager
     async def stage_txn(self) -> AsyncIterator[tuple[AsyncSession, TrackStage]]:
@@ -327,6 +340,7 @@ class _StageRun:
     async def _prepare(self) -> _Plan | None:
         """Read the claimed row, stamping the source on a first run. None when the source is gone."""
         async with self.stage_txn() as (db, stage):
+            self.job_id = stage.job_id
             source = Path(stage.source_path)
             current = _current_stamp(source)
             if current is None:
@@ -379,7 +393,9 @@ class _StageRun:
 
     async def _settle(self, outcome: PlaceResult | CopyCancelled | OSError) -> None:
         """Pick the terminal transition for how the placement ended."""
-        if self.stalled:
+        if self.job_cancelled:
+            await asyncio.to_thread(_remove_staged_files, self.plan.dest)
+        elif self.stalled:
             await self._after_stall()
         elif isinstance(outcome, PlaceResult):
             await self._commit_staged(outcome)
@@ -500,6 +516,7 @@ class TrackStager:
         self._exited = asyncio.Event()
         self._running = False
         self._cancel = threading.Event()
+        self._active: _StageRun | None = None
 
     def wake(self) -> None:
         """New work may be waiting."""
@@ -535,11 +552,37 @@ class TrackStager:
             stage_id = await self._claim()
             if stage_id is None:
                 return False
-            await _StageRun(stage_id, self._settings, self._hub, self._db_factory, self._cancel, self._clock).run()
+            await self._run_stage(stage_id)
         except Exception:
             logger.exception("stager pass failed")
             return False
         return True
+
+    async def _run_stage(self, stage_id: str) -> None:
+        run = _StageRun(stage_id, self._settings, self._hub, self._db_factory, self._cancel, self._clock)
+        self._active = run
+        try:
+            await run.run()
+        finally:
+            self._active = None
+
+    async def cancel_job(self, job_id: str, *, wait: float = CANCEL_WAIT_SECONDS) -> None:
+        """Stop staging a job that is going away: drop its stage rows, then stop its running copy.
+
+        The rows go first, so nothing of the job can be claimed again and a claim already made finds
+        its row gone. A copy in flight stops at a chunk boundary and removes its own files; this
+        returns once it has (or after `wait` seconds, logged), so the caller can remove the folder."""
+        async with self._db_factory() as db:
+            await db.execute(delete(TrackStage).where(col(TrackStage.job_id) == job_id))
+            await db.commit()
+        run = self._active
+        if run is None or run.job_id != job_id:
+            return
+        run.cancel_for_job()
+        try:
+            await asyncio.wait_for(run.finished.wait(), wait)
+        except TimeoutError:
+            logger.warning("stage copy for job_id=%s did not stop within %.1f s", job_id, wait)
 
     async def _claim(self) -> str | None:
         async with self._db_factory() as db:
@@ -554,6 +597,12 @@ def set_active_stager(stager: TrackStager | None) -> None:
     """Publish the running stager (or clear it)."""
     global _active_stager
     _active_stager = stager
+
+
+async def cancel_job_staging(job_id: str) -> None:
+    """Stop and forget the running stager's work for a job that is being deleted or abandoned."""
+    if _active_stager is not None:
+        await _active_stager.cancel_job(job_id)
 
 
 def wake_active_stager() -> None:

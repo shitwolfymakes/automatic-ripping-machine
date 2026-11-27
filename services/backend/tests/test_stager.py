@@ -21,6 +21,7 @@ from arm_backend.stager import (
     TrackStager,
     _Plan,
     _StageProgress,
+    cancel_job_staging,
     claim_next_stage,
     eta_seconds,
     error_text,
@@ -648,3 +649,120 @@ def test_a_stamp_helper_reads_unreadable_paths_as_none(tmp_path: Path) -> None:
     assert stager._current_stamp(tmp_path / "gone") is None
     assert stager._file_size(tmp_path / "gone") is None
     assert stager._file_size(tmp_path) is not None
+
+
+# --- a job going away (delete or abandon) ---------------------------------------------------
+
+
+def _copying_place(outcome: str, started: threading.Event) -> Any:
+    """A `place_staged` that leaves a temp file, then waits for the cancel and ends as `outcome` says."""
+
+    def place(plan: _Plan, cancel: threading.Event, progress: _StageProgress, on_checkpoint: Any) -> PlaceResult:
+        plan.dest.parent.mkdir(parents=True, exist_ok=True)
+        fileops.inprogress_path(plan.dest).write_bytes(b"partial")
+        started.set()
+        assert cancel.wait(5), "the cancel never reached the copy"
+        if outcome == "cancelled":
+            raise CopyCancelled("job gone")
+        plan.dest.write_bytes(b"whole")
+        return PlaceResult(size=5, sha256="late", linked=False)
+
+    return place
+
+
+@pytest.mark.parametrize("outcome", ["cancelled", "finished"])
+async def test_cancelling_a_job_stops_its_copy_and_leaves_no_file_or_row(
+    env: Env, monkeypatch: pytest.MonkeyPatch, outcome: str
+) -> None:
+    stage_id = await seed_stage(env)
+    started = threading.Event()
+    monkeypatch.setattr(stager, "place_staged", _copying_place(outcome, started))
+    worker = _stager(env)
+    task = asyncio.ensure_future(worker._work_once())
+    await asyncio.to_thread(started.wait, 5)
+    dest = _dest(env)
+    assert fileops.inprogress_path(dest).exists()
+
+    await asyncio.wait_for(worker.cancel_job(JOB), 5)
+
+    assert await asyncio.wait_for(task, 5) is True
+    assert not fileops.inprogress_path(dest).exists()
+    assert not dest.exists()
+    async with env.factory() as db:
+        assert await db.get(TrackStage, stage_id) is None
+    assert "stage.failed" not in env.hub.types()
+
+
+async def test_cancelling_a_job_does_not_touch_another_jobs_copy(env: Env, monkeypatch: pytest.MonkeyPatch) -> None:
+    stage_id = await seed_stage(env)
+    started = threading.Event()
+    monkeypatch.setattr(stager, "place_staged", _copying_place("cancelled", started))
+    worker = _stager(env)
+    task = asyncio.ensure_future(worker._work_once())
+    await asyncio.to_thread(started.wait, 5)
+
+    await worker.cancel_job("job_other")
+
+    assert not worker._cancel.is_set()
+    assert fileops.inprogress_path(_dest(env)).exists()
+    await asyncio.wait_for(worker.stop(), 5)
+    await asyncio.wait_for(task, 5)
+    assert (await load_stage(env, stage_id)).status == StageStatus.PENDING
+
+
+async def test_cancelling_a_job_with_no_copy_running_drops_its_claimable_rows(env: Env) -> None:
+    stage_id = await seed_stage(env)
+    worker = _stager(env)
+    await worker.cancel_job(JOB)
+    async with env.factory() as db:
+        assert await db.get(TrackStage, stage_id) is None
+        assert await claim_next_stage(db, env.hub) is None  # type: ignore[arg-type]
+
+
+async def test_a_claim_whose_row_was_dropped_before_it_started_places_nothing(
+    env: Env, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    stage_id = await seed_stage(env)
+    placed: list[str] = []
+    monkeypatch.setattr(stager, "place_staged", lambda *a: placed.append("x"))
+    worker = _stager(env)
+    async with env.factory() as db:
+        assert await claim_next_stage(db, env.hub) == stage_id  # type: ignore[arg-type]
+    await worker.cancel_job(JOB)  # between the claim and the run's first read
+    await stager._StageRun(stage_id, env.settings, env.hub, env.factory, threading.Event(), lambda: 0.0).run()  # type: ignore[arg-type]
+    assert placed == []
+
+
+async def test_a_copy_that_will_not_stop_is_logged_after_the_bounded_wait(
+    env: Env, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    await seed_stage(env)
+    started, release = threading.Event(), threading.Event()
+
+    def place(plan: _Plan, cancel: threading.Event, progress: _StageProgress, on_checkpoint: Any) -> PlaceResult:
+        started.set()
+        assert release.wait(5)
+        raise CopyCancelled("late")
+
+    monkeypatch.setattr(stager, "place_staged", place)
+    worker = _stager(env)
+    task = asyncio.ensure_future(worker._work_once())
+    await asyncio.to_thread(started.wait, 5)
+    with caplog.at_level(logging.WARNING, logger="arm_backend.stager"):
+        await worker.cancel_job(JOB, wait=0.05)
+    assert "did not stop" in caplog.text
+    release.set()
+    assert await asyncio.wait_for(task, 5) is True
+
+
+async def test_the_active_stager_hook_cancels_a_job_and_tolerates_none(env: Env) -> None:
+    stage_id = await seed_stage(env)
+    await cancel_job_staging(JOB)  # none published: a no-op
+    assert (await load_stage(env, stage_id)).status == StageStatus.PENDING
+    set_active_stager(_stager(env))
+    try:
+        await cancel_job_staging(JOB)
+    finally:
+        set_active_stager(None)
+    async with env.factory() as db:
+        assert await db.get(TrackStage, stage_id) is None
