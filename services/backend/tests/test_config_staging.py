@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 import pytest
@@ -41,9 +42,25 @@ def test_effective_staging_host_path_defaults_to_raw_subdir() -> None:
     assert effective_staging_host_path(_cfg(ARM_HOST_RAW_PATH="/data/raw")) == "/data/raw/.staging"
 
 
-def test_effective_staging_host_path_prefers_the_configured_path() -> None:
-    cfg = _cfg(ARM_HOST_RAW_PATH="/data/raw", ARM_HOST_STAGING_PATH="/mnt/stage")
-    assert effective_staging_host_path(cfg) == "/mnt/stage"
+@pytest.mark.parametrize(
+    ("host_staging", "host_mount", "backend_root"),
+    [
+        ("", "/data/raw/.staging", "/raw/.staging"),  # unset
+        ("/data/raw", "/data/raw/.staging", "/raw/.staging"),  # equal to raw: raw is no staging area
+        ("/data/raw/", "/data/raw/.staging", "/raw/.staging"),  # equal to raw, trailing slash
+        ("/data/raw/stage/here", "/data/raw/stage/here", "/raw/stage/here"),  # a subpath of raw
+        ("/data/raw//x/../y", "/data/raw/y", "/raw/y"),  # normalised like the backend side
+        ("/mnt/stage", "/mnt/stage", "/staging"),  # outside raw
+    ],
+)
+def test_transcoder_mounts_the_folder_the_backend_stages_into(
+    host_staging: str, host_mount: str, backend_root: str
+) -> None:
+    cfg = _cfg(ARM_HOST_RAW_PATH="/data/raw", ARM_HOST_STAGING_PATH=host_staging)
+    assert effective_staging_host_path(cfg) == host_mount
+    assert staging_root(cfg) == Path(backend_root)
+    if staging_inside_raw(cfg):  # one folder seen from both sides: host raw <-> backend raw
+        assert os.path.relpath(host_mount, "/data/raw") == os.path.relpath(backend_root, "/raw")
 
 
 @pytest.mark.parametrize(
