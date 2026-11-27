@@ -11,6 +11,11 @@ from fastapi.testclient import TestClient
 from arm_backend import image_cache
 from arm_backend.routers import images as images_router
 
+# Bodies that open with each format's signature, as the proxy reads the type from the bytes.
+JPEG = b"\xff\xd8\xff\xe0" + b"IMG"
+PNG = b"\x89PNG\r\n\x1a\n" + b"IMG"
+WEBP = b"RIFF\x00\x00\x00\x00WEBPVP8 " + b"IMG"
+
 
 @pytest.fixture
 def client(tmp_path, monkeypatch):
@@ -40,7 +45,7 @@ class _FakeStreamResp:
             yield self._content[i : i + 4096]
 
 
-def _patch_fetch(monkeypatch, *, content=b"IMG", content_type="image/png", raise_error=False):
+def _patch_fetch(monkeypatch, *, content=PNG, content_type="image/png", raise_error=False):
     class _FakeStreamCtx:
         def __init__(self, resp, raise_error):
             self._resp = resp
@@ -81,10 +86,10 @@ def test_extra_image_host_not_rejected(client, monkeypatch):
     # hit the "not allowed" SSRF-guard path. It proceeds to the fetch (which we
     # stub to succeed), proving the host is accepted, not rejected.
     monkeypatch.setattr(images_router.settings, "ARM_EXTRA_IMAGE_HOSTS", ["posters.lan"])
-    _patch_fetch(monkeypatch, content=b"IMG", content_type="image/png")
+    _patch_fetch(monkeypatch, content=PNG, content_type="image/png")
     r = client.get("/api/images/proxy", params={"url": "https://posters.lan/x.jpg"})
     assert r.status_code == 200
-    assert r.content == b"IMG"
+    assert r.content == PNG
 
 
 def test_rejects_non_http_scheme(client):
@@ -94,24 +99,64 @@ def test_rejects_non_http_scheme(client):
 
 
 def test_fetches_caches_and_serves_allowlisted(client, monkeypatch):
-    _patch_fetch(monkeypatch, content=b"IMG", content_type="image/png")
+    _patch_fetch(monkeypatch, content=PNG, content_type="image/png")
     url = "https://image.tmdb.org/t/p/w500/x.jpg"
     r = client.get("/api/images/proxy", params={"url": url})
     assert r.status_code == 200
-    assert r.content == b"IMG"
+    assert r.content == PNG
     assert r.headers["content-type"] == "image/png"
     assert "max-age=604800" in r.headers["cache-control"]
     _patch_fetch(monkeypatch, raise_error=True)
     r2 = client.get("/api/images/proxy", params={"url": url})
     assert r2.status_code == 200
-    assert r2.content == b"IMG"
+    assert r2.content == PNG
 
 
-def test_unsafe_content_type_coerced(client, monkeypatch):
-    _patch_fetch(monkeypatch, content=b"IMG", content_type="text/html")
+@pytest.mark.parametrize(
+    ("body", "expected_type"),
+    [
+        (JPEG, "image/jpeg"),
+        (PNG, "image/png"),
+        (b"GIF87a" + b"IMG", "image/gif"),
+        (b"GIF89a" + b"IMG", "image/gif"),
+        (WEBP, "image/webp"),
+    ],
+)
+@pytest.mark.parametrize("declared", ["text/html", "application/octet-stream", "image/jpeg; charset=utf-8"])
+def test_content_type_comes_from_the_body_not_the_header(client, monkeypatch, body, expected_type, declared):
+    _patch_fetch(monkeypatch, content=body, content_type=declared)
     r = client.get("/api/images/proxy", params={"url": "https://coverartarchive.org/x"})
     assert r.status_code == 200
-    assert r.headers["content-type"] == "image/jpeg"
+    assert r.headers["content-type"] == expected_type
+
+
+def test_webp_body_labelled_jpeg_is_served_as_webp(client, monkeypatch):
+    _patch_fetch(monkeypatch, content=WEBP, content_type="image/jpeg")
+    r = client.get("/api/images/proxy", params={"url": "https://coverartarchive.org/x"})
+    assert r.headers["content-type"] == "image/webp"
+
+
+@pytest.mark.parametrize("body", [b"<html>rate limited</html>", b"RIFF\x00\x00\x00\x00WAVEfmt ", b""])
+@pytest.mark.parametrize("declared", ["image/jpeg", "image/png", "text/html"])
+def test_non_image_body_is_refused_and_not_cached(client, monkeypatch, body, declared):
+    _patch_fetch(monkeypatch, content=body, content_type=declared)
+    url = "https://coverartarchive.org/release/r/front-500"
+    r = client.get("/api/images/proxy", params={"url": url})
+    assert r.status_code == 404
+    assert "not an image" in r.json()["detail"]
+    assert image_cache.retrieve(url) is None
+    assert url in images_router._NEGATIVE_CACHE
+
+
+def test_cached_non_image_body_is_refetched(client, monkeypatch):
+    url = "https://coverartarchive.org/release/r/front-500"
+    image_cache.store(url, b"<html>rate limited</html>", "image/jpeg")
+    _patch_fetch(monkeypatch, content=PNG, content_type="image/png")
+    r = client.get("/api/images/proxy", params={"url": url})
+    assert r.status_code == 200
+    assert r.content == PNG
+    assert r.headers["content-type"] == "image/png"
+    assert image_cache.retrieve(url) == (PNG, "image/png")
 
 
 def test_fetch_failure_negative_caches(client, monkeypatch):
@@ -145,7 +190,7 @@ def test_oversized_negative_cached(client, monkeypatch):
 
 
 def test_endpoint_requires_no_auth(client, monkeypatch):
-    _patch_fetch(monkeypatch, content=b"OK", content_type="image/webp")
+    _patch_fetch(monkeypatch, content=WEBP, content_type="image/webp")
     r = client.get("/api/images/proxy", params={"url": "https://image.tmdb.org/a.webp"})
     assert r.status_code == 200
 
@@ -289,7 +334,7 @@ def test_follows_caa_redirect_chain_to_image(client, monkeypatch):
         [
             (307, "https://archive.org/download/mbid-x/cover.jpg"),
             (302, "https://dn710304.ca.archive.org/0/items/mbid-x/cover.jpg"),
-            ("image", b"COVER", "image/jpeg"),
+            ("image", JPEG + b"COVER", "image/jpeg"),
         ],
     )
     r = client.get(
@@ -297,7 +342,7 @@ def test_follows_caa_redirect_chain_to_image(client, monkeypatch):
         params={"url": "https://coverartarchive.org/release/mbid-x/front"},
     )
     assert r.status_code == 200
-    assert r.content == b"COVER"
+    assert r.content == JPEG + b"COVER"
     assert r.headers["content-type"] == "image/jpeg"
 
 
@@ -309,7 +354,7 @@ def test_redirect_to_disallowed_host_blocked(client, monkeypatch):
         monkeypatch,
         [
             (307, "http://169.254.169.254/latest/meta-data/"),
-            ("image", b"SECRET", "image/jpeg"),
+            ("image", JPEG + b"SECRET", "image/jpeg"),
         ],
     )
     r = client.get(
@@ -317,7 +362,7 @@ def test_redirect_to_disallowed_host_blocked(client, monkeypatch):
         params={"url": "https://coverartarchive.org/release/mbid-x/front"},
     )
     assert r.status_code == 404
-    assert r.content != b"SECRET"
+    assert r.content != JPEG + b"SECRET"
 
 
 def test_redirect_loop_capped(client, monkeypatch):
@@ -335,13 +380,13 @@ def test_redirect_loop_capped(client, monkeypatch):
 
 def test_archive_org_subdomain_allowed_directly(client, monkeypatch):
     # The dynamic archive.org data-node host is suffix-allowlisted.
-    _patch_fetch(monkeypatch, content=b"IMG", content_type="image/jpeg")
+    _patch_fetch(monkeypatch, content=JPEG, content_type="image/jpeg")
     r = client.get(
         "/api/images/proxy",
         params={"url": "https://dn710304.ca.archive.org/0/items/mbid-x/cover.jpg"},
     )
     assert r.status_code == 200
-    assert r.content == b"IMG"
+    assert r.content == JPEG
 
 
 # --- cache failure must not break serving (cache is an optimization) ---
@@ -350,7 +395,7 @@ def test_archive_org_subdomain_allowed_directly(client, monkeypatch):
 def test_serves_image_when_cache_store_fails(client, monkeypatch):
     # A broken/unwritable cache dir (image_cache.store raises) must NOT 500 the
     # request — the freshly fetched image is still served.
-    _patch_fetch(monkeypatch, content=b"IMG", content_type="image/png")
+    _patch_fetch(monkeypatch, content=PNG, content_type="image/png")
 
     def _boom(*a, **k):
         raise OSError("cache dir unwritable")
@@ -358,13 +403,13 @@ def test_serves_image_when_cache_store_fails(client, monkeypatch):
     monkeypatch.setattr(images_router.image_cache, "store", _boom)
     r = client.get("/api/images/proxy", params={"url": "https://image.tmdb.org/x.png"})
     assert r.status_code == 200
-    assert r.content == b"IMG"
+    assert r.content == PNG
 
 
 def test_serves_image_when_cache_retrieve_fails(client, monkeypatch):
     # A read failure on the cache lookup must also fall through to a live fetch,
     # not 500.
-    _patch_fetch(monkeypatch, content=b"IMG", content_type="image/png")
+    _patch_fetch(monkeypatch, content=PNG, content_type="image/png")
 
     def _boom(*a, **k):
         raise OSError("cache dir unreadable")
@@ -372,7 +417,7 @@ def test_serves_image_when_cache_retrieve_fails(client, monkeypatch):
     monkeypatch.setattr(images_router.image_cache, "retrieve", _boom)
     r = client.get("/api/images/proxy", params={"url": "https://image.tmdb.org/y.png"})
     assert r.status_code == 200
-    assert r.content == b"IMG"
+    assert r.content == PNG
 
 
 # --- release -> release-group cover fallback (Picard model) ---
@@ -385,23 +430,46 @@ def test_release_404_falls_back_to_group(client, monkeypatch):
     # The proxy must serve the group cover (the art-less-pressing rescue).
     requested = _patch_fetch_recording(
         monkeypatch,
-        {"/release/rel-1/": "404", "/release-group/grp-1/": ("image", b"GROUPCOVER", "image/jpeg")},
+        {"/release/rel-1/": "404", "/release-group/grp-1/": ("image", JPEG + b"GROUPCOVER", "image/jpeg")},
     )
     r = client.get("/api/images/proxy", params={"url": f"{_RELEASE_URL}?fallback_group=grp-1"})
     assert r.status_code == 200
-    assert r.content == b"GROUPCOVER"
+    assert r.content == JPEG + b"GROUPCOVER"
     assert any("/release-group/grp-1/" in u for u in requested)
+    assert "https://coverartarchive.org/release-group/grp-1/front-250" in requested
+
+
+def test_group_fallback_keeps_the_requested_size(client, monkeypatch):
+    # The transcoder's cover asks for front-500; the album-wide fallback must not drop to the thumbnail.
+    requested = _patch_fetch_recording(
+        monkeypatch,
+        {"/release/rel-1/": "404", "/release-group/grp-1/": ("image", JPEG + b"GROUPCOVER", "image/jpeg")},
+    )
+    url = "https://coverartarchive.org/release/rel-1/front-500?fallback_group=grp-1"
+    r = client.get("/api/images/proxy", params={"url": url})
+    assert r.status_code == 200
+    assert requested[-1] == "https://coverartarchive.org/release-group/grp-1/front-500"
+
+
+def test_group_fallback_without_a_size_in_the_url_uses_the_thumbnail(client, monkeypatch):
+    requested = _patch_fetch_recording(
+        monkeypatch,
+        {"/release/rel-1/": "404", "/release-group/grp-1/": ("image", JPEG + b"GROUPCOVER", "image/jpeg")},
+    )
+    url = "https://coverartarchive.org/release/rel-1/front?fallback_group=grp-1"
+    assert client.get("/api/images/proxy", params={"url": url}).status_code == 200
+    assert requested[-1] == "https://coverartarchive.org/release-group/grp-1/front-250"
 
 
 def test_release_200_does_not_use_fallback(client, monkeypatch):
     # Release art exists -> serve it, never fetch the group (distinct covers).
     requested = _patch_fetch_recording(
         monkeypatch,
-        {"/release/rel-1/": ("image", b"RELEASECOVER", "image/jpeg"), "/release-group/grp-1/": "404"},
+        {"/release/rel-1/": ("image", JPEG + b"RELEASECOVER", "image/jpeg"), "/release-group/grp-1/": "404"},
     )
     r = client.get("/api/images/proxy", params={"url": f"{_RELEASE_URL}?fallback_group=grp-1"})
     assert r.status_code == 200
-    assert r.content == b"RELEASECOVER"
+    assert r.content == JPEG + b"RELEASECOVER"
     assert not any("/release-group/" in u for u in requested)
 
 
@@ -429,7 +497,7 @@ def test_release_404_skips_group_fallback_on_non_allowlisted_host(client, monkey
 
 def test_fallback_group_param_stripped_from_upstream_fetch(client, monkeypatch):
     # The upstream request URL must NOT carry fallback_group (clean request/cache key).
-    requested = _patch_fetch_recording(monkeypatch, {"/release/rel-1/": ("image", b"IMG", "image/jpeg")})
+    requested = _patch_fetch_recording(monkeypatch, {"/release/rel-1/": ("image", JPEG, "image/jpeg")})
     r = client.get("/api/images/proxy", params={"url": f"{_RELEASE_URL}?fallback_group=grp-1"})
     assert r.status_code == 200
     assert requested  # something was fetched
