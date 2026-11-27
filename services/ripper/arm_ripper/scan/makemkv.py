@@ -10,6 +10,7 @@ from typing import NamedTuple
 
 from arm_common import DiscType
 from arm_common.schemas import DiscFingerprintInput, ScanResult, ScanTitle
+from arm_ripper.scan.data import sniff_video_image
 from arm_ripper.scan.disc_probe import DiscProbe, probe_disc
 from arm_ripper.scan.makemkv_info import parse_makemkvcon_info
 from arm_ripper.source import makemkv_source_url
@@ -61,11 +62,19 @@ class ScanError(Exception):
 class MakemkvScanFailed(ScanError):
     """makemkvcon ran but its scan failed; carries why, and the last non-progress output."""
 
-    def __init__(self, reason: ScanFailureReason, detail: str, tail: tuple[str, ...]) -> None:
+    def __init__(
+        self,
+        reason: ScanFailureReason,
+        detail: str,
+        tail: tuple[str, ...],
+        disc_type: DiscType | None = None,
+    ) -> None:
         super().__init__(detail)
         self.reason = reason
         self.detail = detail
         self.tail = tail
+        # What kind of disc failed: MakeMKV's CINFO:1, else a layout sniff; None when neither knew.
+        self.disc_type = disc_type
 
 
 def _info_command(device_path: str) -> list[str]:
@@ -304,11 +313,21 @@ def _fingerprints(probe: DiscProbe) -> list[DiscFingerprintInput]:
     return fingerprints
 
 
+async def _failed_disc_type(device_path: str, stdout: list[str]) -> DiscType | None:
+    """The disc type of a scan that failed: MakeMKV's CINFO:1 when it got that far, else the video layout the
+    disc's directory names reveal; None when neither says."""
+    _label, _titles, cinfo_type = parse_makemkvcon_info(stdout)
+    if cinfo_type is not None:
+        return cinfo_type
+    return await asyncio.to_thread(sniff_video_image, device_path)
+
+
 async def scan_disc(device_path: str) -> ScanResult:
     run = await _run_info(device_path)
 
     failure = _failure_of(run)
     if failure is not None:
+        failure.disc_type = await _failed_disc_type(device_path, run.watch.stdout)
         raise failure
 
     volume_label, titles, mkv_disc_type = parse_makemkvcon_info(run.watch.stdout)

@@ -4,7 +4,7 @@ from pathlib import Path
 
 from arm_common import DiscType
 from arm_common.schemas import ScanResult
-from arm_ripper.source import is_folder_source, is_iso_source
+from arm_ripper.source import is_folder_source
 
 logger = logging.getLogger("arm_ripper.scan.data")
 
@@ -43,9 +43,9 @@ def sniff_video_image(path: str) -> DiscType | None:
 async def scan_data(device_path: str) -> ScanResult:
     """Last-resort fallback: read the volume label via blkid.
 
-    For an ISO source the image is also sniffed for a Blu-ray/DVD directory
-    layout, so an image MakeMKV cannot open still becomes a video job (with no
-    titles) rather than a data disc.
+    The image or disc is also sniffed for a Blu-ray/DVD directory layout, so
+    one MakeMKV listed no titles in still becomes a video job (with no titles)
+    rather than a data disc.
     """
     if is_folder_source(device_path):
         return _classify_folder(device_path)
@@ -92,14 +92,10 @@ async def _blkid_stdout(device_path: str) -> bytes | None:
 
 
 async def _sniffed_video_type(device_path: str) -> DiscType | None:
-    """The video disc type an ISO image's directory names reveal, logged when found; None for a device node or an
-    image without a Blu-ray / DVD layout.
+    """The video disc type an image's or disc's directory names reveal, logged when found; None for a source
+    without a Blu-ray / DVD layout.
     """
-    if not is_iso_source(device_path):
-        return None
     kind = await asyncio.to_thread(sniff_video_image, device_path)
     if kind is not None:
-        logger.info(
-            "image %s carries a %s layout; classifying as %s with no titles", device_path, kind.value, kind.value
-        )
+        logger.info("%s carries a %s layout; classifying as %s with no titles", device_path, kind.value, kind.value)
     return kind
