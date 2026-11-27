@@ -1,3 +1,15 @@
+// Every branch of RoutingMatrix's own code is covered. The coverage tool
+// still reports nine open arms that are Svelte's:
+// - Eight `(...) ?? ''` arms, one per `{...}` in a text or attribute value,
+//   and none of these values is ever null: the media and disc labels in each
+//   select's aria-label, the select's value (routeCellView gives '' for no
+//   route), and the Other-routes label and session name, in the row text and
+//   in the Clear button's aria-label (sessionNameFor falls back to the id).
+// - The skipped arm of the guard that rewrites an option's value only when
+//   s.id changes. The option's text and value share one effect, which runs
+//   again only if the session object changes under the same key. Nothing
+//   rewrites a loaded session in place, and a reload swaps the table for the
+//   loading line, so every option is built fresh and the effect runs once.
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { renderComponent, screen, fireEvent, cleanup, waitFor } from '$lib/testing/render';
 import type { SessionRouteView, SessionView } from '$lib/types/api.gen';

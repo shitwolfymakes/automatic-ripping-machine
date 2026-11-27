@@ -1,3 +1,7 @@
+// Every branch of AutoSaveToggle's own code is covered. The coverage tool
+// still reports one open arm that is Svelte's: the `setting-{key}` value of
+// the wrapper's id compiles to `(...) ?? ''`, and key is a required string,
+// so it is never null.
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { renderComponent, screen, fireEvent, cleanup } from '$lib/testing/render';
 import AutoSaveToggle from '../AutoSaveToggle.svelte';

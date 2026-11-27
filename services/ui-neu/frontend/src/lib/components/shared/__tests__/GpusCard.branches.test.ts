@@ -8,6 +8,13 @@ import { ApiError } from '$lib/api/client';
 // - The no-target early return in removeConfirmed: the only caller is the
 //   delete dialog's confirm button, and that dialog renders only while a
 //   delete target is set, so the target is always there when it runs.
+//
+// The coverage tool also reports eight open arms that are Svelte's: each
+// `{...}` in an attribute value compiles to `(...) ?? ''`, and none of these
+// values is ever null (GpuView types id, vendor and device_path as required).
+// They are g.id in the row's data-testid and in the probe error's data-testid,
+// and g.vendor and g.device_path in the Enable toggle's label and in the
+// Re-probe and Delete buttons' aria-labels.
 
 const mockFetchGpus = vi.fn();
 const mockUpdateGpu = vi.fn();
