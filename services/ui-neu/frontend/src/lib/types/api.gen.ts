@@ -4090,9 +4090,9 @@ export type RegisterTranscoderRequest = {
  *
  * Bootstrap bundle the transcoder needs before it can claim + run.
  *
- * `raw_input_path` is the absolute path the transcoder should read from
- * (`/raw/<job>/title_tNN.mkv` for video, `/raw/<job>/track_NN.wav` for
- * audio, `/raw/<job>/dump.iso` for data). `media_root` plus the task's
+ * `source_path` is the absolute path of the staged copy the transcoder should read from
+ * (`/staging/<job>/title_tNN.mkv` for video, `/staging/<job>/track_NN.wav` for
+ * audio, `/staging/<job>/dump.iso` for data). `media_root` plus the task's
  * `output_path` is where the final file lands.
  */
 export type RegisterTranscoderResponse = {
@@ -4101,9 +4101,9 @@ export type RegisterTranscoderResponse = {
     transcode_preset: TranscodePresetView | null;
     source_track: TrackView;
     /**
-     * Raw Input Path
+     * Source Path
      */
-    raw_input_path: string;
+    source_path: string;
     /**
      * Media Root
      */

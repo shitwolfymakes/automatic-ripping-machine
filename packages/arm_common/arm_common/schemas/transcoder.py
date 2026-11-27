@@ -41,9 +41,9 @@ class RegisterTranscoderRequest(BaseModel):
 class RegisterTranscoderResponse(BaseModel):
     """Bootstrap bundle the transcoder needs before it can claim + run.
 
-    `raw_input_path` is the absolute path the transcoder should read from
-    (`/raw/<job>/title_tNN.mkv` for video, `/raw/<job>/track_NN.wav` for
-    audio, `/raw/<job>/dump.iso` for data). `media_root` plus the task's
+    `source_path` is the absolute path of the staged copy the transcoder should read from
+    (`/staging/<job>/title_tNN.mkv` for video, `/staging/<job>/track_NN.wav` for
+    audio, `/staging/<job>/dump.iso` for data). `media_root` plus the task's
     `output_path` is where the final file lands.
     """
 
@@ -51,7 +51,7 @@ class RegisterTranscoderResponse(BaseModel):
     session: SessionView
     transcode_preset: TranscodePresetView | None
     source_track: TrackView
-    raw_input_path: str
+    source_path: str
     media_root: str
 
 

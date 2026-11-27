@@ -2,7 +2,7 @@
 
 Five endpoints per `03-protocol.md § Transcode container ↔ Backend`:
 - `POST /register` — bootstrap; transcoder receives the task, session, preset,
-  source track, and the `raw_input_path` it should read from.
+  source track, and the `source_path` it should read from.
 - `POST /tasks/{task_id}/claim` — atomic CAS to `in_progress`. First claim
   on a session_application also flips the application to RUNNING and emits
   `session.started`.
@@ -18,6 +18,7 @@ Five endpoints per `03-protocol.md § Transcode container ↔ Backend`:
 
 import logging
 from datetime import UTC, datetime
+from pathlib import Path
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -29,7 +30,9 @@ from arm_backend.gpu_claim import release_gpu_for_task
 from arm_backend.handbrake_schema_runner import HandbrakeSchemaRunner
 from arm_backend.handbrake_schema_store import SchemaStore, get_schema_store
 from arm_backend.preset_views import preset_view
+from arm_backend.config import Settings, staging_root
 from arm_backend.routers._deps import get_hub, get_schema_runner
+from arm_backend.staging import release_if_settled, stage_for_track, unlink_staged_copy
 from arm_backend.transcode_apply import settle_session_application
 from arm_backend.ws import WSHub
 from arm_common import (
@@ -37,6 +40,8 @@ from arm_common import (
     Session,
     SessionApplication,
     SessionApplicationStatus,
+    StageStatus,
+    TrackStage,
     TranscodePreset,
     TranscodeTask,
     TranscodeTaskStatus,
@@ -64,6 +69,21 @@ async def _load_task(db: AsyncSession, task_id: str) -> TranscodeTask:
     if row is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown transcode_task_id: {task_id}")
     return row
+
+
+_NOT_STAGED = "source not staged yet"
+
+
+def _require_staged(stage: TrackStage | None) -> TrackStage:
+    """The stage row when its copy is committed; 409 otherwise (no row, or still copying, failed, stalled)."""
+    if stage is None or stage.status != StageStatus.STAGED:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=_NOT_STAGED)
+    return stage
+
+
+def transcoder_source_path(stage: TrackStage, settings: Settings) -> str:
+    """The staged file as the transcoder sees it: under its `/staging` mount, whatever the backend's own path."""
+    return str(Path("/staging") / Path(stage.dest_path).relative_to(staging_root(settings)))
 
 
 def _require_owner(task: TranscodeTask, hostname: str | None) -> None:
@@ -130,11 +150,7 @@ async def register(
         ).scalar_one_or_none()
     track = (await db.execute(select(Track).where(col(Track.id) == task.source_track_id))).scalar_one()
 
-    if not track.output_path:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=f"source track {track.id} has no output_path on disk; rip not yet complete",
-        )
+    stage = _require_staged(await stage_for_track(db, track.id))
 
     _refuse_image_without_settings_support(req, transcode_preset)
     _request_schema_refresh(req, store, runner)
@@ -145,16 +161,20 @@ async def register(
         session=SessionView.model_validate(sess),
         transcode_preset=preset_view(transcode_preset, store.current(), gpus) if transcode_preset is not None else None,
         source_track=TrackView.model_validate(track),
-        raw_input_path=track.output_path,
+        source_path=transcoder_source_path(stage, request_settings()),
         media_root=media_root,
     )
 
 
-def request_media_root() -> str:
+def request_settings() -> Settings:
     # Imported lazily so test settings don't have to be hot-loaded just to import the router.
     from arm_backend.config import settings
 
-    return settings.MEDIA_ROOT
+    return settings
+
+
+def request_media_root() -> str:
+    return request_settings().MEDIA_ROOT
 
 
 @router.post("/tasks/{task_id}/claim", response_model=ClaimTaskResponse)
@@ -177,6 +197,7 @@ async def claim(
             status_code=status.HTTP_409_CONFLICT,
             detail=f"task is in status={task.status.value}, not queued",
         )
+    _require_staged(await stage_for_track(db, task.source_track_id))
 
     # The dispatcher's `FOR UPDATE SKIP LOCKED` spawn loop guarantees one
     # container per row, so the race window here is small. The natural-key
@@ -301,7 +322,9 @@ async def complete(
     )
 
     await settle_session_application(db, hub, application)
+    released = await release_if_settled(db, task.source_track_id)
     await db.commit()
+    unlink_staged_copy(released)
     await db.refresh(task)
     logger.info("transcode complete task_id=%s output=%s", task.id, task.output_path)
     return task

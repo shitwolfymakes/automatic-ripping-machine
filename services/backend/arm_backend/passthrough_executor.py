@@ -30,6 +30,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import col, select
 
 from arm_backend.config import Settings
+from arm_backend.staging import release_if_settled, unlink_staged_copy
 from arm_common import (
     SessionApplication,
     SessionApplicationStatus,
@@ -305,9 +306,11 @@ class _PassthroughRun:
             )
 
             await settle_session_application(self._db, self._hub, self._application)
+        released = await release_if_settled(self._db, self._source_track_id) if error is None else None
         # Commit the terminal state (+ any aggregate transition) as its own
         # transaction, separate from the claim commit above.
         await self._db.commit()
+        unlink_staged_copy(released)
         return error is None
 
     async def _refetch_task(self) -> TranscodeTask | None:
