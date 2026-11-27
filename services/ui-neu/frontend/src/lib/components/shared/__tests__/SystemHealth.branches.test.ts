@@ -3,7 +3,13 @@ import { renderComponent, screen, fireEvent, cleanup, waitFor, within } from '$l
 import SystemHealth from '../SystemHealth.svelte';
 
 // Branch pins for SystemHealth, beside SystemHealth.test.ts. Nothing here
-// forces a branch the component cannot reach; no branch is left open.
+// forces a branch the component cannot reach.
+//
+// Branches not forced (SystemHealthGrouped.svelte): the two `?? ''` fallbacks
+// Svelte compiles around `{tally.problemCount}` and
+// `{plural(tally.problemCount, 'problem')}` in the problem summary.
+// problemCount is always a number and plural always returns a string, so
+// neither is ever nullish.
 
 const fetchSystemDiagnostics = vi.fn();
 vi.mock('$lib/api/system', () => ({ fetchSystemDiagnostics: () => fetchSystemDiagnostics() }));

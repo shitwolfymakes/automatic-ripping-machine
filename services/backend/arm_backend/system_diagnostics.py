@@ -21,6 +21,7 @@ from arm_backend.makemkv_status import makemkv_state_detail
 from arm_backend.ripper_manager import RipperManager
 from arm_backend.transcode_dispatcher import TranscodeDispatcher
 from arm_backend.transcode_queue import count_queued_encode_tasks
+from arm_backend.url_masking import strip_userinfo
 from arm_backend.utils import default_roots
 from arm_common import (
     Config,
@@ -222,7 +223,8 @@ def _transcoder_location() -> tuple[str, str | None]:
     if not effective_transcode_capable(settings):
         return "none", None
     if remote:
-        return "remote", remote.removeprefix("ssh://").split("/", 1)[0] or None
+        # Mask before dropping the scheme: without one, strip_userinfo hides the host too.
+        return "remote", strip_userinfo(remote).removeprefix("ssh://").split("/", 1)[0] or None
     return "local", None
 
 

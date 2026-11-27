@@ -711,6 +711,35 @@ def test_backend_url_that_does_not_resolve(monkeypatch) -> None:
     )
 
 
+def _capture_getaddrinfo(monkeypatch) -> list[tuple[object, object]]:
+    from arm_backend import docker_probe
+
+    seen: list[tuple[object, object]] = []
+
+    def _fail(host, port, **kw):
+        seen.append((host, port))
+        raise OSError("Name or service not known")
+
+    monkeypatch.setattr(docker_probe.socket, "getaddrinfo", _fail)
+    return seen
+
+
+def test_backend_url_without_a_host_resolves_the_empty_host(monkeypatch) -> None:
+    from arm_backend import docker_probe
+
+    seen = _capture_getaddrinfo(monkeypatch)
+    ok, _ = docker_probe.probe_backend_url("https:///api")
+    assert ok is False and seen == [("", 443)]
+
+
+def test_http_backend_url_without_a_port_defaults_to_80(monkeypatch) -> None:
+    from arm_backend import docker_probe
+
+    seen = _capture_getaddrinfo(monkeypatch)
+    ok, _ = docker_probe.probe_backend_url("http://arm.example")
+    assert ok is False and seen == [("arm.example", 80)]
+
+
 def test_backend_url_with_a_bad_port_fails_the_probe_without_raising() -> None:
     """`probe()` promises never to raise; a typo in the URL
     must read as a failed check, not abort every spawn tick."""
@@ -752,6 +781,65 @@ def test_backend_url_reachable(monkeypatch) -> None:
     monkeypatch.setattr(docker_probe, "ARM_CA_FILE", __file__)  # any readable file path; load is stubbed below
     monkeypatch.setattr(docker_probe.ssl.SSLContext, "load_verify_locations", lambda self, *a, **kw: None)
     assert docker_probe.probe_backend_url("https://arm.example") == (True, None)
+
+
+def test_backend_url_detail_never_carries_credentials_when_it_does_not_resolve(monkeypatch) -> None:
+    """The detail reaches /api/system/diagnostics and the copied deployment report."""
+    from arm_backend import docker_probe
+
+    def _fail(*a, **kw):
+        raise OSError("Name or service not known")
+
+    monkeypatch.setattr(docker_probe.socket, "getaddrinfo", _fail)
+    ok, detail = docker_probe.probe_backend_url("https://admin:hunter2@arm.invalid:8443")
+    assert ok is False
+    assert detail == (
+        "backend URL https://***@arm.invalid:8443 does not resolve from the backend host: Name or service not known"
+    )
+
+
+def test_backend_url_detail_never_carries_credentials_when_unreachable(monkeypatch) -> None:
+    from arm_backend import docker_probe
+
+    class _Client:
+        def __init__(self, **kw: object) -> None:
+            pass
+
+        def __enter__(self) -> "_Client":
+            return self
+
+        def __exit__(self, *exc: object) -> None:
+            return None
+
+        def get(self, url: str) -> None:
+            raise docker_probe.httpx.ConnectError("connection refused")
+
+    monkeypatch.setattr(docker_probe.httpx, "Client", _Client)
+    monkeypatch.setattr(docker_probe.socket, "getaddrinfo", lambda *a, **kw: [(0, 0, 0, "", ("10.0.0.5", 443))])
+    monkeypatch.setattr(docker_probe.ssl.SSLContext, "load_verify_locations", lambda self, *a, **kw: None)
+    ok, detail = docker_probe.probe_backend_url("https://admin:hunter2@arm.example")
+    assert ok is False
+    assert detail == (
+        "backend URL https://***@arm.example (10.0.0.5) not reachable from the backend host: connection refused"
+    )
+
+
+def test_backend_url_detail_never_carries_credentials_when_invalid() -> None:
+    from arm_backend import docker_probe
+
+    ok, detail = docker_probe.probe_backend_url("https://admin:hunter2@host:84a3")
+    assert ok is False and detail is not None
+    assert "hunter2" not in detail and "admin" not in detail
+    assert detail.startswith("backend URL https://***@host:84a3 is not a valid URL")
+
+
+def test_backend_url_detail_never_carries_a_password_fragment_when_the_password_breaks_parsing() -> None:
+    """An unencoded `#` ends the host part at `hun`, and urlsplit's port error quotes it."""
+    from arm_backend import docker_probe
+
+    ok, detail = docker_probe.probe_backend_url("https://admin:hun#ter2@arm.example:8443")
+    assert ok is False
+    assert detail == "backend URL *** is not a valid URL"
 
 
 def test_local_spawn_never_checks_the_backend_url() -> None:

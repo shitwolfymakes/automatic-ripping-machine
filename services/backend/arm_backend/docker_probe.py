@@ -18,6 +18,8 @@ from urllib.parse import urlsplit
 import docker.errors  # type: ignore[import-untyped]
 import httpx
 
+from arm_backend.url_masking import strip_userinfo
+
 # How long a probe result is reused before re-pinging the docker host. An
 # unreachable ssh host stalls each uncached call for docker-py's client
 # timeout, and diagnostics polls this on every request.
@@ -89,16 +91,19 @@ def probe_backend_url(url: str) -> tuple[bool, str | None]:
     cannot see DNS that resolves differently on the remote host; the detail
     names the address it resolved to, for comparison.
     """
+    shown = strip_userinfo(url)
     try:
         parts = urlsplit(url)
         host = parts.hostname or ""
         port = parts.port or (443 if parts.scheme == "https" else 80)
-    except ValueError as exc:
-        return False, f"backend URL {url} is not a valid URL: {exc}"
+    except ValueError:
+        # Not `{exc}`: urlsplit's port error quotes the text after the
+        # first `:` of the host part, which can be part of a password.
+        return False, f"backend URL {shown} is not a valid URL"
     try:
         address = socket.getaddrinfo(host, port, type=socket.SOCK_STREAM)[0][4][0]
     except OSError as exc:
-        return False, f"backend URL {url} does not resolve from the backend host: {exc}"
+        return False, f"backend URL {shown} does not resolve from the backend host: {exc}"
     try:
         ctx = _tls_context()
     except (OSError, ssl.SSLError) as exc:
@@ -107,5 +112,5 @@ def probe_backend_url(url: str) -> tuple[bool, str | None]:
         with httpx.Client(verify=ctx, timeout=BACKEND_URL_TIMEOUT_SECONDS) as client:
             client.get(url.rstrip("/") + "/api/health")
     except (httpx.HTTPError, httpx.InvalidURL) as exc:
-        return False, f"backend URL {url} ({address}) not reachable from the backend host: {exc}"
+        return False, f"backend URL {shown} ({address}) not reachable from the backend host: {exc}"
     return True, None

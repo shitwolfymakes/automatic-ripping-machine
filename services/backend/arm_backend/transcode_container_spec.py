@@ -102,6 +102,12 @@ def backend_url_for_spawn(settings: Settings) -> str:
     )
 
 
+def spawn_network(settings: Settings) -> str | None:
+    """The docker network a transcoder joins: the backend's own for a local
+    spawn, none on a remote docker host (it dials home on its backend URL)."""
+    return None if settings.ARM_TRANSCODE_DOCKER_HOST else settings.ARM_DOCKER_NETWORK
+
+
 def task_env(settings: Settings, task: TranscodeTask, backend_url: str) -> dict[str, str]:
     return {
         "ARM_TRANSCODE_TASK_ID": task.id,
@@ -114,14 +120,20 @@ def task_env(settings: Settings, task: TranscodeTask, backend_url: str) -> dict[
     }
 
 
-def task_volumes(settings: Settings) -> dict[str, dict[str, str]]:
+def task_volume_pairs(settings: Settings) -> list[tuple[str, str, str]]:
+    """(host, bind, mode) per mount. A list, not a dict: unset host paths are
+    all "" and would collapse as dict keys."""
     certs_root = Path(settings.ARM_HOST_CERTS_PATH)
-    return {
-        settings.ARM_HOST_RAW_PATH: {"bind": "/raw", "mode": "ro"},
-        settings.ARM_HOST_MEDIA_PATH: {"bind": "/media", "mode": "rw"},
-        settings.ARM_HOST_LOGS_PATH: {"bind": "/logs", "mode": "rw"},
-        str(certs_root / "arm-ca.crt"): {"bind": "/etc/ssl/arm/arm-ca.crt", "mode": "ro"},
-    }
+    return [
+        (settings.ARM_HOST_RAW_PATH, "/raw", "ro"),
+        (settings.ARM_HOST_MEDIA_PATH, "/media", "rw"),
+        (settings.ARM_HOST_LOGS_PATH, "/logs", "rw"),
+        (str(certs_root / "arm-ca.crt"), "/etc/ssl/arm/arm-ca.crt", "ro"),
+    ]
+
+
+def task_volumes(settings: Settings) -> dict[str, dict[str, str]]:
+    return {host: {"bind": bind, "mode": mode} for host, bind, mode in task_volume_pairs(settings)}
 
 
 def gpu_env(gpu: Gpu | None, encoder: EncoderSpec | None) -> dict[str, str]:

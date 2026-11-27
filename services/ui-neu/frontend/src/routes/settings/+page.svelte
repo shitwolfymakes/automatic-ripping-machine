@@ -57,7 +57,7 @@
 	const keysGroup = $derived(group('Keys'));
 	const rippingGroup = $derived(group('Ripping'));
 	const transcodingGroup = $derived(group('Transcoding'));
-	const systemGroup = $derived(group('System'));
+	const drivesGroup = $derived(group('Drives'));
 
 	let activeTab = $state<Tab>(tabFromHash(window.location.hash));
 
@@ -276,7 +276,7 @@
 
 			<!-- System Info Tab -->
 			{#if activeTab === 'system'}
-				<SystemSettings {settings} group={systemGroup} setup={setupRestart} />
+				<SystemSettings setup={setupRestart} />
 			{/if}
 
 			<!-- Appearance Tab -->
@@ -301,6 +301,8 @@
 					options={driveSessionOptions}
 					{settings}
 					diagnostics={driveDiagnostics}
+					group={drivesGroup}
+					onsaved={loaded.foldSaved}
 				/>
 			{/if}
 		{/snippet}
