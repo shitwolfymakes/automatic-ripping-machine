@@ -6,8 +6,11 @@ owns its own commit point.
 
 from __future__ import annotations
 
+import asyncio
 from typing import TYPE_CHECKING, Any
 
+from arm_backend.config import settings, staging_root
+from arm_backend.job_files import remove_staging_dir
 from arm_backend.session_drain import cancel_parked_applications
 from arm_common import Job, JobStatus
 
@@ -30,7 +33,8 @@ async def abandon_job_transition(db: AsyncSession, hub: WSHub, job: Job, *, dele
     `delete_raw` is plumbed in the WS payload because only the ripper has
     `/raw` mounted; doing the rmtree here would silently no-op. Even when
     there's no active task, the ripper still runs the rmtree against any
-    orphaned partial-rip directory.
+    orphaned partial-rip directory. The staged copies live under the
+    backend's own mount, so the backend removes `<staging>/<id>/` itself.
     """
     job.status = JobStatus.ABANDONED
     db.add(job)
@@ -38,6 +42,8 @@ async def abandon_job_transition(db: AsyncSession, hub: WSHub, job: Job, *, dele
     # finishes" for a rip that never will.
     await cancel_parked_applications(db, job)
     await db.flush()
+    if delete_raw:
+        await asyncio.to_thread(remove_staging_dir, job.id, staging_root(settings))
 
     payload: dict[str, Any] = {
         "job_id": job.id,

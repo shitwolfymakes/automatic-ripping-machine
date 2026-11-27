@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import secrets
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 
 
@@ -2370,3 +2371,42 @@ def test_accept_keeps_a_previously_ripped_hold_in_place(signing_key: bytes, hold
     assert body["title"] == "Iron Man"
     assert body["metadata_json"].get("identity_suggestion") is None
     assert body["metadata_json"]["previously_ripped"] == {"job_id": _PRIOR_JOB_ID}
+
+
+def test_abandon_with_delete_raw_removes_the_jobs_staging_dir(
+    signing_key: bytes, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The ripper wipes /raw/<id>; the staged copies live under the backend's mount, so the backend removes them."""
+    from arm_backend import job_abandon
+
+    monkeypatch.setattr(job_abandon.settings, "RAW_ROOT", str(tmp_path))
+    staged = tmp_path / ".staging" / "job_01JZXR7K3M5Q8N4VWA00000001" / "t.mkv"
+    staged.parent.mkdir(parents=True)
+    staged.write_bytes(b"staged")
+    db = FakeSession()
+    app, token = _make_app(signing_key, db, _Hub())
+    db.rows["jobs"] = [_job(status=JobStatus.RIPPING)]
+    with TestClient(app) as client:
+        r = client.post(
+            "/api/jobs/job_01JZXR7K3M5Q8N4VWA00000001/abandon", json={"delete_raw": True}, headers=_auth(token)
+        )
+    assert r.status_code == 200
+    assert not staged.parent.exists()
+
+
+def test_abandon_without_delete_raw_keeps_the_staging_dir(
+    signing_key: bytes, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from arm_backend import job_abandon
+
+    monkeypatch.setattr(job_abandon.settings, "RAW_ROOT", str(tmp_path))
+    staged = tmp_path / ".staging" / "job_01JZXR7K3M5Q8N4VWA00000001" / "t.mkv"
+    staged.parent.mkdir(parents=True)
+    staged.write_bytes(b"staged")
+    db = FakeSession()
+    app, token = _make_app(signing_key, db, _Hub())
+    db.rows["jobs"] = [_job(status=JobStatus.RIPPING)]
+    with TestClient(app) as client:
+        r = client.post("/api/jobs/job_01JZXR7K3M5Q8N4VWA00000001/abandon", headers=_auth(token))
+    assert r.status_code == 200
+    assert staged.exists()

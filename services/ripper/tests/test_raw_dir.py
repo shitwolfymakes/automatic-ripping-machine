@@ -98,3 +98,17 @@ async def test_wipe_not_found_without_filename_is_not_absent(
     await wipe_raw_dir("job_x")
 
     assert any("wiped raw dir" in m for m in _records(caplog, logging.INFO))
+
+
+async def test_wipe_leaves_the_staging_dir_inside_raw_alone(tmp_path: Path) -> None:
+    """Staging defaults to `<raw>/.staging`; the ripper's wipe only ever removes `<raw>/<job_id>`."""
+    (tmp_path / "job_x").mkdir()
+    (tmp_path / "job_x" / "a.mkv").write_bytes(b"x")
+    staged = tmp_path / ".staging" / "job_x" / "a.mkv"
+    staged.parent.mkdir(parents=True)
+    staged.write_bytes(b"staged")
+
+    await wipe_raw_dir("job_x")
+
+    assert not (tmp_path / "job_x").exists()
+    assert staged.read_bytes() == b"staged"

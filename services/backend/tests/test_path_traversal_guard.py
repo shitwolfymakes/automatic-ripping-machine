@@ -166,3 +166,13 @@ def test_valid_id_passes_pattern_to_handler(
     with TestClient(app) as client:
         r = client.delete(f"/api/jobs/{VALID_JOB_ID}", headers=_auth(token))
     assert r.status_code == 404  # passed validation, then unknown id
+
+
+def test_remove_staging_dir_rejects_bad_id_without_touching_fs(tmp_path: Path) -> None:
+    staging_root = tmp_path / ".staging"
+    staging_root.mkdir()
+    sentinel = tmp_path / "secret"  # lives OUTSIDE staging_root
+    sentinel.write_text("keep me")
+    with pytest.raises(ValueError):
+        job_files.remove_staging_dir("../secret", staging_root)
+    assert sentinel.exists()
