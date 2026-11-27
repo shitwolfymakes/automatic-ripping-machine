@@ -8,7 +8,7 @@ from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import NamedTuple
 
-from arm_common import DiscType
+from arm_common import DiscType, ScanFailureReason
 from arm_common.schemas import DiscFingerprintInput, ScanResult, ScanTitle
 from arm_ripper.scan.data import sniff_video_image
 from arm_ripper.scan.disc_probe import DiscProbe, probe_disc
@@ -45,14 +45,6 @@ _EXPIRED_DETAIL = (
 _TIMED_OUT_DETAIL = (
     f"makemkvcon timed out: no output for {SCAN_IDLE_TIMEOUT_SECONDS:g}s or still running after {SCAN_MAX_SECONDS:g}s"
 )
-
-
-class ScanFailureReason(StrEnum):
-    VOLUME_KEY_UNKNOWN = "volume_key_unknown"
-    DISC_OPEN_FAILED = "disc_open_failed"
-    TIMED_OUT = "timed_out"
-    MAKEMKV_EXPIRED = "makemkv_expired"
-    MAKEMKV_ERROR = "makemkv_error"
 
 
 class ScanError(Exception):

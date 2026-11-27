@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 import secrets
 from datetime import datetime, timezone
 from pathlib import Path
@@ -48,7 +49,8 @@ from arm_common import (
     TranscodePreset,
     TranscodeTool,
 )
-from arm_common.enums import IdentificationMode, OutputMode, TrackKind, TrackSelection
+from arm_common.enums import IdentificationMode, OutputMode, ScanFailureReason, TrackKind, TrackSelection
+from arm_common.schemas import ScanFailure
 from arm_common.models import Track
 
 from tests._fakes import FakeSession
@@ -472,6 +474,53 @@ def test_register_refuses_a_retired_virtual_drive() -> None:
 
 
 # --- /identify ---------------------------------------------------------------
+
+
+def _failed_scan_body(reason: str = "volume_key_unknown") -> dict[str, Any]:
+    return {
+        "drive_id": "drv_x",
+        "scan_result": {
+            "disc_type": "bluray",
+            "failure": {"reason": reason, "detail": "makemkvcon reported it", "output_tail": ["MSG:3303,key unknown"]},
+        },
+    }
+
+
+def test_identify_with_a_scan_failure_makes_a_failed_job_with_the_reason() -> None:
+    db = FakeSession()
+    db.rows["drives"] = [_drive()]
+    db.rows["config"] = [_config()]
+    dispatcher = _Dispatcher(MetadataResult(title="Iron Man", year=2008, kind="movie", payload={}))
+    hub = _Hub()
+    app = _make_app(db, dispatcher=dispatcher, hub=hub)
+    with TestClient(app) as client:
+        r = client.post("/api/ripper/identify", json=_failed_scan_body(), headers=_SERVICE_AUTH)
+    assert r.status_code == 200, r.text
+    out = r.json()
+    assert out["status"] == "failed"
+    assert out["disc_type"] == "bluray"
+    assert out["failure_reason"] == identify_flow._failure_text(
+        ScanFailure(reason=ScanFailureReason.VOLUME_KEY_UNKNOWN, detail="d")
+    )
+    assert out["title"] is None
+    assert dispatcher.calls == []
+    assert [f for f in db.added if type(f).__name__ == "DiscFingerprint"] == []
+    failed = [e for e in hub.events if e["event_type"] == "rip.failed"]
+    assert len(failed) == 1
+    assert failed[0]["payload"]["reason"] == out["failure_reason"]
+
+
+@pytest.mark.parametrize("reason", list(ScanFailureReason))
+def test_failure_text_has_a_sentence_for_every_reason(reason: ScanFailureReason) -> None:
+    text = identify_flow._failure_text(ScanFailure(reason=reason, detail="d"))
+    assert text.endswith(".")
+
+
+def test_failure_text_for_an_unknown_key_names_the_port_not_an_address() -> None:
+    text = identify_flow._failure_text(ScanFailure(reason=ScanFailureReason.VOLUME_KEY_UNKNOWN, detail="d"))
+    assert "volume key is unknown" in text
+    assert "HTTPS (TCP 443)" in text
+    assert not re.search(r"\d+\.\d+\.\d+\.\d+", text)
 
 
 def test_identify_unknown_drive_404() -> None:
@@ -3041,6 +3090,7 @@ def test_rip_start_iso_without_titles_fails_the_job_instead_of_dumping_it() -> N
     failed = [e for e in hub.events if e["event_type"] == "rip.failed"]
     assert len(failed) == 1
     assert "no titles" in failed[0]["payload"]["reason"]
+    assert job.failure_reason == failed[0]["payload"]["reason"]
 
 
 def test_rip_start_iso_dump_still_works_when_the_operator_chose_it() -> None:
@@ -3125,6 +3175,7 @@ def test_rip_start_bd_backup_of_a_dvd_is_422() -> None:
     failed = [e for e in hub.events if e["event_type"] == "rip.failed"]
     assert len(failed) == 1
     assert "disc backup needs a Blu-ray" in failed[0]["payload"]["reason"]
+    assert job.failure_reason == "disc backup needs a Blu-ray, not disc_type=dvd"
 
 
 async def test_persist_review_tracks_skips_a_dvd_under_the_backup_session() -> None:

@@ -251,6 +251,18 @@ def test_list_jobs_total_count_is_exact_on_short_and_past_end_pages(signing_key:
 # --- get_job_detail ----------------------------------------------------------
 
 
+def test_get_job_detail_serialises_the_failure_reason(signing_key: bytes) -> None:
+    db = FakeSession()
+    app, token = _make_app(signing_key, db)
+    job = _job("job_01JZXR7K3M5Q8N4VWA00000001", status=JobStatus.FAILED)
+    job.failure_reason = "MakeMKV could not open this disc."
+    db.rows["jobs"] = [job]
+    with TestClient(app) as client:
+        r = client.get("/api/jobs/job_01JZXR7K3M5Q8N4VWA00000001", headers=_auth(token))
+    assert r.status_code == 200
+    assert r.json()["job"]["failure_reason"] == "MakeMKV could not open this disc."
+
+
 def test_get_job_detail_found(signing_key: bytes) -> None:
     db = FakeSession()
     app, token = _make_app(signing_key, db)

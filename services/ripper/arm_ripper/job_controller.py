@@ -7,7 +7,7 @@ from typing import Any
 import httpx
 
 from arm_common import DiscType, Job, JobStatus, with_log_context
-from arm_common.schemas import JobView, RipStartResponse, ScanResult, WSEnvelope
+from arm_common.schemas import JobView, RipStartResponse, ScanFailure, ScanResult, WSEnvelope
 from arm_ripper import raw_dir
 from arm_ripper.backend_client import BackendClient
 from arm_ripper.background_tasks import spawn_tracked
@@ -305,6 +305,9 @@ class JobController:
             job = await self._identify_or_none(scan_result, device_path, pending_session_id=pending_session_id)
             if job is None:
                 return
+            if scan_result.failure is not None:
+                await self._end_failed_scan(job, scan_result.failure, device_path)
+                return
             self._active_job_id = job.id
 
             # Every log line below carries job_id once identify lands.
@@ -326,6 +329,20 @@ class JobController:
                     return
 
                 await self._run_rip_guarded(job, device_path)
+
+    async def _end_failed_scan(self, job: Job, failure: ScanFailure, device_path: str) -> None:
+        """The backend failed this job for a MakeMKV scan failure: write why, and MakeMKV's last output, to the
+        job's log, then give the disc back."""
+        with with_log_context(job_id=job.id):
+            logger.error(
+                "scan failed device=%s reason=%s detail=%s",
+                device_path,
+                failure.reason.value,
+                failure.detail,
+            )
+            for line in failure.output_tail:
+                logger.error("makemkvcon: %s", line)
+        await self._ejector.eject(device_path)
 
     async def _pass_gate(self, job: Job, spec: WaitSpec) -> bool:
         """Wait a job parked at `spec`'s gate until it leaves, recording the status it left in; True unless it left

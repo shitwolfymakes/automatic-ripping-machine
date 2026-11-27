@@ -4,7 +4,7 @@ import asyncio
 import logging
 
 from arm_common import DiscType
-from arm_common.schemas import ScanResult
+from arm_common.schemas import ScanFailure, ScanResult
 from arm_ripper.drive_poll import DriveErrorKind, DriveState, classify_drive_error, read_drive_status
 from arm_ripper.scan import MakemkvScanFailed, ScanError, scan as scan_disc
 from arm_ripper.source import is_file_source
@@ -24,13 +24,13 @@ SCAN_NOT_READY_BACKOFFS = (2.0, 4.0, 8.0, 12.0)  # between attempts 1→2, 2→3
 
 
 async def scan_or_none(device_path: str) -> ScanResult | None:
-    """Scan the disc, or None after a log line when the scan fails or the drive goes absent mid-scan (which ends
-    the pipeline). Any other OSError propagates."""
+    """Scan the disc. A MakeMKV scan failure comes back as a result carrying `failure`, so the pipeline can fail a
+    job with the reason; None after a log line when the scan fails otherwise or the drive goes absent mid-scan
+    (which ends the pipeline). Any other OSError propagates."""
     try:
         return await _scan_with_ready_retry(device_path)
     except MakemkvScanFailed as e:
-        _log_scan_failure(device_path, e)
-        return None
+        return _failed_scan_result(e)
     except ScanError as e:
         logger.error("scan failed device=%s err=%s", device_path, e)
         return None
@@ -41,17 +41,13 @@ async def scan_or_none(device_path: str) -> ScanResult | None:
         return None
 
 
-def _log_scan_failure(device_path: str, failure: MakemkvScanFailed) -> None:
-    """Side effect: log why MakeMKV could not scan the disc, then its last output, one line each."""
-    logger.error(
-        "scan failed device=%s reason=%s disc_type=%s detail=%s",
-        device_path,
-        failure.reason.value,
-        failure.disc_type.value if failure.disc_type else None,
-        failure.detail,
+def _failed_scan_result(failure: MakemkvScanFailed) -> ScanResult:
+    """Pure: the scan result that carries a MakeMKV failure to the backend, which fails a job with it. The disc
+    type is what the failure learned (CINFO or layout sniff), else UNKNOWN."""
+    return ScanResult(
+        disc_type=failure.disc_type or DiscType.UNKNOWN,
+        failure=ScanFailure(reason=failure.reason, detail=failure.detail, output_tail=list(failure.tail)),
     )
-    for line in failure.tail:
-        logger.error("makemkvcon: %s", line)
 
 
 # Zero titles from these may be a drive still settling; DATA and CD have no titles by nature.

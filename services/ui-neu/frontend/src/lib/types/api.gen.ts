@@ -2567,6 +2567,10 @@ export type Job = {
      */
     manual_pause?: boolean;
     /**
+     * Failure Reason
+     */
+    failure_reason: string | null;
+    /**
      * Started At
      */
     started_at: string | null;
@@ -2912,6 +2916,10 @@ export type JobView = {
      * Manual Pause
      */
     manual_pause?: boolean;
+    /**
+     * Failure Reason
+     */
+    failure_reason?: string | null;
     rip_progress?: RipProgressSummary | null;
     transcode_progress?: TranscodeProgressSummary | null;
     readonly actions: JobActions;
@@ -4471,6 +4479,28 @@ export type RipperHeartbeatRequest = {
 };
 
 /**
+ * ScanFailure
+ *
+ * Why MakeMKV could not scan the disc: a typed reason, its detail line, and MakeMKV's last non-progress output.
+ */
+export type ScanFailure = {
+    reason: ScanFailureReason;
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Output Tail
+     */
+    output_tail?: Array<string>;
+};
+
+/**
+ * ScanFailureReason
+ */
+export type ScanFailureReason = 'volume_key_unknown' | 'disc_open_failed' | 'timed_out' | 'makemkv_expired' | 'makemkv_error';
+
+/**
  * ScanResult
  */
 export type ScanResult = {
@@ -4496,6 +4526,7 @@ export type ScanResult = {
      */
     fingerprints?: Array<DiscFingerprintInput>;
     bd_meta?: BdDiscMeta | null;
+    failure?: ScanFailure | null;
     /**
      * Raw
      */
@@ -6183,6 +6214,10 @@ export type JobViewWritable = {
      * Manual Pause
      */
     manual_pause?: boolean;
+    /**
+     * Failure Reason
+     */
+    failure_reason?: string | null;
     rip_progress?: RipProgressSummary | null;
     transcode_progress?: TranscodeProgressSummary | null;
 };
