@@ -41,6 +41,12 @@ from arm_common import (
 )
 from arm_common.enums import TrackKind
 from tests._fakes import FakeSession
+from tests._staged_sources import staged_by_default
+
+
+@pytest.fixture(autouse=True)
+def _staged_sources(monkeypatch: pytest.MonkeyPatch) -> None:
+    staged_by_default(monkeypatch)
 
 
 def _settings(**overrides: Any) -> Settings:
@@ -217,8 +223,9 @@ async def test_spawn_pending_calls_docker_run_with_correct_volumes_and_env() -> 
     kwargs = docker.containers.run.call_args.kwargs
     assert kwargs["image"] == "arm-transcode:latest"
     assert kwargs["labels"] == {"arm.task_id": "txt_1"}
-    assert "/host/raw" in kwargs["volumes"]
-    assert kwargs["volumes"]["/host/raw"] == {"bind": "/raw", "mode": "ro"}
+    assert "/host/raw" not in kwargs["volumes"]
+    assert kwargs["volumes"]["/host/raw/.staging"] == {"bind": "/staging", "mode": "ro"}
+    assert all(mount["bind"] != "/raw" for mount in kwargs["volumes"].values())
     assert kwargs["volumes"]["/host/media"] == {"bind": "/media", "mode": "rw"}
     assert kwargs["environment"]["ARM_TRANSCODE_TASK_ID"] == "txt_1"
     assert kwargs["environment"]["ARM_SERVICE_TOKEN"] == "tok-service"

@@ -63,7 +63,7 @@ class Harness:
             ),
             source_track=SimpleNamespace(job_id="job1", duration_seconds=123),
             transcode_preset=_handbrake_preset(preset_ref="x"),
-            raw_input_path="/raw/in.mkv",
+            source_path="/staging/in.mkv",
             media_root="/media",
         )
 
@@ -189,7 +189,7 @@ async def test_success(h: Harness) -> None:
     preset = h.response.transcode_preset
     assert ek["tool"] == TranscodeTool.HANDBRAKE
     assert ek["preset"] is preset
-    assert ek["raw_input"] == Path("/raw/in.mkv")
+    assert ek["raw_input"] == Path("/staging/in.mkv")
     assert ek["final_output"] == Path("/media") / "Movies/Film/film.mkv"
     assert ek["duration_seconds"] == 123
     assert isinstance(ek["state"], ProgressState)

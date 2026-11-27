@@ -9,7 +9,7 @@ import logging
 from pathlib import Path
 from typing import Any
 
-from arm_backend.config import Settings
+from arm_backend.config import Settings, effective_staging_host_path
 from arm_common import Gpu, TranscodeTask
 from arm_common.encoders import EncoderSpec
 from arm_common.enums import GpuVendor
@@ -117,7 +117,7 @@ def task_env(settings: Settings, task: TranscodeTask, backend_url: str) -> dict[
 def task_volumes(settings: Settings) -> dict[str, dict[str, str]]:
     certs_root = Path(settings.ARM_HOST_CERTS_PATH)
     return {
-        settings.ARM_HOST_RAW_PATH: {"bind": "/raw", "mode": "ro"},
+        effective_staging_host_path(settings): {"bind": "/staging", "mode": "ro"},
         settings.ARM_HOST_MEDIA_PATH: {"bind": "/media", "mode": "rw"},
         settings.ARM_HOST_LOGS_PATH: {"bind": "/logs", "mode": "rw"},
         str(certs_root / "arm-ca.crt"): {"bind": "/etc/ssl/arm/arm-ca.crt", "mode": "ro"},

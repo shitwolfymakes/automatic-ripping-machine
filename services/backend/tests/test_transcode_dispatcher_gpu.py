@@ -48,6 +48,12 @@ from arm_common import (
 )
 from arm_common.enums import ContainerFormat, MediaType, TranscodeTool
 from tests._fakes import FakeSession
+from tests._staged_sources import staged_by_default
+
+
+@pytest.fixture(autouse=True)
+def _staged_sources(monkeypatch: pytest.MonkeyPatch) -> None:
+    staged_by_default(monkeypatch)
 
 
 def _settings(**overrides: Any) -> Settings:
