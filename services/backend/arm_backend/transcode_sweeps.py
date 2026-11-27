@@ -6,6 +6,7 @@ Stale claims, orphaned applications and orphaned `.arm-inprogress` files.
 from __future__ import annotations
 
 import logging
+import shutil
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -206,14 +207,16 @@ class TranscodeSweeps:
         """Delete `*.arm-inprogress` orphans whose final-path's task isn't IN_PROGRESS.
 
         Runs once at Backend startup. A live in-progress task's `.arm-inprogress`
-        is preserved (the transcoder is still writing it). Returns the count
-        of deleted orphans.
+        is preserved (the transcoder is still writing it). An orphan is a file,
+        or the staging folder of a disc backup copied across filesystems.
+        Returns the count of deleted orphans.
         """
         if not media_root.exists():
             return 0
         deleted = 0
         async with self._db_factory() as db:
-            for path in media_root.rglob("*.arm-inprogress"):
+            # Listed up front: removing a staging folder mid-walk must not disturb the walk.
+            for path in list(media_root.rglob("*.arm-inprogress")):
                 final = path.with_suffix("")
                 relative = final.relative_to(media_root).as_posix()
                 live = (
@@ -226,7 +229,10 @@ class TranscodeSweeps:
                 if live is not None:
                     continue
                 try:
-                    path.unlink()
+                    if path.is_dir() and not path.is_symlink():
+                        shutil.rmtree(path)
+                    else:
+                        path.unlink()
                     deleted += 1
                     logger.info("swept arm-inprogress orphan path=%s", path)
                 except OSError as exc:
