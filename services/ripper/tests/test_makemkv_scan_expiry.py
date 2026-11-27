@@ -17,12 +17,12 @@ from __future__ import annotations
 from typing import Any
 
 import pytest
+from arm_common.enums import ScanFailureReason
 
 import arm_ripper.scan.makemkv as makemkv_mod
 from arm_ripper.scan.makemkv import (
     MakemkvScanFailed,
     ScanError,
-    ScanFailureReason,
     scan_disc,
 )
 

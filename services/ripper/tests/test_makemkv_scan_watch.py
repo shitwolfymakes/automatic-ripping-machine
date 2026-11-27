@@ -15,12 +15,12 @@ from pathlib import Path  # noqa: E402
 from typing import Any  # noqa: E402
 
 import pytest  # noqa: E402
+from arm_common.enums import ScanFailureReason  # noqa: E402
 
 import arm_ripper.scan.makemkv as mk  # noqa: E402
 from arm_ripper.scan.disc_probe import DiscProbe  # noqa: E402
 from arm_ripper.scan.makemkv import (  # noqa: E402
     MakemkvScanFailed,
-    ScanFailureReason,
     _Chunk,
     _classify_line,
     _EventKind,

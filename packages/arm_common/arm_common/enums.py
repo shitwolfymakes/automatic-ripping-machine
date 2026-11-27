@@ -9,6 +9,14 @@ class DiscType(StrEnum):
     UNKNOWN = "unknown"
 
 
+class ScanFailureReason(StrEnum):
+    VOLUME_KEY_UNKNOWN = "volume_key_unknown"
+    DISC_OPEN_FAILED = "disc_open_failed"
+    TIMED_OUT = "timed_out"
+    MAKEMKV_EXPIRED = "makemkv_expired"
+    MAKEMKV_ERROR = "makemkv_error"
+
+
 class DriveStatus(StrEnum):
     ONLINE = "online"
     OFFLINE = "offline"

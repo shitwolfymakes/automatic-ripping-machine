@@ -14,7 +14,8 @@ from arm_common import DiscType  # noqa: E402
 from arm_common.schemas import ScanResult, ScanTitle  # noqa: E402
 
 import arm_ripper.scan.dispatcher as dispatcher  # noqa: E402
-from arm_ripper.scan.makemkv import MakemkvScanFailed, ScanError, ScanFailureReason  # noqa: E402
+from arm_common.enums import ScanFailureReason  # noqa: E402
+from arm_ripper.scan.makemkv import MakemkvScanFailed, ScanError  # noqa: E402
 
 _KEY_UNKNOWN = MakemkvScanFailed(
     ScanFailureReason.VOLUME_KEY_UNKNOWN, "volume key unknown", ("MSG:3303,key",), DiscType.BLURAY

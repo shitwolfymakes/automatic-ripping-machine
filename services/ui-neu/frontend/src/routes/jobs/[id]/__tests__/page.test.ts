@@ -615,6 +615,39 @@ describe('Job detail page (v3)', () => {
 		const transcodeCell = document.querySelector('td[data-label="Transcode"]');
 		expect(transcodeCell?.textContent?.trim()).toBe('-');
 	});
+	describe('failure reason', () => {
+		const failed = (failure_reason: string | null) => ({
+			job: createJob({ id: 'job_42', status: 'failed', title: 'MY_DISC', disc_type: 'bluray', failure_reason }),
+			tracks: [],
+			fingerprints: []
+		});
+
+		it('shows the reason in the shared alert inside the header', async () => {
+			const original = mockFetchJob.getMockImplementation();
+			mockFetchJob.mockImplementation(() => Promise.resolve(failed('MakeMKV could not open this disc.')));
+			try {
+				renderComponent(Page);
+				const alert = await screen.findByTestId('job-failure-reason');
+				expect(alert).toHaveClass('alert', 'alert-danger');
+				expect(alert.closest('.job-detail-header-card')).not.toBeNull();
+				expect(alert).toHaveTextContent('MakeMKV could not open this disc.');
+			} finally {
+				mockFetchJob.mockImplementation(original!);
+			}
+		});
+
+		it('shows no alert when the job has no reason', async () => {
+			const original = mockFetchJob.getMockImplementation();
+			mockFetchJob.mockImplementation(() => Promise.resolve(failed(null)));
+			try {
+				renderComponent(Page);
+				await waitFor(() => expect(document.querySelector('.job-detail-header-card')).not.toBeNull());
+				expect(screen.queryByTestId('job-failure-reason')).toBeNull();
+			} finally {
+				mockFetchJob.mockImplementation(original!);
+			}
+		});
+	});
 	describe('held identity suggestion', () => {
 		const held = () => ({
 			job: createJob({

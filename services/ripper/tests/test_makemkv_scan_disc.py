@@ -13,7 +13,7 @@ import asyncio  # noqa: E402
 from typing import Any  # noqa: E402
 
 import pytest  # noqa: E402
-from arm_common.enums import DiscType  # noqa: E402
+from arm_common.enums import DiscType, ScanFailureReason  # noqa: E402
 from arm_common.schemas import DiscFingerprintInput  # noqa: E402
 
 import arm_ripper.scan.makemkv as makemkv_mod  # noqa: E402
@@ -21,7 +21,6 @@ from arm_ripper.scan.disc_probe import DiscProbe  # noqa: E402
 from arm_ripper.scan.makemkv import (
     MakemkvScanFailed,
     ScanError,
-    ScanFailureReason,
     _fingerprints,
     scan_disc,
 )  # noqa: E402
