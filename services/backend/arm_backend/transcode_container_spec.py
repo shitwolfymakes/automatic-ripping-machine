@@ -102,6 +102,12 @@ def backend_url_for_spawn(settings: Settings) -> str:
     )
 
 
+def spawn_network(settings: Settings) -> str | None:
+    """The docker network a transcoder joins: the backend's own for a local
+    spawn, none on a remote docker host (it dials home on its backend URL)."""
+    return None if settings.ARM_TRANSCODE_DOCKER_HOST else settings.ARM_DOCKER_NETWORK
+
+
 def task_env(settings: Settings, task: TranscodeTask, backend_url: str) -> dict[str, str]:
     return {
         "ARM_TRANSCODE_TASK_ID": task.id,

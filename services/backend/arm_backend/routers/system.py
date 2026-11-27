@@ -1,9 +1,11 @@
 """The system routes: diagnostics report, stats, resources, version and the TheDiscDB refresh."""
 
+import asyncio
 import functools
 import importlib.metadata
 import logging
 import os
+from collections.abc import Callable
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -25,6 +27,7 @@ from arm_backend.identity.sources.thediscdb_refresh import RefreshBusy, refresh 
 from arm_backend.identity.sources.thediscdb_refresh import refresh_running as thediscdb_refresh_running
 from arm_backend.system_environment import build_env_groups, ripper_container_views, transcode_container_views
 from arm_backend.system_diagnostics import collect_diagnostics, online_enrolled_drives, system_roots
+from arm_backend.transcode_dispatcher import TranscodeDispatcher
 from arm_common import (
     Config,
     Drive,
@@ -183,6 +186,19 @@ async def system_version(_: User = Depends(require_jwt)) -> SystemVersionRespons
     )
 
 
+def _no_variant_present(image: str) -> bool:
+    """No transcode dispatcher is running, so no docker host to look on."""
+    return False
+
+
+def _variant_present(request: Request) -> Callable[[str], bool]:
+    """The running dispatcher's presence-only image check (never pulls)."""
+    dispatcher: TranscodeDispatcher | None = getattr(request.app.state, "transcode_dispatcher", None)
+    if dispatcher is None:
+        return _no_variant_present
+    return dispatcher.images.image_exists
+
+
 @router.get("/environment", response_model=SystemEnvironmentResponse)
 async def environment(
     request: Request,
@@ -193,6 +209,8 @@ async def environment(
     drives = list((await session.execute(select(Drive))).scalars().all())
     gpus = list((await session.execute(select(Gpu))).scalars().all())
     manager = getattr(request.app.state, "ripper_manager", None)
+    # The image check may ask the docker host: off the event loop.
+    transcode_views = await asyncio.to_thread(transcode_container_views, settings, gpus, _variant_present(request))
     return SystemEnvironmentResponse(
         version=_app_version(),
         summary=EnvironmentSummary(
@@ -201,7 +219,7 @@ async def environment(
             gpus=[f"{g.vendor.value} {g.device_path}" for g in gpus if g.probed_at is not None],
         ),
         groups=build_env_groups(settings, cfg, len(gpus)),
-        containers=[*ripper_container_views(settings, drives), *transcode_container_views(settings, gpus)],
+        containers=[*ripper_container_views(settings, drives), *transcode_views],
     )
 
 

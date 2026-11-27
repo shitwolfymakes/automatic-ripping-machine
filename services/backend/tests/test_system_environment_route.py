@@ -116,3 +116,53 @@ def test_returns_groups_containers_and_masks(client: TestClient) -> None:
 def test_no_ripper_manager_still_200(client: TestClient) -> None:
     body = client.get("/api/system/environment").json()
     assert body["summary"]["host_paths_set"] is None
+
+
+class _Manager:
+    def host_paths_set(self) -> bool:
+        return True
+
+
+class _Images:
+    def __init__(self) -> None:
+        self.asked: list[str] = []
+
+    def image_exists(self, image: str) -> bool:
+        self.asked.append(image)
+        return True
+
+
+class _Dispatcher:
+    def __init__(self) -> None:
+        self.images = _Images()
+
+
+def test_running_services_feed_the_summary_and_the_transcode_image(monkeypatch: pytest.MonkeyPatch) -> None:
+    app, token = _app(monkeypatch)
+    monkeypatch.setattr(
+        system_router,
+        "settings",
+        system_router.settings.model_copy(update={"ARM_TRANSCODE_IMAGE": "ghcr.io/x/arm-transcode:3.1.0"}),
+    )
+    app.state.ripper_manager = _Manager()
+    app.state.transcode_dispatcher = dispatcher = _Dispatcher()
+    with TestClient(app, headers={"Authorization": f"Bearer {token}"}) as c:
+        body = c.get("/api/system/environment").json()
+    assert body["summary"]["host_paths_set"] is True
+    images = {c["label"]: c["image"] for c in body["containers"] if c["kind"] == "transcode"}
+    assert images["vaapi /dev/dri/renderD128"] == "ghcr.io/x/arm-transcode:3.1.0-amd"
+    assert images["CPU"] == "ghcr.io/x/arm-transcode:3.1.0"
+    assert dispatcher.images.asked == ["ghcr.io/x/arm-transcode:3.1.0-amd"]
+
+
+def test_no_dispatcher_shows_the_base_transcode_image(monkeypatch: pytest.MonkeyPatch) -> None:
+    app, token = _app(monkeypatch)
+    monkeypatch.setattr(
+        system_router,
+        "settings",
+        system_router.settings.model_copy(update={"ARM_TRANSCODE_IMAGE": "ghcr.io/x/arm-transcode:3.1.0"}),
+    )
+    with TestClient(app, headers={"Authorization": f"Bearer {token}"}) as c:
+        body = c.get("/api/system/environment").json()
+    images = {c["image"] for c in body["containers"] if c["kind"] == "transcode"}
+    assert images == {"ghcr.io/x/arm-transcode:3.1.0"}

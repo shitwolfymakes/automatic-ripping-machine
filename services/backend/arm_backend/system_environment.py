@@ -1,6 +1,6 @@
 """Grouped, masked view of the backend's `Settings` for the environment report."""
 
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from typing import Any
 
 from arm_common import Config, Drive, DriveLifecycle, Gpu
@@ -23,9 +23,10 @@ from arm_backend.transcode_container_spec import (
     container_identity_env,
     gpu_env,
     gpu_run_kwargs,
+    spawn_network,
     task_volume_pairs,
 )
-from arm_backend.transcode_images import vendor_override
+from arm_backend.transcode_images import image_for
 from arm_backend.url_masking import strip_userinfo
 
 # The GPU inventory card lives on the Transcoding settings tab.
@@ -135,12 +136,23 @@ def ripper_container_views(settings: Settings, drives: list[Drive]) -> list[Cont
     return [_ripper_view(settings, d) for d in drives if d.lifecycle != DriveLifecycle.RETIRED]
 
 
+def _nvenc_device_ids(request: Any) -> list[str] | None:
+    ids = getattr(request, "device_ids", None)
+    if ids:
+        return list(ids)
+    if isinstance(request, dict):
+        return request.get("DeviceIDs")
+    return None
+
+
 def _nvenc_device(request: Any) -> str:
-    ids = getattr(request, "device_ids", None) or (request.get("DeviceIDs") if isinstance(request, dict) else None)
-    return f"nvidia runtime, device {','.join(ids)}" if ids else "nvidia runtime, any device"
+    ids = _nvenc_device_ids(request)
+    if ids:
+        return f"nvidia runtime, device {','.join(ids)}"
+    return "nvidia runtime, any device"
 
 
-def _transcode_view(settings: Settings, gpu: Gpu | None) -> ContainerView:
+def _transcode_view(settings: Settings, gpu: Gpu | None, image_present: Callable[[str], bool]) -> ContainerView:
     vendor: GpuVendor | None = gpu.vendor if gpu is not None else None
     env = container_identity_env(settings, vendor) | gpu_env(gpu, None)
     env |= {
@@ -149,21 +161,19 @@ def _transcode_view(settings: Settings, gpu: Gpu | None) -> ContainerView:
         "ARM_LOG_LEVEL": settings.ARM_LOG_LEVEL,
     }
     devices: list[str] = []
-    image = settings.ARM_TRANSCODE_IMAGE
     label, state = "CPU", None
     if gpu is not None and vendor is not None:
         kwargs = gpu_run_kwargs(gpu)
         devices = list(kwargs.get("devices", []))
         devices += [_nvenc_device(r) for r in kwargs.get("device_requests", [])]
-        image = vendor_override(settings, vendor) or image
         label = f"{vendor.value} {gpu.device_path}"
         state = ("enabled" if gpu.enabled else "disabled") + (", not probed" if gpu.probed_at is None else "")
     return ContainerView(
         kind="transcode",
         label=label,
         state=state,
-        image=image,
-        network=None,
+        image=image_for(settings, vendor, exists=image_present),
+        network=spawn_network(settings),
         docker_host=strip_userinfo(settings.ARM_TRANSCODE_DOCKER_HOST) or None,
         mounts=_mounts(task_volume_pairs(settings)),
         devices=devices,
@@ -171,5 +181,14 @@ def _transcode_view(settings: Settings, gpu: Gpu | None) -> ContainerView:
     )
 
 
-def transcode_container_views(settings: Settings, gpus: list[Gpu]) -> list[ContainerView]:
-    return [_transcode_view(settings, None), *(_transcode_view(settings, g) for g in gpus)]
+def transcode_container_views(
+    settings: Settings, gpus: list[Gpu], image_present: Callable[[str], bool]
+) -> list[ContainerView]:
+    """The CPU transcoder plus one per GPU, as the dispatcher would spawn them.
+
+    `image_present` answers whether a per-vendor variant image is on the
+    docker host; it is never asked about the base image."""
+    return [
+        _transcode_view(settings, None, image_present),
+        *(_transcode_view(settings, g, image_present) for g in gpus),
+    ]

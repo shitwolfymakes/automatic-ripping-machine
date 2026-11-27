@@ -48,6 +48,7 @@ from arm_backend.transcode_container_spec import (
     container_identity_env,
     gpu_env,
     gpu_run_kwargs,
+    spawn_network,
     task_env,
     task_volumes,
 )
@@ -794,7 +795,6 @@ class TranscodeDispatcher:
         return self.probe()
 
     def _spawn_container(self, task: TranscodeTask, *, assignment: GpuAssignment | None = None) -> Any:
-        remote = bool(self._settings.ARM_TRANSCODE_DOCKER_HOST)
         backend_url = backend_url_for_spawn(self._settings)
         gpu = assignment.gpu if assignment is not None else None
         gpu_vendor = gpu.vendor if gpu is not None else None
@@ -817,7 +817,7 @@ class TranscodeDispatcher:
             labels={_DOCKER_LABEL_KEY: task.id},
             environment=env,
             volumes=volumes,
-            network=(None if remote else self._settings.ARM_DOCKER_NETWORK),
+            network=spawn_network(self._settings),
             detach=True,
             auto_remove=True,
             log_config=log_config(),

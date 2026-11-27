@@ -4,6 +4,7 @@ from arm_backend.env_registry import CONTAINER_PUBLIC_ENV, ENV_GROUP_ORDER, EnvV
 from arm_backend.ripper_container_spec import container_spec
 from arm_backend.system_environment import (
     _effective,
+    _nvenc_device,
     _tab_for,
     build_env_groups,
     mask_container_env,
@@ -26,6 +27,10 @@ def make_settings(monkeypatch: pytest.MonkeyPatch):
         return Settings()
 
     return _make
+
+
+def _absent(image: str) -> bool:
+    return False
 
 
 def _var(groups: list[EnvGroupView], key: str) -> EnvVarView:
@@ -136,7 +141,7 @@ def test_unknown_container_key_masked():
 
 def test_transcode_views_cpu_plus_each_gpu(make_settings):
     gpu = Gpu(id="gpu_1", vendor=GpuVendor.VAAPI, device_path="/dev/dri/renderD128", enabled=True)
-    cpu, vaapi = transcode_container_views(make_settings(ARM_RENDER_GID="109"), [gpu])
+    cpu, vaapi = transcode_container_views(make_settings(ARM_RENDER_GID="109"), [gpu], _absent)
     assert cpu.label == "CPU" and cpu.devices == []
     assert vaapi.devices == ["/dev/dri/renderD128:/dev/dri/renderD128:rwm"]
     env = {e.key: e for e in vaapi.env}
@@ -147,19 +152,61 @@ def test_transcode_views_cpu_plus_each_gpu(make_settings):
 
 def test_transcode_nvenc_renders_runtime_device(make_settings):
     gpu = Gpu(id="gpu_2", vendor=GpuVendor.NVENC, device_path="nvidia://1", enabled=False)
-    _, nv = transcode_container_views(make_settings(), [gpu])
+    _, nv = transcode_container_views(make_settings(), [gpu], _absent)
     assert nv.devices == ["nvidia runtime, device 1"]
     assert nv.state == "disabled, not probed"
+
+
+def test_nvenc_device_reads_raw_device_request_dicts():
+    assert _nvenc_device({"DeviceIDs": ["0", "2"]}) == "nvidia runtime, device 0,2"
+
+
+def test_nvenc_device_without_ids_is_any_device():
+    assert _nvenc_device({"Count": -1}) == "nvidia runtime, any device"
+    assert _nvenc_device(object()) == "nvidia runtime, any device"
 
 
 def test_transcode_backend_url_userinfo_stripped(make_settings):
     s = make_settings(
         ARM_TRANSCODE_DOCKER_HOST="ssh://bob:pw@nas:22", ARM_TRANSCODE_BACKEND_URL="https://u:p@host:8443"
     )
-    [cpu] = transcode_container_views(s, [])
+    [cpu] = transcode_container_views(s, [], _absent)
     env = {e.key: e.value for e in cpu.env}
     assert env["ARM_BACKEND_URL"] == "https://***@host:8443"
     assert cpu.docker_host == "ssh://***@nas:22"
+
+
+def test_transcode_local_view_uses_the_spawn_network(make_settings):
+    [cpu] = transcode_container_views(make_settings(ARM_DOCKER_NETWORK="armv3_default"), [], _absent)
+    assert cpu.network == "armv3_default"
+
+
+def test_transcode_remote_view_has_no_network(make_settings):
+    s = make_settings(ARM_DOCKER_NETWORK="armv3_default", ARM_TRANSCODE_DOCKER_HOST="ssh://nas")
+    [cpu] = transcode_container_views(s, [], _absent)
+    assert cpu.network is None
+
+
+def test_transcode_view_shows_the_vendor_variant_the_spawn_picks(make_settings):
+    s = make_settings(ARM_TRANSCODE_IMAGE="ghcr.io/x/arm-transcode:3.1.0")
+    gpu = Gpu(id="gpu_q", vendor=GpuVendor.QSV, device_path="/dev/dri/renderD128", enabled=True)
+    seen: list[str] = []
+
+    def _present(image: str) -> bool:
+        seen.append(image)
+        return True
+
+    cpu, qsv = transcode_container_views(s, [gpu], _present)
+    assert cpu.image == "ghcr.io/x/arm-transcode:3.1.0"
+    assert qsv.image == "ghcr.io/x/arm-transcode:3.1.0-intel"
+    assert seen == ["ghcr.io/x/arm-transcode:3.1.0-intel"]
+
+
+def test_transcode_view_falls_back_to_the_base_image_without_the_variant(make_settings):
+    s = make_settings(ARM_TRANSCODE_IMAGE="ghcr.io/x/arm-transcode:3.1.0")
+    gpu = Gpu(id="gpu_q", vendor=GpuVendor.QSV, device_path="/dev/dri/renderD128", enabled=True)
+    _, qsv = transcode_container_views(s, [gpu], _absent)
+    assert qsv.image == "ghcr.io/x/arm-transcode:3.1.0"
 
 
 def test_container_env_keys_all_allowlisted_except_token(make_settings):
@@ -209,7 +256,7 @@ def test_empty_host_paths_keep_every_mount_and_show_unset(make_settings):
     )
     [rip] = ripper_container_views(s, [drive])
     assert {m.container for m in rip.mounts if m.host == "(unset)"} == {"/raw", "/logs"}
-    cpu = transcode_container_views(s, [])[0]
+    cpu = transcode_container_views(s, [], _absent)[0]
     assert {m.container for m in cpu.mounts if m.host == "(unset)"} == {"/raw", "/media", "/logs"}
 
 
