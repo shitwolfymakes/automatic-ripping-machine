@@ -13,7 +13,9 @@ import arm_backend.ripper_manager as ripper_manager_mod
 from arm_backend.ripper_container_spec import (
     DOCKER_LABEL_KEY,
     SPEC_HASH_LABEL_KEY,
+    MAKEMKV_VOLUME,
     container_name,
+    _spec_hash,
     container_spec,
 )
 from arm_backend.ripper_manager import (
@@ -151,6 +153,7 @@ def test_container_spec_matches_spec_section_3() -> None:
         "/host/logs": {"bind": "/logs", "mode": "rw"},
         "/host/certs/arm-ca.crt": {"bind": "/etc/ssl/arm/arm-ca.crt", "mode": "ro"},
         "/dev/disk": {"bind": "/host-disk", "mode": "ro"},
+        "arm-makemkv": {"bind": "/home/arm/.MakeMKV", "mode": "rw"},
     }
 
 
@@ -233,6 +236,7 @@ def test_virtual_container_spec_mounts_only_the_iso() -> None:
     assert spec["volumes"]["/host/raw"] == {"bind": "/raw", "mode": "rw"}
     assert spec["volumes"]["/host/logs"] == {"bind": "/logs", "mode": "rw"}
     assert spec["volumes"]["/host/certs/arm-ca.crt"] == {"bind": "/etc/ssl/arm/arm-ca.crt", "mode": "ro"}
+    assert spec["volumes"][MAKEMKV_VOLUME] == {"bind": "/home/arm/.MakeMKV", "mode": "rw"}
     assert "device_cgroup_rules" not in spec
     assert spec["restart_policy"] == {"Name": "no"}
     assert spec["log_config"]["type"] == "json-file"  # inherited from the optical spec
@@ -601,3 +605,9 @@ def test_reconcile_records_a_drift_check_failure_per_drive(monkeypatch) -> None:
     summary = m.reconcile([bad, good])
     assert "no host path" in summary.failed["drv_bad"]
     assert summary.recreated == ["drv_good"]
+
+
+def test_spec_hash_covers_the_makemkv_volume() -> None:
+    spec = container_spec(_settings(), _drive())
+    without = {**spec, "volumes": {k: v for k, v in spec["volumes"].items() if k != MAKEMKV_VOLUME}}
+    assert _spec_hash(without) != spec["labels"][SPEC_HASH_LABEL_KEY]

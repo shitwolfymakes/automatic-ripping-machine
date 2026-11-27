@@ -48,10 +48,16 @@ MAKEMKV_DIR="${HOME:-/home/arm}/.MakeMKV"
 mkdir -p "$MAKEMKV_DIR"
 SETTINGS_FILE="$MAKEMKV_DIR/settings.conf"
 
-if [[ ! -f "$SETTINGS_FILE" ]] || ! grep -q "app_Key" "$SETTINGS_FILE"; then
-    echo "app_Key = \"$KEY\"" >> "$SETTINGS_FILE"
-else
-    sed -i "s|app_Key = \"T-.*\"|app_Key = \"$KEY\"|" "$SETTINGS_FILE"
+# One atomic rewrite (tmp in the same dir + mv): replaces any stored key form
+# (T-, M-, ...) and cannot leave a half-written file when several rippers
+# share the persisted ~/.MakeMKV volume. grep -v exits 1 when nothing is left
+# to keep (new or empty file), which is fine.
+tmp="$(mktemp "$SETTINGS_FILE.XXXXXX")"
+trap 'rm -f "$tmp"' EXIT
+if [[ -f "$SETTINGS_FILE" ]]; then
+    grep -v '^app_Key' "$SETTINGS_FILE" > "$tmp" || true
 fi
+echo "app_Key = \"$KEY\"" >> "$tmp"
+mv "$tmp" "$SETTINGS_FILE"
 
 echo "update_key: settings.conf written at $SETTINGS_FILE"

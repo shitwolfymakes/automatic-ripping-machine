@@ -138,11 +138,15 @@ RUN chmod +x /usr/local/bin/update_sdf.sh
 
 # Bake a baseline MakeMKV SDF so protected-disc scans never hang on the
 # first-boot SDF download (the runtime update_sdf.sh keeps it current).
+# It lives in a seed dir, not in ~/.MakeMKV (a named volume since #701): the
+# entrypoint's seed_makemkv_sdf copies it in when the volume has none or the
+# seed is newer.
 # Upstream first, then the optional internal mirror last — same order as the
 # runtime script, so the build rides out a makemkv.com outage.
 ARG MAKEMKV_MIRROR_URL=
 RUN --mount=type=secret,id=makemkv_mirror_password \
     set -eu; \
+    mkdir -p /usr/local/share/arm/makemkv-seed; \
     . /usr/local/bin/mirror_fetch.sh; \
     if [ -s /run/secrets/makemkv_mirror_password ]; then \
         MAKEMKV_MIRROR_PASSWORD="$(cat /run/secrets/makemkv_mirror_password)"; \
@@ -154,11 +158,10 @@ RUN --mount=type=secret,id=makemkv_mirror_password \
             set -- -H "X-SHARE-PASSWORD: ${MAKEMKV_MIRROR_PASSWORD}"; \
         fi; \
         curl -fsSL --connect-timeout 15 --max-time 120 "$@" \
-            -o /home/arm/.MakeMKV/sdf.bin "$url" && break; \
+            -o /usr/local/share/arm/makemkv-seed/sdf.bin "$url" && break; \
     done \
-    && test "$(stat -c %s /home/arm/.MakeMKV/sdf.bin)" -ge 262144 \
-    && touch /home/arm/.MakeMKV/.sdf_refreshed \
-    && chown -R 1000:1000 /home/arm/.MakeMKV
+    && test "$(stat -c %s /usr/local/share/arm/makemkv-seed/sdf.bin)" -ge 262144 \
+    && touch /usr/local/share/arm/makemkv-seed/.sdf_refreshed
 
 COPY --from=ghcr.io/astral-sh/uv:0.11 /uv /uvx /usr/local/bin/
 

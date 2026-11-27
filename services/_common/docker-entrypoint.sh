@@ -222,6 +222,35 @@ precreate_optical_nodes() {  # <dev_dir> <sr_max> <sg_max> <group>
     echo "optical nodes: created ${created} (sr0..sr${sr_max}, sg0..sg${sg_max}) in ${dev_dir}"
 }
 
+# Ripper-only: the persisted ~/.MakeMKV volume (arm-makemkv) outlives the
+# container, so after a PUID/PGID change its files still belong to the old UID.
+# Recursive chown (a few small files) at every start fixes that; the home dir
+# itself is chowned non-recursively. Defined above the SOURCE_ONLY seam so
+# test-entrypoint-makemkv.sh can exercise it unprivileged.
+prepare_makemkv_dir() {  # <makemkv_dir>
+    local dir="$1"
+    mkdir -p "${dir}"
+    chown arm:arm "$(dirname "${dir}")"
+    chown -R arm:arm "${dir}"
+}
+
+# Ripper-only: copy the SDF baked into the image (the seed dir) into the
+# volume. Docker seeds a named volume from the image only when it is first
+# created, so a later image's newer baseline would never arrive on its own.
+# Seed when the volume has no sentinel, or the seed's sentinel is newer
+# (update_sdf.sh touches the volume's on every refresh, so a refreshed
+# volume wins). The sentinel's mtime is copied so the comparison stays stable.
+seed_makemkv_sdf() {  # <seed_dir> <makemkv_dir>
+    local seed="$1" dir="$2"
+    [[ -s "${seed}/sdf.bin" && -e "${seed}/.sdf_refreshed" ]] || return 0
+    if [[ -e "${dir}/.sdf_refreshed" && ! "${seed}/.sdf_refreshed" -nt "${dir}/.sdf_refreshed" ]]; then
+        return 0
+    fi
+    cp "${seed}/sdf.bin" "${dir}/sdf.bin"
+    cp "${seed}/.sdf_refreshed" "${dir}/.sdf_refreshed"
+    touch -r "${seed}/.sdf_refreshed" "${dir}/.sdf_refreshed"
+}
+
 # Test seam: lets services/_common/test-entrypoint-render.sh source the
 # functions above without executing the entrypoint (mirrors install.sh's
 # ARM_INSTALL_SOURCE_ONLY). The sourced-ness check makes a leaked env var
@@ -300,15 +329,16 @@ for d in /logs /raw /media /data; do
     require_writable "$d" || exit 1
 done
 
-# Ripper-only: ensure the arm user owns its home + MakeMKV config dir so the
-# per-rip key refresh (arm_ripper/makemkv_key.py) can write settings.conf —
-# the Dockerfile chowns /home/arm to UID 1000 at build, so a PUID/PGID remap
-# would otherwise leave it unwritable. The key itself is not scraped at
-# boot; the JobController runs update_key.sh before every rip. Gated on the
-# ripper image's update_key.sh + makemkvcon so backend / transcode no-op past it.
+# Ripper-only: seed the baked SDF into the persisted ~/.MakeMKV volume and
+# make the arm user own it, so the per-rip key refresh (arm_ripper/makemkv_key.py)
+# can write settings.conf after a PUID/PGID remap. The key itself is not
+# scraped at boot; the JobController runs update_key.sh before every rip.
+# Gated on the ripper image's update_key.sh + makemkvcon so backend /
+# transcode no-op past it. Seed first, chown last, so seeded files are arm's.
 if [[ -x /usr/local/bin/update_key.sh ]] && command -v makemkvcon >/dev/null 2>&1; then
-    [[ -d /home/arm/.MakeMKV ]] || install -d -o arm -g arm /home/arm/.MakeMKV
-    chown arm:arm /home/arm /home/arm/.MakeMKV 2>/dev/null || true
+    mkdir -p /home/arm/.MakeMKV
+    seed_makemkv_sdf /usr/local/share/arm/makemkv-seed /home/arm/.MakeMKV
+    prepare_makemkv_dir /home/arm/.MakeMKV
 fi
 
 umask 002
