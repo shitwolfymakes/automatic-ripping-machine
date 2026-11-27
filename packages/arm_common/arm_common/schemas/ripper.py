@@ -69,7 +69,15 @@ class ScanTitle(BaseModel):
     duration_seconds: int
     chapter_count: int | None = None
     size_bytes: int | None = None
+    # MakeMKV's source for the title: a playlist (`00800.mpls`), a raw stream
+    # (`00010.m2ts`) or, on a DVD, a title number. TheDiscDB's SourceFile.
     source_file: str | None = None
+    # The clips the title plays, in play order, and how many there are.
+    segment_count: int | None = None
+    segment_map: list[int] | None = None
+    # MakeMKV's comment: the disc's own name for the playlist, when it has one
+    # (`FPL_MainFeature`). Decoy playlists usually have none.
+    comment: str | None = None
 
 
 class DiscFingerprintInput(BaseModel):

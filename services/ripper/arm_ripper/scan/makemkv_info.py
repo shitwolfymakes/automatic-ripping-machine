@@ -23,6 +23,23 @@ def _parse_duration(value: str) -> int | None:
     return h * 3600 + mn * 60 + s
 
 
+def _parse_segment_map(value: str) -> list[int] | None:
+    """MakeMKV's segment map (`508,501,503`, or ranges like `1-3,7`) as clip
+    numbers in play order; None when any part isn't a number or a rising range."""
+    clips: list[int] = []
+    for part in value.split(","):
+        first, sep, last = part.strip().partition("-")
+        if not first.isdigit() or (sep and not last.isdigit()):
+            return None
+        if not sep:
+            clips.append(int(first))
+        elif int(first) <= int(last):
+            clips.extend(range(int(first), int(last) + 1))
+        else:
+            return None
+    return clips
+
+
 def _to_int(value: str) -> int | None:
     """The value as an int, or None when it isn't one."""
     try:
@@ -32,11 +49,14 @@ def _to_int(value: str) -> int | None:
 
 
 # TINFO attribute code -> (title field, parser). A field is set only when its parser returns a value.
-_TINFO_FIELDS: dict[int, tuple[str, Callable[[str], int | str | None]]] = {
+_TINFO_FIELDS: dict[int, tuple[str, Callable[[str], int | str | list[int] | None]]] = {
     8: ("chapter_count", _to_int),
     9: ("duration_seconds", _parse_duration),
     11: ("size_bytes", _to_int),
-    27: ("source_file", str),
+    16: ("source_file", str),
+    25: ("segment_count", _to_int),
+    26: ("segment_map", _parse_segment_map),
+    49: ("comment", str),
 }
 
 
@@ -79,12 +99,18 @@ def _scan_title(idx: int, entry: dict[str, object]) -> ScanTitle | None:
     chapter_obj = entry.get("chapter_count")
     size_obj = entry.get("size_bytes")
     source_obj = entry.get("source_file")
+    segment_count_obj = entry.get("segment_count")
+    segment_map_obj = entry.get("segment_map")
+    comment_obj = entry.get("comment")
     return ScanTitle(
         index=idx,
         duration_seconds=duration_obj,
         chapter_count=chapter_obj if isinstance(chapter_obj, int) else None,
         size_bytes=size_obj if isinstance(size_obj, int) else None,
         source_file=source_obj if isinstance(source_obj, str) else None,
+        segment_count=segment_count_obj if isinstance(segment_count_obj, int) else None,
+        segment_map=segment_map_obj if isinstance(segment_map_obj, list) else None,
+        comment=comment_obj if isinstance(comment_obj, str) else None,
     )
 
 
@@ -153,7 +179,11 @@ def parse_makemkvcon_info(
     - TINFO:t,9,...  — title duration (HH:MM:SS)
     - TINFO:t,8,...  — chapter count
     - TINFO:t,11,... — title size in bytes
-    - TINFO:t,27,... — source filename (e.g. title_t00.mkv)
+    - TINFO:t,16,... — source playlist or stream (e.g. 00800.mpls; a title number on DVD)
+    - TINFO:t,25,... — number of clips (segments)
+    - TINFO:t,26,... — clip numbers in play order (e.g. 508,501,503)
+    - TINFO:t,49,... — comment: the disc's own playlist name (e.g. FPL_MainFeature)
+    TINFO 27 is the output file name and is not read.
 
     Reference: https://github.com/automatic-ripping-machine/automatic-ripping-machine/wiki/MakeMKV-Codes
     """
