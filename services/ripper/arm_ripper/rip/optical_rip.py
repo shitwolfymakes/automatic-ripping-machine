@@ -7,6 +7,7 @@ from collections.abc import Callable, Collection
 from dataclasses import dataclass
 from pathlib import Path
 
+from arm_common.enums import TrackStatus
 from arm_common.schemas import TrackView
 
 from arm_ripper.drive_ready import ReadyOutcome, wait_until_readable
@@ -531,7 +532,9 @@ async def _rip_each_title(
     Selected titles MakeMKV would not rip (below the minimum length) fail with the same reason a full pass gives them.
     """
     pending = [idx for idx in eligible if idx not in skipped]
-    disc = DiscProgress({idx: track_by_index[idx].expected_size_bytes for idx in eligible}, skipped)
+    # Unticked (SKIPPED) titles are no rip work; the ones an earlier pass settled stay in as done work.
+    ticked = {idx: track_by_index[idx] for idx in eligible if track_by_index[idx].status is not TrackStatus.SKIPPED}
+    disc = DiscProgress({idx: track.expected_size_bytes for idx, track in ticked.items()}, skipped)
     for n, idx in enumerate(pending):
         if stop is not None and stop.is_set():
             await _report_unreached(

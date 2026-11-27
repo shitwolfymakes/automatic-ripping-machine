@@ -20,14 +20,16 @@ _JOB = "job_01M4R7157QDCVQ3MX6M2VK0XX0"
 _NOT_READY_ERROR = "makemkvcon failed: SCSI NOT READY, LOGICAL UNIT IS IN PROCESS OF BECOMING READY"
 
 
-def _track(idx: int, *, expected: int | None = 10, duration: int = 1800) -> TrackView:
+def _track(
+    idx: int, *, expected: int | None = 10, duration: int = 1800, status: TrackStatus = TrackStatus.QUEUED
+) -> TrackView:
     return TrackView(
         id=f"trk_{idx}",
         job_id=_JOB,
         kind=TrackKind.VIDEO_TITLE,
         index=idx,
         source_ref=str(idx),
-        status=TrackStatus.QUEUED,
+        status=status,
         output_path=None,
         size_bytes=None,
         duration_seconds=duration,
@@ -229,6 +231,37 @@ async def test_progress_is_disc_wide_and_never_goes_back_across_three_titles(mon
     # Title 2 at half: title 1's 10 and half of 30, over 100.
     assert fractions[4] == pytest.approx(0.25)
     assert [tid for tid, _f in rig.progress[3:6]] == ["trk_2"] * 3
+
+
+async def test_unticked_titles_are_no_work_in_the_disc_wide_progress(monkeypatch, tmp_path) -> None:
+    # Titles 2 and 3 were unticked at Start (SKIPPED, so in `skip`): only 0 and 1 are the denominator.
+    rig = _Rig(monkeypatch)
+    tracks = [
+        _track(0, expected=60),
+        _track(1, expected=1),
+        _track(2, expected=60, status=TrackStatus.SKIPPED),
+        _track(3, expected=1, status=TrackStatus.SKIPPED),
+    ]
+    await rig.rip(tmp_path, tracks, {"trk_2", "trk_3"})
+
+    fractions = [f for _tid, f in rig.progress]
+    assert fractions[0] == 0.0
+    assert fractions[2] == pytest.approx(60 / 61)  # title 0 finished: 60 of 61
+    assert fractions[-1] == pytest.approx(1.0)
+
+
+async def test_a_title_settled_by_an_earlier_pass_still_counts_as_done_work(monkeypatch, tmp_path) -> None:
+    rig = _Rig(monkeypatch)
+    tracks = [
+        _track(0, expected=60, status=TrackStatus.DONE),
+        _track(1, expected=40),
+        _track(2, expected=60, status=TrackStatus.SKIPPED),
+    ]
+    await rig.rip(tmp_path, tracks, {"trk_0", "trk_2"})
+
+    fractions = [f for _tid, f in rig.progress]
+    assert fractions[0] == pytest.approx(0.6)
+    assert fractions[-1] == pytest.approx(1.0)
 
 
 async def test_progress_stays_monotonic_when_a_title_is_retried(monkeypatch, tmp_path) -> None:
