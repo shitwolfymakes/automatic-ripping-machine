@@ -1,16 +1,23 @@
-import type { TrackView, ScanTitle, TrackRole } from '$lib/types/api.gen';
+import type { TrackView, ScanTitle, TrackRole, TitleClass } from '$lib/types/api.gen';
 import { trackSizeLabel } from '$lib/jobs/track-fields';
 import { formatBytes } from '$lib/utils/format';
+import { sourceName, titleClassLabel, type RefIndex, type TitleClassLabel } from './title-class';
 
 // One row shape covering both review-card lifecycle stages. A row is editable iff
 // it has a real materialized-track id; scanned-title rows (trackId === null) are
 // read-only.
-type ReviewRow = {
+export type ReviewRow = {
 	index: number;
 	durationSeconds: number | null;
-	sourceLabel: string | null;
 	/** The actual size once ripped, else the scan estimate with a leading ~; '-' when unknown. */
 	sizeLabel: string;
+	/** What the Source column names: the ripped file, the playlist, the stream file, else the title number. */
+	sourceName: string;
+	/** The `source_ref` of this row's title, which a copy's `classRef` points at. */
+	sourceRef: string;
+	titleClass: TitleClass | null;
+	classRef: string | null;
+	classLabel: TitleClassLabel | null;
 	trackId: string | null;
 	title: string | null;
 	year: number | null;
@@ -22,13 +29,17 @@ type ReviewRow = {
 	excluded: boolean;
 };
 
-export function trackToRow(t: TrackView): ReviewRow {
+export function trackToRow(t: TrackView, refIndex: RefIndex): ReviewRow {
 	return {
 		index: t.index,
 		// The post-rip actual, else the scan-time estimate: a track waiting to rip has a length too.
 		durationSeconds: t.duration_seconds ?? t.expected_duration_seconds ?? null,
-		sourceLabel: t.output_path || t.source_ref,
 		sizeLabel: trackSizeLabel(t),
+		sourceName: sourceName(t),
+		sourceRef: t.source_ref,
+		titleClass: t.title_class ?? null,
+		classRef: t.title_class_ref ?? null,
+		classLabel: titleClassLabel(t, refIndex),
 		trackId: t.id,
 		title: t.title ?? null,
 		year: t.year ?? null,
@@ -43,8 +54,17 @@ export function scanTitleToRow(s: ScanTitle): ReviewRow {
 	return {
 		index: s.index,
 		durationSeconds: s.duration_seconds,
-		sourceLabel: s.source_file ?? null,
 		sizeLabel: s.size_bytes == null ? '-' : `~${formatBytes(s.size_bytes)}`,
+		sourceName: sourceName({
+			output_path: null,
+			playlist_name: s.playlist_name,
+			source_file: s.source_file,
+			source_ref: String(s.index)
+		}),
+		sourceRef: String(s.index),
+		titleClass: null,
+		classRef: null,
+		classLabel: null,
 		trackId: null,
 		title: null,
 		year: null,

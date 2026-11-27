@@ -1,5 +1,6 @@
 <script lang="ts">
 	import JobTrackRow from '$lib/components/jobs/JobTrackRow.svelte';
+	import { refIndexOf, titleClassLabel } from '$lib/jobs/title-class';
 	import type { JobView, NamingPreviewItem, TrackView } from '$lib/types/api.gen';
 
 	interface Props {
@@ -24,6 +25,8 @@
 		ontitleapplied,
 		onstageretried
 	}: Props = $props();
+
+	let refIndex = $derived(refIndexOf(tracks));
 
 	let editingTrackId = $state<string | null>(null);
 
@@ -63,6 +66,7 @@
 					<JobTrackRow
 						{job}
 						{track}
+						classLabel={titleClassLabel(track, refIndex)}
 						{preview}
 						{tracksAreSeries}
 						editing={editingTrackId === track.id}

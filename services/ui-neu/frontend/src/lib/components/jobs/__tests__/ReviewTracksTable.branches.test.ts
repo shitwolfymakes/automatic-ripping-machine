@@ -387,3 +387,76 @@ describe('ReviewTracksTable title search', () => {
 		expect(panel(1)).toBeInTheDocument();
 	});
 });
+
+describe('ReviewTracksTable title classes', () => {
+	const main = track({ id: 'm', index: 0, source_ref: '0', playlist_name: '00800.mpls', title_class: 'primary' });
+	const decoy = (n: number, o: Partial<TrackView> = {}) =>
+		track({
+			id: `d${n}`,
+			index: n,
+			source_ref: String(n),
+			playlist_name: `0090${n}.mpls`,
+			title_class: 'decoy',
+			title_class_ref: '0',
+			excluded: true,
+			...o
+		});
+
+	it('names the playlist in Source and labels a raw-stream duplicate', () => {
+		renderTable({
+			tracks: [
+				main,
+				track({
+					id: 'x',
+					index: 1,
+					source_ref: '1',
+					source_file: '00294.m2ts',
+					title_class: 'duplicate',
+					title_class_ref: '0'
+				})
+			]
+		});
+		expect(screen.getByText('00800.mpls')).toBeInTheDocument();
+		expect(screen.getByText(/00294\.m2ts/)).toBeInTheDocument();
+		expect(screen.getByTestId('track-class-label')).toHaveTextContent('Copy of #0 (stream file)');
+	});
+
+	it('styles an edition label as info and a copy as plain', () => {
+		renderTable({
+			tracks: [
+				main,
+				track({ id: 'e', index: 1, source_ref: '1', title_class: 'edition', duration_seconds: 60 }),
+				track({ id: 'c', index: 2, source_ref: '2', title_class: 'duplicate', title_class_ref: '0' })
+			]
+		});
+		const [edition, copy] = screen.getAllByTestId('track-class-label');
+		expect(edition).toHaveClass('chip-info');
+		expect(copy).not.toHaveClass('chip-info');
+	});
+
+	it('lists two decoys as ordinary rows', () => {
+		renderTable({ tracks: [main, decoy(1), decoy(2)] });
+		expect(screen.queryByRole('button', { name: /decoy playlists/ })).toBeNull();
+		expect(screen.getAllByTestId('track-class-label')).toHaveLength(2);
+	});
+
+	it('collapses three decoys behind a disclosure and expands them with their checkboxes', async () => {
+		renderTable({ tracks: [main, decoy(1), decoy(2), decoy(3)] });
+		const toggle = screen.getByRole('button', { name: '3 decoy playlists of #0 (unticked)' });
+		expect(toggle).toHaveAttribute('aria-expanded', 'false');
+		expect(screen.queryByTestId('track-class-label')).toBeNull();
+		await fireEvent.click(toggle);
+		expect(toggle).toHaveAttribute('aria-expanded', 'true');
+		expect(screen.getAllByTestId('track-class-label')).toHaveLength(3);
+		expect(screen.getByLabelText('Include track 2')).not.toBeChecked();
+		await fireEvent.click(screen.getByLabelText('Include track 2'));
+		expect(mockUpdate).toHaveBeenCalledWith('job_1', 'd2', { excluded: false });
+		await fireEvent.click(toggle);
+		expect(screen.queryByTestId('track-class-label')).toBeNull();
+	});
+
+	it('says how many decoys are ticked', () => {
+		renderTable({ tracks: [main, decoy(1, { excluded: false }), decoy(2), decoy(3)] });
+		expect(screen.getByRole('button', { name: '3 decoy playlists of #0 (1 ticked)' })).toBeInTheDocument();
+	});
+});
