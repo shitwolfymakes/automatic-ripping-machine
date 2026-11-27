@@ -252,6 +252,30 @@ export type BashScriptSummary = {
 };
 
 /**
+ * BdClip
+ *
+ * One Blu-ray clip (`BDMV/CLIPINF/<number>.clpi` + `BDMV/STREAM/<number>.m2ts`).
+ */
+export type BdClip = {
+    /**
+     * Number
+     */
+    number: number;
+    /**
+     * Seconds
+     */
+    seconds: number;
+    /**
+     * Size Bytes
+     */
+    size_bytes?: number | null;
+    /**
+     * Mvc
+     */
+    mvc?: boolean;
+};
+
+/**
  * BdDiscMeta
  *
  * Blu-ray disc title from BDMV/META/DL/bdmt_<lang>.xml (studio-authored).
@@ -303,9 +327,13 @@ export type BdPlaylist = {
      */
     chapter_count: number;
     /**
-     * Multi Angle
+     * Angle Clips
      */
-    multi_angle?: boolean;
+    angle_clips?: Array<Array<number>>;
+    /**
+     * Mvc Clips
+     */
+    mvc_clips?: Array<number>;
 };
 
 /**
@@ -4532,6 +4560,10 @@ export type ScanResult = {
      * Playlists
      */
     playlists?: Array<BdPlaylist>;
+    /**
+     * Clips
+     */
+    clips?: Array<BdClip>;
     /**
      * Raw
      */

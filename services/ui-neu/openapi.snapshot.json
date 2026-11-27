@@ -8274,6 +8274,41 @@
         ],
         "title": "BashScriptSummary"
       },
+      "BdClip": {
+        "properties": {
+          "number": {
+            "type": "integer",
+            "title": "Number"
+          },
+          "seconds": {
+            "type": "number",
+            "title": "Seconds"
+          },
+          "size_bytes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Size Bytes"
+          },
+          "mvc": {
+            "type": "boolean",
+            "title": "Mvc",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "number",
+          "seconds"
+        ],
+        "title": "BdClip",
+        "description": "One Blu-ray clip (`BDMV/CLIPINF/<number>.clpi` + `BDMV/STREAM/<number>.m2ts`)."
+      },
       "BdDiscMeta": {
         "properties": {
           "name": {
@@ -8349,10 +8384,22 @@
             "type": "integer",
             "title": "Chapter Count"
           },
-          "multi_angle": {
-            "type": "boolean",
-            "title": "Multi Angle",
-            "default": false
+          "angle_clips": {
+            "items": {
+              "items": {
+                "type": "integer"
+              },
+              "type": "array"
+            },
+            "type": "array",
+            "title": "Angle Clips"
+          },
+          "mvc_clips": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "title": "Mvc Clips"
           }
         },
         "type": "object",
@@ -16245,6 +16292,13 @@
             },
             "type": "array",
             "title": "Playlists"
+          },
+          "clips": {
+            "items": {
+              "$ref": "#/components/schemas/BdClip"
+            },
+            "type": "array",
+            "title": "Clips"
           },
           "raw": {
             "additionalProperties": true,
