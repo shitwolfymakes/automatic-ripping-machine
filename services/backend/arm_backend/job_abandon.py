@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING, Any
 from arm_backend.config import settings, staging_root
 from arm_backend.job_files import remove_staging_dir
 from arm_backend.session_drain import cancel_parked_applications
+from arm_backend.stager import cancel_job_staging
 from arm_common import Job, JobStatus
 
 if TYPE_CHECKING:
@@ -36,6 +37,9 @@ async def abandon_job_transition(db: AsyncSession, hub: WSHub, job: Job, *, dele
     orphaned partial-rip directory. The staged copies live under the
     backend's own mount, so the backend removes `<staging>/<id>/` itself.
     """
+    if delete_raw:
+        # Before the staging folder goes, so a running copy cannot recreate files inside it.
+        await cancel_job_staging(job.id)
     job.status = JobStatus.ABANDONED
     db.add(job)
     # A parked application would otherwise promise "applies when the rip

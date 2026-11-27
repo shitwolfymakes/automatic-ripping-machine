@@ -2513,3 +2513,48 @@ def test_retry_409_unless_the_stage_failed(signing_key: bytes) -> None:
     assert r.status_code == 409
     assert "got copying" in r.json()["detail"]
     assert stage.status == StageStatus.COPYING and db.committed == 0
+
+
+class _SpyStager:
+    """Stands in for the active stager: records the job and whether the staging dir still existed."""
+
+    def __init__(self, staged_dir: Path) -> None:
+        self.staged_dir = staged_dir
+        self.calls: list[tuple[str, bool]] = []
+
+    async def cancel_job(self, job_id: str) -> None:
+        self.calls.append((job_id, self.staged_dir.exists()))
+
+
+def _abandon_with_spy(signing_key: bytes, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, body: dict | None) -> Any:
+    from arm_backend import job_abandon, stager
+
+    monkeypatch.setattr(job_abandon.settings, "RAW_ROOT", str(tmp_path))
+    staged = tmp_path / ".staging" / "job_01JZXR7K3M5Q8N4VWA00000001" / "t.mkv"
+    staged.parent.mkdir(parents=True)
+    staged.write_bytes(b"staged")
+    spy = _SpyStager(staged.parent)
+    monkeypatch.setattr(stager, "_active_stager", spy)
+    db = FakeSession()
+    app, token = _make_app(signing_key, db, _Hub())
+    db.rows["jobs"] = [_job(status=JobStatus.RIPPING)]
+    with TestClient(app) as client:
+        r = client.post("/api/jobs/job_01JZXR7K3M5Q8N4VWA00000001/abandon", json=body, headers=_auth(token))
+    assert r.status_code == 200
+    return spy
+
+
+def test_abandon_with_delete_raw_stops_the_stage_copy_before_removing_the_staging_dir(
+    signing_key: bytes, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    spy = _abandon_with_spy(signing_key, tmp_path, monkeypatch, {"delete_raw": True})
+    assert spy.calls == [("job_01JZXR7K3M5Q8N4VWA00000001", True)]
+    assert not spy.staged_dir.exists()
+
+
+def test_abandon_without_delete_raw_leaves_the_stage_copy_alone(
+    signing_key: bytes, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    spy = _abandon_with_spy(signing_key, tmp_path, monkeypatch, None)
+    assert spy.calls == []
+    assert spy.staged_dir.exists()

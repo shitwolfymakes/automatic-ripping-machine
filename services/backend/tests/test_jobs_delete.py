@@ -863,3 +863,47 @@ def test_remove_staging_dir_logs_an_rmtree_failure(
     assert job_files.remove_staging_dir(_JOB_A, tmp_path / ".staging") == 0
     assert staged.exists()
     assert "staging rmtree failed" in caplog.text
+
+
+class _SpyStager:
+    def __init__(self) -> None:
+        self.cancelled: list[str] = []
+
+    async def cancel_job(self, job_id: str) -> None:
+        self.cancelled.append(job_id)
+
+
+@pytest.mark.parametrize("query", ["", "?delete_raw=true"])
+def test_delete_stops_the_jobs_stage_copy(signing_key: bytes, monkeypatch: pytest.MonkeyPatch, query: str) -> None:
+    from arm_backend import stager
+
+    spy = _SpyStager()
+    monkeypatch.setattr(stager, "_active_stager", spy)
+    db = FakeSession()
+    _seed_admin(db)
+    db.rows["jobs"] = [_make_job("job_01JZXR7K3M5Q8N4VWA00000002", status=JobStatus.RIPPED)]
+    app, token = _make_app(signing_key, db, _CapturingHub())
+    with TestClient(app) as client:
+        r = client.delete(f"/api/jobs/job_01JZXR7K3M5Q8N4VWA00000002{query}", headers=_auth(token))
+    assert r.status_code == 204
+    assert spy.cancelled == ["job_01JZXR7K3M5Q8N4VWA00000002"]
+
+
+def test_bulk_delete_stops_the_stage_copy_of_each_deleted_job_only(
+    signing_key: bytes, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from arm_backend import stager
+
+    spy = _SpyStager()
+    monkeypatch.setattr(stager, "_active_stager", spy)
+    db = FakeSession()
+    _seed_admin(db)
+    db.rows["jobs"] = [
+        _make_job("job_01JZXR7K3M5Q8N4VWA00000007", status=JobStatus.RIPPED),
+        _make_job("job_01JZXR7K3M5Q8N4VWA00000009", status=JobStatus.RIPPING),
+    ]
+    app, token = _make_app(signing_key, db, _CapturingHub())
+    with TestClient(app) as client:
+        r = client.delete("/api/jobs", headers=_auth(token))
+    assert r.status_code == 200
+    assert spy.cancelled == ["job_01JZXR7K3M5Q8N4VWA00000007"]
