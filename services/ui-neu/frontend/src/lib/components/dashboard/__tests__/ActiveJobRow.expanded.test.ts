@@ -51,4 +51,11 @@ describe('ActiveJobRow expanded panel', () => {
 		expect(screen.queryAllByRole('img', { name: 'Blu-ray' })).toHaveLength(0);
 		expect(container.textContent?.match(/Blu-ray/g)).toHaveLength(2);
 	});
+
+	it('names the title once in the panel', async () => {
+		await renderExpanded();
+		const panel = screen.getByText('Job ID').closest('div.flex') as HTMLElement;
+		expect(within(panel).getAllByText(/Last Crusade/)).toHaveLength(1);
+		expect(within(panel).queryByRole('img', { name: /Last Crusade/ })).toBeNull();
+	});
 });

@@ -34,7 +34,7 @@
 	<!-- Poster (larger) -->
 	<PosterImage
 		url={jobPoster(job)}
-		alt={job.title ?? 'Poster'}
+		alt=""
 		class="job-active-row-poster-lg {job.disc_type === 'cd' ? 'job-active-row-poster-lg-square' : ''}"
 	/>
 

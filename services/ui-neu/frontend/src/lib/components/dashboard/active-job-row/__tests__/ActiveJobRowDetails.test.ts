@@ -44,11 +44,6 @@ describe('ActiveJobRowDetails', () => {
 		expect(screen.getByRole('link', { name: 'Untitled' })).toBeInTheDocument();
 	});
 
-	it('falls back to a Poster alt text when the title is null', () => {
-		const { container } = renderDetails({ title: null, poster_url: 'http://x/p.jpg' });
-		expect(container.querySelector('img[alt="Poster"]')).not.toBeNull();
-	});
-
 	it('shows the job id', () => {
 		renderDetails({ id: 'job_42' });
 		expect(valueCell('Job ID')).toHaveTextContent('job_42');

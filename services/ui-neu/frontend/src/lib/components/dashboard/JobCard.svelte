@@ -30,7 +30,7 @@
 		<div class="job-card-body">
 			<PosterImage
 				url={jobPoster(job)}
-				alt={job.title ?? 'Poster'}
+				alt=""
 				class="job-card-poster {job.disc_type === 'cd' ? 'job-card-poster-square' : ''}"
 			/>
 			<div class="min-w-0 flex-1">

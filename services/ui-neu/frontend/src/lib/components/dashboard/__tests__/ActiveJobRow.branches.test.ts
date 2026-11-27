@@ -243,12 +243,6 @@ describe('ActiveJobRow branches', () => {
 			expect(dvd.container.querySelector('.job-active-row-poster-lg-square')).toBeNull();
 			expect(dvd.container.querySelector('.job-active-row-poster-lg')).not.toBeNull();
 		});
-
-		it('falls back to the "Poster" alt text for an untitled job', async () => {
-			renderComponent(ActiveJobRow, { props: { job: createJob({ title: null, poster_url: 'http://x/p.jpg' }) } });
-			await fireEvent.click(screen.getByText('Untitled'));
-			await waitFor(() => expect(screen.getByAltText('Poster')).toBeInTheDocument());
-		});
 	});
 
 	describe('toggle', () => {
