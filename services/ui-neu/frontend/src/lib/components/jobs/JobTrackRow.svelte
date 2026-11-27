@@ -8,10 +8,13 @@
 	import { isAdmin } from '$lib/stores/auth';
 	import type { Snippet } from 'svelte';
 	import type { JobView, NamingPreviewItem, TrackView } from '$lib/types/api.gen';
+	import type { TitleClassLabel } from '$lib/jobs/title-class';
 
 	interface Props {
 		job: JobView;
 		track: TrackView;
+		/** What the classifier made of this title, or null for a plain one. */
+		classLabel: TitleClassLabel | null;
 		preview: NamingPreviewItem | undefined;
 		tracksAreSeries: boolean;
 		editing: boolean;
@@ -27,6 +30,7 @@
 	let {
 		job,
 		track,
+		classLabel,
 		preview,
 		tracksAreSeries,
 		editing,
@@ -95,6 +99,9 @@
 						{/if}
 						{#if track.edition}
 							<span class="job-detail-track-meta-pill">{track.edition}</span>
+						{/if}
+						{#if classLabel}
+							<span class="job-detail-track-meta-pill" data-testid="track-class-label">{classLabel.text}</span>
 						{/if}
 						{#if track.role}
 							<span class="job-detail-track-meta-pill">{track.role}</span>
