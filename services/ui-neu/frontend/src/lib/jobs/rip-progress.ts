@@ -3,7 +3,8 @@
 import type { JobView, RipProgressSummary, TrackView } from '$lib/types/api.gen';
 
 export function ripProgressFromTracks(tracks: Pick<TrackView, 'id' | 'index' | 'status'>[]): RipProgressSummary {
-	const ordered = [...tracks].sort((a, b) => a.index - b.index);
+	// A skipped track was unticked at Start of a per-title rip and is never read: it is no rip work.
+	const ordered = tracks.filter((t) => t.status !== 'skipped').sort((a, b) => a.index - b.index);
 	const current = ordered.findIndex((t) => t.status === 'in_progress');
 	return {
 		tracks_total: ordered.length,

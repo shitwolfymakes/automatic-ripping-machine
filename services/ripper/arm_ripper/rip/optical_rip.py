@@ -1,5 +1,5 @@
-"""The DVD and Blu-ray rip: one makemkvcon run for the whole disc, or one per selected title, attributed back to the
-selected tracks."""
+"""The DVD and Blu-ray rip: one makemkvcon run for the whole disc, or one per ticked title, attributed back to the
+ticked tracks."""
 
 import asyncio
 import logging
@@ -7,6 +7,7 @@ from collections.abc import Callable, Collection
 from dataclasses import dataclass
 from pathlib import Path
 
+from arm_common.enums import TrackStatus
 from arm_common.schemas import TrackView
 
 from arm_ripper.drive_ready import ReadyOutcome, wait_until_readable
@@ -70,7 +71,7 @@ def _first_eligible_track(track_by_index: dict[int, TrackView], eligible: list[i
 
 
 def _no_output_error(title_idx: int, track: TrackView, min_length_seconds: int, eligible: list[int]) -> str:
-    """Why a selected title has no result: MakeMKV skipped it as too short, or it produced nothing for it."""
+    """Why a ticked title has no result: MakeMKV skipped it as too short, or it produced nothing for it."""
     duration = track.duration_seconds
     if duration is not None and duration < min_length_seconds:
         return f"track duration {duration}s below minlength={min_length_seconds}s; makemkvcon skipped it"
@@ -244,7 +245,7 @@ class _OpticalRip:
         await self._on_track_start(track)
 
     async def run(self) -> None:
-        """Run makemkvcon once, then report every selected track exactly once."""
+        """Run makemkvcon once, then report every ticked (not SKIPPED) track exactly once."""
         disc_result = await rip_disc(
             device_path=self._device_path,
             output_dir=self._output_dir,
@@ -270,7 +271,7 @@ class _OpticalRip:
         await self._attribute(disc_result)
 
     async def _attribute(self, disc_result: RipDiscResult) -> None:
-        """Report each selected track the live path didn't finish, from rip_disc's per-title results."""
+        """Report each ticked track the live path didn't finish, from rip_disc's per-title results."""
         # Per-title attribution for tracks the live path didn't already
         # finalise (e.g. below-minlength tracks MakeMKV skipped, or
         # eligible tracks that didn't produce a file). Tracks already in
@@ -314,8 +315,8 @@ class _OpticalRip:
             await self._on_track_done(track, result)
 
     async def _fail_unfinished(self, error: str) -> None:
-        """Fail every selected track the live path didn't finish with the rip-level error."""
-        # Rip-level failure — mark every selected track FAILED with the
+        """Fail every ticked track the live path didn't finish with the rip-level error."""
+        # Rip-level failure — mark every ticked track FAILED with the
         # disc-level error so the operator knows what happened. Each
         # track must transit IN_PROGRESS first per the backend's state
         # machine. Tracks the live path already reported DONE (titles
@@ -345,7 +346,7 @@ async def rip_optical(
 ) -> None:
     """Single-invocation DVD/BD rip with per-title attribution.
 
-    `per_title` (`ARM_RIP_INVOCATION=per_title`) instead runs one `mkv … <title>` per selected, unsettled eligible
+    `per_title` (`ARM_RIP_INVOCATION=per_title`) instead runs one `mkv … <title>` per ticked (not SKIPPED), unsettled eligible
     title, each into its own folder.
 
     The makemkvcon invocation rips every title ≥ minlength to
@@ -499,7 +500,7 @@ async def _fail_below_minimum(
     on_track_start: OnTrackStart,
     on_track_done: OnTrackDone,
 ) -> None:
-    """Fail each selected title MakeMKV would not rip (below the minimum length), as a full pass does."""
+    """Fail each ticked title MakeMKV would not rip (below the minimum length), as a full pass does."""
     for idx, track in track_by_index.items():
         if idx in skipped or idx in eligible:
             continue
@@ -525,13 +526,15 @@ async def _rip_each_title(
 ) -> None:
     """One `mkv … <title>` per selected, unsettled eligible title, each into `output_dir/title-NN`, in source order.
 
-    Settled and unselected titles are never read. Each title waits for the drive to be readable first, and one that
+    Settled and SKIPPED titles are never read. Each title waits for the drive to be readable first, and one that
     fails because the drive was not ready is tried once more. Progress is reported disc-wide. Once `stop` is set (the
     drive dropped), the titles not yet reached are reported stopped so the caller leaves them for its next resume.
     Selected titles MakeMKV would not rip (below the minimum length) fail with the same reason a full pass gives them.
     """
     pending = [idx for idx in eligible if idx not in skipped]
-    disc = DiscProgress({idx: track_by_index[idx].expected_size_bytes for idx in eligible}, skipped)
+    # Unticked (SKIPPED) titles are no rip work; the ones an earlier pass settled stay in as done work.
+    ticked = {idx: track_by_index[idx] for idx in eligible if track_by_index[idx].status is not TrackStatus.SKIPPED}
+    disc = DiscProgress({idx: track.expected_size_bytes for idx, track in ticked.items()}, skipped)
     for n, idx in enumerate(pending):
         if stop is not None and stop.is_set():
             await _report_unreached(

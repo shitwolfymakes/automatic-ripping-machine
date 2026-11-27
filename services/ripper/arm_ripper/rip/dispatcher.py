@@ -43,7 +43,7 @@ async def rip_all(
     title's file is cut short, so it is reported unfinished and `stop` is set.
     A resume passes every track so the `mkv all` output positions still line
     up, and the skipped tracks get no callbacks (their new files are deleted).
-    `per_title` (`ARM_RIP_INVOCATION=per_title`) rips only the selected, unsettled
+    `per_title` (`ARM_RIP_INVOCATION=per_title`) rips only the ticked (not SKIPPED), unsettled
     titles instead, one invocation each.
 
     Per disc_type:

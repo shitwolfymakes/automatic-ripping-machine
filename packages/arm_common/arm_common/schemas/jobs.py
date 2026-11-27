@@ -1,4 +1,5 @@
 from datetime import datetime
+from collections.abc import Callable
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, computed_field
@@ -217,6 +218,24 @@ def job_actions_for(status: JobStatus) -> JobActions:
     )
 
 
+def _mkv_all() -> RipInvocation:
+    return RipInvocation.MKV_ALL
+
+
+_rip_invocation_source: Callable[[], RipInvocation] = _mkv_all
+
+
+def set_rip_invocation_source(source: Callable[[], RipInvocation]) -> None:
+    """Install where every `JobView` reads the install's rip invocation. The backend sets it once, to its
+    `ARM_RIP_INVOCATION` setting, so each JobView it builds (a response, a WebSocket payload) carries the real value."""
+    global _rip_invocation_source
+    _rip_invocation_source = source
+
+
+def _current_rip_invocation() -> RipInvocation:
+    return _rip_invocation_source()
+
+
 class JobView(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -260,6 +279,9 @@ class JobView(BaseModel):
     # Populated by the jobs list + detail endpoints by aggregating the job's
     # session_applications. None when no session has been applied.
     transcode_progress: TranscodeProgressSummary | None = None
+    # How this install reads a DVD/BD (the ARM_RIP_INVOCATION experiment): per_title rips only the ticked titles,
+    # mkv_all writes every title. Read from the backend's setting when the view is built.
+    rip_invocation: RipInvocation = Field(default_factory=_current_rip_invocation)
 
     @computed_field  # type: ignore[prop-decorator]
     @property

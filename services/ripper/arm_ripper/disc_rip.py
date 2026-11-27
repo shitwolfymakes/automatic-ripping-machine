@@ -52,6 +52,11 @@ def _resumable(disc_type: DiscType, device_path: str, tracks: list[TrackView]) -
     )
 
 
+def _skipped_ids(tracks: list[TrackView]) -> set[str]:
+    """The ids of the tracks the backend marked SKIPPED at Start: never read, so settled from the first pass."""
+    return {t.id for t in tracks if t.status == TrackStatus.SKIPPED}
+
+
 def _done_fields(result: RipResult) -> dict[str, object]:
     """The track patch for a finished title: DONE, plus each of its output path, size and duration that the
     rip reported."""
@@ -116,6 +121,7 @@ class DiscRip:
         # after a restart starts with the titles the backend kept DONE.
         self._unfinished: set[str] = set()
         settled = [t for t in self._tracks if t.status == TrackStatus.DONE]
+        self._settled_at_start = len(settled)
         self._kept: set[Path] = {Path(t.output_path) for t in settled if t.output_path is not None}
         # IN_PROGRESS is sent once per track across every pass.
         self._started: set[str] = set()
@@ -124,7 +130,7 @@ class DiscRip:
         )
         self._rip_path = device_path
         self._rip_dir = self._output_dir
-        self._skip: set[str] = {t.id for t in settled}
+        self._skip: set[str] = {t.id for t in settled} | _skipped_ids(self._tracks)
         self._per_title = rip_start.rip_invocation is RipInvocation.PER_TITLE
         self._resumes = 0
 
@@ -247,7 +253,7 @@ class DiscRip:
     async def run(self) -> None:
         """Rip the disc through its resumes, then finish it."""
         self._output_dir.mkdir(parents=True, exist_ok=True)
-        if self._skip:
+        if self._settled_at_start:
             self._prepare_restart_resume()
         while True:
             await self._run_pass()
@@ -297,7 +303,7 @@ class DiscRip:
         fresh resume folder."""
         _remove_partial_outputs(self._output_dir, self._kept)
         self._rip_dir = _next_resume_dir(self._output_dir)
-        logger.info("resuming after a restart; %d title(s) already settled", len(self._skip))
+        logger.info("resuming after a restart; %d title(s) already settled", self._settled_at_start)
 
     def _prepare_resume(self, returned: str) -> None:
         """Set up the next pass on the node the drive came back on: drop the partial files, skip every title already

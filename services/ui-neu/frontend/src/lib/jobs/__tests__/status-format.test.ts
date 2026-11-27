@@ -51,6 +51,7 @@ describe('statusLabel', () => {
 		['queued', 'Queued'],
 		['in_progress', 'In Progress'],
 		['done', 'Done'],
+		['skipped', 'Not ripped'],
 		['running', 'Running'],
 		['waiting_identify', 'Waiting to identify'],
 		['done_partial', 'Done (partial)'],

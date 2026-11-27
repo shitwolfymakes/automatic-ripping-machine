@@ -17,6 +17,7 @@ from fastapi.testclient import TestClient
 import pytest
 from sqlalchemy.exc import IntegrityError
 
+from arm_backend.config import settings
 from arm_backend.auto_session import ApplySessionOutcome, SessionNotFoundError
 from arm_backend.db import get_session
 from arm_backend.identity.proposals import record_manual_job
@@ -33,6 +34,7 @@ from arm_common import (
     Job,
     JobStatus,
     MediaType,
+    RipInvocation,
     Session,
     SessionApplication,
     SessionApplicationStatus,
@@ -2370,3 +2372,84 @@ def test_accept_keeps_a_previously_ripped_hold_in_place(signing_key: bytes, hold
     assert body["title"] == "Iron Man"
     assert body["metadata_json"].get("identity_suggestion") is None
     assert body["metadata_json"]["previously_ripped"] == {"job_id": _PRIOR_JOB_ID}
+
+
+def _start_review_tracks(db: FakeSession) -> tuple[Track, Track]:
+    db.rows["jobs"] = [_job(status=JobStatus.AWAITING_REVIEW)]
+    ticked = _track("trk_01JZXR7K3M5Q8N4VWA0000T01", status=TrackStatus.QUEUED)
+    unticked = _track("trk_01JZXR7K3M5Q8N4VWA0000T02", status=TrackStatus.QUEUED, index=2)
+    unticked.excluded = True
+    db.rows["tracks"] = [ticked, unticked]
+    return ticked, unticked
+
+
+def test_rip_start_review_per_title_skips_the_unticked_titles(
+    signing_key: bytes, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(settings, "ARM_RIP_INVOCATION", RipInvocation.PER_TITLE)
+    db = FakeSession()
+    app, token = _make_app(signing_key, db)
+    ticked, unticked = _start_review_tracks(db)
+    with TestClient(app) as client:
+        r = client.post("/api/jobs/job_01JZXR7K3M5Q8N4VWA00000001/rip-start-review", headers=_auth(token))
+    assert r.status_code == 200
+    assert (ticked.status, unticked.status) == (TrackStatus.QUEUED, TrackStatus.SKIPPED)
+
+
+def test_rip_start_review_mkv_all_keeps_the_unticked_titles_queued(
+    signing_key: bytes, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(settings, "ARM_RIP_INVOCATION", RipInvocation.MKV_ALL)
+    db = FakeSession()
+    app, token = _make_app(signing_key, db)
+    _, unticked = _start_review_tracks(db)
+    with TestClient(app) as client:
+        r = client.post("/api/jobs/job_01JZXR7K3M5Q8N4VWA00000001/rip-start-review", headers=_auth(token))
+    assert r.status_code == 200
+    assert unticked.status == TrackStatus.QUEUED
+
+
+def _patch_tick(signing_key: bytes, status: TrackStatus, excluded: bool) -> Any:
+    db = FakeSession()
+    _seed_job_with_track(db)
+    track = db.rows["tracks"][0]
+    track.status = status
+    track.excluded = not excluded
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as c:
+        r = c.patch(
+            f"/api/jobs/{_JOB_ID_A}",
+            json={"tracks": [{"track_id": _TRK_ID_A, "excluded": excluded}]},
+            headers=_auth(token),
+        )
+    return r, track
+
+
+def test_ticking_a_skipped_track_is_refused_422(signing_key: bytes) -> None:
+    r, track = _patch_tick(signing_key, TrackStatus.SKIPPED, excluded=False)
+    assert r.status_code == 422
+    assert "was not ripped" in r.json()["detail"]
+    assert track.excluded is True
+
+
+def test_unticking_a_skipped_track_is_allowed(signing_key: bytes) -> None:
+    r, track = _patch_tick(signing_key, TrackStatus.SKIPPED, excluded=True)
+    assert r.status_code == 200, r.text
+    assert track.excluded is True
+
+
+@pytest.mark.parametrize("status", [TrackStatus.QUEUED, TrackStatus.IN_PROGRESS, TrackStatus.DONE, TrackStatus.FAILED])
+def test_ticking_a_track_that_was_read_is_allowed(signing_key: bytes, status: TrackStatus) -> None:
+    r, track = _patch_tick(signing_key, status, excluded=False)
+    assert r.status_code == 200, r.text
+    assert track.excluded is False
+
+
+def test_job_detail_reports_the_rip_invocation(signing_key: bytes, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(settings, "ARM_RIP_INVOCATION", RipInvocation.PER_TITLE)
+    db = FakeSession()
+    app, token = _make_app(signing_key, db)
+    db.rows["jobs"] = [_job("job_01JZXR7K3M5Q8N4VWA00000001", status=JobStatus.RIPPED)]
+    with TestClient(app) as client:
+        r = client.get("/api/jobs/job_01JZXR7K3M5Q8N4VWA00000001", headers=_auth(token))
+    assert r.json()["job"]["rip_invocation"] == "per_title"

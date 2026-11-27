@@ -52,7 +52,7 @@ async def reset_job_for_recovery(db: AsyncSession, job: Job) -> int:
     """Reset one job for crash recovery. Caller commits.
 
     - Set `job.resumed_from_crash = True` (no-op if already true).
-    - For every track on the job that is not QUEUED, and is not a DONE
+    - For every track on the job that is not QUEUED or SKIPPED (never read, so nothing to redo), and is not a DONE
       track whose file is intact, set status to QUEUED and increment
       `attempts`. Tracks already QUEUED are left alone (idempotent re-runs
       do not inflate counters).
@@ -63,7 +63,7 @@ async def reset_job_for_recovery(db: AsyncSession, job: Job) -> int:
     all_tracks = (await db.execute(select(Track).where(col(Track.job_id) == job.id))).scalars().all()
     touched = 0
     for track in all_tracks:
-        if track.status == TrackStatus.QUEUED:
+        if track.status in (TrackStatus.QUEUED, TrackStatus.SKIPPED):
             continue
         if track.status == TrackStatus.DONE and await asyncio.to_thread(_finished_file_intact, track):
             continue
