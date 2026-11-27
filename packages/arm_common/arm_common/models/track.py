@@ -4,7 +4,7 @@ from sqlalchemy import BigInteger, Boolean, Column, ForeignKey, Integer, JSON, S
 from sqlmodel import Field, SQLModel
 
 from arm_common.models._columns import created_at_column, enum_column, updated_at_column
-from arm_common.enums import TrackKind, TrackRole, TrackStatus
+from arm_common.enums import TitleClass, TrackKind, TrackRole, TrackStatus
 from arm_common.ulid import new_id
 
 
@@ -23,6 +23,15 @@ class Track(SQLModel, table=True):
     label: str | None = Field(default=None)
     role: TrackRole | None = Field(default=None, sa_column=enum_column(TrackRole, "track_role", nullable=True))
     edition: str | None = Field(default=None)
+    # Scan-time facts about a Blu-ray title (NULL for DVD, CD and whole-disc
+    # tracks): MakeMKV's source file and playlist name, the classifier's verdict
+    # and, for a copy, the `source_ref` of the kept title it copies.
+    source_file: str | None = Field(default=None)
+    playlist_name: str | None = Field(default=None)
+    title_class: TitleClass | None = Field(
+        default=None, sa_column=enum_column(TitleClass, "title_class", nullable=True)
+    )
+    title_class_ref: str | None = Field(default=None)
     # Per-track identity (operator-editable; null = inherit job-level). For
     # multi-title discs (TV box sets / multi-movie) each VIDEO_TITLE track
     # carries its own identity. Resolver-managed fields record which identity

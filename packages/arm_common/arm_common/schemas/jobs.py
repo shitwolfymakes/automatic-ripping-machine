@@ -13,6 +13,7 @@ from arm_common.enums import (
     JobStatus,
     MediaType,
     SessionApplicationStatus,
+    TitleClass,
     TrackKind,
     TrackRole,
     TrackStatus,
@@ -395,6 +396,10 @@ class TrackView(BaseModel):
     label: str | None = None
     role: TrackRole | None = None
     edition: str | None = None
+    source_file: str | None = None
+    playlist_name: str | None = None
+    title_class: TitleClass | None = None
+    title_class_ref: str | None = None
     title: str | None = None
     year: int | None = None
     imdb_id: str | None = None

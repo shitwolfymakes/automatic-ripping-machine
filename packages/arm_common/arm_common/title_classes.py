@@ -64,11 +64,11 @@ def _is_playlist(title: ScanTitle) -> bool:
 
 
 def pick_representative(group: Sequence[ScanTitle], preferred: Collection[int]) -> ScanTitle:
-    """The title of a group that stays kept: the only one with a comment, else
+    """The title of a group that stays kept: the only one with a playlist name, else
     the only preferred one, else the lowest index (MakeMKV lists its own pick
     first; never order by playlist number)."""
     for narrowed in (
-        [t for t in group if t.comment],
+        [t for t in group if t.playlist_name],
         [t for t in group if t.index in preferred],
     ):
         if len(narrowed) == 1:

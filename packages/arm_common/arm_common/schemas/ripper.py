@@ -75,9 +75,9 @@ class ScanTitle(BaseModel):
     # The clips the title plays, in play order, and how many there are.
     segment_count: int | None = None
     segment_map: list[int] | None = None
-    # MakeMKV's comment: the disc's own name for the playlist, when it has one
+    # The disc's own name for the playlist, when it has one
     # (`FPL_MainFeature`). Decoy playlists usually have none.
-    comment: str | None = None
+    playlist_name: str | None = None
 
 
 class DiscFingerprintInput(BaseModel):

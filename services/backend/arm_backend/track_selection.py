@@ -9,7 +9,17 @@ class TrackSelectionError(ValueError):
     pass
 
 
-def _video_track(job_id: str, title: ScanTitle) -> Track:
+def _verdict_fields(verdict: TitleVerdict | None) -> dict[str, TitleClass | str | None]:
+    """The track columns a classifier verdict fills; all NULL without one (a
+    DVD, or a title the classifier never saw). `title_class_ref` is the
+    `source_ref` of the kept title a copy points at."""
+    if verdict is None:
+        return {"title_class": None, "title_class_ref": None}
+    ref = None if verdict.of_index is None else str(verdict.of_index)
+    return {"title_class": verdict.title_class, "title_class_ref": ref}
+
+
+def _video_track(job_id: str, title: ScanTitle, verdicts: dict[int, TitleVerdict]) -> Track:
     return Track(
         job_id=job_id,
         kind=TrackKind.VIDEO_TITLE,
@@ -17,6 +27,9 @@ def _video_track(job_id: str, title: ScanTitle) -> Track:
         source_ref=str(title.index),
         expected_duration_seconds=title.duration_seconds,
         expected_size_bytes=title.size_bytes,
+        source_file=title.source_file,
+        playlist_name=title.playlist_name,
+        **_verdict_fields(verdicts.get(title.index)),
     )
 
 
@@ -103,15 +116,16 @@ def _select_video(scan: ScanResult, rip_preset: RipPreset, job_id: str, preferre
     candidates = _kept_titles(titles, verdicts)
     rule = rip_preset.track_selection
     if rule == TrackSelection.MAIN_FEATURE:
-        return [_video_track(job_id, t) for t in _main_feature(candidates, verdicts)]
+        return [_video_track(job_id, t, verdicts) for t in _main_feature(candidates, verdicts)]
     if rule == TrackSelection.ALL_TRACKS:
-        return [_video_track(job_id, t) for t in candidates if t.duration_seconds >= ALL_TRACKS_MIN_SECONDS]
+        return [_video_track(job_id, t, verdicts) for t in candidates if t.duration_seconds >= ALL_TRACKS_MIN_SECONDS]
     if rule == TrackSelection.ARCHIVE:
-        return [_video_track(job_id, t) for t in candidates]
+        return [_video_track(job_id, t, verdicts) for t in candidates]
     if rule == TrackSelection.CUSTOM:
         filters = _parse_filters(rip_preset)
         return [
-            _video_track(job_id, t) for t in _apply_custom_filters(_custom_pool(titles, candidates, filters), filters)
+            _video_track(job_id, t, verdicts)
+            for t in _apply_custom_filters(_custom_pool(titles, candidates, filters), filters)
         ]
     # Unreachable: TrackSelection enum is exhaustively handled above.
     raise TrackSelectionError(f"unknown track_selection: {rule}")  # pragma: no cover
@@ -197,9 +211,10 @@ def select_tracks_for_review(
 
     kept_refs = {t.source_ref for t in select_tracks(job_id, scan, rip_preset, preferred=preferred)}
     is_cd = scan.disc_type == DiscType.CD
+    verdicts = _classify(scan, preferred)
     rows: list[Track] = []
     for title in scan.titles:
-        track = _audio_track(job_id, title) if is_cd else _video_track(job_id, title)
+        track = _audio_track(job_id, title) if is_cd else _video_track(job_id, title, verdicts)
         track.excluded = str(title.index) not in kept_refs
         rows.append(track)
     return rows
