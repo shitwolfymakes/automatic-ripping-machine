@@ -15478,9 +15478,9 @@
           "source_track": {
             "$ref": "#/components/schemas/TrackView"
           },
-          "raw_input_path": {
+          "source_path": {
             "type": "string",
-            "title": "Raw Input Path"
+            "title": "Source Path"
           },
           "media_root": {
             "type": "string",
@@ -15493,11 +15493,11 @@
           "session",
           "transcode_preset",
           "source_track",
-          "raw_input_path",
+          "source_path",
           "media_root"
         ],
         "title": "RegisterTranscoderResponse",
-        "description": "Bootstrap bundle the transcoder needs before it can claim + run.\n\n`raw_input_path` is the absolute path the transcoder should read from\n(`/raw/<job>/title_tNN.mkv` for video, `/raw/<job>/track_NN.wav` for\naudio, `/raw/<job>/dump.iso` for data). `media_root` plus the task's\n`output_path` is where the final file lands."
+        "description": "Bootstrap bundle the transcoder needs before it can claim + run.\n\n`source_path` is the absolute path of the staged copy the transcoder should read from\n(`/staging/<job>/title_tNN.mkv` for video, `/staging/<job>/track_NN.wav` for\naudio, `/staging/<job>/dump.iso` for data). `media_root` plus the task's\n`output_path` is where the final file lands."
       },
       "RenameRequest": {
         "properties": {

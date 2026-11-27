@@ -7,12 +7,14 @@ Service-token auth (no JWT plumbing required).
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any, AsyncIterator
 
-
+import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from arm_backend.config import staging_root
 from arm_backend.db import get_session
 from arm_backend.handbrake_schema_store import SchemaStore
 from arm_backend.routers import transcoder as transcoder_router
@@ -29,9 +31,11 @@ from arm_common import (
     Session,
     SessionApplication,
     SessionApplicationStatus,
+    StageStatus,
     Track,
     TrackKind,
     TrackSelection,
+    TrackStage,
     TrackStatus,
     TranscodePreset,
     TranscodeTask,
@@ -43,6 +47,19 @@ from tests._hb_schema import fixture_schema
 
 _HOSTNAME = "arm-transcode-abc123"
 _SERVICE_AUTH = {"Authorization": "Bearer tok-service", "X-ARM-Hostname": _HOSTNAME}
+_JOB = "job_01JZXR7K3M5Q8N4VWA00000001"
+
+
+def _stage_row(status: StageStatus = StageStatus.STAGED) -> TrackStage:
+    dest = staging_root(transcoder_router.request_settings()) / _JOB / "title_t01.mkv"
+    return TrackStage(
+        id="stg_1",
+        track_id="trk_1",
+        job_id=_JOB,
+        status=status,
+        source_path=f"/raw/{_JOB}/title_t01.mkv",
+        dest_path=str(dest),
+    )
 
 
 def _seed(db: FakeSession, *, task_status: TranscodeTaskStatus = TranscodeTaskStatus.QUEUED) -> None:
@@ -126,6 +143,12 @@ def _seed(db: FakeSession, *, task_status: TranscodeTaskStatus = TranscodeTaskSt
             claim_heartbeat_at=datetime.now(UTC) if task_status == TranscodeTaskStatus.IN_PROGRESS else None,
         )
     ]
+    db.rows["track_stages"] = [_stage_row()]
+
+
+def _set_stage(db: FakeSession, status: StageStatus | None) -> None:
+    """Replace the seeded STAGED row with one at `status`, or with none."""
+    db.rows["track_stages"] = [] if status is None else [_stage_row(status)]
 
 
 class _FakeRunner:
@@ -168,24 +191,96 @@ def test_register_returns_bundle() -> None:
     assert r.status_code == 200, r.text
     body = r.json()
     assert body["task"]["id"] == "txt_1"
-    assert body["raw_input_path"] == "/raw/job_01JZXR7K3M5Q8N4VWA00000001/title_t01.mkv"
+    assert body["source_path"] == f"/staging/{_JOB}/title_t01.mkv"
+    assert "raw_input_path" not in body
     assert body["transcode_preset"]["preset_ref"] == "H.265 MKV 1080p30"
     assert body["session"]["id"] == "ses_x"
 
 
-def test_register_refuses_when_track_has_no_output_path() -> None:
+_REGISTER_BODY = {"task_id": "txt_1", "hostname": _HOSTNAME, "hw_caps": {"cpu_count": 4}}
+
+
+@pytest.mark.parametrize(
+    "stage_status",
+    [None, StageStatus.PENDING, StageStatus.COPYING, StageStatus.STALLED, StageStatus.FAILED],
+)
+def test_register_409_until_the_source_is_staged(stage_status: StageStatus | None) -> None:
     db = FakeSession()
     _seed(db)
-    db.rows["tracks"][0].output_path = None
-    app = _make_app(db)
-    with TestClient(app) as client:
-        r = client.post(
-            "/api/transcoder/register",
-            json={"task_id": "txt_1", "hostname": _HOSTNAME, "hw_caps": {"cpu_count": 4}},
+    _set_stage(db, stage_status)
+    with TestClient(_make_app(db)) as client:
+        r = client.post("/api/transcoder/register", json=_REGISTER_BODY, headers=_SERVICE_AUTH)
+    assert r.status_code == 409
+    assert r.json()["detail"] == "source not staged yet"
+
+
+def test_register_translates_a_staging_outside_raw_to_the_transcoder_mount(monkeypatch: pytest.MonkeyPatch) -> None:
+    cfg = transcoder_router.request_settings().model_copy(
+        update={"ARM_HOST_STAGING_PATH": "/mnt/fast", "STAGING_ROOT": "/staging-backend"}
+    )
+    monkeypatch.setattr(transcoder_router, "request_settings", lambda: cfg)
+    db = FakeSession()
+    _seed(db)
+    with TestClient(_make_app(db)) as client:
+        r = client.post("/api/transcoder/register", json=_REGISTER_BODY, headers=_SERVICE_AUTH)
+    assert r.status_code == 200, r.text
+    assert r.json()["source_path"] == f"/staging/{_JOB}/title_t01.mkv"
+
+
+@pytest.mark.parametrize("stage_status", [None, StageStatus.PENDING, StageStatus.COPYING, StageStatus.FAILED])
+def test_claim_409_until_the_source_is_staged(stage_status: StageStatus | None) -> None:
+    db = FakeSession()
+    _seed(db)
+    _set_stage(db, stage_status)
+    with TestClient(_make_app(db)) as client:
+        r = client.post("/api/transcoder/tasks/txt_1/claim", headers=_SERVICE_AUTH)
+    assert r.status_code == 409
+    assert r.json()["detail"] == "source not staged yet"
+    assert db.rows["transcode_tasks"][0].status == TranscodeTaskStatus.QUEUED
+
+
+def _complete(db: FakeSession) -> Any:
+    with TestClient(_make_app(db)) as client:
+        return client.patch(
+            "/api/transcoder/tasks/txt_1/complete",
+            json={"output_path": "Iron Man (2008)/Iron Man.mkv", "size_bytes": 1, "duration_seconds": 1},
             headers=_SERVICE_AUTH,
         )
-    assert r.status_code == 409
-    assert "no output_path" in r.json()["detail"]
+
+
+def test_complete_releases_the_staged_copy_of_the_last_task(tmp_path: Path) -> None:
+    db = FakeSession()
+    _seed(db, task_status=TranscodeTaskStatus.IN_PROGRESS)
+    staged = tmp_path / "t.mkv"
+    staged.write_bytes(b"x")
+    db.rows["track_stages"][0].dest_path = str(staged)
+    assert _complete(db).status_code == 200
+    assert not staged.exists()
+    assert db.rows["track_stages"] == []
+
+
+def test_a_failed_commit_leaves_the_staged_copy_in_place(tmp_path: Path) -> None:
+    db = FakeSession()
+    _seed(db, task_status=TranscodeTaskStatus.IN_PROGRESS)
+    staged = tmp_path / "t.mkv"
+    staged.write_bytes(b"x")
+    db.rows["track_stages"][0].dest_path = str(staged)
+    db.commit_raises = RuntimeError("commit failed")
+    with pytest.raises(RuntimeError, match="commit failed"):
+        _complete(db)
+    assert staged.exists()
+
+
+def test_complete_keeps_the_staged_copy_while_a_sibling_task_is_not_done(tmp_path: Path) -> None:
+    db = FakeSession()
+    _seed(db, task_status=TranscodeTaskStatus.IN_PROGRESS)
+    _add_second_task(db, TranscodeTaskStatus.QUEUED)
+    staged = tmp_path / "t.mkv"
+    staged.write_bytes(b"x")
+    db.rows["track_stages"][0].dest_path = str(staged)
+    assert _complete(db).status_code == 200
+    assert staged.exists()
+    assert len(db.rows["track_stages"]) == 1
 
 
 def test_register_404_unknown_task() -> None:

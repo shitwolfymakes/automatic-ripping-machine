@@ -53,6 +53,7 @@ from arm_backend.transcode_container_spec import (
 )
 from arm_backend.transcode_image_pool import TranscodeImagePool
 from arm_backend.transcode_images import image_for
+from arm_backend.staging import stage_for_track
 from arm_backend.transcode_sweeps import TranscodeSweeps
 from arm_backend.transcode_queue import max_parallel_transcodes, resolve_preset_for_task
 from arm_common import (
@@ -60,6 +61,8 @@ from arm_common import (
     GpuStatus,
     GpuVendor,
     SessionApplication,
+    StageStatus,
+    TrackStage,
     TranscodePreset,
     TranscodeTask,
     TranscodeTaskStatus,
@@ -121,6 +124,21 @@ def gpu_awaiting_probe(gpu: Gpu) -> bool:
     return _active_dispatcher is not None and _active_dispatcher.awaiting_probe(gpu)
 
 
+_ACTIVE_STAGE = (StageStatus.PENDING, StageStatus.COPYING, StageStatus.STALLED)
+
+
+def held_for_staging(stage: TrackStage | None, preset: TranscodePreset | None) -> bool:
+    """Whether a queued task must wait for its source track's stage.
+
+    An encode task needs the staged copy, so it waits unless the stage is STAGED. A passthrough task moves
+    raw, so it only waits while a stage is still reading it."""
+    from arm_backend.transcode_apply import is_passthrough_preset
+
+    if is_passthrough_preset(preset):
+        return stage is not None and stage.status in _ACTIVE_STAGE
+    return stage is None or stage.status != StageStatus.STAGED
+
+
 class _SpawnPass:
     """One `TranscodeDispatcher.spawn_pending` pass over the queued tasks, holding the pass's counters and its
     cached host probe."""
@@ -133,6 +151,7 @@ class _SpawnPass:
         self.encode_slots: int = 0
         self.spawned: int = 0
         self.held_encode: int = 0
+        self.held_staging: int = 0
         self.encode_examined: int = 0
 
     async def run(self) -> int:
@@ -153,6 +172,8 @@ class _SpawnPass:
                 self.enabled,
                 self._dispatcher._docker is not None,
             )
+        if self.held_staging:
+            logger.debug("%d task(s) held waiting for staged files", self.held_staging)
         await self._db.commit()
         return self.spawned
 
@@ -279,12 +300,23 @@ class _SpawnPass:
         job_id = await self._job_id_for(task)
         with with_log_context(job_id=job_id, session_application_id=task.session_application_id):
             preset = await resolve_preset_for_task(self._db, task)
+            stage = await stage_for_track(self._db, task.source_track_id)
+            if held_for_staging(stage, preset):
+                self._note_held_for_staging(task, stage)
+                return
             if is_passthrough_preset(preset):
                 await self._run_passthrough_isolated(task, task_id)
                 return
             if not await self._admit_encode():
                 return
             await self._claim_and_spawn(task, task_id, preset)
+
+    def _note_held_for_staging(self, task: TranscodeTask, stage: TrackStage | None) -> None:
+        """Count a task held for its stage; a task with no stage row at all is logged once."""
+        self.held_staging += 1
+        if stage is None and task.id not in self._dispatcher._unstaged_logged:
+            self._dispatcher._unstaged_logged.add(task.id)
+            logger.debug("task_id=%s has no stage row (predates staging); held", task.id)
 
     async def _claim_and_spawn(self, task: TranscodeTask, task_id: str, preset: TranscodePreset | None) -> None:
         # No separate re-verify needed here: the fresh,
@@ -436,6 +468,8 @@ class TranscodeDispatcher:
         self.last_spawn_error: str | None = None
         # (detail, monotonic time) of the last "spawns held" log line.
         self._probe_hold_logged: tuple[str | None, float] | None = None
+        # Task ids already logged as held for having no stage row at all.
+        self._unstaged_logged: set[str] = set()
         self._probe = TtlProbe(lambda: probe_docker(self._docker_client, self._settings.ARM_TRANSCODE_IMAGE))
         # The URL a remote-spawned transcoder calls home on; only checked
         # when spawning remotely (see `probe`).
@@ -736,7 +770,7 @@ class TranscodeDispatcher:
 
     def host_paths_set(self) -> bool:
         return bool(
-            self._settings.ARM_HOST_RAW_PATH
+            (self._settings.ARM_HOST_RAW_PATH or self._settings.ARM_HOST_STAGING_PATH)
             and self._settings.ARM_HOST_MEDIA_PATH
             and self._settings.ARM_HOST_LOGS_PATH
             and self._settings.ARM_HOST_CERTS_PATH

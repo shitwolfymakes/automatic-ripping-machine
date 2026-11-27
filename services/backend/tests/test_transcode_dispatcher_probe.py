@@ -30,8 +30,16 @@ from arm_common import (
     TranscodeTool,
 )
 
+import pytest
+
 from tests._fakes import FakeSession
+from tests._staged_sources import staged_by_default
 from tests.test_transcode_dispatcher_full import _disp
+
+
+@pytest.fixture(autouse=True)
+def _staged_sources(monkeypatch: pytest.MonkeyPatch) -> None:
+    staged_by_default(monkeypatch)
 
 
 def _make_dispatcher():

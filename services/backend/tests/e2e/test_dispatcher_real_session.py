@@ -50,7 +50,9 @@ from arm_common import (
     Session,
     SessionApplication,
     SessionApplicationStatus,
+    StageStatus,
     Track,
+    TrackStage,
     TranscodePreset,
     TranscodeTask,
     TranscodeTaskStatus,
@@ -165,6 +167,13 @@ async def test_persistently_failing_encode_spawn_does_not_abort_passthrough(tmp_
                             index=1,
                             source_ref="t0",
                             output_path=str(raw),
+                        ),
+                        TrackStage(
+                            track_id="trk_e",
+                            job_id="job_01JZXR7K3M5Q8N4VWA00000001",
+                            status=StageStatus.STAGED,
+                            source_path="/raw/job_01JZXR7K3M5Q8N4VWA00000001/e.mkv",
+                            dest_path="/raw/.staging/job_01JZXR7K3M5Q8N4VWA00000001/e.mkv",
                         ),
                         TranscodeTask(
                             id="txt_enc",
@@ -311,6 +320,13 @@ async def test_unrunnable_encode_task_fails_and_passthrough_still_runs(tmp_path:
                             index=1,
                             source_ref="t0",
                             output_path=str(raw),
+                        ),
+                        TrackStage(
+                            track_id="trk_e",
+                            job_id="job_01JZXR7K3M5Q8N4VWA00000001",
+                            status=StageStatus.STAGED,
+                            source_path="/raw/job_01JZXR7K3M5Q8N4VWA00000001/e.mkv",
+                            dest_path="/raw/.staging/job_01JZXR7K3M5Q8N4VWA00000001/e.mkv",
                         ),
                         TranscodeTask(
                             id="txt_enc",

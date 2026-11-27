@@ -363,7 +363,7 @@ async def _encode_and_report(
     cancel_event: asyncio.Event,
 ) -> int:
     """Encode the registered task under a heartbeat, report the outcome to the Backend, and return the exit code."""
-    raw_input = Path(registered.raw_input_path)
+    raw_input = Path(registered.source_path)
     final_output = Path(registered.media_root) / (registered.task.output_path or "")
     preset = registered.transcode_preset
     if preset is None or preset.tool == TranscodeTool.NONE:

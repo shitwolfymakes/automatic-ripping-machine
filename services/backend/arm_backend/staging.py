@@ -13,7 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import col, select
 
 from arm_backend.config import Settings, staging_root
-from arm_common import StageStatus, Track, TrackKind, TrackStage
+from arm_common import StageStatus, Track, TrackKind, TrackStage, TranscodeTask, TranscodeTaskStatus
 from arm_common.models._columns import enum_value_str
 
 if TYPE_CHECKING:
@@ -106,3 +106,36 @@ async def ensure_stage_rows(
         for stage in created:
             await emit_stage_event(hub, db, "stage.queued", stage)
     return created
+
+
+async def _all_tasks_done(db: AsyncSession, track_id: str) -> bool:
+    """True when the track has transcode tasks and every one is DONE."""
+    tasks = (
+        (await db.execute(select(TranscodeTask).where(col(TranscodeTask.source_track_id) == track_id))).scalars().all()
+    )
+    return bool(tasks) and all(t.status == TranscodeTaskStatus.DONE for t in tasks)
+
+
+def unlink_staged_copy(path: Path | None) -> None:
+    """Remove a released staged file, after the transaction that dropped its row committed.
+
+    `None` (nothing was released) is a no-op; a copy already gone or one that won't unlink is logged, not raised."""
+    if path is None:
+        return
+    try:
+        path.unlink(missing_ok=True)
+    except OSError as exc:
+        logger.warning("staged copy not removed path=%s: %s", path, exc)
+
+
+async def release_if_settled(db: AsyncSession, track_id: str) -> Path | None:
+    """Delete the track's stage row once every transcode task for the track is DONE; return the file to unlink.
+
+    A FAILED or live task keeps the row, so a retry needs no re-copy. Call it after a task reached DONE
+    (flushed). The row delete joins the caller's transaction; the caller commits, then passes the returned
+    path to `unlink_staged_copy`, so a failed commit never leaves a STAGED row without its file."""
+    stage = await stage_for_track(db, track_id)
+    if stage is None or not await _all_tasks_done(db, track_id):
+        return None
+    await db.delete(stage)
+    return Path(stage.dest_path)
