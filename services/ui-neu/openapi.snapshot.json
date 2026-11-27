@@ -10041,6 +10041,11 @@
             ],
             "title": "Media Status At"
           },
+          "scanning": {
+            "type": "boolean",
+            "title": "Scanning",
+            "default": false
+          },
           "rip_params_json": {
             "additionalProperties": true,
             "type": "object",
@@ -10623,6 +10628,10 @@
             ],
             "title": "Media Status At"
           },
+          "scanning": {
+            "type": "boolean",
+            "title": "Scanning"
+          },
           "default_session_id": {
             "anyOf": [
               {
@@ -10879,6 +10888,7 @@
           "last_seen_at",
           "media_status",
           "media_status_at",
+          "scanning",
           "default_session_id",
           "rip_speed",
           "drive_mode",
@@ -16210,12 +16220,17 @@
           },
           "media_status": {
             "$ref": "#/components/schemas/DriveMediaStatus"
+          },
+          "scanning": {
+            "type": "boolean",
+            "title": "Scanning"
           }
         },
         "type": "object",
         "required": [
           "drive_id",
-          "media_status"
+          "media_status",
+          "scanning"
         ],
         "title": "RipperHeartbeatRequest",
         "description": "POST /api/ripper/heartbeat body. Each ripper sends one of these\nevery HEARTBEAT_INTERVAL_SECONDS so the backend can refuse manual-\ntrigger requests against drives whose tray is open / empty without\nwaiting for a doomed identify.\n\nNamed distinctly from the transcoder HeartbeatRequest because the\ntwo services post completely different payloads to different paths."

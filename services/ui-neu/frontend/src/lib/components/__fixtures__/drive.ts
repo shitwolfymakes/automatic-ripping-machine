@@ -12,6 +12,7 @@ export function createDrive(overrides: Partial<DriveView> = {}): DriveView {
 		last_seen_at: null,
 		media_status: null,
 		media_status_at: null,
+		scanning: false,
 		default_session_id: null,
 		rip_speed: null,
 		drive_mode: null,

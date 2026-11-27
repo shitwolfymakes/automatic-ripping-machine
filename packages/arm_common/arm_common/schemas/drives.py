@@ -39,6 +39,7 @@ class DriveView(BaseModel):
     last_seen_at: datetime | None
     media_status: DriveMediaStatus | None
     media_status_at: datetime | None
+    scanning: bool
     default_session_id: str | None
     rip_speed: int | None
     drive_mode: DriveMode | None

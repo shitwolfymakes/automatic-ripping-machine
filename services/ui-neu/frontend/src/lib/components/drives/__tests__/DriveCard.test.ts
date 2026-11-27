@@ -29,6 +29,7 @@ function createDrive(overrides: Partial<Drive> = {}): Drive {
 		last_seen_at: null,
 		media_status: null,
 		media_status_at: null,
+		scanning: false,
 		default_session_id: null,
 		rip_speed: null,
 		drive_mode: null,
@@ -213,25 +214,34 @@ describe('DriveCard', () => {
 	});
 
 	describe('cancel scan', () => {
-		it('is offered, with an accessible name, while a disc is loaded and there is no job', () => {
-			renderDrive({ media_status: 'loaded' });
+		it('is offered, with an accessible name, while the ripper reports a scan', () => {
+			renderDrive({ media_status: 'loaded', scanning: true });
 			expect(screen.getByRole('button', { name: 'Cancel scan' })).toBe(screen.getByTestId('drive-cancel-scan'));
 		});
 
+		it('is absent while no scan is running', () => {
+			renderDrive({ media_status: 'loaded', scanning: false });
+			expect(screen.queryByTestId('drive-cancel-scan')).not.toBeInTheDocument();
+		});
+
 		it('is absent when there is no disc', () => {
-			renderDrive({ media_status: 'no_disc' });
+			renderDrive({ media_status: 'no_disc', scanning: true });
 			expect(screen.queryByTestId('drive-cancel-scan')).not.toBeInTheDocument();
 		});
 
 		it('is absent once the drive has a job', () => {
-			renderDrive({ media_status: 'loaded', current_job: { id: 'job_1', title: 'X', status: 'created' } });
+			renderDrive({
+				media_status: 'loaded',
+				scanning: true,
+				current_job: { id: 'job_1', title: 'X', status: 'created' }
+			});
 			expect(screen.queryByTestId('drive-cancel-scan')).not.toBeInTheDocument();
 		});
 
 		it('cancels the scan and refreshes the drive list', async () => {
 			const onupdate = vi.fn();
 			renderComponent(DriveCard, {
-				props: { drive: createDrive({ media_status: 'loaded' }), sessions: [], onupdate }
+				props: { drive: createDrive({ media_status: 'loaded', scanning: true }), sessions: [], onupdate }
 			});
 			await fireEvent.click(screen.getByTestId('drive-cancel-scan'));
 			await waitFor(() => expect(onupdate).toHaveBeenCalled());
@@ -240,7 +250,7 @@ describe('DriveCard', () => {
 
 		it('shows a failure inline', async () => {
 			cancelDriveScanMock.mockRejectedValueOnce(new Error('the drive has a job'));
-			renderDrive({ media_status: 'loaded' });
+			renderDrive({ media_status: 'loaded', scanning: true });
 			await fireEvent.click(screen.getByTestId('drive-cancel-scan'));
 			await waitFor(() =>
 				expect(screen.getByTestId('drive-cancel-scan-error')).toHaveTextContent('the drive has a job')

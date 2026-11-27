@@ -179,6 +179,7 @@ async def heartbeat(req: RipperHeartbeatRequest, session: AsyncSession = Depends
         drive.notice = None
     drive.media_status = req.media_status
     drive.media_status_at = now
+    drive.scanning = req.scanning
     drive.last_seen_at = now
     # For an enrolled drive the ripper is authoritative on presence.
     # DETACHED = the node has no hardware behind it right now. ERROR (identity

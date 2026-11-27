@@ -1145,6 +1145,10 @@ export type Drive = {
      */
     media_status_at: string | null;
     /**
+     * Scanning
+     */
+    scanning?: boolean;
+    /**
      * Rip Params Json
      */
     rip_params_json?: {
@@ -1440,6 +1444,10 @@ export type DriveView = {
      * Media Status At
      */
     media_status_at: string | null;
+    /**
+     * Scanning
+     */
+    scanning: boolean;
     /**
      * Default Session Id
      */
@@ -4504,6 +4512,10 @@ export type RipperHeartbeatRequest = {
      */
     drive_id: string;
     media_status: DriveMediaStatus;
+    /**
+     * Scanning
+     */
+    scanning: boolean;
 };
 
 /**

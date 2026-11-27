@@ -44,6 +44,11 @@ def _previously_ripped(response: httpx.Response) -> bool:
     return isinstance(detail, dict) and detail.get("reason") == "previously_ripped"
 
 
+def scan_running(task: "asyncio.Task[None] | None", job_id: str | None) -> bool:
+    """A pre-job scan is the claimed task while no job exists yet: a live task, and no job id."""
+    return task is not None and job_id is None and not task.done()
+
+
 class JobController:
     """Drives one disc through scan → identify → rip → eject."""
 
@@ -122,10 +127,14 @@ class JobController:
         """
         return self._active_task is None
 
+    def is_scanning(self) -> bool:
+        """True while the claimed task is still in its pre-job scan phase."""
+        return scan_running(self._active_task, self._active_job_id)
+
     def cancel_scan(self) -> bool:
         """Cancel the pre-job scan phase: the claimed task has no job yet. Returns whether a task was cancelled."""
         task = self._active_task
-        if task is None or self._active_job_id is not None or task.done():
+        if task is None or not self.is_scanning():
             return False
         task.cancel()
         return True

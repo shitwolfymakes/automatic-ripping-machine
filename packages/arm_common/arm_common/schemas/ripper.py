@@ -62,6 +62,8 @@ class RipperHeartbeatRequest(BaseModel):
 
     drive_id: str
     media_status: DriveMediaStatus
+    # A pre-job scan is running: the claimed task has no job yet.
+    scanning: bool
 
 
 class ScanTitle(BaseModel):
