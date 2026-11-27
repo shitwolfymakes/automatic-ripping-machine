@@ -170,6 +170,7 @@ class JobController:
             "review.pause": self._on_wake_command,
             "manual.trigger": self._on_manual_trigger,
             "job.abandoned": self._on_job_abandoned,
+            "scan.cancel": self._on_scan_cancel,
         }
         handler = handlers.get(envelope.event_type)
         if handler is None:
@@ -199,6 +200,13 @@ class JobController:
             logger.warning("manual.trigger with non-string session_id: %r", session_id)
             session_id = None
         asyncio.create_task(self.handle_manual_trigger(session_id))
+
+    def _on_scan_cancel(self, envelope: WSEnvelope) -> None:
+        """Cancel the pre-job scan, when the drive is in one."""
+        if self.cancel_scan():
+            logger.info("scan.cancel: scan cancelled")
+        else:
+            logger.debug("scan.cancel: no scan to cancel")
 
     def _on_job_abandoned(self, envelope: WSEnvelope) -> None:
         """Abandon the payload's job, then wake a pipeline parked on it so it sees the new status."""

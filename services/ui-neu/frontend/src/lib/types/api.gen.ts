@@ -7812,6 +7812,36 @@ export type UnenrollDriveApiDrivesDriveIdUnenrollPostResponses = {
 
 export type UnenrollDriveApiDrivesDriveIdUnenrollPostResponse = UnenrollDriveApiDrivesDriveIdUnenrollPostResponses[keyof UnenrollDriveApiDrivesDriveIdUnenrollPostResponses];
 
+export type CancelScanApiDrivesDriveIdCancelScanPostData = {
+    body?: never;
+    path: {
+        /**
+         * Drive Id
+         */
+        drive_id: string;
+    };
+    query?: never;
+    url: '/api/drives/{drive_id}/cancel-scan';
+};
+
+export type CancelScanApiDrivesDriveIdCancelScanPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CancelScanApiDrivesDriveIdCancelScanPostError = CancelScanApiDrivesDriveIdCancelScanPostErrors[keyof CancelScanApiDrivesDriveIdCancelScanPostErrors];
+
+export type CancelScanApiDrivesDriveIdCancelScanPostResponses = {
+    /**
+     * Successful Response
+     */
+    204: void;
+};
+
+export type CancelScanApiDrivesDriveIdCancelScanPostResponse = CancelScanApiDrivesDriveIdCancelScanPostResponses[keyof CancelScanApiDrivesDriveIdCancelScanPostResponses];
+
 export type LibraryApiIsoLibraryGetData = {
     body?: never;
     path?: never;

@@ -2026,3 +2026,15 @@ async def test_auto_rip_lookup_failure_proceeds_fail_open(caplog, stub_scan, stu
     assert "auto-rip config lookup failed (down); proceeding fail-open" in warnings
     assert client.rip_start_calls == ["job_test"]
     assert client.rip_complete_calls == ["job_test"]
+
+
+@pytest.mark.parametrize("cancelled", [True, False])
+async def test_scan_cancel_command_cancels_the_pre_job_scan(cancelled, caplog):
+    controller = JobController(FakeClient(), "drv_test")
+    controller.cancel_scan = lambda: cancelled  # type: ignore[method-assign]
+    caplog.set_level(logging.DEBUG, logger="arm_ripper.job_controller")
+
+    await controller.on_ws_command(_command("scan.cancel", {}))
+
+    expected = "scan.cancel: scan cancelled" if cancelled else "scan.cancel: no scan to cancel"
+    assert [r.getMessage() for r in caplog.records if r.name == "arm_ripper.job_controller"] == [expected]

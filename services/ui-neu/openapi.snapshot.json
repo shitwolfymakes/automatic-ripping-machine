@@ -2653,6 +2653,47 @@
         }
       }
     },
+    "/api/drives/{drive_id}/cancel-scan": {
+      "post": {
+        "tags": [
+          "drives"
+        ],
+        "summary": "Cancel Scan",
+        "description": "Tell the drive's ripper to cancel the scan it is running before a job exists. Refused (409) once the drive\nhas a job: that is abandoned from the job, not here. The ripper ignores the command when it is not scanning.",
+        "operationId": "cancel_scan_api_drives__drive_id__cancel_scan_post",
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "drive_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Drive Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/iso/library": {
       "get": {
         "tags": [
