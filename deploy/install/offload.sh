@@ -161,6 +161,13 @@ verify_paths() {  # <p...> — report every missing path
     (( ${#missing[@]} == 0 )) && printf 'PASS' || printf 'FAIL %s' "${missing[*]}"
 }
 
+# verify_offload_paths <staging> <media> <logs>: the remote reads staging and
+# writes media and logs; it never sees raw. An empty staging path is an error.
+verify_offload_paths() {
+    if [[ -z "$1" ]]; then printf 'FAIL_UNSET'; return 0; fi
+    verify_paths "$@"
+}
+
 # offload_persisted: rc 0 iff a prior run already seeded a remote offload host
 # into .env — used both to skip the questionnaire on rerun and to gate the
 # completion report.
@@ -206,9 +213,9 @@ offload_completion_report() {
     local envf="${OFFLOAD_ENV_FILE:-${ENV_FILE}}"
     local caf="${OFFLOAD_CA_FILE:-${ARM_CERTS_DIR}/arm-ca.crt}"
     eget() { sed -nE "s/^$1=(.+)\$/\\1/p" "$envf" | head -n1; }
-    local endpoint url raw_p media_p logs_p certs_p image_ref gpus_raw
+    local endpoint url staging_p media_p logs_p certs_p image_ref gpus_raw
     endpoint="$(eget ARM_TRANSCODE_DOCKER_HOST)"; url="$(eget ARM_TRANSCODE_BACKEND_URL)"
-    raw_p="$(eget ARM_HOST_RAW_PATH)"; media_p="$(eget ARM_HOST_MEDIA_PATH)"; logs_p="$(eget ARM_HOST_LOGS_PATH)"
+    staging_p="$(eget ARM_HOST_STAGING_PATH)"; media_p="$(eget ARM_HOST_MEDIA_PATH)"; logs_p="$(eget ARM_HOST_LOGS_PATH)"
     certs_p="$(eget ARM_HOST_CERTS_PATH)"
     gpus_raw="$(eget ARM_GPUS)"
     image_ref="${OFFLOAD_IMAGE_REF:-$(offload_image_ref "$envf")}"
@@ -236,8 +243,9 @@ offload_completion_report() {
             PASS) _report_row "transcode image" "PASS  (${image_ref})" ;;
             *) _report_row "transcode image" "FAIL — not on remote daemon"; failed_steps+=(image) ;; esac
     fi
-    v="$(verify_paths "$raw_p" "$media_p" "$logs_p")"
-    case "$v" in PASS) _report_row "data paths" "PASS  (raw, media, logs)" ;;
+    v="$(verify_offload_paths "$staging_p" "$media_p" "$logs_p")"
+    case "$v" in PASS) _report_row "data paths" "PASS  (staging, media, logs)" ;;
+                 FAIL_UNSET) _report_row "data paths" "FAIL — ARM_HOST_STAGING_PATH is not set" ;;
                  *) _report_row "data paths" "FAIL — missing: ${v#FAIL }" ;; esac
     # Inventory-from-.env row (informational — not a live re-probe of the
     # remote; the walkthrough's remote_detect_gpus already did the live probe).
@@ -498,12 +506,12 @@ setup_remote_offload() {
     # first run; read the .env when present, else skip with a note — the
     # completion battery re-checks with final values).
     echo; log "Step 4 of 5 — shared data paths on the remote"
-    local raw_p media_p logs_p
-    raw_p="${RAW_PATH:-$(env_file_value ARM_HOST_RAW_PATH)}"
+    local staging_p media_p logs_p
+    staging_p="${STAGING_PATH:-$(env_file_value ARM_HOST_STAGING_PATH)}"
     media_p="${MEDIA_PATH:-$(env_file_value ARM_HOST_MEDIA_PATH)}"
     logs_p="${ARM_DIR}/logs"
-    if [[ -n "$raw_p" && -n "$media_p" && -n "$logs_p" ]]; then
-        local v; v="$(verify_paths "$raw_p" "$media_p" "$logs_p")"
+    if [[ -n "$staging_p" && -n "$media_p" && -n "$logs_p" ]]; then
+        local v; v="$(verify_paths "$staging_p" "$media_p" "$logs_p")"
         case "$v" in
             PASS) okline "data paths exist on the remote" ;;
             *) warnline "missing on the remote: ${v#FAIL } — mount the shared export there" ;;

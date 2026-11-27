@@ -47,7 +47,22 @@ done <<<"${built_only}"
 
 if ! command -v docker >/dev/null 2>&1 || ! docker compose version >/dev/null 2>&1; then
     echo "skip - docker compose not available; contract checked by text only"
-    exit "$fail"
+    # A staging folder on shared storage replaces the default mount and is told to the backend.
+STAGING_PATH="${TMP}/nas/staging"; mkdir -p "${STAGING_PATH}"
+write_env >/dev/null
+write_host_overlay
+cfg="$(compose config)"
+mounts_staged="$(awk '
+    /^  [a-z][a-z0-9-]*:$/ { svc=$1; sub(":", "", svc) }
+    /^ *source: / { src=$0; sub(/^ *source: /, "", src) }
+    /^ *target: / { if (src != "") { t=$0; sub(/^ *target: /, "", t); print svc "|" src "|" t; src="" } }
+' <<<"${cfg}")"
+check "backend /staging is the chosen shared folder" "arm-backend|${STAGING_PATH}|/staging" "$(grep '^arm-backend|.*|/staging$' <<<"${mounts_staged}")"
+env_staging="$(awk '/^  arm-backend:$/ {f=1} f && /ARM_HOST_STAGING_PATH:/ {sub(/^ *ARM_HOST_STAGING_PATH: /, ""); print; exit}' <<<"${cfg}")"
+check "backend is told the staging folder for spawned containers" "${STAGING_PATH}" "${env_staging}"
+check "backend gets time to stop a copy at a chunk boundary" "30s" "$(awk '/^  arm-backend:$/ {f=1} f && /stop_grace_period:/ {print $2; exit}' <<<"${cfg}")"
+
+exit "$fail"
 fi
 
 # --- docker compose config: the layered stack as armctl runs it -------------------
@@ -97,6 +112,8 @@ mounts="$(awk '
 ' <<<"${cfg}")"
 check "backend /raw is the chosen folder, spaces and all" "arm-backend|${RAW_PATH}|/raw" "$(grep '^arm-backend|.*|/raw$' <<<"${mounts}")"
 check "backend /media is the chosen folder" "arm-backend|${MEDIA_PATH}|/media" "$(grep '^arm-backend|.*|/media$' <<<"${mounts}")"
+check "backend /staging defaults to a folder inside the arm folder" "yes" \
+    "$(grep -q "^arm-backend|${ARM_DIR}/.*|/staging\$" <<<"${mounts}" && echo yes || echo no)"
 stray=""
 while IFS='|' read -r svc src target; do
     case "${src}" in
@@ -109,5 +126,20 @@ check "no host path escapes the arm folder" "" "${stray}"
 
 env_raw="$(awk '/^  arm-backend:$/ {f=1} f && /ARM_HOST_RAW_PATH:/ {sub(/^ *ARM_HOST_RAW_PATH: /, ""); print; exit}' <<<"${cfg}")"
 check "backend is told the raw folder for spawned containers" "${RAW_PATH}" "${env_raw}"
+
+# A staging folder on shared storage replaces the default mount and is told to the backend.
+STAGING_PATH="${TMP}/nas/staging"; mkdir -p "${STAGING_PATH}"
+write_env >/dev/null
+write_host_overlay
+cfg="$(compose config)"
+mounts_staged="$(awk '
+    /^  [a-z][a-z0-9-]*:$/ { svc=$1; sub(":", "", svc) }
+    /^ *source: / { src=$0; sub(/^ *source: /, "", src) }
+    /^ *target: / { if (src != "") { t=$0; sub(/^ *target: /, "", t); print svc "|" src "|" t; src="" } }
+' <<<"${cfg}")"
+check "backend /staging is the chosen shared folder" "arm-backend|${STAGING_PATH}|/staging" "$(grep '^arm-backend|.*|/staging$' <<<"${mounts_staged}")"
+env_staging="$(awk '/^  arm-backend:$/ {f=1} f && /ARM_HOST_STAGING_PATH:/ {sub(/^ *ARM_HOST_STAGING_PATH: /, ""); print; exit}' <<<"${cfg}")"
+check "backend is told the staging folder for spawned containers" "${STAGING_PATH}" "${env_staging}"
+check "backend gets time to stop a copy at a chunk boundary" "30s" "$(awk '/^  arm-backend:$/ {f=1} f && /stop_grace_period:/ {print $2; exit}' <<<"${cfg}")"
 
 exit "$fail"

@@ -279,6 +279,7 @@ cmd_up() {
     require_installed
     refuse_half_switch
     load_profile
+    warn_raw_network_fs "$(env_file_value ARM_HOST_RAW_PATH)"
     ARM_HINT_FORCE_CMD="${ARMCTL_CMD} up --force"
     ARM_HINT_IMAGES_READY="Images are pulled"
     stack_up
