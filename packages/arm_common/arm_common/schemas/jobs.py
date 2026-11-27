@@ -445,6 +445,9 @@ class RipStartResponse(BaseModel):
     # How this rip reads the disc, on a fresh rip and on every resume (after a
     # restart, or when the drive drops off the bus and comes back). From backend settings.
     rip_invocation: RipInvocation = RipInvocation.MKV_ALL
+    # Whether each makemkvcon run of this rip may be ended once it reports the copy complete and its files are closed.
+    # Resolved per request (the drive's override, else the global setting), so a resume sees the current answer.
+    end_on_completion_message: bool
 
 
 # The one definition of apply/fan-out skip reasons — the backend engine

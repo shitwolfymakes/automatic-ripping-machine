@@ -21,7 +21,9 @@ class _Client:
 
     async def resume(self, job_id: str) -> RipStartResponse:
         self.resume_calls.append(job_id)
-        return RipStartResponse(job_id=job_id, rip_preset_id="rp_1", tracks=[], min_length_seconds=None)
+        return RipStartResponse(
+            end_on_completion_message=False, job_id=job_id, rip_preset_id="rp_1", tracks=[], min_length_seconds=None
+        )
 
 
 def _job() -> JobView:

@@ -456,3 +456,58 @@ describe('DriveSettingsPanel docs links', () => {
 			expect(screen.queryByRole('link', { name: `Docs for ${f.label} (opens in a new tab)` })).toBeNull();
 	});
 });
+
+describe('DriveSettingsPanel end on completion message', () => {
+	function endSelect(): HTMLSelectElement {
+		return screen.getByTestId('drive-end-on-completion') as HTMLSelectElement;
+	}
+
+	it('labels the field and offers the default, named after the global value, then On and Off', () => {
+		renderPanel({}, { globalRip: { rip_end_on_completion_message: true } });
+		expect(screen.getByLabelText("End each title on MakeMKV's completion message")).toBe(endSelect());
+		expect(Array.from(endSelect().options).map((o) => o.textContent)).toEqual(['Default (On)', 'On', 'Off']);
+		expect(endSelect().value).toBe('');
+	});
+
+	it('names an Off global as Default (Off) when the panel is given no global of its own', () => {
+		renderPanel();
+		expect(endSelect().options[0].textContent).toBe('Default (Off)');
+	});
+
+	it('shows the drive override', () => {
+		renderPanel({ rip_end_on_completion_message: false });
+		expect(endSelect().value).toBe('off');
+	});
+
+	it.each([
+		['on', true],
+		['off', false],
+		['', null]
+	])('saves %j as %j', async (choice, expected) => {
+		const onupdate = vi.fn();
+		renderPanel({ rip_end_on_completion_message: choice === '' ? true : null }, { onupdate });
+		await fireEvent.change(endSelect(), { target: { value: choice } });
+		await waitFor(() => expect(onupdate).toHaveBeenCalledTimes(1));
+		expect(updateDriveMock).toHaveBeenCalledWith('drv_1', { rip_end_on_completion_message: expected });
+	});
+
+	it('shows the error and does not refresh when the save fails, then clears it on the next save', async () => {
+		const onupdate = vi.fn();
+		updateDriveMock.mockRejectedValueOnce(new Error('nope'));
+		renderPanel({}, { onupdate });
+		await fireEvent.change(endSelect(), { target: { value: 'on' } });
+		expect((await screen.findByTestId('drive-end-on-completion-error')).textContent).toBe('nope');
+		expect(onupdate).not.toHaveBeenCalled();
+		await fireEvent.change(endSelect(), { target: { value: 'off' } });
+		await waitFor(() => expect(screen.queryByTestId('drive-end-on-completion-error')).toBeNull());
+	});
+
+	it('disables the select while the save is in flight', async () => {
+		const finish = deferredUpdate();
+		renderPanel();
+		await fireEvent.change(endSelect(), { target: { value: 'on' } });
+		await waitFor(() => expect(endSelect().disabled).toBe(true));
+		finish();
+		await waitFor(() => expect(endSelect().disabled).toBe(false));
+	});
+});

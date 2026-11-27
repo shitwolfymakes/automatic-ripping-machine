@@ -385,6 +385,7 @@ def test_list_returns_driveview_with_null_tuning(signing_key: bytes) -> None:
         "rip_speed",
         "drive_mode",
         "uhd_capable",
+        "rip_end_on_completion_message",
         "prescan_cache_mb",
         "prescan_timeout",
         "prescan_retries",
@@ -497,6 +498,39 @@ def test_patch_tuning_fields_persisted(signing_key: bytes) -> None:
         assert row[k] == v
     assert db.rows["drives"][0].rip_speed == 8
     assert db.rows["drives"][0].drive_mode == DriveMode.MANUAL
+
+
+def test_patch_rip_end_on_completion_message_sets_and_clears_the_override(signing_key: bytes) -> None:
+    db = FakeSession()
+    _seed(db)
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as c:
+        on = c.patch("/api/drives/drv_x", json={"rip_end_on_completion_message": True}, headers=_auth(token))
+        off = c.patch("/api/drives/drv_x", json={"rip_end_on_completion_message": False}, headers=_auth(token))
+        cleared = c.patch("/api/drives/drv_x", json={"rip_end_on_completion_message": None}, headers=_auth(token))
+    assert on.json()["rip_end_on_completion_message"] is True
+    assert off.json()["rip_end_on_completion_message"] is False
+    assert cleared.json()["rip_end_on_completion_message"] is None
+    assert db.rows["drives"][0].rip_end_on_completion_message is None
+
+
+def test_patch_without_rip_end_on_completion_message_leaves_the_override(signing_key: bytes) -> None:
+    db = FakeSession()
+    _seed(db)
+    db.rows["drives"][0].rip_end_on_completion_message = True
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as c:
+        r = c.patch("/api/drives/drv_x", json={"rip_speed": 4}, headers=_auth(token))
+    assert r.json()["rip_end_on_completion_message"] is True
+
+
+def test_patch_invalid_rip_end_on_completion_message_422(signing_key: bytes) -> None:
+    db = FakeSession()
+    _seed(db)
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as c:
+        r = c.patch("/api/drives/drv_x", json={"rip_end_on_completion_message": "sometimes"}, headers=_auth(token))
+    assert r.status_code == 422
 
 
 def test_patch_invalid_drive_mode_422(signing_key: bytes) -> None:

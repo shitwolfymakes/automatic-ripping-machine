@@ -920,8 +920,8 @@ def _as_process(proc: _FakeProc) -> Any:
     return proc
 
 
-async def test_wait_for_exit_without_stop_returns_false_when_the_proc_exits():
-    assert await makemkv_process._wait_for_exit(_as_process(_FakeProc([])), None) is False
+async def test_wait_for_exit_without_stop_reports_the_exit_when_the_proc_exits():
+    assert await makemkv_process._wait_for_exit(_as_process(_FakeProc([])), None) is makemkv_process._Ending.EXITED
 
 
 async def test_wait_for_exit_without_stop_times_out_when_the_proc_never_exits(monkeypatch):
@@ -930,14 +930,17 @@ async def test_wait_for_exit_without_stop_times_out_when_the_proc_never_exits(mo
         await makemkv_process._wait_for_exit(_as_process(_HangingProc()), None)
 
 
-async def test_wait_for_exit_with_stop_returns_false_when_the_proc_exits_first():
-    assert await makemkv_process._wait_for_exit(_as_process(_FakeProc([])), asyncio.Event()) is False
+async def test_wait_for_exit_with_stop_reports_the_exit_when_the_proc_exits_first():
+    assert (
+        await makemkv_process._wait_for_exit(_as_process(_FakeProc([])), asyncio.Event())
+        is makemkv_process._Ending.EXITED
+    )
 
 
-async def test_wait_for_exit_returns_true_when_stop_is_set_first():
+async def test_wait_for_exit_reports_stop_when_stop_is_set_first():
     stop = asyncio.Event()
     stop.set()
-    assert await makemkv_process._wait_for_exit(_as_process(_HangingProc()), stop) is True
+    assert await makemkv_process._wait_for_exit(_as_process(_HangingProc()), stop) is makemkv_process._Ending.STOPPED
 
 
 async def test_wait_for_exit_with_stop_times_out_when_neither_happens(monkeypatch):

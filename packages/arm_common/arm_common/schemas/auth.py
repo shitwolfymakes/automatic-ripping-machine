@@ -52,6 +52,7 @@ class ConfigView(BaseModel):
     auto_transcode_on_idle: bool
     auto_rip_on_insert: bool
     block_on_miss: bool
+    rip_end_on_completion_message: bool
     community_keydb_enabled: bool
     # Drive scanner tunables — operator-editable, read every tick.
     drive_scan_interval_seconds: int
@@ -106,6 +107,7 @@ class ConfigUpdateRequest(BaseModel):
     auto_transcode_on_idle: bool | None = None
     auto_rip_on_insert: bool | None = None
     block_on_miss: bool | None = None
+    rip_end_on_completion_message: bool | None = None
     community_keydb_enabled: bool | None = None
     drive_scan_interval_seconds: int | None = None
     drive_detected_prune_days: int | None = None

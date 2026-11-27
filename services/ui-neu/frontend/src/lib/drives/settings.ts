@@ -119,6 +119,31 @@ export function prescanInputTexts(d: { [K in PrescanKey]?: number | null } | und
 	};
 }
 
+/** The global rip settings a drive with no override of its own follows. */
+export interface GlobalRipSettings {
+	rip_end_on_completion_message: boolean;
+}
+
+/** The value of the on/off/default select for a nullable boolean override: '' when the drive follows the global. */
+export type OverrideChoice = '' | 'on' | 'off';
+
+/** The select value for a drive's stored override. */
+export function overrideChoice(value: boolean | null | undefined): OverrideChoice {
+	if (value == null) return '';
+	return value ? 'on' : 'off';
+}
+
+/** The override to save for a select value: null clears it, so the drive follows the global. */
+export function parseOverrideChoice(choice: string): boolean | null {
+	if (choice === '') return null;
+	return choice === 'on';
+}
+
+/** The "On"/"Off" a select's Default option names for the global value. */
+export function onOffLabel(value: boolean): 'On' | 'Off' {
+	return value ? 'On' : 'Off';
+}
+
 /** The drive settings fields, the friendly name and 4K setting included, in the field docs registry. */
 export const FIELD_IDS = {
 	name: 'form.drive.name',
@@ -128,5 +153,9 @@ export const FIELD_IDS = {
 	prescan_timeout: 'form.drive.prescan_timeout',
 	prescan_retries: 'form.drive.prescan_retries',
 	disc_enum_timeout: 'form.drive.disc_enum_timeout',
-	uhd_capable: 'form.drive.uhd_capable'
-} as const satisfies Record<'name' | 'default_session' | 'rip_speed' | 'uhd_capable' | PrescanKey, string>;
+	uhd_capable: 'form.drive.uhd_capable',
+	rip_end_on_completion_message: 'form.drive.rip_end_on_completion_message'
+} as const satisfies Record<
+	'name' | 'default_session' | 'rip_speed' | 'uhd_capable' | 'rip_end_on_completion_message' | PrescanKey,
+	string
+>;

@@ -14,6 +14,7 @@ from arm_ripper.drive_ready import Probe, ReadyOutcome
 from arm_ripper.rip import optical_rip as optical_rip_module
 from arm_ripper.rip.makemkv_process import STOPPED_ERROR
 from arm_ripper.rip.makemkv_rip import RipDiscResult
+from arm_ripper.rip.options import RipOptions
 from arm_ripper.rip.result import RipResult
 
 _JOB = "job_01M4R7157QDCVQ3MX6M2VK0XX0"
@@ -93,7 +94,13 @@ class _Rig:
         return RipDiscResult(overall_error=None, titles={title: RipResult(ok=True, output_path=path, size_bytes=4)})
 
     async def rip(
-        self, tmp_path: Path, tracks: list[TrackView], skip: set[str] = frozenset(), *, with_progress: bool = True
+        self,
+        tmp_path: Path,
+        tracks: list[TrackView],
+        skip: set[str] = frozenset(),
+        *,
+        with_progress: bool = True,
+        options: RipOptions = RipOptions(per_title=True),
     ) -> None:
         async def on_start(track: TrackView) -> None:
             self.started.append(track.id)
@@ -114,7 +121,7 @@ class _Rig:
             min_length_seconds=60,
             stop=self.stop,
             skip_track_ids=skip,
-            per_title=True,
+            options=options,
         )
 
 
@@ -276,3 +283,26 @@ async def test_a_rip_with_no_progress_listener_still_rips(monkeypatch, tmp_path)
     rig = _Rig(monkeypatch)
     await rig.rip(tmp_path, [_track(1)], with_progress=False)
     assert rig.done == [("trk_1", True, None)]
+
+
+async def test_each_title_run_is_told_to_end_on_completion_and_the_next_starts_after_it(monkeypatch, tmp_path) -> None:
+    rig = _Rig(monkeypatch)
+    await rig.rip(tmp_path, [_track(1), _track(3)], options=RipOptions(per_title=True, end_on_completion=True))
+
+    assert [c["end_on_completion"] for c in rig.calls] == [True, True]
+    assert rig.events == ["gate", "rip-1", "gate", "rip-3"]
+    assert sorted(rig.done) == [("trk_1", True, None), ("trk_3", True, None)]
+
+
+async def test_a_full_pass_is_told_to_end_on_completion_too(monkeypatch, tmp_path) -> None:
+    rig = _Rig(monkeypatch)
+    await rig.rip(tmp_path, [_track(1)], options=RipOptions(end_on_completion=True))
+
+    assert [(c["title"], c["end_on_completion"]) for c in rig.calls] == [(None, True)]
+
+
+async def test_the_toggle_defaults_off_for_every_pass(monkeypatch, tmp_path) -> None:
+    rig = _Rig(monkeypatch)
+    await rig.rip(tmp_path, [_track(1)])
+
+    assert [c["end_on_completion"] for c in rig.calls] == [False]

@@ -11,6 +11,7 @@ from arm_ripper.rip.abcde_rip import rip_cd
 from arm_ripper.rip.data_rip import rip_data
 from arm_ripper.rip.makemkv_backup import rip_backup
 from arm_ripper.rip.optical_rip import rip_optical
+from arm_ripper.rip.options import RipOptions
 from arm_ripper.rip.result import RipResult
 from arm_ripper.rip.track_callbacks import OnTrackDone, OnTrackProgress, OnTrackStart, TransferStats
 
@@ -32,7 +33,7 @@ async def rip_all(
     stop: asyncio.Event | None = None,
     skip_track_ids: Collection[str] = (),
     drive_lost: Callable[[], bool] | None = None,
-    per_title: bool = False,
+    options: RipOptions = RipOptions(),
 ) -> None:
     """Rip every track in `tracks` and invoke the lifecycle callbacks.
 
@@ -43,8 +44,9 @@ async def rip_all(
     title's file is cut short, so it is reported unfinished and `stop` is set.
     A resume passes every track so the `mkv all` output positions still line
     up, and the skipped tracks get no callbacks (their new files are deleted).
-    `per_title` (`ARM_RIP_INVOCATION=per_title`) rips only the ticked (not SKIPPED), unsettled
-    titles instead, one invocation each.
+    `options.per_title` (`ARM_RIP_INVOCATION=per_title`) rips only the ticked (not SKIPPED), unsettled
+    titles instead, one invocation each. `options.end_on_completion` ends each makemkvcon run once it is complete
+    and its files are closed, rather than at its exit.
 
     Per disc_type:
     - DVD / BD: one `makemkvcon mkv ... all` invocation for the whole
@@ -77,7 +79,7 @@ async def rip_all(
             stop=stop,
             skip_track_ids=skip_track_ids,
             drive_lost=drive_lost,
-            per_title=per_title,
+            options=options,
         )
         return
 

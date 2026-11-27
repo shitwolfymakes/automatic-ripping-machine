@@ -147,6 +147,9 @@
       "page": "guide/configuring-arm",
       "section": "Rip / transcode behaviour"
     },
+    "config.rip_end_on_completion_message": {
+      "none": "Explained by the help text under the field; no docs page covers ending a rip on MakeMKV's completion message."
+    },
     "config.ripping_paused": {
       "type": "internal",
       "page": "guide/configuring-arm",
@@ -227,6 +230,9 @@
     },
     "form.drive.prescan_timeout": {
       "none": "Explained by the help text under the field; no docs page covers pre-scan tuning."
+    },
+    "form.drive.rip_end_on_completion_message": {
+      "none": "Explained by the help text under the field; no docs page covers ending a rip on MakeMKV's completion message."
     },
     "form.drive.rip_speed": {
       "none": "Explained by the help text under the field; no docs page covers drive read speed."

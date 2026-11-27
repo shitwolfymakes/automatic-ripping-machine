@@ -278,6 +278,16 @@ CONFIG_FIELD_META: list[ConfigFieldMeta] = [
         setup_order=2,
     ),
     ConfigFieldMeta(
+        key="rip_end_on_completion_message",
+        group="Ripping",
+        tier="operator",
+        label="End each title on MakeMKV's completion message",
+        help="Finish each title as soon as MakeMKV reports the copy complete and the file is closed, instead of "
+        "waiting for MakeMKV to exit. Off until validated.",
+        type="bool",
+        editable=True,
+    ),
+    ConfigFieldMeta(
         key="block_on_miss",
         group="Ripping",
         tier="operator",

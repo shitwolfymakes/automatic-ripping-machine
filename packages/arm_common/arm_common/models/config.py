@@ -93,6 +93,11 @@ class Config(SQLModel, table=True):
     auto_transcode_on_idle: bool = Field(sa_column=Column(Boolean, nullable=False, server_default="false"))
     auto_rip_on_insert: bool = Field(sa_column=Column(Boolean, nullable=False, server_default="true"))
     block_on_miss: bool = Field(sa_column=Column(Boolean, nullable=False, server_default="true"))
+    # Global default for ending a makemkvcon run once it reports the copy complete and its files are closed, instead of
+    # at its exit. A drive's own value (Drive.rip_end_on_completion_message) overrides it; NULL there follows this.
+    rip_end_on_completion_message: bool = Field(
+        default=False, sa_column=Column(Boolean, nullable=False, server_default="false")
+    )
     ripping_paused: bool = Field(sa_column=Column(Boolean, nullable=False, server_default="false"))
     # Timed pre-rip review gate: when on, an inserted disc scans + identifies then
     # parks in AWAITING_REVIEW for `manual_wait_seconds` before auto-starting the

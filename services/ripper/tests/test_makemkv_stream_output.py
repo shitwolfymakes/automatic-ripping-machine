@@ -435,3 +435,75 @@ async def test_feed_tries_handlers_in_order_and_stops_at_the_first_taker(monkeyp
     install(parser, "title_line")
     await parser.feed("M")
     assert calls == [f"{n}:M" for n in names[:4]]
+
+
+class _TickClock:
+    """A clock that reads 1.0, 2.0, 3.0 ... one tick per call."""
+
+    def __init__(self) -> None:
+        self.now = 0.0
+
+    def __call__(self) -> float:
+        self.now += 1.0
+        return self.now
+
+
+_COPY_COMPLETE = b'MSG:5036,0,1,"Copy complete. 1 titles saved.","Copy complete. %1 titles saved.","1"'
+
+
+@pytest.mark.asyncio
+async def test_copy_complete_is_recorded_with_its_arrival_and_wakes_the_waiter():
+    state = ParserState(clock=_TickClock())
+    await _run([b"PRGV:1,1,100", _COPY_COMPLETE, b'MSG:1005,0,1,"x","y"'], state)
+    assert state.copy_complete == makemkv_stream.CopyComplete(saved=1, failed=0)
+    assert state.copy_complete_at == 2.0
+    assert state.last_line_at == 3.0
+    assert state.completed.is_set()
+
+
+@pytest.mark.asyncio
+async def test_a_second_copy_complete_keeps_the_first_arrival():
+    state = ParserState(clock=_TickClock())
+    await _run([_COPY_COMPLETE, _COPY_COMPLETE], state)
+    assert state.copy_complete_at == 1.0
+
+
+@pytest.mark.asyncio
+async def test_copy_complete_5037_still_lands_in_the_diagnostics():
+    state = await _run([b'MSG:5037,0,2,"Copy complete. 1 titles saved, 1 failed.","f","1","1"'])
+    assert state.copy_complete == makemkv_stream.CopyComplete(saved=1, failed=1)
+    assert state.diagnostics == ["Copy complete. 1 titles saved, 1 failed."]
+
+
+@pytest.mark.asyncio
+async def test_full_save_progress_is_recorded_in_the_save_phase():
+    state = ParserState(clock=_TickClock())
+    await _run([b'PRGT:5024,0,"Saving all titles to MKV files"', b"PRGV:50,50,100", b"PRGV:100,100,100"], state)
+    assert state.save_full_at == 3.0
+    assert state.completed.is_set()
+    assert state.copy_complete is None
+
+
+@pytest.mark.asyncio
+async def test_full_save_progress_is_recorded_once_a_title_is_current():
+    state = ParserState(clock=_TickClock())
+    await _run(
+        [b'PRGC:5017,0,"Saving to MKV file"', b"PRGV:100,100,100", b"PRGV:100,100,100"],
+        state,
+        eligible_source_indexes=[0],
+    )
+    assert state.save_full_at == 2.0
+
+
+@pytest.mark.asyncio
+async def test_full_progress_before_the_save_phase_is_not_a_completion():
+    state = await _run([b"PRGV:100,100,100"])
+    assert state.save_full_at is None
+    assert not state.completed.is_set()
+
+
+@pytest.mark.asyncio
+async def test_partial_save_progress_is_not_a_completion():
+    state = await _run([b'PRGT:5024,0,"Saving all titles to MKV files"', b"PRGV:99,99,100"])
+    assert state.save_full_at is None
+    assert not state.completed.is_set()
