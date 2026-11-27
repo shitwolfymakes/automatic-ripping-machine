@@ -51,8 +51,7 @@ from arm_common.schemas import (
     DriveDevicePathUpdateRequest,
     IsoPrepareReport,
     flag_is_set,
-    identity_suggestion_of,
-    previously_ripped_job_id,
+    no_countdown_reason,
     HeldJobView,
     IdentifyRequest,
     JobCompleteRequest,
@@ -750,14 +749,14 @@ async def get_held_job(drive_id: str, session: AsyncSession = Depends(get_sessio
     # paused = the hold survives a reboot: global ripping_paused OR this disc's
     # per-job manual_pause. Either means the operator deliberately held it.
     global_paused = bool(cfg.ripping_paused) if cfg is not None else False
-    # A previously-ripped hold, a held suggestion or a guessed episode
-    # placement waits for the operator however it got there.
+    # A hold with no countdown (previously ripped, a held suggestion, a
+    # blocked miss) or a guessed episode placement waits for the operator
+    # however it got there.
     view = JobView.model_validate(rows[0])
     paused = (
         global_paused
         or bool(rows[0].manual_pause)
-        or previously_ripped_job_id(rows[0].metadata_json) is not None
-        or identity_suggestion_of(rows[0].metadata_json) is not None
+        or no_countdown_reason(rows[0].metadata_json) is not None
         or view.episodes_unsure
     )
     return HeldJobView(job=view, paused=paused)

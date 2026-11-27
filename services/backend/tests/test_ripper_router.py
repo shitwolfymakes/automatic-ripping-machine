@@ -1822,6 +1822,20 @@ def test_held_job_paused_flag_from_global() -> None:
     assert r.json()["paused"] is True
 
 
+def test_held_job_blocked_miss_reports_paused() -> None:
+    """A blocked miss waits for the operator with no countdown, so a ripper
+    restart re-parks it instead of abandoning it."""
+    db = FakeSession()
+    db.rows["drives"] = [_drive()]
+    db.rows["config"] = [_config(ripping_paused=False)]
+    meta = {"flags": {"unidentified": True, "blocked_miss": True}}
+    db.rows["jobs"] = [_job("job_01JZXR7K3M5Q8N4VWA0000H03", status=JobStatus.AWAITING_REVIEW, meta=meta)]
+    with TestClient(_make_app(db)) as client:
+        r = client.get("/api/ripper/drives/drv_x/held-job", headers=_SERVICE_AUTH)
+    assert r.status_code == 200
+    assert r.json()["paused"] is True
+
+
 _SUGGESTION = {
     "provider": "tmdb",
     "title": "Iron Man",
