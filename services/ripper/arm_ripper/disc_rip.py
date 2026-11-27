@@ -54,22 +54,20 @@ def _resumable(disc_type: DiscType, device_path: str, tracks: list[TrackView]) -
 
 
 def _done_fields(result: RipResult) -> dict[str, object]:
-    """The track patch for a finished title: DONE, plus each of its output path, size, checksum and duration that the
+    """The track patch for a finished title: DONE, plus each of its output path, size and duration that the
     rip reported."""
     fields: dict[str, object] = {"status": TrackStatus.DONE}
     if result.output_path is not None:
         fields["output_path"] = str(result.output_path)
     if result.size_bytes is not None:
         fields["size_bytes"] = result.size_bytes
-    if result.sha256 is not None:
-        fields["sha256"] = result.sha256
     if result.duration_seconds is not None:
         fields["duration_seconds"] = result.duration_seconds
     return fields
 
 
 def _progress_payload(track_id: str, fraction: float, stats: TransferStats | None) -> dict[str, object]:
-    """The WS progress payload for a track: its percentage, plus the byte detail, rounded rate and phase of a copy
+    """The WS progress payload for a track: its percentage, plus the byte detail, and rounded rate of a copy
     when the rip reports them."""
     payload: dict[str, object] = {
         "track_id": track_id,
@@ -81,8 +79,6 @@ def _progress_payload(track_id: str, fraction: float, stats: TransferStats | Non
         payload["bytes_done"] = stats["bytes_done"]
         payload["bytes_total"] = stats["bytes_total"]
         payload["rate_bps"] = round(stats["rate_bps"]) if stats["rate_bps"] is not None else None
-        if "phase" in stats:
-            payload["phase"] = stats["phase"]
     return payload
 
 

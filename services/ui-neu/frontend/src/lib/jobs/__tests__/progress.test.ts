@@ -160,10 +160,6 @@ describe('jobProgress: status table', () => {
 			expect(readout(j)).toEqual({ tone: 'default', label: 'Ripping', detail: 'starting MakeMKV', figure: null });
 		}
 	});
-	it('ripping in the verify phase', () => {
-		const j = job({ status: 'ripping', rip_progress: rp() });
-		expect(readout(j, ripLive({ phase: 'verifying' })).label).toBe('Verifying');
-	});
 	it('ripping in a copy stage uses its words', () => {
 		const j = job({ status: 'ripping', rip_progress: rp({ current_track_index: 1 }) });
 		const r = readout(j, ripLive({ phase: 'scratch-to-media' }));
@@ -306,9 +302,9 @@ describe('jobProgress: unidentified overlay', () => {
 		expect(states(ripping)).toEqual(['attention', 'done', 'active', 'pending', 'pending']);
 		expect(readout(ripping).detail).toBe('title 2 of 4, no identity');
 	});
-	it('joins "no identity" onto the verify detail', () => {
+	it('joins "no identity" onto the starting detail', () => {
 		const j = job({ status: 'ripping', rip_progress: null, metadata_json: flagged });
-		expect(readout(j, ripLive({ phase: 'verifying' })).detail).toBe('checking the ripped files, no identity');
+		expect(readout(j).detail).toBe('starting MakeMKV, no identity');
 	});
 	it('leaves other statuses alone', () => {
 		expect(states(job({ status: 'ripped', metadata_json: flagged }))).toEqual([

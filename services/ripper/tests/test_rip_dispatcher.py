@@ -219,13 +219,11 @@ def _stub_rip_disc(
         on_title_progress: Any | None = None,
         on_disc_progress: Any | None = None,
         on_title_done: Any | None = None,
-        hash_outputs: bool = True,
         stop: Any | None = None,
         title: int | None = None,
     ) -> RipDiscResult:
         if captured is not None:
             captured["title"] = title
-            captured["hash_outputs"] = hash_outputs
             captured["device_path"] = device_path
             captured["output_dir"] = output_dir
             captured["minlength_seconds"] = minlength_seconds
@@ -261,9 +259,9 @@ async def test_rip_all_dvd_single_invocation_per_disc(monkeypatch, tmp_path):
     fake_result = RipDiscResult(
         overall_error=None,
         titles={
-            0: RipResult(ok=True, output_path=tmp_path / "title_t00.mkv", size_bytes=100, sha256="a"),
-            1: RipResult(ok=True, output_path=tmp_path / "title_t01.mkv", size_bytes=200, sha256="b"),
-            2: RipResult(ok=True, output_path=tmp_path / "title_t02.mkv", size_bytes=300, sha256="c"),
+            0: RipResult(ok=True, output_path=tmp_path / "title_t00.mkv", size_bytes=100),
+            1: RipResult(ok=True, output_path=tmp_path / "title_t01.mkv", size_bytes=200),
+            2: RipResult(ok=True, output_path=tmp_path / "title_t02.mkv", size_bytes=300),
         },
     )
     captured: dict[str, Any] = {}
@@ -280,8 +278,6 @@ async def test_rip_all_dvd_single_invocation_per_disc(monkeypatch, tmp_path):
         done.append((track.id, result.ok, result.error))
 
     async def on_progress(track: TrackView, fraction: float, stats: Any = None) -> None:
-        if stats is not None and stats.get("phase") == "verifying":
-            return  # the post-rip hash pass; covered by its own tests
         progress.append((track.id, fraction))
 
     tracks = [_track(0), _track(1), _track(2)]
@@ -313,7 +309,7 @@ async def test_rip_all_marks_skipped_titles_failed(monkeypatch, tmp_path):
     fake_result = RipDiscResult(
         overall_error=None,
         titles={
-            0: RipResult(ok=True, output_path=tmp_path / "vol_t00.mkv", size_bytes=100, sha256="a"),
+            0: RipResult(ok=True, output_path=tmp_path / "vol_t00.mkv", size_bytes=100),
         },
     )
     _stub_rip_disc(monkeypatch, fake_result)
@@ -445,8 +441,8 @@ async def test_rip_all_synthesises_start_when_prgt_misses(monkeypatch, tmp_path)
     fake_result = RipDiscResult(
         overall_error=None,
         titles={
-            0: RipResult(ok=True, output_path=tmp_path / "title_t00.mkv", size_bytes=100, sha256="a"),
-            2: RipResult(ok=True, output_path=tmp_path / "title_t02.mkv", size_bytes=200, sha256="b"),
+            0: RipResult(ok=True, output_path=tmp_path / "title_t00.mkv", size_bytes=100),
+            2: RipResult(ok=True, output_path=tmp_path / "title_t02.mkv", size_bytes=200),
         },
     )
     _stub_rip_disc(monkeypatch, fake_result, fire_per_title_start=False)
@@ -491,8 +487,8 @@ async def test_rip_all_disc_progress_attributes_to_first_eligible_track(monkeypa
     fake_result = RipDiscResult(
         overall_error=None,
         titles={
-            0: RipResult(ok=True, output_path=tmp_path / "title_t00.mkv", size_bytes=100, sha256="a"),
-            2: RipResult(ok=True, output_path=tmp_path / "title_t01.mkv", size_bytes=200, sha256="b"),
+            0: RipResult(ok=True, output_path=tmp_path / "title_t00.mkv", size_bytes=100),
+            2: RipResult(ok=True, output_path=tmp_path / "title_t01.mkv", size_bytes=200),
         },
     )
     _stub_rip_disc(
@@ -505,8 +501,6 @@ async def test_rip_all_disc_progress_attributes_to_first_eligible_track(monkeypa
     progress: list[tuple[str, float]] = []
 
     async def on_progress(track: TrackView, fraction: float, stats: Any = None) -> None:
-        if stats is not None and stats.get("phase") == "verifying":
-            return  # the post-rip hash pass; covered by its own tests
         progress.append((track.id, fraction))
 
     async def noop_start(_track: TrackView) -> None:
@@ -540,7 +534,7 @@ async def test_rip_all_disc_progress_no_op_when_no_progress_callback(monkeypatch
     fake_result = RipDiscResult(
         overall_error=None,
         titles={
-            0: RipResult(ok=True, output_path=tmp_path / "title_t00.mkv", size_bytes=100, sha256="a"),
+            0: RipResult(ok=True, output_path=tmp_path / "title_t00.mkv", size_bytes=100),
         },
     )
     _stub_rip_disc(
@@ -609,7 +603,7 @@ async def test_rip_all_does_not_double_start_when_prgt_fires(monkeypatch, tmp_pa
     409 on the second IN_PROGRESS PATCH."""
     fake_result = RipDiscResult(
         overall_error=None,
-        titles={0: RipResult(ok=True, output_path=tmp_path / "t.mkv", size_bytes=10, sha256="a")},
+        titles={0: RipResult(ok=True, output_path=tmp_path / "t.mkv", size_bytes=10)},
     )
     _stub_rip_disc(monkeypatch, fake_result, fire_per_title_start=True)
 
@@ -642,7 +636,7 @@ async def test_rip_all_carries_duration_from_track_view(monkeypatch, tmp_path):
     fake_result = RipDiscResult(
         overall_error=None,
         titles={
-            0: RipResult(ok=True, output_path=tmp_path / "t.mkv", size_bytes=100, sha256="a"),
+            0: RipResult(ok=True, output_path=tmp_path / "t.mkv", size_bytes=100),
         },
     )
     _stub_rip_disc(monkeypatch, fake_result)
@@ -689,7 +683,7 @@ async def test_rip_all_falls_back_to_expected_duration(monkeypatch, tmp_path):
     fake_result = RipDiscResult(
         overall_error=None,
         titles={
-            0: RipResult(ok=True, output_path=tmp_path / "t.mkv", size_bytes=100, sha256="a"),
+            0: RipResult(ok=True, output_path=tmp_path / "t.mkv", size_bytes=100),
         },
     )
     _stub_rip_disc(monkeypatch, fake_result)
@@ -861,7 +855,7 @@ async def test_rip_all_dump_track_uses_data_rip_even_on_a_bluray_scan(monkeypatc
         data_calls.append(device_path)
         if on_progress is not None:
             await on_progress(512, 1024)
-        return RipResult(ok=True, output_path=output_dir / "dump.iso", size_bytes=1, sha256="x")
+        return RipResult(ok=True, output_path=output_dir / "dump.iso", size_bytes=1)
 
     async def fake_rip_disc(**_kwargs):
         raise AssertionError("makemkvcon must not be invoked for a dump track")
@@ -896,7 +890,7 @@ async def test_rip_all_dump_progress_carries_transfer_stats(monkeypatch, tmp_pat
     async def fake_rip_data(*, device_path, output_dir, on_progress=None):
         await on_progress(256, 1024)
         await on_progress(1024, 1024)
-        return RipResult(ok=True, output_path=output_dir / "dump.iso", size_bytes=1024, sha256="x")
+        return RipResult(ok=True, output_path=output_dir / "dump.iso", size_bytes=1024)
 
     monkeypatch.setattr(dispatcher_module, "rip_data", fake_rip_data)
     dump = _track(0, source_ref="full").model_copy(update={"kind": TrackKind.DATA_DUMP})
@@ -966,14 +960,9 @@ async def test_rip_all_disc_backup_track_uses_rip_backup(monkeypatch, tmp_path):
     ]
 
 
-async def test_rip_all_hashes_each_title_and_patches_done_with_its_sha256(monkeypatch, tmp_path):
-    """The makemkv path hashes each title in the background as soon
-    as it is written (rip_disc is told not to re-read everything after the
-    rip) and PATCHes DONE with the digest, live titles and post-rip ones
-    alike. Whatever is still hashing after the rip is reported as a
-    "verifying" phase on the progress channel."""
-    import hashlib
-
+async def test_rip_all_patches_a_live_title_done_before_the_rip_ends(monkeypatch, tmp_path):
+    """A title whose file makemkvcon has closed is reported DONE with its size and path right then, while the rip is
+    still running; the title attributed after the rip follows."""
     (tmp_path / "title_t00.mkv").write_bytes(b"main feature")
     (tmp_path / "title_t01.mkv").write_bytes(b"extra")
     fake_result = RipDiscResult(
@@ -983,31 +972,26 @@ async def test_rip_all_hashes_each_title_and_patches_done_with_its_sha256(monkey
             1: RipResult(ok=True, output_path=tmp_path / "title_t01.mkv", size_bytes=5),
         },
     )
-    captured: dict[str, Any] = {}
-    _stub_rip_disc(monkeypatch, fake_result, captured=captured, fire_per_title_start=False)
+    _stub_rip_disc(monkeypatch, fake_result, fire_per_title_start=False)
 
-    # Title 0 finalises live (mid-rip); title 1 is attributed post-rip.
     real_stub = optical_rip_module.rip_disc
+    order: list[str] = []
 
     async def live_then_post(**kwargs: Any) -> RipDiscResult:
         await kwargs["on_title_done"](0)
+        order.append("rip_disc returns")
         return await real_stub(**kwargs)
 
     monkeypatch.setattr(optical_rip_module, "rip_disc", live_then_post)
 
-    done: dict[str, str | None] = {}
-    phases: list[str] = []
+    done: dict[str, RipResult] = {}
 
     async def noop_start(_track: TrackView) -> None:
         return None
 
     async def on_done(track: TrackView, result: RipResult) -> None:
-        assert result.ok
-        done[track.id] = result.sha256
-
-    async def on_progress(_track: TrackView, _fraction: float, stats: Any = None) -> None:
-        if stats is not None and "phase" in stats:
-            phases.append(stats["phase"])
+        order.append(track.id)
+        done[track.id] = result
 
     await rip_all(
         disc_type=DiscType.BLURAY,
@@ -1016,64 +1000,17 @@ async def test_rip_all_hashes_each_title_and_patches_done_with_its_sha256(monkey
         output_dir=tmp_path,
         on_track_start=noop_start,
         on_track_done=on_done,
-        on_track_progress=on_progress,
+        on_track_progress=None,
         min_length_seconds=600,
     )
 
-    assert captured["hash_outputs"] is False
-    assert done == {
-        "trk_0": hashlib.sha256(b"main feature").hexdigest(),
-        "trk_1": hashlib.sha256(b"extra").hexdigest(),
-    }
-    assert set(phases) <= {"verifying"}
-
-
-async def test_title_hasher_reports_verify_progress_until_done(tmp_path):
-    from arm_ripper.rip import title_hasher
-
-    path = tmp_path / "t.mkv"
-    path.write_bytes(b"x" * 10)
-    gate = asyncio.Event()
-    real = title_hasher.sha256_file
-
-    async def slow(p, on_bytes=None):  # type: ignore[no-untyped-def]
-        await gate.wait()
-        return await real(p, on_bytes)
-
-    title_hasher.sha256_file = slow  # type: ignore[assignment]
-    try:
-        hasher = title_hasher.TitleHasher()
-        got: list[str | None] = []
-
-        async def then(digest: str | None) -> None:
-            got.append(digest)
-
-        hasher.submit(path, 10, then)
-        seen: list[tuple[int, int]] = []
-
-        async def on_progress(done: int, total: int, _rate: float | None) -> None:
-            seen.append((done, total))
-            gate.set()
-
-        await hasher.finish(on_progress)
-    finally:
-        title_hasher.sha256_file = real  # type: ignore[assignment]
-    assert seen and seen[0] == (0, 10)
-    assert got and got[0] is not None
-
-
-async def test_title_hasher_passes_none_for_an_unreadable_file(tmp_path):
-    from arm_ripper.rip.title_hasher import TitleHasher
-
-    hasher = TitleHasher()
-    got: list[str | None] = []
-
-    async def then(digest: str | None) -> None:
-        got.append(digest)
-
-    hasher.submit(tmp_path / "missing.mkv", 1, then)
-    await hasher.finish()
-    assert got == [None]
+    assert order == ["trk_0", "rip_disc returns", "trk_1"]
+    assert (done["trk_0"].ok, done["trk_0"].output_path, done["trk_0"].size_bytes) == (
+        True,
+        tmp_path / "title_t00.mkv",
+        12,
+    )
+    assert (done["trk_1"].ok, done["trk_1"].size_bytes) == (True, 5)
 
 
 async def test_rip_all_resume_pass_skips_titles_an_earlier_pass_settled(monkeypatch, tmp_path):
@@ -1233,20 +1170,12 @@ async def test_rip_all_with_the_drive_present_finalises_every_title(monkeypatch,
 
 async def _fire_on_title_done_once(monkeypatch, tmp_path, tracks: list[TrackView], title_idx: int) -> dict[str, Any]:
     """Run rip_all with a fake rip_disc that fires `on_title_done(title_idx)`
-    once and snapshots, right after the closure returns, what it handed to
-    the hasher and which lifecycle callbacks had fired by then."""
-    seen: dict[str, Any] = {"submitted": [], "events": []}
-    real_submit = optical_rip_module.TitleHasher.submit
-
-    def recording_submit(self: Any, path: Path, size: int, on_hashed: Any) -> None:
-        seen["submitted"].append(path)
-        real_submit(self, path, size, on_hashed)
-
-    monkeypatch.setattr(optical_rip_module.TitleHasher, "submit", recording_submit)
+    once and snapshots, right after the closure returns, what
+    which lifecycle callbacks had fired by then."""
+    seen: dict[str, Any] = {"events": []}
 
     async def fake_rip_disc(**kwargs: Any) -> RipDiscResult:
         await kwargs["on_title_done"](title_idx)
-        seen["submitted_in_closure"] = list(seen["submitted"])
         seen["events_in_closure"] = list(seen["events"])
         return RipDiscResult(overall_error=None, titles={})
 
@@ -1283,18 +1212,16 @@ async def test_on_title_done_ignores_a_title_missing_from_the_eligible_list(monk
     with caplog.at_level(logging.DEBUG, logger=optical_rip_module.logger.name):
         seen = await _fire_on_title_done_once(monkeypatch, tmp_path, tracks, 5)
 
-    assert seen["submitted_in_closure"] == []
     assert seen["events_in_closure"] == []
     assert not [r for r in caplog.records if r.name == optical_rip_module.logger.name and "on_title_done" in r.message]
 
 
 async def test_on_title_done_defers_a_title_whose_file_is_not_on_disk_yet(monkeypatch, tmp_path, caplog):
     """No `_tNN.mkv` exists for the title's position: the closure logs at
-    debug and returns without hashing or PATCHing anything."""
+    debug and returns without PATCHing anything."""
     with caplog.at_level(logging.DEBUG, logger=optical_rip_module.logger.name):
         seen = await _fire_on_title_done_once(monkeypatch, tmp_path, [_track(0)], 0)
 
-    assert seen["submitted_in_closure"] == []
     assert seen["events_in_closure"] == []
     records = [r for r in caplog.records if r.name == optical_rip_module.logger.name and "deferring" in r.message]
     assert len(records) == 1
@@ -1304,14 +1231,13 @@ async def test_on_title_done_defers_a_title_whose_file_is_not_on_disk_yet(monkey
 
 async def test_on_title_done_warns_and_skips_a_title_whose_file_cannot_be_stat_ed(monkeypatch, tmp_path, caplog):
     """A dangling symlink named like the output is listed by the glob but
-    `stat` fails: the closure logs a warning and hands nothing to the hasher."""
+    `stat` fails: the closure logs a warning and reports nothing."""
     dangling = tmp_path / "Disc_t00.mkv"
     dangling.symlink_to(tmp_path / "missing_target.mkv")
 
     with caplog.at_level(logging.DEBUG, logger=optical_rip_module.logger.name):
         seen = await _fire_on_title_done_once(monkeypatch, tmp_path, [_track(0)], 0)
 
-    assert seen["submitted_in_closure"] == []
     assert seen["events_in_closure"] == []
     records = [r for r in caplog.records if r.name == optical_rip_module.logger.name and "stat failed" in r.message]
     assert len(records) == 1
@@ -1373,10 +1299,8 @@ async def test_rip_all_reports_a_failed_title_result_as_is_after_starting_the_tr
 
 async def test_rip_all_keeps_the_duration_a_title_result_already_has(monkeypatch, tmp_path):
     """A successful title result that carries its own duration is not rebuilt
-    with the track's duration: the hasher gets it and on_track_done reports the
-    same duration, output path and size plus the file's sha256."""
-    import hashlib
-
+    with the track's duration: on_track_done reports the same duration, output
+    path and size."""
     mkv = tmp_path / "title_t00.mkv"
     mkv.write_bytes(b"main feature")
     result = RipResult(ok=True, output_path=mkv, size_bytes=12, duration_seconds=42)
@@ -1385,19 +1309,9 @@ async def test_rip_all_keeps_the_duration_a_title_result_already_has(monkeypatch
         RipDiscResult(overall_error=None, titles={0: result}),
         fire_per_title_start=False,
     )
-    submitted: list[tuple[Path, int]] = []
-    real_submit = optical_rip_module.TitleHasher.submit
-
-    def recording_submit(self: Any, path: Path, size: int, on_hashed: Any) -> None:
-        submitted.append((path, size))
-        real_submit(self, path, size, on_hashed)
-
-    monkeypatch.setattr(optical_rip_module.TitleHasher, "submit", recording_submit)
 
     events = await _run_rip_all_recording_events(tmp_path, [_track(0, duration_seconds=1800)])
 
-    assert submitted == [(mkv, 12)]
-    # The hasher's own "verifying" progress may interleave; only lifecycle order matters.
     lifecycle = [e for e in events if e[0] != "progress"]
     assert [e[:2] for e in lifecycle] == [("start", "trk_0"), ("done", "trk_0")]
     reported = lifecycle[1][2]
@@ -1405,21 +1319,11 @@ async def test_rip_all_keeps_the_duration_a_title_result_already_has(monkeypatch
     assert reported.output_path == mkv
     assert reported.size_bytes == 12
     assert reported.duration_seconds == 42
-    assert reported.sha256 == hashlib.sha256(b"main feature").hexdigest()
 
 
 @pytest.mark.parametrize("exc", [RuntimeError("rip blew up"), asyncio.CancelledError()], ids=["error", "cancel"])
-async def test_rip_all_cancels_the_hasher_and_propagates_an_exception_raised_mid_rip(monkeypatch, tmp_path, exc):
-    """Anything raised inside the rip cancels the background hasher and
-    reaches the caller of rip_all as the same exception object."""
-    cancelled: list[Any] = []
-    real_cancel = optical_rip_module.TitleHasher.cancel
-
-    def recording_cancel(self: Any) -> None:
-        cancelled.append(self)
-        real_cancel(self)
-
-    monkeypatch.setattr(optical_rip_module.TitleHasher, "cancel", recording_cancel)
+async def test_rip_all_propagates_an_exception_raised_mid_rip(monkeypatch, tmp_path, exc):
+    """Anything raised inside the rip reaches the caller of rip_all as the same exception object."""
 
     async def raising_rip_disc(**kwargs: Any) -> RipDiscResult:
         raise exc
@@ -1430,7 +1334,6 @@ async def test_rip_all_cancels_the_hasher_and_propagates_an_exception_raised_mid
         await _run_rip_all_recording_events(tmp_path, [_track(0)])
 
     assert caught.value is exc
-    assert len(cancelled) == 1
 
 
 async def test_rip_all_drops_per_title_progress_for_a_title_that_was_not_selected(monkeypatch, tmp_path):

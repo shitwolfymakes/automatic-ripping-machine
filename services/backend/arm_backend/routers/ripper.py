@@ -801,8 +801,6 @@ def _finish_track(track: Track, req: TrackUpdateRequest) -> None:
         track.output_path = req.output_path
     if req.size_bytes is not None:
         track.size_bytes = req.size_bytes
-    if req.sha256 is not None:
-        track.sha256 = req.sha256
     if req.duration_seconds is not None:
         track.duration_seconds = req.duration_seconds
 

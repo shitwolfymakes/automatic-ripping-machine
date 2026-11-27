@@ -35,7 +35,6 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
-from arm_ripper.rip.hashing import sha256_file
 from arm_ripper.rip.makemkv_process import run_makemkvcon
 from arm_ripper.rip.makemkv_stream import (
     OnDiscProgress,
@@ -125,7 +124,7 @@ def _mkv_title_command(device_path: str, output_dir: Path, title: int) -> list[s
     ]
 
 
-async def _attribute_outputs(output_dir: Path, eligible: list[int], hash_outputs: bool) -> dict[int, RipResult]:
+def _attribute_outputs(output_dir: Path, eligible: list[int]) -> dict[int, RipResult]:
     """Pair each eligible source index with the output file in its rip position.
 
     Files past the eligible list stay unclaimed.
@@ -144,12 +143,10 @@ async def _attribute_outputs(output_dir: Path, eligible: list[int], hash_outputs
 
     for source_idx, file_path in zip(eligible, output_files):
         size = file_path.stat().st_size
-        digest = await sha256_file(file_path) if hash_outputs else None
         titles_out[source_idx] = RipResult(
             ok=True,
             output_path=file_path,
             size_bytes=size,
-            sha256=digest,
         )
     return titles_out
 
@@ -195,7 +192,6 @@ async def rip_disc(
     on_title_progress: OnTitleProgress | None = None,
     on_disc_progress: OnDiscProgress | None = None,
     on_title_done: OnTitleDone | None = None,
-    hash_outputs: bool = True,
     stop: asyncio.Event | None = None,
     title: int | None = None,
 ) -> RipDiscResult:
@@ -222,10 +218,6 @@ async def rip_disc(
     without `--minlength` (see `_mkv_title_command`); the caller passes
     `eligible_source_indexes=[title]`, so its one output file pairs with it
     positionally like any `mkv all` output.
-
-    `hash_outputs=False` leaves `sha256` unset on every result: the
-    dispatcher hashes each title itself as soon as it is written, so the
-    pass overlaps the rip instead of re-reading every file after it.
 
     Returns a `RipDiscResult` whose `titles` dict maps source title
     index to a RipResult. The dispatcher cross-references this with
@@ -260,7 +252,7 @@ async def rip_disc(
     await finish_pending_titles(state, on_title_done)
 
     eligible = eligible_source_indexes or []
-    titles_out = await _attribute_outputs(output_dir, eligible, hash_outputs)
+    titles_out = _attribute_outputs(output_dir, eligible)
 
     titles_out.update(_failed_titles(state, eligible, titles_out))
 

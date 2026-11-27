@@ -27,6 +27,10 @@ class _FakeHttp:
         self.calls.append((url, json))
         return _FakeResponse()
 
+    async def patch(self, url: str, json: dict[str, Any]) -> _FakeResponse:
+        self.calls.append((url, json))
+        return _FakeResponse()
+
 
 @pytest.fixture
 def client(monkeypatch: pytest.MonkeyPatch) -> tuple[BackendClient, _FakeHttp]:
@@ -35,6 +39,7 @@ def client(monkeypatch: pytest.MonkeyPatch) -> tuple[BackendClient, _FakeHttp]:
     fake = _FakeHttp()
     c._client = fake  # type: ignore[assignment]
     monkeypatch.setattr(api_client.RegisterTranscoderResponse, "model_validate", staticmethod(lambda d: d))
+    monkeypatch.setattr(api_client.TranscodeTaskView, "model_validate", staticmethod(lambda d: d))
     return c, fake
 
 
@@ -64,3 +69,11 @@ async def test_register_sends_no_hash_without_a_baked_schema(
     monkeypatch.setattr(api_client, "baked_schema_hash", lambda: None)
     await c.register(task_id="t1", hw_caps=HardwareCaps(cpu_count=2))
     assert fake.calls[0][1]["schema_hash"] is None
+
+
+async def test_complete_patches_the_output_with_no_checksum(client: tuple[BackendClient, _FakeHttp]) -> None:
+    c, fake = client
+    await c.complete("t1", output_path="/out/a.mkv", size_bytes=9, duration_seconds=3)
+    url, body = fake.calls[0]
+    assert url == "/api/transcoder/tasks/t1/complete"
+    assert body == {"output_path": "/out/a.mkv", "size_bytes": 9, "duration_seconds": 3}

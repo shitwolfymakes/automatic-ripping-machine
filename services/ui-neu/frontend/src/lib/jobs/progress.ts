@@ -103,7 +103,6 @@ const row = (...states: SegmentState[]) => states;
 function ripReadout(job: ProgressJob, live: JobLive, pct: number | null): Readout {
 	const phase = live.rip?.phase ?? null;
 	const rp = job.rip_progress;
-	if (phase === 'verifying') return say('Verifying', 'checking the ripped files');
 	if (!rp || rp.tracks_total === 0) return say('Ripping', 'starting MakeMKV');
 	const n = Math.min(rp.current_track_index ?? rp.tracks_done + 1, rp.tracks_total);
 	const figure = pctFigure(pct, finite(live.rip?.etaSeconds)) ?? `${rp.tracks_done} / ${rp.tracks_total} titles`;

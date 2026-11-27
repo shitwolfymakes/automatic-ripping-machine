@@ -259,9 +259,7 @@
 				{@const sample = jobLive.get(job.id).rip}
 				<!-- StageRail above holds the watch on this job, so the card only reads. -->
 				<section class="job-detail-lifecycle-card stack" data-testid="job-rip-progress">
-					<h2 class="job-detail-section-title">
-						{sample?.phase === 'verifying' ? 'Verifying ripped files' : 'Ripping'}
-					</h2>
+					<h2 class="job-detail-section-title">Ripping</h2>
 					<LiveProgressLine {sample} />
 				</section>
 			{/if}
