@@ -6,7 +6,7 @@ import logging
 import pytest
 
 from arm_backend.ripper_manager import ReconcileSummary, RipperManagerError
-from arm_backend.ripper_reconcile import reconcile_enrolled_rippers
+from arm_backend.ripper_reconcile import adopted_drive_ids, reconcile_enrolled_rippers
 from arm_common import (
     DiscType,
     Drive,
@@ -138,3 +138,12 @@ async def test_boot_sweep_runs_before_reconcile() -> None:
     assert manager.removed == ["drv_iso_done"]
     assert manager.seen == [["drv_sr0"]]
     assert hub.events == []
+
+
+def test_adopted_drive_ids_are_the_adopted_drives_only() -> None:
+    summary = ReconcileSummary(adopted=["drv_a"], restarted=["drv_b"], created=["drv_c"])
+    assert adopted_drive_ids(summary) == frozenset({"drv_a"})
+
+
+def test_adopted_drive_ids_empty_when_the_daemon_could_not_be_listed() -> None:
+    assert adopted_drive_ids(None) == frozenset()
