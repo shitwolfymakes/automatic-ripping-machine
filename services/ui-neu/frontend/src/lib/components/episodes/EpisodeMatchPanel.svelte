@@ -417,6 +417,7 @@
 
 		{#if showRows}
 			<EpisodeRows
+				{job}
 				rows={shownRows}
 				fileNames={episodeIdentity.fileNames}
 				matching={view === 'matching'}

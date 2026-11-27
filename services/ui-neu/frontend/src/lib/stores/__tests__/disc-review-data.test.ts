@@ -127,4 +127,45 @@ describe('DiscReviewData', () => {
 		expect(data.sessions).toEqual([]);
 		expect(data.sessionNames.size).toBe(0);
 	});
+
+	it('loadDetail keeps the newest request when an older one answers last', async () => {
+		const staleTracks = [{ id: 't1', excluded: false }];
+		const freshTracks = [{ id: 't1', excluded: true }];
+		let answerStale: (v: unknown) => void = () => {};
+		fetchJobMock
+			.mockReturnValueOnce(new Promise((r) => (answerStale = r)))
+			.mockResolvedValueOnce({ ...DETAIL, tracks: freshTracks });
+		fetchNamingPreviewMock.mockResolvedValue(PREVIEW);
+		const data = new DiscReviewData(() => 'j1');
+
+		const older = data.loadDetail();
+		await data.loadDetail();
+		answerStale({ ...DETAIL, tracks: staleTracks });
+		await older;
+
+		expect(data.detail?.tracks).toEqual(freshTracks);
+		expect(fetchNamingPreviewMock).toHaveBeenCalledTimes(1);
+	});
+
+	it('an older preview that answers last does not replace the newest file names', async () => {
+		let answerOld: (v: unknown) => void = () => {};
+		let failOld: (e: unknown) => void = () => {};
+		fetchJobMock.mockResolvedValue(DETAIL);
+		fetchNamingPreviewMock
+			.mockReturnValueOnce(new Promise((r) => (answerOld = r)))
+			.mockReturnValueOnce(new Promise((_, rej) => (failOld = rej)))
+			.mockResolvedValueOnce({ items: [{ track_id: 't9', output_name: 'New.mkv' }] });
+		const data = new DiscReviewData(() => 'j1');
+
+		const first = data.loadDetail();
+		await vi.waitFor(() => expect(fetchNamingPreviewMock).toHaveBeenCalledTimes(1));
+		const second = data.loadDetail();
+		await vi.waitFor(() => expect(fetchNamingPreviewMock).toHaveBeenCalledTimes(2));
+		await data.loadDetail();
+		answerOld(PREVIEW);
+		failOld(new Error('409'));
+		await Promise.all([first, second]);
+
+		expect([...data.fileNames.entries()]).toEqual([['t9', 'New.mkv']]);
+	});
 });

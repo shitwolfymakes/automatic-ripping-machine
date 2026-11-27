@@ -1,7 +1,8 @@
 <script lang="ts">
-	import type { JobView } from '$lib/types/api.gen';
+	import type { JobView, TrackView } from '$lib/types/api.gen';
 	import type { JobMetadata } from '$lib/jobs/metadata';
 	import type { EpisodeStatus } from '$lib/episodes/status';
+	import { ripPlanLine, ripPlanSummary, ripPlanWarning } from '$lib/jobs/rip-plan';
 	import { isIdentifyMiss, missReason } from '$lib/jobs/review';
 	import {
 		discFactsLine,
@@ -28,6 +29,10 @@
 		episodeRow: EpisodeStatus | null;
 		/** The Source row's label and value. */
 		sourceRow: SourceRow;
+		/** The job's tracks: they size the Rip row. */
+		tracks: TrackView[];
+		/** The job waits at the review gate: the Rip row shows only here. */
+		isReviewGate: boolean;
 		/** The Session row's text; null hides the row. */
 		appliedSession: string | null;
 		/** Called by the Season row's "Season not set" link. */
@@ -45,6 +50,8 @@
 		isPostRip,
 		episodeRow,
 		sourceRow,
+		tracks,
+		isReviewGate,
 		appliedSession,
 		onopenseason,
 		onopenepisodes
@@ -56,6 +63,8 @@
 	let matchDetail = $derived(matchDetailLine(job, isTv, jobMeta.video_type));
 	let showProvider = $derived(matchProviderLabel(job));
 	let discLine = $derived(discFactsLine(job, jobMeta.titleCount));
+	let plan = $derived(isReviewGate ? ripPlanSummary(tracks, job) : null);
+	let planWarning = $derived(plan ? ripPlanWarning(plan) : null);
 </script>
 
 <dl class="disc-review-widget-rows">
@@ -166,6 +175,14 @@
 			<span class="disc-review-widget-value disc-review-widget-source" title={sourceRow.value}>{sourceRow.value}</span>
 		</dd>
 	</div>
+	{#if plan}
+		<div class="disc-review-widget-row" data-testid="rip-row">
+			<dt>Rip</dt>
+			<dd>
+				<span class="disc-review-widget-value" title={ripPlanLine(plan)}>{ripPlanLine(plan)}</span>
+			</dd>
+		</div>
+	{/if}
 	{#if appliedSession}
 		<div class="disc-review-widget-row">
 			<dt>Session</dt>
@@ -175,6 +192,9 @@
 		</div>
 	{/if}
 </dl>
+{#if planWarning}
+	<p class="alert alert-warning" data-testid="rip-warning">{planWarning}</p>
+{/if}
 
 <style>
 	/* One aligned label column for every fact (a single grid, so the labels

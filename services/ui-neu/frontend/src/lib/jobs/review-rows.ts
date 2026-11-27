@@ -1,4 +1,6 @@
 import type { TrackView, ScanTitle, TrackRole } from '$lib/types/api.gen';
+import { trackSizeLabel } from '$lib/jobs/track-fields';
+import { formatBytes } from '$lib/utils/format';
 
 // One row shape covering both review-card lifecycle stages. A row is editable iff
 // it has a real materialized-track id; scanned-title rows (trackId === null) are
@@ -7,6 +9,8 @@ type ReviewRow = {
 	index: number;
 	durationSeconds: number | null;
 	sourceLabel: string | null;
+	/** The actual size once ripped, else the scan estimate with a leading ~; '-' when unknown. */
+	sizeLabel: string;
 	trackId: string | null;
 	title: string | null;
 	year: number | null;
@@ -24,6 +28,7 @@ export function trackToRow(t: TrackView): ReviewRow {
 		// The post-rip actual, else the scan-time estimate: a track waiting to rip has a length too.
 		durationSeconds: t.duration_seconds ?? t.expected_duration_seconds ?? null,
 		sourceLabel: t.output_path || t.source_ref,
+		sizeLabel: trackSizeLabel(t),
 		trackId: t.id,
 		title: t.title ?? null,
 		year: t.year ?? null,
@@ -39,6 +44,7 @@ export function scanTitleToRow(s: ScanTitle): ReviewRow {
 		index: s.index,
 		durationSeconds: s.duration_seconds,
 		sourceLabel: s.source_file ?? null,
+		sizeLabel: s.size_bytes == null ? '-' : `~${formatBytes(s.size_bytes)}`,
 		trackId: null,
 		title: null,
 		year: null,

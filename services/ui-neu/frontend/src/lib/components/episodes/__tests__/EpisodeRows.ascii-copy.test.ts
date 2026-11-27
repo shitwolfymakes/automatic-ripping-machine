@@ -4,6 +4,7 @@ import { describe, it, expect, afterEach } from 'vitest';
 import { renderComponent, screen, cleanup } from '$lib/testing/render';
 import EpisodeRows from '../EpisodeRows.svelte';
 import type { EpisodeRow } from '../../../episodes/episode-model';
+import { createJob } from '../../../__fixtures__/job';
 
 // UI copy is ASCII: an empty value is "-", a trailing wait is "...", and joined
 // facts are separated by ", ". Comments and <style> blocks are not copy.
@@ -52,9 +53,10 @@ describe('ASCII copy', () => {
 			season: null,
 			seconds: null,
 			excluded: false,
+			status: 'queued',
 			pickValue: ''
 		};
-		renderComponent(EpisodeRows, { rows: [row], fileNames: new Map() });
+		renderComponent(EpisodeRows, { job: createJob(), rows: [row], fileNames: new Map() });
 		expect(screen.getAllByText('-').length).toBeGreaterThan(0);
 	});
 });
