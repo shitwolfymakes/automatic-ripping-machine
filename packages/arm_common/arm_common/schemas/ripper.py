@@ -78,6 +78,10 @@ class ScanTitle(BaseModel):
     # MakeMKV's comment: the disc's own name for the playlist, when it has one
     # (`FPL_MainFeature`). Decoy playlists usually have none.
     comment: str | None = None
+    # Which angle of a multi-angle playlist the title plays (1-based); None for a single-angle one.
+    angle: int | None = None
+    # A 3D title: its play items have MVC dependent-view clips (the base and dependent views are ripped together).
+    stereo_3d: bool = False
 
 
 class DiscFingerprintInput(BaseModel):

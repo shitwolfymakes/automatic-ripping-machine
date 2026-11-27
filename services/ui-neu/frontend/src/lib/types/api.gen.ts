@@ -4608,6 +4608,14 @@ export type ScanTitle = {
      * Comment
      */
     comment?: string | null;
+    /**
+     * Angle
+     */
+    angle?: number | null;
+    /**
+     * Stereo 3D
+     */
+    stereo_3d?: boolean;
 };
 
 /**

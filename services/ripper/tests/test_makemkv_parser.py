@@ -230,7 +230,7 @@ def test_to_int_parses_ints_and_returns_none_otherwise():
 
 
 def test_tinfo_fields_covers_exactly_the_known_codes():
-    assert set(_TINFO_FIELDS) == {8, 9, 11, 16, 25, 26, 49}
+    assert set(_TINFO_FIELDS) == {8, 9, 11, 15, 16, 25, 26, 49}
 
 
 def test_later_unparseable_chapter_count_keeps_the_earlier_valid_one():
@@ -402,3 +402,9 @@ def test_parses_blu_ray_with_decoy_playlists():
     assert {frozenset(t.segment_map or []) for t in decoys} == {frozenset(feature.segment_map)}
     assert len({tuple(t.segment_map or []) for t in decoys}) == 299
     assert [t.index for t in decoys if t.comment] == [0]
+
+
+def test_tinfo_15_is_the_angle():
+    lines = ['TINFO:2,9,0,"0:10:00"', 'TINFO:2,15,0,"2"', 'TINFO:2,16,0,"00334.mpls"']
+    _, titles, _ = parse_makemkvcon_info(lines)
+    assert [(t.source_file, t.angle) for t in titles] == [("00334.mpls", 2)]
