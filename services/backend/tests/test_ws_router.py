@@ -159,6 +159,44 @@ def test_same_origin_accepted_without_allowlist(monkeypatch: pytest.MonkeyPatch)
             assert ack["op"] == "ack"
 
 
+def test_service_subprotocol_does_not_waive_the_origin_check(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Any page can ask for the `arm-service-token` subprotocol; a foreign
+    origin that does is still refused before auth, instead of being accepted
+    and let in as the guest."""
+    settings.ARM_ALLOWED_ORIGINS = []
+    db = FakeSession()
+    db.rows["users"] = [_guest_user()]
+    app = _make_app(db, _Hub(), monkeypatch)
+    with TestClient(app) as client:
+        with pytest.raises(WebSocketDisconnect) as closed:
+            with client.websocket_connect(
+                "/ws",
+                subprotocols=[ws_router.SERVICE_TOKEN_SUBPROTOCOL],
+                headers={"origin": "https://evil.example"},
+            ) as ws:
+                ws.send_json({"op": "auth", "token": ""})
+                ws.receive_json()
+    assert closed.value.code == 1008
+
+
+def test_service_client_without_origin_still_connects(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Rippers and transcoders send the subprotocol and no Origin header, so
+    the no-Origin rule admits them and the subprotocol is still echoed."""
+    settings.ARM_ALLOWED_ORIGINS = []
+    db = FakeSession()
+    db.rows["drives"] = [_ripper_drive()]
+    app = _make_app(db, _Hub(), monkeypatch)
+    with TestClient(app) as client:
+        with client.websocket_connect(
+            "/ws",
+            subprotocols=[ws_router.SERVICE_TOKEN_SUBPROTOCOL],
+            headers={"x-arm-hostname": "ripper-host"},
+        ) as ws:
+            assert ws.accepted_subprotocol == ws_router.SERVICE_TOKEN_SUBPROTOCOL
+            ws.send_json({"op": "auth", "token": "tok-service"})
+            assert ws.receive_json()["op"] == "ack"
+
+
 # --- auth handshake failures -------------------------------------------------
 
 
