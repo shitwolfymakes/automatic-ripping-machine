@@ -80,6 +80,9 @@ jobs:
       # Zero-infra unit test for the writability/readability guard, same seam.
       - name: Entrypoint writability guard suite
         run: bash services/_common/test-entrypoint-guard.sh
+      # Zero-infra unit test for the private TLS key copy, same seam.
+      - name: Entrypoint TLS key suite
+        run: bash services/_common/test-entrypoint-tls.sh
       # Zero-infra assertions that the dev installer + compose template do not
       # enumerate drives.
       - name: setup-dev / compose template suite

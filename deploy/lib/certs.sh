@@ -34,8 +34,10 @@ san_is_ipv4() {
 
 # make_leaf <name> [extra SAN ...]: issue a leaf signed by the CA. The name is
 # always a DNS SAN; each extra SAN is an IP when it looks like one, DNS otherwise.
-# Keys are 440 and group-owned by ARM_PGID so a stack whose PUID differs from
-# the user who ran the installer can still read them.
+# Keys are 440, group-owned by ARM_PGID when the caller sets it, else by the
+# installing user's group. A stack whose PUID/PGID differs from that user still
+# starts: the service entrypoint (services/_common/docker-entrypoint.sh,
+# private_tls_key) hands the dropped user a private copy of a key it cannot read.
 make_leaf() {
     local name="$1"; shift
     local extra_sans=("$@")
