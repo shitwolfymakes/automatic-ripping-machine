@@ -16274,7 +16274,7 @@
             ],
             "title": "Segment Map"
           },
-          "comment": {
+          "playlist_name": {
             "anyOf": [
               {
                 "type": "string"
@@ -16283,7 +16283,7 @@
                 "type": "null"
               }
             ],
-            "title": "Comment"
+            "title": "Playlist Name"
           }
         },
         "type": "object",
@@ -17720,6 +17720,18 @@
         ],
         "title": "TemplatePreviewResponse"
       },
+      "TitleClass": {
+        "type": "string",
+        "enum": [
+          "primary",
+          "edition",
+          "duplicate",
+          "decoy",
+          "variant"
+        ],
+        "title": "TitleClass",
+        "description": "What the classifier (arm_common.title_classes) decides about one scanned\nBlu-ray title."
+      },
       "TrackClaim": {
         "properties": {
           "role": {
@@ -18365,6 +18377,49 @@
               }
             ],
             "title": "Edition"
+          },
+          "source_file": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source File"
+          },
+          "playlist_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Playlist Name"
+          },
+          "title_class": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TitleClass"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "title_class_ref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title Class Ref"
           },
           "title": {
             "anyOf": [

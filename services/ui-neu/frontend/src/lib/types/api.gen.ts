@@ -4537,9 +4537,9 @@ export type ScanTitle = {
      */
     segment_map?: Array<number> | null;
     /**
-     * Comment
+     * Playlist Name
      */
-    comment?: string | null;
+    playlist_name?: string | null;
 };
 
 /**
@@ -5371,6 +5371,14 @@ export type TemplatePreviewResponse = {
 };
 
 /**
+ * TitleClass
+ *
+ * What the classifier (arm_common.title_classes) decides about one scanned
+ * Blu-ray title.
+ */
+export type TitleClass = 'primary' | 'edition' | 'duplicate' | 'decoy' | 'variant';
+
+/**
  * TrackClaim
  */
 export type TrackClaim = {
@@ -5651,6 +5659,19 @@ export type TrackView = {
      * Edition
      */
     edition?: string | null;
+    /**
+     * Source File
+     */
+    source_file?: string | null;
+    /**
+     * Playlist Name
+     */
+    playlist_name?: string | null;
+    title_class?: TitleClass | null;
+    /**
+     * Title Class Ref
+     */
+    title_class_ref?: string | null;
     /**
      * Title
      */

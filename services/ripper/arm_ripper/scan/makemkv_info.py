@@ -56,7 +56,7 @@ _TINFO_FIELDS: dict[int, tuple[str, Callable[[str], int | str | list[int] | None
     16: ("source_file", str),
     25: ("segment_count", _to_int),
     26: ("segment_map", _parse_segment_map),
-    49: ("comment", str),
+    49: ("playlist_name", str),
 }
 
 
@@ -101,7 +101,7 @@ def _scan_title(idx: int, entry: dict[str, object]) -> ScanTitle | None:
     source_obj = entry.get("source_file")
     segment_count_obj = entry.get("segment_count")
     segment_map_obj = entry.get("segment_map")
-    comment_obj = entry.get("comment")
+    playlist_name_obj = entry.get("playlist_name")
     return ScanTitle(
         index=idx,
         duration_seconds=duration_obj,
@@ -110,7 +110,7 @@ def _scan_title(idx: int, entry: dict[str, object]) -> ScanTitle | None:
         source_file=source_obj if isinstance(source_obj, str) else None,
         segment_count=segment_count_obj if isinstance(segment_count_obj, int) else None,
         segment_map=segment_map_obj if isinstance(segment_map_obj, list) else None,
-        comment=comment_obj if isinstance(comment_obj, str) else None,
+        playlist_name=playlist_name_obj if isinstance(playlist_name_obj, str) else None,
     )
 
 
@@ -182,7 +182,7 @@ def parse_makemkvcon_info(
     - TINFO:t,16,... — source playlist or stream (e.g. 00800.mpls; a title number on DVD)
     - TINFO:t,25,... — number of clips (segments)
     - TINFO:t,26,... — clip numbers in play order (e.g. 508,501,503)
-    - TINFO:t,49,... — comment: the disc's own playlist name (e.g. FPL_MainFeature)
+    - TINFO:t,49,... — playlist_name: the disc's own playlist name (e.g. FPL_MainFeature)
     TINFO 27 is the output file name and is not read.
 
     Reference: https://github.com/automatic-ripping-machine/automatic-ripping-machine/wiki/MakeMKV-Codes
