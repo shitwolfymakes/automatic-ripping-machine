@@ -68,7 +68,8 @@ async def test_resume_holds_the_single_flight_gate_while_ripping(monkeypatch) ->
     client = _Client()
     c = JobController(client, "drv_test", device_path="/dev/sr0")  # type: ignore[arg-type]
     assert c.is_idle()
-    task = asyncio.create_task(c.resume_inflight_job(_job(), "/dev/sr0"))
+    task = await c.resume_inflight_job(_job(), "/dev/sr0")
+    assert task is not None
     await started.wait()
     seen_idle.append(c.is_idle())
     release.set()
@@ -86,8 +87,7 @@ async def test_resume_releases_the_gate_when_the_rip_raises(monkeypatch) -> None
 
     monkeypatch.setattr(JobController, "_execute_rip", _boom)
     c = JobController(_Client(), "drv_test", device_path="/dev/sr0")  # type: ignore[arg-type]
-    try:
-        await c.resume_inflight_job(_job(), "/dev/sr0")
-    except RuntimeError:
-        pass
+    task = await c.resume_inflight_job(_job(), "/dev/sr0")
+    assert task is not None
+    await task  # the error is logged in the rip's own task
     assert c.is_idle()
