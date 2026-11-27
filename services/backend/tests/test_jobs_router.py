@@ -401,6 +401,107 @@ def test_rip_start_review_clears_the_unidentified_flag(signing_key: bytes) -> No
     assert stored == {"flags": {"dispatch_timeout": True}}
 
 
+_PRIOR_RIP = "job_01JZXR7K3M5Q8N4VWA0000PR10"
+
+
+def _held_job(disc_type: DiscType, meta: dict[str, Any]) -> Job:
+    job = _job(status=JobStatus.AWAITING_REVIEW, meta=meta)
+    job.disc_type = disc_type
+    return job
+
+
+def _start_then_rip_complete(
+    signing_key: bytes, db: FakeSession, monkeypatch: pytest.MonkeyPatch, start_path: str
+) -> tuple[Any, list[str]]:
+    """Start a held job through `start_path`, rip its track, and post the
+    ripper's rip-complete. Auto-apply is on and a session is routed, so the
+    returned list names every job auto-apply reached the apply step for."""
+    from arm_backend import auto_session
+    from arm_backend.routers import ripper as ripper_router
+
+    applied: list[str] = []
+
+    async def _routed(_db: Any, _job: Any) -> str:
+        return "ses_routed"
+
+    async def _apply(_db: Any, *, job: Job, **_kw: Any) -> ApplySessionOutcome:
+        applied.append(job.id)
+        raise SessionNotFoundError
+
+    monkeypatch.setattr(auto_session, "resolve_routed_session_id", _routed)
+    monkeypatch.setattr(auto_session, "apply_session_internal", _apply)
+    db.rows["config"] = [Config(id=1, auto_transcode_on_idle=True)]
+    db.rows["drives"] = [Drive(id="drv_x", hostname="ripper-host", device_path="/dev/sr0", status=DriveStatus.ONLINE)]
+    db.rows["tracks"] = [_track("trk_01JZXR7K3M5Q8N4VWA0000T01", status=TrackStatus.QUEUED)]
+    app, token = _make_app(signing_key, db)
+    app.include_router(ripper_router.router)
+    with TestClient(app) as client:
+        started = client.post(start_path, headers=_auth(token))
+        assert started.status_code == 200, started.text
+        db.rows["tracks"][0].status = TrackStatus.DONE
+        done = client.post(
+            "/api/ripper/jobs/job_01JZXR7K3M5Q8N4VWA00000001/rip-complete",
+            json={},
+            headers={"Authorization": "Bearer tok-service", "X-ARM-Hostname": "ripper-host"},
+        )
+    assert done.status_code == 200, done.text
+    return done.json(), applied
+
+
+@pytest.mark.parametrize(
+    ("disc_type", "finished"),
+    [(DiscType.DVD, JobStatus.RIPPED), (DiscType.CD, JobStatus.RIPPED_AWAITING_IDENTIFY)],
+)
+def test_start_without_accepting_a_held_suggestion_keeps_the_disc_unidentified(
+    signing_key: bytes, monkeypatch: pytest.MonkeyPatch, disc_type: DiscType, finished: JobStatus
+) -> None:
+    """Start on a hit held for confirmation, without accepting it, is not a
+    match: the flag stays, so the finished rip waits for identity (a CD parks
+    as a placeholder, a DVD's auto-apply holds back) and nothing is applied."""
+    db = FakeSession()
+    meta = {"flags": {"unidentified": True}, "identity_suggestion": dict(_SUGGESTION)}
+    db.rows["jobs"] = [_held_job(disc_type, meta)]
+    out, applied = _start_then_rip_complete(
+        signing_key, db, monkeypatch, "/api/jobs/job_01JZXR7K3M5Q8N4VWA00000001/rip-start-review"
+    )
+    assert out["status"] == finished.value
+    assert out["metadata_json"]["flags"]["unidentified"] is True
+    assert applied == []
+
+
+@pytest.mark.parametrize(
+    "start_path",
+    [
+        "/api/jobs/job_01JZXR7K3M5Q8N4VWA00000001/rip-start-review",
+        f"/api/jobs/{_PRIOR_RIP}/rip-again",
+    ],
+)
+def test_starting_a_cd_miss_held_as_previously_ripped_keeps_it_a_placeholder(
+    signing_key: bytes, monkeypatch: pytest.MonkeyPatch, start_path: str
+) -> None:
+    """A CD that missed with block_on_miss off and was then held as ripped
+    before rips as the unidentified placeholder it is, whether started from
+    review or by Rip again on the earlier rip."""
+    db = FakeSession()
+    meta = {"flags": {"unidentified": True}, "previously_ripped": {"job_id": _PRIOR_RIP}}
+    db.rows["jobs"] = [_held_job(DiscType.CD, meta), _job(_PRIOR_RIP, status=JobStatus.RIPPED)]
+    out, applied = _start_then_rip_complete(signing_key, db, monkeypatch, start_path)
+    assert out["status"] == JobStatus.RIPPED_AWAITING_IDENTIFY.value
+    assert applied == []
+
+
+def test_starting_a_video_miss_releases_it_to_auto_apply(signing_key: bytes, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A missed DVD with no held suggestion: Start counts it as matched, so the
+    finished rip reaches auto-apply."""
+    db = FakeSession()
+    db.rows["jobs"] = [_held_job(DiscType.DVD, {"flags": {"unidentified": True, "blocked_miss": True}})]
+    out, applied = _start_then_rip_complete(
+        signing_key, db, monkeypatch, "/api/jobs/job_01JZXR7K3M5Q8N4VWA00000001/rip-start-review"
+    )
+    assert out["status"] == JobStatus.RIPPED.value
+    assert applied == ["job_01JZXR7K3M5Q8N4VWA00000001"]
+
+
 def test_rip_start_review_wrong_status_409(signing_key: bytes) -> None:
     db = FakeSession()
     app, token = _make_app(signing_key, db)

@@ -67,6 +67,7 @@ from arm_common.enums import (
     POST_RIP_JOB_STATUSES,
     RESOLVABLE_JOB_STATUSES,
     TERMINAL_JOB_STATUSES,
+    VIDEO_DISC_TYPES,
 )
 from arm_common.schemas.job_metadata import (
     identity_suggestion_of,
@@ -259,10 +260,12 @@ async def rip_start_review(
 
 async def _start_held_job(db: AsyncSession, hub: WSHub, job: Job) -> None:
     """AWAITING_REVIEW -> RIPPING, plus the `rip.start` command that unblocks
-    the parked ripper. Commits. 422 when every track is excluded. The
-    operator starting the rip counts the disc as matched and releases a
-    blocked miss, so the `unidentified` flag and the blocked-miss marker go
-    and auto-apply runs once the rip finishes."""
+    the parked ripper. Commits. 422 when every track is excluded. Starting
+    a missed video disc with no held suggestion counts it as matched and
+    releases a blocked miss, so the `unidentified` flag and the blocked-miss
+    marker go and auto-apply runs once the rip finishes. Any other hold keeps
+    its flags: a suggestion started without accepting it is unconfirmed, and
+    a missed CD rips as the placeholder it is."""
     tracks = list((await db.execute(select(Track).where(col(Track.job_id) == job.id))).scalars().all())
     if tracks and all(t.excluded for t in tracks):
         raise HTTPException(
@@ -272,7 +275,8 @@ async def _start_held_job(db: AsyncSession, hub: WSHub, job: Job) -> None:
 
     job.status = JobStatus.RIPPING
     job.started_at = datetime.now(timezone.utc)
-    job.metadata_json = without_flags(job.metadata_json, "unidentified", "blocked_miss")
+    if job.disc_type in VIDEO_DISC_TYPES and identity_suggestion_of(job.metadata_json) is None:
+        job.metadata_json = without_flags(job.metadata_json, "unidentified", "blocked_miss")
     db.add(job)
     await db.flush()
 
