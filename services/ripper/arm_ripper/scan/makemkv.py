@@ -1,5 +1,11 @@
 import asyncio
+import contextlib
 import logging
+import time
+from collections import deque
+from collections.abc import Callable
+from dataclasses import dataclass, field
+from enum import StrEnum
 from typing import NamedTuple
 
 from arm_common import DiscType
@@ -10,22 +16,60 @@ from arm_ripper.source import makemkv_source_url
 
 logger = logging.getLogger("arm_ripper.scan.makemkv")
 
-SCAN_TIMEOUT_SECONDS = 300.0
+# Stop waiting when makemkvcon has printed nothing (progress lines count) for
+# this long, or has been running this long in total.
+SCAN_IDLE_TIMEOUT_SECONDS = 180.0
+SCAN_MAX_SECONDS = 1200.0
+# makemkvcon prints the disc's CINFO block after `TCOUNT:0`; wait this long for
+# it to go quiet, then kill instead of waiting for it to give up on its own.
+SCAN_TERMINAL_GRACE_SECONDS = 5.0
+# Non-progress lines kept (stdout and stderr, in arrival order) for a failure report.
+SCAN_TAIL_LINES = 60
+
+_PIPE_COUNT = 2  # stdout and stderr
 
 # MakeMKV emits this when its hard-coded 60-day beta kill-switch has fired.
 # No registration key overrides it; the binary refuses all protected-disc
 # work and the only fix is rebuilding against a fresher upstream tarball.
-# See docs/user/MakeMKV-Ripper.md § Failure modes.
 MAKEMKV_EXPIRED_PREFIX = b"MSG:5021,"
+TCOUNT_ZERO_LINE = "TCOUNT:0"
+# Disc-open failure messages. The code and text come from the issue report.
+VOLUME_KEY_UNKNOWN_PREFIX = "MSG:3303,"
+DISC_OPEN_FAILED_TEXT = "failed to open disc"
+
+_EXPIRED_DETAIL = (
+    "makemkvcon refused: binary is past its hard-coded expiry (MSG:5021 'application version is too old'); "
+    "rebuild the ripper image after upstream ships a fresher tarball"
+)
+_TIMED_OUT_DETAIL = (
+    f"makemkvcon timed out: no output for {SCAN_IDLE_TIMEOUT_SECONDS:g}s or still running after {SCAN_MAX_SECONDS:g}s"
+)
+
+
+class ScanFailureReason(StrEnum):
+    VOLUME_KEY_UNKNOWN = "volume_key_unknown"
+    DISC_OPEN_FAILED = "disc_open_failed"
+    TIMED_OUT = "timed_out"
+    MAKEMKV_EXPIRED = "makemkv_expired"
+    MAKEMKV_ERROR = "makemkv_error"
 
 
 class ScanError(Exception):
     pass
 
 
-class MakemkvBinaryExpiredError(ScanError):
-    """Distinct subtype so callers / operators can match this specifically
-    and route to the upstream-blocked playbook instead of a generic retry."""
+class MakemkvScanFailed(ScanError):
+    """makemkvcon ran but its scan failed; carries why, and the last non-progress output."""
+
+    def __init__(self, reason: ScanFailureReason, detail: str, tail: tuple[str, ...]) -> None:
+        super().__init__(detail)
+        self.reason = reason
+        self.detail = detail
+        self.tail = tail
+
+
+def _info_command(device_path: str) -> list[str]:
+    return ["makemkvcon", "-r", "--cache=1", "--progress=-stdout", "info", makemkv_source_url(device_path)]
 
 
 def _classify_from_titles(titles: list[ScanTitle]) -> DiscType:
@@ -43,107 +87,209 @@ def _classify_from_titles(titles: list[ScanTitle]) -> DiscType:
     )
 
 
-async def _read_info_stdout(proc: asyncio.subprocess.Process) -> tuple[bytes, bool]:
-    """Read makemkvcon's stdout to EOF; return it and whether MSG:5021 (expired binary) appeared.
-
-    The first MSG:5021 line kills makemkvcon; the pipe is still drained to EOF.
-    """
-    assert proc.stdout is not None
-    chunks: list[bytes] = []
-    expired = False
-    async for raw in proc.stdout:
-        chunks.append(raw)
-        if not expired and raw.startswith(MAKEMKV_EXPIRED_PREFIX):
-            expired = True
-            proc.kill()
-            # Keep draining the pipe so the kernel doesn't block on
-            # buffered writes between SIGKILL and process teardown.
-    return b"".join(chunks), expired
+class _EventKind(StrEnum):
+    EXPIRED = "expired"
+    TCOUNT_ZERO = "tcount_zero"
+    REASON = "reason"
+    PROGRESS = "progress"
+    OTHER = "other"
 
 
-async def _read_info_stderr(proc: asyncio.subprocess.Process) -> bytes:
-    """Read makemkvcon's stderr to EOF."""
-    assert proc.stderr is not None
-    chunks: list[bytes] = []
-    async for chunk in proc.stderr:
-        chunks.append(chunk)
-    return b"".join(chunks)
+@dataclass(frozen=True)
+class _LineEvent:
+    kind: _EventKind
+    reason: ScanFailureReason | None = None
 
 
-async def _read_makemkvcon_stream(proc: asyncio.subprocess.Process) -> tuple[bytes, bytes, bool]:
-    """Drain stdout + stderr concurrently. Returns (stdout, stderr, expired).
+_PROGRESS_PREFIXES = ("PRGV:", "PRGT:", "PRGC:")
 
-    Watches stdout line-by-line; on `MSG:5021,` (binary kill-switch fired)
-    kills the subprocess so the caller short-circuits the SCAN_TIMEOUT_SECONDS
-    ceiling. With an expired binary makemkvcon can either exit instantly
-    (`info disc:9999`) or spin against the ISO/disc structure for the full
-    5 minutes (`info iso:/big.iso`) — the early-kill turns the slow path
-    into a deterministic ~few-second failure.
-    """
-    assert proc.stdout is not None
-    assert proc.stderr is not None
-    stdout_task = asyncio.create_task(_read_info_stdout(proc))
-    stderr_task = asyncio.create_task(_read_info_stderr(proc))
-    stdout_bytes, expired = await stdout_task
-    stderr_bytes = await stderr_task
-    return stdout_bytes, stderr_bytes, expired
+
+def _classify_line(line: str) -> _LineEvent:
+    """Pure: what one line of makemkvcon output means for the scan."""
+    if line.startswith(MAKEMKV_EXPIRED_PREFIX.decode()):
+        return _LineEvent(_EventKind.EXPIRED)
+    if line.strip() == TCOUNT_ZERO_LINE:
+        return _LineEvent(_EventKind.TCOUNT_ZERO)
+    if line.startswith(VOLUME_KEY_UNKNOWN_PREFIX):
+        return _LineEvent(_EventKind.REASON, ScanFailureReason.VOLUME_KEY_UNKNOWN)
+    if line.startswith("MSG:") and DISC_OPEN_FAILED_TEXT in line.lower():
+        return _LineEvent(_EventKind.REASON, ScanFailureReason.DISC_OPEN_FAILED)
+    if line.startswith(_PROGRESS_PREFIXES):
+        return _LineEvent(_EventKind.PROGRESS)
+    return _LineEvent(_EventKind.OTHER)
+
+
+def _on_expired(watch: "_ScanWatch", _event: _LineEvent) -> None:
+    watch.expired = True
+
+
+def _on_tcount_zero(watch: "_ScanWatch", _event: _LineEvent) -> None:
+    watch.tcount_zero = True
+
+
+def _on_reason(watch: "_ScanWatch", event: _LineEvent) -> None:
+    watch.reason = watch.reason or event.reason
+
+
+def _on_other(_watch: "_ScanWatch", _event: _LineEvent) -> None:
+    return None
+
+
+_EVENT_HANDLERS: dict[_EventKind, Callable[["_ScanWatch", _LineEvent], None]] = {
+    _EventKind.EXPIRED: _on_expired,
+    _EventKind.TCOUNT_ZERO: _on_tcount_zero,
+    _EventKind.REASON: _on_reason,
+    _EventKind.PROGRESS: _on_other,
+    _EventKind.OTHER: _on_other,
+}
+
+
+@dataclass
+class _ScanWatch:
+    """What the scan has shown so far; decides when to stop waiting for makemkvcon."""
+
+    started_at: float
+    last_line_at: float
+    stdout: list[str] = field(default_factory=list)
+    tail: deque[str] = field(default_factory=lambda: deque(maxlen=SCAN_TAIL_LINES))
+    reason: ScanFailureReason | None = None
+    expired: bool = False
+    tcount_zero: bool = False
+    timed_out: bool = False
+
+    def observe(self, line: str, now: float) -> None:
+        self.last_line_at = now
+        event = _classify_line(line)
+        if event.kind is not _EventKind.PROGRESS:
+            self.tail.append(line)
+        _EVENT_HANDLERS[event.kind](self, event)
+
+    def deadline(self) -> float:
+        """Pure: the monotonic time at which to stop waiting (idle window or the hard ceiling)."""
+        window = SCAN_TERMINAL_GRACE_SECONDS if self.tcount_zero else SCAN_IDLE_TIMEOUT_SECONDS
+        return min(self.last_line_at + window, self.started_at + SCAN_MAX_SECONDS)
+
+    def expire(self) -> None:
+        """The deadline passed. After TCOUNT:0 that is the normal end of the scan, otherwise a timeout."""
+        self.timed_out = not self.tcount_zero
+
+
+@dataclass(frozen=True)
+class _Chunk:
+    """One decoded line from one pipe; `line is None` marks that pipe's EOF."""
+
+    is_stdout: bool
+    line: str | None
+
+
+async def _pump(stream: asyncio.StreamReader, queue: "asyncio.Queue[_Chunk]", is_stdout: bool) -> None:
+    """I/O: copy one pipe into the queue, line by line, then post its EOF marker."""
+    try:
+        async for raw in stream:
+            await queue.put(_Chunk(is_stdout, raw.decode(errors="replace").rstrip("\r\n")))
+    finally:
+        queue.put_nowait(_Chunk(is_stdout, None))
+
+
+async def _next_chunk(queue: "asyncio.Queue[_Chunk]", remaining: float) -> _Chunk | None:
+    """The next queued line, or None when `remaining` seconds pass first."""
+    if remaining <= 0:
+        return None
+    try:
+        return await asyncio.wait_for(queue.get(), timeout=remaining)
+    except asyncio.TimeoutError:
+        return None
+
+
+def _feed(watch: _ScanWatch, chunk: _Chunk, now: float) -> bool:
+    """Record one chunk in the watch; True when it was a pipe's EOF marker."""
+    if chunk.line is None:
+        return True
+    if chunk.is_stdout:
+        watch.stdout.append(chunk.line)
+    watch.observe(chunk.line, now)
+    return False
+
+
+async def _watch(queue: "asyncio.Queue[_Chunk]", watch: _ScanWatch, clock: Callable[[], float]) -> bool:
+    """Feed the watch until both pipes reach EOF (returns True), or it is time to give up (False)."""
+    open_pipes = _PIPE_COUNT
+    while open_pipes and not watch.expired:
+        chunk = await _next_chunk(queue, watch.deadline() - clock())
+        if chunk is None:
+            watch.expire()
+            return False
+        open_pipes -= _feed(watch, chunk, clock())
+    return open_pipes == 0
 
 
 class _InfoRun(NamedTuple):
     """What one `makemkvcon info` run printed, and how it exited."""
 
-    stdout: bytes
-    stderr: bytes
-    expired: bool
+    watch: _ScanWatch
     returncode: int | None
 
 
-async def _run_info(device_path: str) -> _InfoRun:
-    """Run `makemkvcon info` on the device under the scan timeout.
+async def _reap(proc: asyncio.subprocess.Process, pumps: list["asyncio.Task[None]"]) -> None:
+    """Side effect: kill makemkvcon if it is still running, reap it and stop the pipe readers."""
+    if proc.returncode is None:
+        with contextlib.suppress(ProcessLookupError):
+            proc.kill()
+    await proc.wait()
+    for pump in pumps:
+        pump.cancel()
+    await asyncio.gather(*pumps, return_exceptions=True)
 
-    Raises ScanError when makemkvcon is not on PATH or times out.
+
+async def _run_info(device_path: str, clock: Callable[[], float] = time.monotonic) -> _InfoRun:
+    """Run `makemkvcon info` on the device, watching its output instead of a flat timeout.
+
+    Raises ScanError when makemkvcon is not on PATH. Whatever the exit path
+    (done, timed out, terminal line, cancelled) the process is killed and reaped.
     """
-    cmd = ["makemkvcon", "-r", "--cache=1", "info", makemkv_source_url(device_path)]
     logger.info("makemkvcon info device=%s", device_path)
-
     try:
         proc = await asyncio.create_subprocess_exec(
-            *cmd,
+            *_info_command(device_path),
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )
     except FileNotFoundError as e:
         raise ScanError("makemkvcon binary not found on PATH") from e
 
+    assert proc.stdout is not None
+    assert proc.stderr is not None
+    queue: asyncio.Queue[_Chunk] = asyncio.Queue()
+    pumps = [
+        asyncio.create_task(_pump(proc.stdout, queue, True)),
+        asyncio.create_task(_pump(proc.stderr, queue, False)),
+    ]
+    watch = _ScanWatch(started_at=clock(), last_line_at=clock())
     try:
-        stdout, stderr, expired = await asyncio.wait_for(_read_makemkvcon_stream(proc), timeout=SCAN_TIMEOUT_SECONDS)
-    except asyncio.TimeoutError:
-        proc.kill()
-        await proc.wait()
-        raise ScanError(f"makemkvcon timed out after {SCAN_TIMEOUT_SECONDS}s") from None
-
-    await proc.wait()
-    return _InfoRun(stdout, stderr, expired, proc.returncode)
+        if await _watch(queue, watch, clock):
+            await proc.wait()
+    finally:
+        await _reap(proc, pumps)
+    return _InfoRun(watch, proc.returncode)
 
 
-def _raise_for_failure(run: _InfoRun) -> None:
-    """Raise when the info run failed.
+def _failed(reason: ScanFailureReason, detail: str, watch: _ScanWatch) -> MakemkvScanFailed:
+    return MakemkvScanFailed(reason, detail, tuple(watch.tail))
 
-    MakemkvBinaryExpiredError for an expired binary, else ScanError on a non-zero exit.
-    """
-    if run.expired:
-        raise MakemkvBinaryExpiredError(
-            "makemkvcon refused: binary is past its hard-coded expiry "
-            "(MSG:5021 'application version is too old'). MakeMKV beta "
-            "binaries carry a 60-day kill-switch from release date that "
-            "no registration key overrides; the only fix is rebuilding the "
-            "ripper image after upstream ships a fresher tarball. See "
-            "docs/user/MakeMKV-Ripper.md § Failure modes."
-        )
 
-    if run.returncode != 0:
-        msg = run.stderr.decode(errors="replace").strip() or run.stdout.decode(errors="replace")[:200]
-        raise ScanError(f"makemkvcon exited {run.returncode}: {msg}")
+def _failure_of(run: _InfoRun) -> MakemkvScanFailed | None:
+    """Pure: the failure this run amounts to, or None when its output can be used."""
+    watch = run.watch
+    if watch.expired:
+        return _failed(ScanFailureReason.MAKEMKV_EXPIRED, _EXPIRED_DETAIL, watch)
+    if watch.reason and (watch.tcount_zero or watch.timed_out or run.returncode != 0):
+        return _failed(watch.reason, f"makemkvcon reported {watch.reason.value}", watch)
+    if watch.timed_out:
+        return _failed(ScanFailureReason.TIMED_OUT, _TIMED_OUT_DETAIL, watch)
+    if watch.tcount_zero or run.returncode == 0:
+        return None
+    last = watch.tail[-1] if watch.tail else ""
+    return _failed(ScanFailureReason.MAKEMKV_ERROR, f"makemkvcon exited {run.returncode}: {last}", watch)
 
 
 def _fingerprints(probe: DiscProbe) -> list[DiscFingerprintInput]:
@@ -161,10 +307,11 @@ def _fingerprints(probe: DiscProbe) -> list[DiscFingerprintInput]:
 async def scan_disc(device_path: str) -> ScanResult:
     run = await _run_info(device_path)
 
-    _raise_for_failure(run)
+    failure = _failure_of(run)
+    if failure is not None:
+        raise failure
 
-    lines = run.stdout.decode(errors="replace").splitlines()
-    volume_label, titles, mkv_disc_type = parse_makemkvcon_info(lines)
+    volume_label, titles, mkv_disc_type = parse_makemkvcon_info(run.watch.stdout)
 
     # MakeMKV's CINFO:1 is the authoritative disc-type signal — works on
     # region-locked discs that the kernel refuses to mount, and on UDF
