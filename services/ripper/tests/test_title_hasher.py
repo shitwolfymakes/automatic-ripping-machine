@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import threading
 from pathlib import Path
 
@@ -58,3 +59,18 @@ async def test_cancel_stops_the_hashing_thread_mid_file(tmp_path: Path, monkeypa
     release.set()
     await asyncio.sleep(0.3)
     assert chunks <= 2
+
+
+async def test_hash_done_and_verify_lines_are_debug(tmp_path: Path, caplog) -> None:
+    path = tmp_path / "t00.mkv"
+    path.write_bytes(b"x" * 10)
+    hasher = TitleHasher()
+
+    async def then(digest: str | None) -> None:
+        await asyncio.sleep(0.05)
+
+    with caplog.at_level(logging.DEBUG, logger="arm_ripper.rip.title_hasher"):
+        hasher.submit(path, 10, then)
+        await hasher.finish()
+    lines = {r.getMessage().split()[0]: r.levelno for r in caplog.records}
+    assert lines == {"sha256": logging.DEBUG, "verifying": logging.DEBUG}

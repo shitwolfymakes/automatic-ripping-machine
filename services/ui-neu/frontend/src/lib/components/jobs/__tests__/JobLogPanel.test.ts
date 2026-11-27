@@ -39,31 +39,43 @@ function raw(overrides: Partial<Record<string, unknown>> = {}) {
 
 const ENTRIES = [
 	{
-		timestamp: '2026-09-05T10:00:00Z',
+		ts: '2026-09-05T10:00:00Z',
 		level: 'info',
 		logger: 'arm',
-		event: 'backend line',
+		msg: 'backend line',
 		job_id: 'job_a',
-		label: null,
-		service: 'arm-backend'
+		service: 'arm-backend',
+		track_id: null,
+		session_application_id: null,
+		event: null,
+		fields: {},
+		exc: null
 	},
 	{
-		timestamp: '2026-09-05T10:00:01Z',
+		ts: '2026-09-05T10:00:01Z',
 		level: 'warning',
 		logger: 'ripper',
-		event: 'ripper line',
+		msg: 'ripper line',
 		job_id: 'job_a',
-		label: null,
-		service: 'arm-ripper-XYZ'
+		service: 'arm-ripper-XYZ',
+		track_id: null,
+		session_application_id: null,
+		event: null,
+		fields: {},
+		exc: null
 	},
 	{
-		timestamp: '2026-09-05T10:00:02Z',
+		ts: '2026-09-05T10:00:02Z',
 		level: 'error',
 		logger: 'transcode',
-		event: 'transcode line',
+		msg: 'transcode line',
 		job_id: 'job_a',
-		label: null,
-		service: 'arm-transcode-t1'
+		service: 'arm-transcode-t1',
+		track_id: null,
+		session_application_id: null,
+		event: null,
+		fields: {},
+		exc: null
 	}
 ];
 

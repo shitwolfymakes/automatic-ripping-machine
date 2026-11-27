@@ -10,7 +10,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import secrets
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -52,6 +52,7 @@ from arm_common.enums import IdentificationMode, OutputMode, TrackKind, TrackSel
 from arm_common.models import Track
 
 from tests._fakes import FakeSession
+from tests._logs import LineCapture
 
 _HOSTNAME = "ripper-host"
 _SERVICE_AUTH = {"Authorization": "Bearer tok-service"}
@@ -871,7 +872,7 @@ def test_identify_miss_without_block_marks_identified_unidentified() -> None:
     assert r.json()["metadata_json"]["flags"]["unidentified"] is True
 
 
-def test_identify_timeout_records_diagnostic() -> None:
+def test_identify_timeout_records_diagnostic(job_log: LineCapture) -> None:
     db = FakeSession()
     db.rows["drives"] = [_drive()]
     db.rows["config"] = [_config(block_on_miss=True)]
@@ -885,6 +886,9 @@ def test_identify_timeout_records_diagnostic() -> None:
     assert r.status_code == 200
     assert r.json()["status"] == "awaiting_user_id"
     assert r.json()["metadata_json"]["flags"]["dispatch_timeout"] is True
+    [timeout] = job_log.lines(logger_prefix="arm_backend.identify_flow", level="info")
+    assert timeout["msg"] == "identify dispatch_timeout"
+    assert timeout["job_id"] == r.json()["id"]
 
 
 _MISS = {"source": "tmdb", "step": "title", "kind": "movie", "outcome": "miss", "detail": "MY DISC"}
@@ -1219,7 +1223,7 @@ class _FakeStore:
         return self.match
 
 
-def test_identify_thediscdb_match_stamps_map_and_uses_exact_identity() -> None:
+def test_identify_thediscdb_match_stamps_map_and_uses_exact_identity(job_log: LineCapture) -> None:
     """A TheDiscDB content-hash match on a new job: the exact-identity path
     (identify_from_imdb) wins over fuzzy identify, the match is stored as an
     identity_claims source, and it is resolved onto the review Track row
@@ -1248,6 +1252,11 @@ def test_identify_thediscdb_match_stamps_map_and_uses_exact_identity() -> None:
     assert out["metadata_json"]["identity_claims"]["sources"]["thediscdb"]["tracks"]["0"]["role"] == "main"
     assert app.state.thediscdb.called_with == ["2D61282D8DA5EAC2CA87B451BCE9A055"]
     assert dispatcher.identify_from_imdb_calls == ["tt0090557"]
+    [matched] = [
+        line for line in job_log.lines(logger_prefix="arm_backend.identify_flow") if "thediscdb" in line["msg"]
+    ]
+    assert matched["job_id"] == out["id"]
+    assert matched["msg"] == "thediscdb: matched release=2022-criterion-blu-ray"
 
     tracks = [row for row in db.added if type(row).__name__ == "Track"]
     by_ref = {t.source_ref: t for t in tracks}
@@ -1936,6 +1945,60 @@ def test_update_track_failed_emits_failed() -> None:
     assert any(e["event_type"] == "track.failed" for e in hub.events)
 
 
+def test_update_track_done_logs_track_ripped_once(job_log: LineCapture) -> None:
+    db = FakeSession()
+    track = _track("trk_1", status=TrackStatus.IN_PROGRESS)
+    app = _track_app(db, track)
+    db.rows["tracks"] = [track, _track("trk_2", status=TrackStatus.QUEUED, index=2)]
+    body = {"status": "done", "size_bytes": 43_100_000, "duration_seconds": 244}
+    with TestClient(app) as client:
+        client.patch("/api/ripper/tracks/trk_1", json=body, headers=_OWNER_HEADERS)
+        again = client.patch("/api/ripper/tracks/trk_1", json=body, headers=_OWNER_HEADERS)
+    assert again.status_code == 409
+    (line,) = job_log.lines(event="track.ripped")
+    assert line["job_id"] == "job_01JZXR7K3M5Q8N4VWA00000001"
+    assert line["track_id"] == "trk_1"
+    assert line["msg"] == "track 1/2 ripped (41.1 MB, 4:04)"
+    assert set(line["fields"]) == {"track_index", "track_total", "title", "size_bytes", "duration_seconds"}
+
+
+def test_update_track_failed_logs_a_warning(job_log: LineCapture) -> None:
+    db = FakeSession()
+    app = _track_app(db, _track("trk_1", status=TrackStatus.IN_PROGRESS))
+    with TestClient(app) as client:
+        client.patch(
+            "/api/ripper/tracks/trk_1", json={"status": "failed", "last_error": "boom"}, headers=_OWNER_HEADERS
+        )
+    (line,) = job_log.lines(event="track.failed")
+    assert line["level"] == "warning"
+    assert line["msg"] == "track 1/1 failed: boom"
+
+
+def test_update_track_survives_a_failing_milestone_log(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    def _boom(*_a: Any) -> None:
+        raise RuntimeError("label lookup broke")
+
+    monkeypatch.setattr(ripper_router.job_events, "log_track_ripped", _boom)
+    db = FakeSession()
+    app = _track_app(db, _track("trk_1", status=TrackStatus.IN_PROGRESS))
+    with caplog.at_level(logging.ERROR), TestClient(app) as client:
+        r = client.patch("/api/ripper/tracks/trk_1", json={"status": "done"}, headers=_OWNER_HEADERS)
+    assert r.status_code == 200
+    assert r.json()["status"] == "done"
+    assert any(rec.exc_info and "label lookup broke" in str(rec.exc_info[1]) for rec in caplog.records)
+
+
+def test_update_track_in_progress_logs_no_track_event(job_log: LineCapture) -> None:
+    db = FakeSession()
+    app = _track_app(db, _track("trk_1", status=TrackStatus.QUEUED))
+    with TestClient(app) as client:
+        client.patch("/api/ripper/tracks/trk_1", json={"status": "in_progress"}, headers=_OWNER_HEADERS)
+    assert job_log.lines(event="track.ripped") == []
+    assert job_log.lines(event="track.failed") == []
+
+
 def test_update_track_bad_to_failed_409() -> None:
     db = FakeSession()
     app = _track_app(db, _track("trk_1", status=TrackStatus.QUEUED))
@@ -1996,6 +2059,33 @@ def test_rip_complete_all_done_ripped(monkeypatch: pytest.MonkeyPatch) -> None:
     assert r.status_code == 200
     assert r.json()["status"] == "ripped"
     assert any(e["event_type"] == "rip.completed" for e in hub.events)
+
+
+def test_rip_complete_logs_rip_completed_with_elapsed(monkeypatch: pytest.MonkeyPatch, job_log: LineCapture) -> None:
+    db = FakeSession()
+    job = _job(status=JobStatus.RIPPING)
+    job.started_at = datetime.now(timezone.utc) - timedelta(seconds=402)
+    db.rows["jobs"] = [job]
+    db.rows["drives"] = [_drive()]
+    db.rows["tracks"] = [_track("t1", status=TrackStatus.DONE), _track("t2", status=TrackStatus.FAILED, index=2)]
+    r = _rip_complete(db, _Hub(), monkeypatch)
+    assert r.status_code == 200
+    (line,) = job_log.lines(event="rip.completed")
+    assert line["job_id"] == job.id
+    assert line["msg"].startswith("rip complete: 1/2 tracks in 6m")
+    assert line["fields"]["status"] == "ripped_partial"
+    assert line["fields"]["failed"] == 1
+
+
+def test_rip_complete_without_started_at_logs_no_elapsed(monkeypatch: pytest.MonkeyPatch, job_log: LineCapture) -> None:
+    db = FakeSession()
+    db.rows["jobs"] = [_job(status=JobStatus.RIPPING)]
+    db.rows["drives"] = [_drive()]
+    db.rows["tracks"] = [_track("t1", status=TrackStatus.DONE)]
+    _rip_complete(db, _Hub(), monkeypatch)
+    (line,) = job_log.lines(event="rip.completed")
+    assert line["msg"] == "rip complete: 1/1 tracks"
+    assert line["fields"]["elapsed_seconds"] is None
 
 
 def test_rip_complete_partial(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -3700,7 +3790,7 @@ def test_identify_ambiguous_fuzzy_cd_hit_is_held_even_with_music_auto_apply_on(
         payload={"toc_match": "fuzzy", "toc_candidates": cands},
         provider="musicbrainz",
     )
-    with caplog.at_level(logging.INFO, logger="arm_backend.identify_flow"):
+    with caplog.at_level(logging.INFO, logger="arm_backend.job_events"):
         out = _identify_with(db, result, _scan_dict("cd")).json()
     assert "(several releases fit the track layout)" in caplog.text
     assert "auto-apply off" not in caplog.text
@@ -3718,3 +3808,246 @@ def test_identify_single_fuzzy_cd_hit_is_applied_with_music_auto_apply_on() -> N
     out = _identify_with(db, result, _scan_dict("cd")).json()
     assert out["status"] == "identified" and out["title"] == "Album"
     assert out["metadata_json"].get("identity_suggestion") is None
+
+
+# --- job log context ----------------------------------------------------------
+
+_JOB_ID = "job_01JZXR7K3M5Q8N4VWA00000001"
+
+
+class _LoggingHub(_Hub):
+    """A hub that logs on every emit, so a test sees the context the handler was in."""
+
+    async def emit(self, topic: str, event_type: str, payload: dict[str, Any], **kw: Any) -> None:
+        logging.getLogger("arm_backend.test_hub").info("emitted %s", event_type)
+        await super().emit(topic, event_type, payload, **kw)
+
+
+def _assert_all_in_job_context(job_log: LineCapture, job_id: str) -> None:
+    emitted = job_log.lines(logger_prefix="arm_backend")
+    assert emitted
+    assert {line["job_id"] for line in emitted} == {job_id}
+    assert not [line["msg"] for line in emitted if "job_id=" in line["msg"]]
+
+
+def test_identify_logs_in_the_new_jobs_context_and_emits_resolved(job_log: LineCapture) -> None:
+    db = FakeSession()
+    db.rows["drives"] = [_drive()]
+    db.rows["config"] = [_config()]
+    result = MetadataResult(title="Iron Man", year=2008, kind="movie", payload={})
+    result.provider = "tmdb"
+    dispatcher = _Dispatcher(
+        result,
+        attempts=[{"source": "tmdb", "step": "title", "kind": "movie", "outcome": "hit", "detail": "Iron Man"}],
+    )
+    with TestClient(_make_app(db, dispatcher=dispatcher)) as client:
+        r = client.post(
+            "/api/ripper/identify", json={"drive_id": "drv_x", "scan_result": _scan_dict()}, headers=_SERVICE_AUTH
+        )
+    job_id = r.json()["id"]
+    assert job_log.lines(logger_prefix="arm_backend.identify_flow") == []
+    [resolved] = job_log.lines(event="identify.resolved")
+    assert resolved["job_id"] == job_id
+    assert resolved["fields"]["provider"] == "tmdb"
+    assert resolved["fields"]["method"] == "title"
+    assert resolved["fields"]["media_type"] == "movie"
+    assert job_log.lines(event="identify.missed") == []
+    assert not any(line["msg"].startswith("identify job_id=") for line in job_log.lines())
+
+
+def test_identify_resolved_without_a_matching_attempt_names_the_release(job_log: LineCapture) -> None:
+    db = FakeSession()
+    db.rows["drives"] = [_drive()]
+    db.rows["config"] = [_config()]
+    result = MetadataResult(title="Iron Man", year=2008, kind="movie", payload={})
+    with TestClient(_make_app(db, dispatcher=_Dispatcher(result))) as client:
+        client.post(
+            "/api/ripper/identify", json={"drive_id": "drv_x", "scan_result": _scan_dict()}, headers=_SERVICE_AUTH
+        )
+    [resolved] = job_log.lines(event="identify.resolved")
+    assert resolved["fields"]["provider"] == "unknown"
+    assert resolved["fields"]["method"] == "release"
+
+
+def test_identify_miss_emits_missed_with_the_attempt_reason(job_log: LineCapture) -> None:
+    db = FakeSession()
+    db.rows["drives"] = [_drive()]
+    db.rows["config"] = [_config(block_on_miss=True)]
+    attempts = [
+        {"source": "tmdb", "step": "title", "kind": "movie", "outcome": "miss", "detail": "MY_DISC"},
+        {
+            "source": "musicbrainz",
+            "step": "disc_id",
+            "kind": "music",
+            "outcome": "miss",
+            "detail": "no release fits the track layout",
+        },
+    ]
+    with TestClient(_make_app(db, dispatcher=_Dispatcher(None, attempts=attempts))) as c:
+        r = c.post(
+            "/api/ripper/identify", json={"drive_id": "drv_x", "scan_result": _scan_dict()}, headers=_SERVICE_AUTH
+        )
+    assert r.json()["status"] == "awaiting_user_id"
+    [missed] = job_log.lines(event="identify.missed")
+    assert missed["job_id"] == r.json()["id"]
+    assert missed["fields"] == {"provider": "musicbrainz", "reason": "no release fits the track layout"}
+    assert job_log.lines(event="identify.resolved") == []
+
+
+def test_identify_miss_without_attempts_reports_no_source(job_log: LineCapture) -> None:
+    db = FakeSession()
+    db.rows["drives"] = [_drive()]
+    db.rows["config"] = [_config(block_on_miss=True)]
+    with TestClient(_make_app(db, dispatcher=_Dispatcher(None))) as client:
+        client.post(
+            "/api/ripper/identify", json={"drive_id": "drv_x", "scan_result": _scan_dict()}, headers=_SERVICE_AUTH
+        )
+    [missed] = job_log.lines(event="identify.missed")
+    assert missed["fields"] == {"provider": None, "reason": "no source answered"}
+
+
+def test_identify_miss_unblocked_emits_missed_for_the_placeholder_rip(job_log: LineCapture) -> None:
+    db = FakeSession()
+    db.rows["drives"] = [_drive()]
+    db.rows["config"] = [_config(block_on_miss=False)]
+    with TestClient(_make_app(db, dispatcher=_Dispatcher(None))) as client:
+        r = client.post(
+            "/api/ripper/identify", json={"drive_id": "drv_x", "scan_result": _scan_dict()}, headers=_SERVICE_AUTH
+        )
+    assert r.json()["status"] == "identified"
+    [missed] = job_log.lines(event="identify.missed")
+    assert missed["job_id"] == r.json()["id"]
+    assert missed["msg"].endswith("ripping as unidentified")
+
+
+def test_rip_start_logs_in_the_jobs_context(job_log: LineCapture) -> None:
+    db = FakeSession()
+    db.rows["drives"] = [_drive()]
+    db.rows["jobs"] = [_job(status=JobStatus.IDENTIFIED, meta={"scan_result": _scan_dict()})]
+    db.rows["tracks"] = []
+    db.rows["rip_presets"] = [_movie_preset()]
+    hub = _LoggingHub()
+    with TestClient(_make_app(db, hub=hub)) as client:
+        with _patch_select_tracks([_track("trk_new", status=TrackStatus.QUEUED)]):
+            r = client.post(f"/api/ripper/jobs/{_JOB_ID}/rip-start", headers=_OWNER_HEADERS)
+    assert r.status_code == 200
+    assert any(e["event_type"] == "rip.started" for e in hub.events)
+    _assert_all_in_job_context(job_log, _JOB_ID)
+
+
+def test_resume_logs_in_the_jobs_context(job_log: LineCapture) -> None:
+    db = FakeSession()
+    db.rows["drives"] = [_drive()]
+    db.rows["jobs"] = [_job(status=JobStatus.RIPPING)]
+    db.rows["tracks"] = []
+    db.rows["rip_presets"] = [_movie_preset()]
+    with TestClient(_make_app(db, hub=_LoggingHub())) as client:
+        r = client.post(f"/api/ripper/jobs/{_JOB_ID}/resume", headers=_OWNER_HEADERS)
+    assert r.status_code == 200
+    _assert_all_in_job_context(job_log, _JOB_ID)
+
+
+def test_recovery_abandon_logs_in_the_jobs_context(job_log: LineCapture) -> None:
+    db = FakeSession()
+    db.rows["jobs"] = [_job(status=JobStatus.AWAITING_REVIEW)]
+    with TestClient(_make_app(db, hub=_LoggingHub())) as client:
+        r = client.post(f"/api/ripper/jobs/{_JOB_ID}/recovery-abandon", headers=_SERVICE_AUTH)
+    assert r.status_code == 200
+    _assert_all_in_job_context(job_log, _JOB_ID)
+
+
+def test_update_track_logs_in_the_job_and_track_context(job_log: LineCapture) -> None:
+    db = FakeSession()
+    app = _track_app(db, _track("trk_1", status=TrackStatus.IN_PROGRESS), hub=_LoggingHub())
+    with TestClient(app) as client:
+        r = client.patch("/api/ripper/tracks/trk_1", json={"status": "done"}, headers=_OWNER_HEADERS)
+    assert r.status_code == 200
+    _assert_all_in_job_context(job_log, _JOB_ID)
+    assert {line["track_id"] for line in job_log.lines(logger_prefix="arm_backend")} == {"trk_1"}
+
+
+def test_rip_complete_logs_in_the_jobs_context(monkeypatch: pytest.MonkeyPatch, job_log: LineCapture) -> None:
+    db = FakeSession()
+    db.rows["jobs"] = [_job(status=JobStatus.RIPPING)]
+    db.rows["drives"] = [_drive()]
+    db.rows["tracks"] = [_track("t1", status=TrackStatus.DONE)]
+    r = _rip_complete(db, _LoggingHub(), monkeypatch)
+    assert r.status_code == 200
+    _assert_all_in_job_context(job_log, _JOB_ID)
+
+
+def test_identify_flow_warnings_carry_the_new_jobs_context(job_log: LineCapture) -> None:
+    db = FakeSession()
+    db.rows["drives"] = [_drive()]
+    db.rows["config"] = [_config()]
+    body = {"drive_id": "drv_x", "scan_result": _scan_dict(), "pending_session_id": "ses_gone"}
+    with TestClient(_make_app(db, dispatcher=_Dispatcher(None))) as client:
+        r = client.post("/api/ripper/identify", json=body, headers=_SERVICE_AUTH)
+    [warning] = job_log.lines(logger_prefix="arm_backend.identify_flow", level="warning")
+    assert warning["job_id"] == r.json()["id"]
+
+
+def test_identify_music_hit_names_the_artist(job_log: LineCapture) -> None:
+    db = FakeSession()
+    db.rows["drives"] = [_drive()]
+    db.rows["config"] = [_config()]
+    result = MetadataResult(
+        title="The Essential Electric Light Orchestra",
+        year=2011,
+        kind="music",
+        payload={"artist": "Electric Light Orchestra"},
+        provider="musicbrainz",
+    )
+    attempts = [{"source": "musicbrainz", "step": "disc_id", "kind": "music", "outcome": "hit", "detail": "x"}]
+    with TestClient(_make_app(db, dispatcher=_Dispatcher(result, attempts=attempts))) as client:
+        client.post(
+            "/api/ripper/identify", json={"drive_id": "drv_x", "scan_result": _scan_dict("cd")}, headers=_SERVICE_AUTH
+        )
+    [resolved] = job_log.lines(event="identify.resolved")
+    assert resolved["fields"]["artist"] == "Electric Light Orchestra"
+    assert resolved["msg"] == (
+        "identified: Electric Light Orchestra - The Essential Electric Light Orchestra (2011), MusicBrainz disc ID"
+    )
+
+
+def test_rip_start_leaves_the_info_line_to_the_rippers_rip_started(job_log: LineCapture) -> None:
+    db = FakeSession()
+    db.rows["drives"] = [_drive()]
+    db.rows["jobs"] = [_job(status=JobStatus.IDENTIFIED, meta={"scan_result": _scan_dict()})]
+    db.rows["tracks"] = []
+    db.rows["rip_presets"] = [_movie_preset()]
+    with TestClient(_make_app(db, hub=_LoggingHub())) as client:
+        with _patch_select_tracks([_track("trk_new", status=TrackStatus.QUEUED)]):
+            r = client.post(f"/api/ripper/jobs/{_JOB_ID}/rip-start", headers=_OWNER_HEADERS)
+    assert r.status_code == 200
+    assert not [
+        line for line in job_log.lines(logger_prefix="arm_backend.routers.ripper") if "rip-start" in line["msg"]
+    ]
+
+
+def test_rip_complete_leaves_the_info_line_to_rip_completed(
+    monkeypatch: pytest.MonkeyPatch, job_log: LineCapture
+) -> None:
+    db = FakeSession()
+    db.rows["jobs"] = [_job(status=JobStatus.RIPPING)]
+    db.rows["drives"] = [_drive()]
+    db.rows["tracks"] = [_track("t1", status=TrackStatus.DONE)]
+    assert _rip_complete(db, _Hub(), monkeypatch).status_code == 200
+    assert [line["event"] for line in job_log.lines(logger_prefix="arm_backend.routers.ripper")] == []
+    assert len(job_log.lines(event="rip.completed")) == 1
+
+
+def test_rip_complete_survives_a_failing_milestone_log(monkeypatch: pytest.MonkeyPatch, job_log: LineCapture) -> None:
+    def _boom(*_a: Any) -> None:
+        raise RuntimeError("log bug")
+
+    monkeypatch.setattr(ripper_router.job_events, "log_rip_completed", _boom)
+    db = FakeSession()
+    db.rows["jobs"] = [_job(status=JobStatus.RIPPING)]
+    db.rows["drives"] = [_drive()]
+    db.rows["tracks"] = [_track("t1", status=TrackStatus.DONE)]
+    hub = _Hub()
+    r = _rip_complete(db, hub, monkeypatch)
+    assert r.status_code == 200 and r.json()["status"] == "ripped"
+    assert any(e["event_type"] == "rip.completed" for e in hub.events)
+    assert job_log.lines(level="error")[-1]["msg"] == "could not log the rip.completed milestone"

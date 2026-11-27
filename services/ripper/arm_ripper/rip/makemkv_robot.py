@@ -30,20 +30,19 @@ _DIAGNOSTIC_MSG_CODES = frozenset({1002, 3032, 5003, 5037})
 TITLE_FAIL_CODE = 5003
 
 
-def parse_progress_total(line: str) -> float | None:
-    """Return the disc-overall fraction [0, 1] from a PRGV line (`total/max`), or None.
+def parse_progress_fractions(line: str) -> tuple[float, float] | None:
+    """Return `(current/max, total/max)`, each clamped to [0, 1], from a PRGV line, or None.
 
-    PRGV also carries `current/max`, per-operation progress that resets
-    at each title in `mkv ... all` mode; the bar shows the whole disc,
-    so only `total/max` is read.
+    `current/max` is the current operation's progress, which resets at each
+    title in `mkv ... all` mode; `total/max` is the whole disc's.
     """
     m = _PRGV_RE.match(line.strip())
     if not m:
         return None
-    _current, total, max_ = (int(g) for g in m.groups())
+    current, total, max_ = (int(g) for g in m.groups())
     if max_ <= 0:
         return None
-    return min(1.0, max(0.0, total / max_))
+    return min(1.0, max(0.0, current / max_)), min(1.0, max(0.0, total / max_))
 
 
 def parse_msg_args(line: str) -> tuple[int, list[str]] | None:

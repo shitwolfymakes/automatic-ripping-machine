@@ -31,7 +31,7 @@ class _Hub:
 
 
 def _rec(**over: Any) -> str:
-    base = {"job_id": "job_01JZXR7K3M5Q8N4VWA00000001", "msg": "hi", "extra": {"logger": "arm_backend.x"}}
+    base = {"job_id": "job_01JZXR7K3M5Q8N4VWA00000001", "msg": "hi", "logger": "arm_backend.x"}
     base.update(over)
     return json.dumps(base)
 
@@ -177,13 +177,6 @@ async def test_emit_line_blank_and_non_json(tmp_path: Path) -> None:
     assert t._hub.events == []  # type: ignore[attr-defined]
 
 
-async def test_emit_line_extra_not_dict_still_emits(tmp_path: Path) -> None:
-    hub = _Hub(subs=1)
-    t = LogTailer(hub, log_dir=str(tmp_path))
-    await t._emit_line(_rec(extra="a-string") + "\n")  # extra not dict → 199->204
-    assert hub.events and hub.events[0]["event_type"] == "log.line"
-
-
 async def test_emit_line_skips_when_no_subscribers(tmp_path: Path) -> None:
     hub = _Hub(subs=0)
     t = LogTailer(hub, log_dir=str(tmp_path))
@@ -194,7 +187,7 @@ async def test_emit_line_skips_when_no_subscribers(tmp_path: Path) -> None:
 async def test_emit_line_skips_hub_self_logs(tmp_path: Path) -> None:
     hub = _Hub(subs=1)
     t = LogTailer(hub, log_dir=str(tmp_path))
-    await t._emit_line(_rec(extra={"logger": lt_mod._HUB_LOGGER_PREFIX + "x"}) + "\n")
+    await t._emit_line(_rec(logger=lt_mod._HUB_LOGGER_PREFIX + "x") + "\n")
     assert hub.events == []
 
 

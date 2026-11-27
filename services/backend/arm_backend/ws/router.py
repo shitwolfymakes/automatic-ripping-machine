@@ -136,7 +136,7 @@ async def ws_endpoint(
         return
 
     await websocket.send_json(WSAck().model_dump())
-    logger.info("ws auth ok principal=%s", principal)
+    logger.debug("ws auth ok principal=%s", principal)
 
     try:
         await _serve_loop(websocket, hub, principal)

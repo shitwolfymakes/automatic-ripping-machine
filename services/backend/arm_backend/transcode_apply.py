@@ -21,6 +21,7 @@ from typing import TYPE_CHECKING, Any, Literal, NamedTuple
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import col, select
 
+from arm_backend import job_events
 from arm_backend.constants import CONFIG_SINGLETON_ID
 from arm_backend.path_sanitize import sanitize_path_component
 from arm_backend.path_template import (
@@ -34,6 +35,7 @@ from arm_backend.path_template import (
 from arm_backend.identity.ids import current_ids
 from arm_backend.session_routing import routing_media_type
 from arm_backend.slugify import slugify
+from arm_backend.log_safely import log_safely
 from arm_common import (
     Config,
     Gpu,
@@ -547,6 +549,9 @@ class AggregateOutcome(NamedTuple):
 
     transitioned_to: SessionApplicationStatus | None
     event_type: str | None  # "session.completed" / "session.partial" / "session.failed"
+    done: int = 0  # task counts once the application settled; 0 while it has not
+    failed: int = 0
+    total: int = 0
 
 
 async def aggregate_session_application(
@@ -589,7 +594,13 @@ async def aggregate_session_application(
 
     application.status = target
     application.completed_at = datetime.now(UTC)
-    return AggregateOutcome(transitioned_to=target, event_type=event)
+    return AggregateOutcome(
+        transitioned_to=target,
+        event_type=event,
+        done=done_count,
+        failed=len(statuses) - done_count,
+        total=len(statuses),
+    )
 
 
 async def emit_session_outcome(
@@ -629,9 +640,30 @@ async def emit_task_failed(hub: "WSHub", db: AsyncSession, task: TranscodeTask) 
     )
 
 
-async def settle_session_application(db: AsyncSession, hub: "WSHub", application: SessionApplication) -> None:
+async def settle_session_application(
+    db: AsyncSession, hub: "WSHub", application: SessionApplication
+) -> AggregateOutcome:
     """Recompute the application's status from its tasks and announce a terminal
-    transition; the caller commits."""
+    transition. The caller commits, logs its task's own milestone, then passes the
+    outcome to `log_session_settled`."""
     outcome = await aggregate_session_application(db, application)
     if outcome.event_type is not None:
         await emit_session_outcome(hub, db, application, outcome.event_type)
+    return outcome
+
+
+async def log_session_settled(db: AsyncSession, application: SessionApplication, outcome: AggregateOutcome) -> None:
+    """Log `session.completed` for a committed terminal transition; nothing when the
+    application did not settle. A failure in the logging is logged, never raised."""
+    if outcome.event_type is not None:
+        await log_safely("session.completed", _log_session_settled(db, application, outcome))
+
+
+async def _log_session_settled(db: AsyncSession, application: SessionApplication, outcome: AggregateOutcome) -> None:
+    """Log `session.completed` with the settled application's task counts."""
+    job = (await db.execute(select(Job).where(col(Job.id) == application.job_id))).scalar_one_or_none()
+    if job is None:
+        return
+    job_events.log_session_completed(
+        job, outcome.done, outcome.failed, outcome.total, session_application_id=application.id
+    )
