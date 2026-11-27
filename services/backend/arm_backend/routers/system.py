@@ -23,6 +23,7 @@ from arm_backend.db import get_session
 from arm_backend.constants import CONFIG_SINGLETON_ID
 from arm_backend.identity.sources.thediscdb_refresh import RefreshBusy, refresh as thediscdb_refresh
 from arm_backend.identity.sources.thediscdb_refresh import refresh_running as thediscdb_refresh_running
+from arm_backend.storage_placement import root_placement
 from arm_backend.system_diagnostics import collect_diagnostics, online_enrolled_drives, system_roots
 from arm_common import (
     Config,
@@ -111,7 +112,8 @@ async def resources(
         percent=mem.percent,
     )
     storage: list[StorageRoot] = []
-    for name, path in system_roots(request).items():
+    roots = system_roots(request)
+    for name, path in roots.items():
         usage = get_disk_usage(path)
         if usage is None:
             continue
@@ -123,6 +125,7 @@ async def resources(
                 used_gb=round(usage["used"] / _GiB, 1),
                 free_gb=round(usage["free"] / _GiB, 1),
                 percent=usage["percent"],
+                placement=root_placement(name, roots, settings),
             )
         )
     return SystemResourcesResponse(

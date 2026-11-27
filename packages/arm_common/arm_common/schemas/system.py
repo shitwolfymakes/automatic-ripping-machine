@@ -1,6 +1,15 @@
 from datetime import datetime
+from enum import StrEnum
 
 from pydantic import BaseModel
+
+
+class StoragePlacement(StrEnum):
+    """Where the staging area sits relative to the raw folder."""
+
+    INSIDE_RAW = "inside_raw"
+    SAME_DEVICE = "same_device"
+    SEPARATE_DEVICE = "separate_device"
 
 
 class DiagnosticDetail(BaseModel):
@@ -31,6 +40,9 @@ class PathStatus(BaseModel):
     host_path: str | None = None
     uid: int | None = None
     gid: int | None = None
+    # Staging only: its placement relative to raw. None for every other root, or
+    # when either path is missing.
+    placement: StoragePlacement | None = None
 
 
 class SystemDiagnosticsResponse(BaseModel):
@@ -70,6 +82,8 @@ class StorageRoot(BaseModel):
     used_gb: float
     free_gb: float
     percent: float
+    # Staging only; see PathStatus.placement.
+    placement: StoragePlacement | None = None
 
 
 class SystemResourcesResponse(BaseModel):

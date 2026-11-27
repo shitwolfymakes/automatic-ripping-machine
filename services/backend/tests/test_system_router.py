@@ -76,10 +76,13 @@ def _make_app(signing_key: bytes, db: FakeSession, *, tmp) -> tuple[FastAPI, str
     raw.mkdir()
     logs = tmp / "logs"
     logs.mkdir()
+    staging = tmp / "staging"
+    staging.mkdir()
     app.state.system_paths = {
         "MEDIA_ROOT": str(media),
         "RAW_ROOT": str(raw),
         "LOG_DIR": str(logs),
+        "STAGING_ROOT": str(staging),
     }
     app.include_router(system_router.router)
 
@@ -120,7 +123,7 @@ def test_diagnostics_ok(signing_key: bytes, tmp_path) -> None:
     body = r.json()
     assert body["status"] == "ok"
     names = {ch["name"] for ch in body["checks"]}
-    assert {"config", "MEDIA_ROOT", "RAW_ROOT", "LOG_DIR", "drives"} <= names
+    assert {"config", "MEDIA_ROOT", "RAW_ROOT", "STAGING_ROOT", "LOG_DIR", "drives"} <= names
     media = next(p for p in body["paths"] if p["name"] == "MEDIA_ROOT")
     assert media["exists"] is True and media["writable"] is True
 
@@ -373,7 +376,7 @@ def test_diagnostics_uses_settings_fallback(signing_key: bytes, tmp_path, monkey
     r = _get(app, token)
     assert r.status_code == 200, r.text
     paths = {p["name"]: p for p in r.json()["paths"]}
-    assert {"MEDIA_ROOT", "RAW_ROOT", "LOG_DIR"} <= set(paths)
+    assert {"MEDIA_ROOT", "RAW_ROOT", "LOG_DIR", "STAGING_ROOT"} <= set(paths)
     # read-only diagnostics: settings-pointed roots are reported, not created
     assert paths["MEDIA_ROOT"]["exists"] is False
     assert not (tmp_path / "m").exists() and not (tmp_path / "r").exists()
@@ -883,6 +886,41 @@ def test_diagnostics_paths_carry_host_path_and_ids(signing_key: bytes, tmp_path,
     assert by_name["RAW_ROOT"]["host_path"] is None
     assert by_name["MEDIA_ROOT"]["uid"] == os.getuid()
     assert by_name["MEDIA_ROOT"]["gid"] == os.getgid()
+
+
+def test_diagnostics_lists_staging_with_placement_and_host_path(signing_key: bytes, tmp_path, monkeypatch) -> None:
+    from arm_backend.config import settings
+
+    monkeypatch.setattr(settings, "ARM_HOST_RAW_PATH", "/srv/arm/raw")
+    monkeypatch.setattr(settings, "ARM_HOST_STAGING_PATH", "/srv/arm/staging")
+    db = FakeSession()
+    _seed(db)
+    app, token = _make_app(signing_key, db, tmp=tmp_path)
+    roots = app.state.system_paths
+    monkeypatch.setattr("arm_backend.storage_placement.get_device", lambda path: 1 if path in roots.values() else None)
+    body = _diag(app, token)
+    by_name = {p["name"]: p for p in body["paths"]}
+    staging = by_name["STAGING_ROOT"]
+    assert staging["exists"] is True and staging["writable"] is True
+    assert staging["host_path"] == "/srv/arm/staging"
+    assert staging["placement"] == "same_device"  # both roots cached on one device
+    assert by_name["RAW_ROOT"]["placement"] is None
+    assert {ch["name"]: ch["status"] for ch in body["checks"]}["STAGING_ROOT"] == "ok"
+
+
+def test_diagnostics_missing_staging_is_a_warning_without_placement(signing_key: bytes, tmp_path, monkeypatch) -> None:
+    from arm_backend.config import settings
+
+    monkeypatch.setattr(settings, "ARM_HOST_RAW_PATH", "/srv/arm/raw")
+    monkeypatch.setattr(settings, "ARM_HOST_STAGING_PATH", "/srv/arm/staging")
+    db = FakeSession()
+    _seed(db)
+    app, token = _make_app(signing_key, db, tmp=tmp_path)
+    app.state.system_paths["STAGING_ROOT"] = str(tmp_path / "gone")
+    body = _diag(app, token)
+    staging = next(p for p in body["paths"] if p["name"] == "STAGING_ROOT")
+    assert staging["exists"] is False and staging["placement"] is None
+    assert {ch["name"]: ch["status"] for ch in body["checks"]}["STAGING_ROOT"] == "warning"
 
 
 def test_diagnostics_ripper_details_split_socket_and_image(signing_key: bytes, tmp_path) -> None:

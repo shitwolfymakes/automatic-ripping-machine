@@ -323,6 +323,11 @@ def test_system_checks_ok_false_on_ripper_or_root_problem() -> None:
     assert setup_router.system_checks_ok(_diag(("RAW_ROOT", "error"))) is False
 
 
+def test_system_checks_ok_false_on_a_staging_problem() -> None:
+    assert setup_router.system_checks_ok(_diag(("config", "ok"), ("STAGING_ROOT", "warning"))) is False
+    assert setup_router.system_checks_ok(_diag(("config", "ok"), ("STAGING_ROOT", "ok"))) is True
+
+
 async def test_diagnostics_ok_uses_collect_diagnostics(monkeypatch) -> None:
     monkeypatch.undo()  # drop the autouse stub for this test
 

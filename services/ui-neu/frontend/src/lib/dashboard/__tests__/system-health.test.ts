@@ -10,11 +10,13 @@ import {
 	otherChecks,
 	pathDetail,
 	pathState,
+	placementLabel,
 	serviceBadge,
 	serviceChecks,
 	serviceDescription,
 	serviceHost,
 	serviceLabel,
+	sharesRawDisk,
 	storageHelp,
 	storageLabel,
 	SERVICE_CHECKS,
@@ -284,6 +286,47 @@ describe('freeLabel', () => {
 	it('says Measuring... when no root has that name', () => {
 		expect(freeLabel([root('RAW_ROOT', 1)], 'MEDIA_ROOT')).toBe('Measuring...');
 	});
+
+	it.each(['inside_raw', 'same_device'] as const)("says it shares raw's disk when staging is %s", (placement) => {
+		expect(freeLabel([root('STAGING_ROOT', 9)], 'STAGING_ROOT', placement)).toBe("Shares raw's disk");
+		expect(freeLabel(null, 'STAGING_ROOT', placement)).toBe("Shares raw's disk");
+	});
+
+	it('shows its own free space when staging has a separate disk', () => {
+		expect(freeLabel([root('STAGING_ROOT', 9.4)], 'STAGING_ROOT', 'separate_device')).toBe('9 GB free');
+	});
+
+	it('ignores a missing placement', () => {
+		expect(freeLabel([root('STAGING_ROOT', 9.4)], 'STAGING_ROOT', null)).toBe('9 GB free');
+	});
+});
+
+describe('placementLabel', () => {
+	it('names each placement', () => {
+		expect(placementLabel('inside_raw')).toBe('Inside raw (hard links)');
+		expect(placementLabel('same_device')).toBe('Same disk as raw (copies)');
+		expect(placementLabel('separate_device')).toBe('Separate disk');
+	});
+});
+
+describe('sharesRawDisk', () => {
+	it("is true inside raw and on raw's device, false otherwise", () => {
+		expect(sharesRawDisk('inside_raw')).toBe(true);
+		expect(sharesRawDisk('same_device')).toBe(true);
+		expect(sharesRawDisk('separate_device')).toBe(false);
+		expect(sharesRawDisk(null)).toBe(false);
+		expect(sharesRawDisk(undefined)).toBe(false);
+	});
+});
+
+describe('staging labels', () => {
+	it('names the staging root and says what it is for', () => {
+		expect(storageLabel('STAGING_ROOT')).toBe('Staging');
+		expect(storageHelp('STAGING_ROOT')).toBe(
+			'Transcoders read rips from here. Copies are released after their transcodes.'
+		);
+		expect(checkLabel('STAGING_ROOT')).toBe('Staging area');
+	});
 });
 
 const names = (checks: SystemDiagnosticCheck[]): string[] => checks.map((c) => c.name);
@@ -291,6 +334,7 @@ const everyCheck = [
 	check({ name: 'ripper_manager' }),
 	check({ name: 'config' }),
 	check({ name: 'MEDIA_ROOT' }),
+	check({ name: 'STAGING_ROOT' }),
 	check({ name: 'drives' }),
 	check({ name: 'transcoder' })
 ];
@@ -312,9 +356,9 @@ describe('otherChecks', () => {
 });
 
 describe('SYSTEM_STEP_CHECKS', () => {
-	it('holds the config, the three storage roots and the two services', () => {
+	it('holds the config, the four storage roots and the two services', () => {
 		expect([...SYSTEM_STEP_CHECKS].sort()).toEqual(
-			['config', 'MEDIA_ROOT', 'RAW_ROOT', 'LOG_DIR', 'ripper_manager', 'transcoder'].sort()
+			['config', 'MEDIA_ROOT', 'RAW_ROOT', 'STAGING_ROOT', 'LOG_DIR', 'ripper_manager', 'transcoder'].sort()
 		);
 	});
 });

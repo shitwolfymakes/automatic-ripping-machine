@@ -6,7 +6,7 @@ Functions that need to be called from anywhere in the service should go here.
 import logging
 import os
 
-from arm_backend.config import settings
+from arm_backend.config import settings, staging_root
 
 
 logger = logging.getLogger(__name__)
@@ -19,7 +19,16 @@ def default_roots() -> dict[str, str]:
         "MEDIA_ROOT": settings.MEDIA_ROOT,
         "RAW_ROOT": settings.RAW_ROOT,
         "LOG_DIR": "/logs",
+        "STAGING_ROOT": str(staging_root(settings)),
     }
+
+
+def disk_refresh_roots(injected: dict[str, str] | None) -> list[str]:
+    """The folders whose disk usage the refresher caches: the injected roots when given,
+    else the default roots plus the ISO ingress folder."""
+    if injected:
+        return list(injected.values())
+    return [*default_roots().values(), settings.ISO_INGRESS_ROOT]
 
 
 def ensure_roots(roots: dict[str, str]) -> None:

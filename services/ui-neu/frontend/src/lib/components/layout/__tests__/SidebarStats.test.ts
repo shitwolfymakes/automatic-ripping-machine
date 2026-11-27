@@ -101,4 +101,19 @@ describe('SidebarStats', () => {
 		expect(screen.getByText(/61/)).toBeInTheDocument();
 		expect(screen.getByText('Raw')).toBeInTheDocument();
 	});
+
+	it("draws a bar for a staging area on its own disk, and none for one that shares raw's", async () => {
+		respond = () => Promise.resolve({ version: '1' });
+		const raw = { name: 'RAW_ROOT', path: '/raw', total_gb: 100, used_gb: 40, free_gb: 60, percent: 40 };
+		const staging = { name: 'STAGING_ROOT', path: '/staging', total_gb: 50, used_gb: 5, free_gb: 45, percent: 10 };
+		initialized().set(true);
+		snapshot().update((s) => ({ ...s, storage: [raw, { ...staging, placement: 'separate_device' }] }));
+		const view = renderComponent(SidebarStats);
+		expect(await screen.findByText('STAGING_ROOT')).toBeInTheDocument();
+		view.unmount();
+		snapshot().update((s) => ({ ...s, storage: [raw, { ...staging, placement: 'same_device' }] }));
+		renderComponent(SidebarStats);
+		expect(await screen.findByText('RAW_ROOT')).toBeInTheDocument();
+		expect(screen.queryByText('STAGING_ROOT')).toBeNull();
+	});
 });

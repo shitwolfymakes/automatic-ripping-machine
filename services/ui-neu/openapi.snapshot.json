@@ -15446,6 +15446,16 @@
               }
             ],
             "title": "Gid"
+          },
+          "placement": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/StoragePlacement"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "type": "object",
@@ -17713,6 +17723,16 @@
         ],
         "title": "StatsResponse"
       },
+      "StoragePlacement": {
+        "type": "string",
+        "enum": [
+          "inside_raw",
+          "same_device",
+          "separate_device"
+        ],
+        "title": "StoragePlacement",
+        "description": "Where the staging area sits relative to the raw folder."
+      },
       "StorageRoot": {
         "properties": {
           "name": {
@@ -17738,6 +17758,16 @@
           "percent": {
             "type": "number",
             "title": "Percent"
+          },
+          "placement": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/StoragePlacement"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "type": "object",

@@ -69,3 +69,33 @@ def test_refresh_path_ignores_non_json_stdout(monkeypatch: pytest.MonkeyPatch) -
     monkeypatch.setattr(duc.subprocess, "run", lambda *a, **k: R())
     duc.refresh_path("/raw")  # must not raise
     assert duc.get_disk_usage("/raw") is None
+
+
+def test_probe_script_reports_the_device_of_the_path(tmp_path) -> None:
+    import json
+    import os
+    import sys
+
+    out = subprocess.run([sys.executable, "-c", duc._PROBE_SCRIPT, str(tmp_path)], capture_output=True, text=True)
+    assert json.loads(out.stdout)["dev"] == os.stat(tmp_path).st_dev
+
+
+def test_refresh_path_caches_the_device(monkeypatch: pytest.MonkeyPatch) -> None:
+    duc._cache.clear()
+
+    class R:
+        returncode = 0
+        stdout = '{"total": 200, "used": 50, "free": 150, "percent": 25.0, "dev": 77}'
+
+    monkeypatch.setattr(duc.subprocess, "run", lambda *a, **k: R())
+    duc.refresh_path("/raw")
+    assert duc.get_device("/raw") == 77
+    assert duc.get_disk_usage("/raw") == {"total": 200, "used": 50, "free": 150, "percent": 25.0}
+
+
+def test_get_device_is_none_on_a_miss_or_an_entry_without_one() -> None:
+    duc._cache.clear()
+    assert duc.get_device("/raw") is None
+    with duc._cache_lock:
+        duc._cache["/raw"] = {"total": 1, "used": 0, "free": 1, "percent": 0.0, "ts": 0.0}
+    assert duc.get_device("/raw") is None

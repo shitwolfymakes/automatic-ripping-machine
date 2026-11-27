@@ -92,4 +92,34 @@ describe('StoragePathItem', () => {
 		expect(within(card).getByText('CUSTOM_ROOT')).toBeInTheDocument();
 		expect(within(card).queryByText('Finished files are filed here.')).toBeNull();
 	});
+
+	it.each([
+		['inside_raw', 'Inside raw (hard links)'],
+		['same_device', 'Same disk as raw (copies)'],
+		['separate_device', 'Separate disk']
+	] as const)('shows the staging placement chip for %s', (placement, text) => {
+		renderComponent(StoragePathItem, {
+			props: { folder: folder({ name: 'STAGING_ROOT', path: '/staging', placement }), storage: null }
+		});
+		const card = screen.getByTestId('system-health-path');
+		expect(within(card).getByText('Staging')).toBeInTheDocument();
+		expect(within(card).getByText(text)).toBeInTheDocument();
+	});
+
+	it("says staging shares raw's disk instead of a free figure unless it has its own", () => {
+		const staging = (placement: PathStatus['placement']) => ({
+			folder: folder({ name: 'STAGING_ROOT', path: '/staging', placement }),
+			storage: [root({ name: 'STAGING_ROOT', free_gb: 12 })]
+		});
+		const shared = renderComponent(StoragePathItem, { props: staging('same_device') });
+		expect(screen.getByText("Shares raw's disk")).toBeInTheDocument();
+		shared.unmount();
+		renderComponent(StoragePathItem, { props: staging('separate_device') });
+		expect(screen.getByText('12 GB free')).toBeInTheDocument();
+	});
+
+	it('shows no placement chip without a placement', () => {
+		renderComponent(StoragePathItem, { props: { folder: folder(), storage: null } });
+		expect(screen.queryByText(/raw/i)).toBeNull();
+	});
 });

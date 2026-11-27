@@ -101,6 +101,14 @@ describe('SystemHealth grouped (setup walkthrough + Settings > System)', () => {
 				host_path: '/home/me/arm/raw',
 				uid: 1000,
 				gid: 1000
+			},
+			{
+				name: 'STAGING_ROOT',
+				path: '/raw/.staging',
+				exists: true,
+				writable: true,
+				host_path: '/home/me/arm/raw/.staging',
+				placement: 'inside_raw'
 			}
 		]
 	};
@@ -119,6 +127,14 @@ describe('SystemHealth grouped (setup walkthrough + Settings > System)', () => {
 		expect(screen.getByText('Media library')).toBeInTheDocument();
 		expect(screen.getByText('Not writable')).toBeInTheDocument();
 		await waitFor(() => expect(screen.getAllByText('751 GB free').length).toBeGreaterThan(0));
+	});
+
+	it('shows the staging card next to raw, with its placement', async () => {
+		fetchSystemDiagnostics.mockResolvedValue(problem);
+		renderComponent(SystemHealth, { props: { autorun: true, grouped: true, scope: 'system' } });
+		expect(await screen.findByText('Staging')).toBeInTheDocument();
+		expect(screen.getByText('Inside raw (hard links)')).toBeInTheDocument();
+		expect(screen.getByText("Shares raw's disk")).toBeInTheDocument();
 	});
 
 	it('explains a down ripper service with its sub-checks, and counts only in-scope problems', async () => {

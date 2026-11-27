@@ -17,7 +17,7 @@ import time
 
 log = logging.getLogger("arm_backend")
 
-# path -> {"total","used","free","percent","ts"}
+# path -> {"total","used","free","percent","dev","ts"}
 _cache: dict[str, dict[str, float]] = {}
 _cache_lock = threading.Lock()
 
@@ -28,11 +28,12 @@ _PROBE_SCRIPT = (
     "import os, json, sys\n"
     "p = sys.argv[1]\n"
     "s = os.statvfs(p)\n"
+    "dev = os.stat(p).st_dev\n"
     "total = s.f_frsize * s.f_blocks\n"
     "free = s.f_frsize * s.f_bavail\n"
     "used = total - (s.f_frsize * s.f_bfree)\n"
     "pct = round(used / total * 100, 1) if total else 0.0\n"
-    "print(json.dumps({'total': total, 'free': free, 'used': used, 'percent': pct}))\n"
+    "print(json.dumps({'total': total, 'free': free, 'used': used, 'percent': pct, 'dev': dev}))\n"
 )
 
 
@@ -71,4 +72,16 @@ def get_disk_usage(path: str) -> dict[str, float] | None:
         entry = _cache.get(path)
     if entry and "total" in entry:
         return {k: entry[k] for k in ("total", "used", "free", "percent")}
+    return None
+
+
+def get_device(path: str) -> int | None:
+    """Return the cached st_dev of *path*, or None on a cache miss.
+
+    Reads only the in-process cache, like `get_disk_usage`, so it never touches the mount.
+    """
+    with _cache_lock:
+        entry = _cache.get(path)
+    if entry and "dev" in entry:
+        return int(entry["dev"])
     return None
