@@ -21,6 +21,7 @@ from fastapi.testclient import TestClient
 
 import pytest
 
+from arm_backend.config import settings as _settings
 from arm_backend.db import get_session
 from arm_backend.metadata.base import MetadataResult
 from arm_backend import identify_flow, rip_preset_resolution
@@ -40,6 +41,7 @@ from arm_common import (
     JobStatus,
     MediaType,
     RetentionPolicy,
+    RipInvocation,
     RipPreset,
     Session,
     SessionApplication,
@@ -52,6 +54,7 @@ from arm_common import (
 from arm_common.enums import IdentificationMode, OutputMode, ScanFailureReason, TrackKind, TrackSelection
 from arm_common.schemas import ScanFailure
 from arm_common.models import Track
+from arm_common.schemas import JobView
 
 from tests._fakes import FakeSession
 
@@ -3769,3 +3772,67 @@ def test_identify_single_fuzzy_cd_hit_is_applied_with_music_auto_apply_on() -> N
     out = _identify_with(db, result, _scan_dict("cd")).json()
     assert out["status"] == "identified" and out["title"] == "Album"
     assert out["metadata_json"].get("identity_suggestion") is None
+
+
+def _per_title(monkeypatch: pytest.MonkeyPatch, invocation: RipInvocation) -> None:
+    monkeypatch.setattr(_settings, "ARM_RIP_INVOCATION", invocation)
+
+
+def _start_held_with_an_unticked_title(db: FakeSession) -> Track:
+    db.rows["drives"] = [_drive()]
+    db.rows["jobs"] = [_job(status=JobStatus.AWAITING_REVIEW)]
+    unticked = _track("trk_2", status=TrackStatus.QUEUED, index=2)
+    unticked.excluded = True
+    db.rows["tracks"] = [_track("trk_1", status=TrackStatus.QUEUED), unticked]
+    return unticked
+
+
+def test_rip_start_existing_tracks_per_title_skips_the_unticked_titles(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The countdown's auto-start reaches rip-start without the operator's Start; the unticked title is SKIPPED
+    in what the ripper receives, and a repeat call changes nothing."""
+    _per_title(monkeypatch, RipInvocation.PER_TITLE)
+    db = FakeSession()
+    unticked = _start_held_with_an_unticked_title(db)
+    for _ in range(2):
+        with TestClient(_make_app(db)) as client:
+            r = client.post("/api/ripper/jobs/job_01JZXR7K3M5Q8N4VWA00000001/rip-start", headers=_OWNER_HEADERS)
+        assert r.status_code == 200
+        assert {t["id"]: t["status"] for t in r.json()["tracks"]} == {"trk_1": "queued", "trk_2": "skipped"}
+    assert unticked.status == TrackStatus.SKIPPED
+
+
+def test_rip_start_existing_tracks_mkv_all_keeps_the_unticked_titles_queued(monkeypatch: pytest.MonkeyPatch) -> None:
+    _per_title(monkeypatch, RipInvocation.MKV_ALL)
+    db = FakeSession()
+    unticked = _start_held_with_an_unticked_title(db)
+    with TestClient(_make_app(db)) as client:
+        r = client.post("/api/ripper/jobs/job_01JZXR7K3M5Q8N4VWA00000001/rip-start", headers=_OWNER_HEADERS)
+    assert r.status_code == 200
+    assert unticked.status == TrackStatus.QUEUED
+
+
+def test_rip_complete_done_and_skipped_is_ripped_not_partial(monkeypatch: pytest.MonkeyPatch) -> None:
+    db = FakeSession()
+    db.rows["jobs"] = [_job(status=JobStatus.RIPPING)]
+    db.rows["drives"] = [_drive()]
+    db.rows["tracks"] = [_track("t1", status=TrackStatus.DONE), _track("t2", status=TrackStatus.SKIPPED, index=2)]
+    r = _rip_complete(db, _Hub(), monkeypatch)
+    assert r.status_code == 200
+    assert r.json()["status"] == "ripped"
+
+
+def test_the_ripper_job_response_carries_the_rip_invocation(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A JobView built outside the list/detail views (here the ripper's get_job response) reports the install's
+    setting, not the schema default."""
+    _per_title(monkeypatch, RipInvocation.PER_TITLE)
+    db = FakeSession()
+    db.rows["drives"] = [_drive()]
+    db.rows["jobs"] = [_job(status=JobStatus.RIPPING)]
+    with TestClient(_make_app(db)) as client:
+        r = client.get("/api/ripper/jobs/job_01JZXR7K3M5Q8N4VWA00000001", headers=_SERVICE_AUTH)
+    assert r.json()["rip_invocation"] == "per_title"
+
+
+def test_a_job_view_built_for_an_event_carries_the_rip_invocation(monkeypatch: pytest.MonkeyPatch) -> None:
+    _per_title(monkeypatch, RipInvocation.PER_TITLE)
+    assert JobView.model_validate(_job(status=JobStatus.RIPPING)).rip_invocation is RipInvocation.PER_TITLE

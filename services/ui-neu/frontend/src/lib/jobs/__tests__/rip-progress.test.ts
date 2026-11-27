@@ -18,6 +18,21 @@ describe('ripProgressFromTracks', () => {
 		});
 	});
 
+	it('leaves skipped tracks out of the total and the ordinals', () => {
+		const summary = ripProgressFromTracks([
+			{ id: 't1', index: 1, status: 'skipped' },
+			{ id: 't2', index: 2, status: 'done' },
+			{ id: 't3', index: 3, status: 'in_progress' }
+		]);
+		expect(summary).toEqual({
+			tracks_total: 2,
+			tracks_done: 1,
+			tracks_failed: 0,
+			current_track_id: 't3',
+			current_track_index: 2
+		});
+	});
+
 	it('has no current track when none is in progress', () => {
 		const summary = ripProgressFromTracks([{ id: 't1', index: 1, status: 'done' }]);
 		expect(summary.current_track_id).toBeNull();

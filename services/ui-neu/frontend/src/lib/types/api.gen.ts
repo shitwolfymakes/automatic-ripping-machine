@@ -2958,6 +2958,7 @@ export type JobView = {
     failure_reason?: string | null;
     rip_progress?: RipProgressSummary | null;
     transcode_progress?: TranscodeProgressSummary | null;
+    rip_invocation?: RipInvocation;
     readonly actions: JobActions;
     /**
      * Looks Episodic
@@ -5640,7 +5641,7 @@ export type TrackSelection = 'main_feature' | 'all_tracks' | 'archive' | 'custom
 /**
  * TrackStatus
  */
-export type TrackStatus = 'queued' | 'in_progress' | 'done' | 'failed';
+export type TrackStatus = 'queued' | 'in_progress' | 'done' | 'failed' | 'skipped';
 
 /**
  * TrackUpdateRequest
@@ -6301,6 +6302,7 @@ export type JobViewWritable = {
     failure_reason?: string | null;
     rip_progress?: RipProgressSummary | null;
     transcode_progress?: TranscodeProgressSummary | null;
+    rip_invocation?: RipInvocation;
 };
 
 /**

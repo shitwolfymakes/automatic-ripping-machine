@@ -31,6 +31,7 @@ from arm_backend.identity.pipeline import resolve_job
 from arm_backend.identity.proposals import preferred_titles, record_preset
 from arm_backend.identity.stage_runner import EpisodeStageRunner
 from arm_backend.routers._deps import get_hub, get_stage_runner
+from arm_backend.rip_snapshot import skip_unticked
 from arm_backend.track_selection import DiscBackupNeedsBluray, select_tracks
 from arm_backend.ws import WSHub
 from arm_common import (
@@ -540,7 +541,10 @@ async def rip_start(
 
     existing = await _job_tracks(session, job.id)
     if existing:
+        # The countdown's auto-start reaches here without the operator's Start; the skip is idempotent.
+        await skip_unticked(session, job, settings.ARM_RIP_INVOCATION)
         await _ensure_ripping(session, job)
+        await session.commit()
         return _rip_start_response(job, preset_id, existing, min_length_seconds)
 
     _require_startable(job)

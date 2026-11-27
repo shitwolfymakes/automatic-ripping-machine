@@ -13,7 +13,7 @@ from arm_backend.identity.proposals import (
 from arm_backend.identity.resolve_service import identity_snapshot
 from arm_backend.identity.stage_runner import EpisodeStageRunner
 from arm_backend.ws import WSHub
-from arm_common import Job
+from arm_common import Job, TrackStatus
 from arm_common.models import Track
 from arm_common.schemas import JobUpdateRequest, TrackEditRequest
 from arm_common.schemas.identity import JOB_CLAIM_FIELDS, TRACK_CLAIM_FIELDS
@@ -36,6 +36,16 @@ def _apply_job_fields(job: Job, req: JobUpdateRequest) -> bool:
         if key not in _IDENTITY_JOB_ATTRS:
             setattr(job, key, value)
     return record_manual_job(job, job_identity) if job_identity else False
+
+
+def _refuse_unripped_tick(track: Track, edit: TrackEditRequest) -> None:
+    """422 when the edit ticks a SKIPPED track: it was not ripped, so there is no file to transcode. Unticking is
+    always allowed."""
+    if track.status == TrackStatus.SKIPPED and edit.excluded is False:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="this title was not ripped; rip the disc again to get it",
+        )
 
 
 def _apply_track_edit(job: Job, track: Track, edit: TrackEditRequest) -> bool:
@@ -68,6 +78,7 @@ async def _apply_track_edits(db: AsyncSession, job: Job, edits: list[TrackEditRe
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"unknown track_id {edit.track_id} for job {job.id}",
             )
+        _refuse_unripped_tick(track, edit)
         if _apply_track_edit(job, track, edit):
             identity_touched = True
         db.add(track)

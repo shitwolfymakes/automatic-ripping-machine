@@ -15,10 +15,11 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from arm_backend.config import settings
 from arm_backend.db import get_session
 from arm_backend.jwt_utils import issue_access_token
 from arm_backend.routers import jobs as jobs_router
-from arm_common import DiscType, Job, JobStatus, Track, TrackKind, TrackStatus, User
+from arm_common import DiscType, Job, JobStatus, RipInvocation, Track, TrackKind, TrackStatus, User
 
 from tests._fakes import FakeSession
 
@@ -228,3 +229,40 @@ def test_mixed_jobs_only_ripping_get_summary(signing_key: bytes) -> None:
     assert by_id["job_01JZXR7K3M5Q8N4VWA0000000A"]["rip_progress"]["current_track_index"] == 1
     assert by_id["job_01JZXR7K3M5Q8N4VWA0000000A"]["rip_progress"]["tracks_total"] == 2
     assert by_id["job_01JZXR7K3M5Q8N4VWA00000007"]["rip_progress"] is None
+
+
+def test_skipped_tracks_are_no_rip_work(signing_key: bytes) -> None:
+    db = FakeSession()
+    _seed_admin(db)
+    job_id = "job_01JZXR7K3M5Q8N4VWA00000002"
+    db.rows["jobs"] = [_make_job(job_id, status=JobStatus.RIPPING)]
+    db.rows["tracks"] = [
+        _make_track("trk_0", job_id=job_id, index=0, status=TrackStatus.SKIPPED),
+        _make_track("trk_1", job_id=job_id, index=1, status=TrackStatus.DONE),
+        _make_track("trk_2", job_id=job_id, index=2, status=TrackStatus.SKIPPED),
+        _make_track("trk_3", job_id=job_id, index=3, status=TrackStatus.IN_PROGRESS),
+    ]
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as client:
+        r = client.get("/api/jobs", headers=_auth(token))
+    assert r.json()[0]["rip_progress"] == {
+        "tracks_total": 2,
+        "tracks_done": 1,
+        "tracks_failed": 0,
+        "current_track_id": "trk_3",
+        "current_track_index": 2,
+    }
+
+
+@pytest.mark.parametrize("invocation", [RipInvocation.MKV_ALL, RipInvocation.PER_TITLE])
+def test_job_list_reports_the_rip_invocation(
+    signing_key: bytes, monkeypatch: pytest.MonkeyPatch, invocation: RipInvocation
+) -> None:
+    monkeypatch.setattr(settings, "ARM_RIP_INVOCATION", invocation)
+    db = FakeSession()
+    _seed_admin(db)
+    db.rows["jobs"] = [_make_job("job_01JZXR7K3M5Q8N4VWA00000002", status=JobStatus.RIPPED)]
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as client:
+        r = client.get("/api/jobs", headers=_auth(token))
+    assert r.json()[0]["rip_invocation"] == invocation.value
