@@ -222,6 +222,20 @@ precreate_optical_nodes() {  # <dev_dir> <sr_max> <sg_max> <group>
     echo "optical nodes: created ${created} (sr0..sr${sr_max}, sg0..sg${sg_max}) in ${dev_dir}"
 }
 
+# Ripper-only: give the arm user its home and the MakeMKV config dir. The
+# Dockerfile builds them as uid 1000, so after a PUID/PGID remap arm could not
+# write settings.conf (makemkv_key.py) or refresh sdf.bin and its
+# .sdf_refreshed sentinel (update_sdf.sh). The MakeMKV dir is chowned
+# recursively because the image bakes files into it; it lives in the container
+# layer, never a user-mounted volume. Defined above the SOURCE_ONLY seam so
+# test-entrypoint-makemkv-home.sh can exercise it unprivileged.
+own_makemkv_home() {  # <home>
+    local home="$1"
+    [[ -d "${home}/.MakeMKV" ]] || install -d -o arm -g arm "${home}/.MakeMKV"
+    chown arm:arm "${home}" 2>/dev/null || true
+    chown -R arm:arm "${home}/.MakeMKV" 2>/dev/null || true
+}
+
 # Test seam: lets services/_common/test-entrypoint-render.sh source the
 # functions above without executing the entrypoint (mirrors install.sh's
 # ARM_INSTALL_SOURCE_ONLY). The sourced-ness check makes a leaked env var
@@ -300,15 +314,11 @@ for d in /logs /raw /media /data; do
     require_writable "$d" || exit 1
 done
 
-# Ripper-only: ensure the arm user owns its home + MakeMKV config dir so the
-# per-rip key refresh (arm_ripper/makemkv_key.py) can write settings.conf —
-# the Dockerfile chowns /home/arm to UID 1000 at build, so a PUID/PGID remap
-# would otherwise leave it unwritable. The key itself is not scraped at
+# Ripper-only (see own_makemkv_home). The key itself is not scraped at
 # boot; the JobController runs update_key.sh before every rip. Gated on the
 # ripper image's update_key.sh + makemkvcon so backend / transcode no-op past it.
 if [[ -x /usr/local/bin/update_key.sh ]] && command -v makemkvcon >/dev/null 2>&1; then
-    [[ -d /home/arm/.MakeMKV ]] || install -d -o arm -g arm /home/arm/.MakeMKV
-    chown arm:arm /home/arm /home/arm/.MakeMKV 2>/dev/null || true
+    own_makemkv_home /home/arm
 fi
 
 umask 002
