@@ -1,3 +1,7 @@
+// Open arms the coverage tool reports that are Svelte's, not the component's:
+// each text or attribute `{...}` below compiles to `(...) ?? ''`, and each sits
+// inside an #if on the same value. The year beside the title and the IMDb id
+// in the IMDb badge's link.
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { createRawSnippet } from 'svelte';
 import { renderComponent, screen, fireEvent, waitFor, cleanup } from '$lib/testing/render';

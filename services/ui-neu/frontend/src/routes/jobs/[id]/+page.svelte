@@ -30,6 +30,7 @@
 	import { fetchSessions } from '$lib/api/sessions';
 	import { buildMetadataFields } from '$lib/jobs/fields';
 	import { transcodeRuntimeEnabled } from '$lib/stores/config';
+	import { cdIdentityMissing } from '$lib/music/identity-gaps';
 	import LoadState from '$lib/components/shared/LoadState.svelte';
 	import SkeletonCard from '$lib/components/shared/SkeletonCard.svelte';
 	import JobRawMetadata from '$lib/components/jobs/JobRawMetadata.svelte';
@@ -198,6 +199,19 @@
 				{#if identitySuggestionOf(job)}
 					<div class="job-detail-suggestion">
 						<IdentitySuggestionBanner {job} canAct={$isAdmin && jobDetail.canResolve} onaccepted={handleIdentified} />
+					</div>
+				{/if}
+
+				<!-- A CD not yet identified: it counts as identified once nothing is missing. -->
+				{#if job.cd_identity_gaps}
+					<div class="job-detail-suggestion">
+						<div class="alert alert-info" data-testid="cd-identity-missing">
+							<p class="alert-title flex items-center gap-2"><Glyph name="info" />CD not identified yet</p>
+							<p class="alert-body">
+								ARM counts this CD as identified once it has an album and an artist; track titles are optional. Still
+								missing: {cdIdentityMissing(job.cd_identity_gaps)}.
+							</p>
+						</div>
 					</div>
 				{/if}
 

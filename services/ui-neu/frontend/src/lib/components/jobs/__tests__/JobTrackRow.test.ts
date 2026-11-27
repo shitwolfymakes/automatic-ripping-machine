@@ -2,7 +2,8 @@
 // each text or attribute `{...}` below compiles to `(...) ?? ''`, and each sits
 // inside an #if on the same value. The track's year, the job's year, the
 // track's IMDb link, the attempt count (inside `attempts > 1`) and the failed
-// track's last error.
+// track's last error. Also the track number in a song row's title editor
+// label (`Track {track.index} title`), a number that is never nullish.
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderComponent, screen, cleanup, waitFor, fireEvent, within } from '$lib/testing/render';
 import JobTrackRowHarness from './JobTrackRowHarness.svelte';

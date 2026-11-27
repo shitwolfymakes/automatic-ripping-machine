@@ -21,8 +21,9 @@
 
 	const shown = $derived(value == null || value === '' ? '-' : String(value));
 
+	// Only the button calls this, and it is shown only while editable and not
+	// editing (a save in flight keeps the editor open).
 	function open() {
-		if (!canEdit || busy) return;
 		draft = value == null ? '' : String(value);
 		error = null;
 		editing = true;

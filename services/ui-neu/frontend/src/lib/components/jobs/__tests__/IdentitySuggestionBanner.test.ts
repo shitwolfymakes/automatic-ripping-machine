@@ -1,3 +1,8 @@
+// Open arms the coverage tool reports that are Svelte's, not the component's:
+// each text `{...}` below compiles to `(...) ?? ''`, and none can be nullish.
+// In the line naming the other releases (inside `tocCandidateCount > 1`): the
+// release count and the name of the button that picks another (a ternary of
+// two strings).
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { renderComponent, screen, fireEvent, cleanup, waitFor } from '$lib/testing/render';
 import IdentitySuggestionBanner from '../IdentitySuggestionBanner.svelte';

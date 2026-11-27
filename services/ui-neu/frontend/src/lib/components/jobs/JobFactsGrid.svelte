@@ -31,7 +31,7 @@
 					<div class="mt-1 job-detail-metadata-value" data-testid="fact-{edit}">
 						<InlineField
 							label={field.label}
-							value={field.raw ?? ''}
+							value={field.raw}
 							type="number"
 							{canEdit}
 							onsave={(raw) => onsave(edit, raw)}
@@ -42,7 +42,7 @@
 					<div class="mt-1 job-detail-metadata-value" data-testid="fact-{textEdit}">
 						<InlineField
 							label={field.label}
-							value={field.raw ?? ''}
+							value={field.raw}
 							type="text"
 							{canEdit}
 							onsave={(raw) => ontextsave(textEdit, raw)}

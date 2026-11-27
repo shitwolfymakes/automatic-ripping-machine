@@ -2289,6 +2289,25 @@ def test_accept_music_suggestion_sets_the_disc_number(signing_key: bytes) -> Non
     assert r.json()["job"]["disc_number"] == 2
 
 
+def test_accept_identifies_a_cd_whose_match_lacks_an_artist(signing_key: bytes) -> None:
+    """Accept applies the held match as identify would have: the CD rule that
+    holds an operator's resolve without an album and an artist does not apply."""
+    db = FakeSession()
+    job = _suggested_job(JobStatus.RIPPED_AWAITING_IDENTIFY)
+    job.disc_type = DiscType.CD
+    job.metadata_json["scan_result"] = {"disc_type": "cd", "titles": [{"index": 1, "duration_seconds": 60}]}
+    job.metadata_json["identity_suggestion"].update(
+        {"provider": "musicbrainz", "kind": "music", "title": "Album", "payload": {"album": "Album", "tracks": []}}
+    )
+    db.rows["jobs"] = [job]
+    db.rows["config"] = [Config(id=1)]
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as client:
+        r = client.post(f"/api/jobs/{job.id}/identity/accept", headers=_auth(token))
+    assert r.status_code == 200, r.text
+    assert r.json()["job"]["status"] == "ripped"
+
+
 def test_accept_409_without_a_suggestion(signing_key: bytes) -> None:
     db = FakeSession()
     job = _job(status=JobStatus.AWAITING_REVIEW)

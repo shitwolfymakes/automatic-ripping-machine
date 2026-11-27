@@ -34,7 +34,8 @@ const jobDefaults: JobView = {
 	rip_progress: null,
 	looks_episodic: false,
 	has_series: false,
-	episodes_unsure: false
+	episodes_unsure: false,
+	cd_identity_gaps: null
 };
 
 export function createJob(overrides: Partial<JobView> = {}): JobView {

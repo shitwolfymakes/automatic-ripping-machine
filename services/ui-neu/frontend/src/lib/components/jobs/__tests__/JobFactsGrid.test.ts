@@ -1,3 +1,8 @@
+// Open arms the coverage tool reports that are Svelte's, not the component's:
+// each attribute `{...}` below compiles to `(...) ?? ''`, and none can be
+// nullish. The edited field in each editor cell's test id: `fact-{edit}` for a
+// number fact and `fact-{textEdit}` for a CD text fact, each inside an #if on
+// the same value.
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import { renderComponent, screen, fireEvent, waitFor, within, cleanup } from '$lib/testing/render';
 import JobFactsGrid from '../JobFactsGrid.svelte';

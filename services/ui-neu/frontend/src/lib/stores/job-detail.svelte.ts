@@ -95,13 +95,21 @@ export class JobDetail {
 	// A CD's artist, album or track title edited in place goes through resolve
 	// with the stored music details restated around the one change. Saves run
 	// one after another, each built from the job the previous one reloaded, so
-	// a quick second edit cannot restate the first field's old value.
+	// a quick second edit cannot restate the first field's old value. A queued
+	// save is for the job loaded when it was queued: it rejects, unsent, when
+	// another job is loaded by the time it runs, or when the reload after a
+	// save failed and no load has succeeded since (the job held is stale).
 	#cdSaves: Promise<void> = Promise.resolve();
+	#staleAfterSave = false;
 	saveCdField = (edit: CdEdit, raw: string): Promise<void> => {
+		const jobId = this.detail?.job.id;
 		const run = this.#cdSaves.then(async () => {
-			if (!this.detail) return;
-			const job = this.detail.job;
+			const job = this.detail?.job;
+			if (!job || job.id !== jobId) throw new Error('A different job is open now, so this edit was not saved');
+			if (this.#staleAfterSave)
+				throw new Error('The job did not reload after the last save, so this edit was not saved');
 			await resolveJob(job.id, cdEditBody(job, edit, raw, this.cdTrackCount));
+			this.#staleAfterSave = true;
 			await this.load();
 		});
 		this.#cdSaves = run.catch(() => {});
@@ -141,6 +149,7 @@ export class JobDetail {
 		this.error = null;
 		try {
 			this.detail = await fetchJob(id);
+			this.#staleAfterSave = false;
 			await this.#loadPreview(id, poll);
 		} catch (e) {
 			if (isNotFound(e)) {

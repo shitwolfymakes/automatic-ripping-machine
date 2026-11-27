@@ -422,4 +422,44 @@ describe('JobDetail CD fields', () => {
 		await d.saveCdField({ field: 'artist' }, 'Y');
 		expect(mockResolve).toHaveBeenCalledTimes(2);
 	});
+
+	it('skips a queued save when another job was loaded before it ran', async () => {
+		const d = detailWith({ id: 'job_A', disc_type: 'cd', metadata_json: cdMeta as never });
+		let finishFirst: (v: unknown) => void = () => {};
+		mockResolve.mockImplementationOnce(() => new Promise((r) => (finishFirst = r)) as never);
+		const first = d.saveCdField({ field: 'track', index: 1 }, 'One');
+		const second = d.saveCdField({ field: 'artist' }, 'Typed on A');
+		await vi.waitFor(() => expect(mockResolve).toHaveBeenCalledTimes(1));
+		mockFetchJob.mockResolvedValue(createJobDetail({ id: 'job_B', disc_type: 'cd', metadata_json: cdMeta } as never));
+		await d.load();
+		finishFirst({ job: d.detail!.job });
+		await first;
+		await expect(second).rejects.toThrow('A different job is open now');
+		expect(mockResolve).toHaveBeenCalledTimes(1);
+		expect(mockResolve).not.toHaveBeenCalledWith('job_B', expect.anything());
+	});
+
+	it('skips a queued save when the reload after the previous save failed, then saves once a reload succeeds', async () => {
+		const d = detailWith({ id: 'job_1', disc_type: 'cd', metadata_json: cdMeta as never });
+		mockResolve.mockResolvedValue({ job: d.detail!.job } as never);
+		mockFetchJob.mockResolvedValue(createJobDetail({ id: 'job_1', disc_type: 'cd', metadata_json: cdMeta } as never));
+		mockFetchJob.mockRejectedValueOnce(new Error('offline'));
+		const first = d.saveCdField({ field: 'track', index: 1 }, 'One');
+		const second = d.saveCdField({ field: 'track', index: 2 }, 'Two');
+		await first;
+		await expect(second).rejects.toThrow('did not reload after the last save');
+		expect(mockResolve).toHaveBeenCalledTimes(1);
+		await d.load();
+		await d.saveCdField({ field: 'track', index: 2 }, 'Two');
+		expect(mockResolve).toHaveBeenCalledTimes(2);
+	});
+
+	it('rejects a save queued with no job loaded', async () => {
+		await expect(newDetail().saveCdField({ field: 'artist' }, 'X')).rejects.toThrow('A different job is open now');
+		expect(mockResolve).not.toHaveBeenCalled();
+	});
+
+	it('has a CD track count of 0 with no job loaded', () => {
+		expect(newDetail().cdTrackCount).toBe(0);
+	});
 });
