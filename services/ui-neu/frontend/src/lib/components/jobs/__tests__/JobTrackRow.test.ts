@@ -9,6 +9,7 @@ import JobTrackRowHarness from './JobTrackRowHarness.svelte';
 import { createJob, createTrack } from '$lib/__fixtures__/job';
 import type { JobView, NamingPreviewItem, TrackView } from '$lib/types/api.gen';
 import { searchMetadata, updateTrack } from '$lib/api/jobs';
+import type { TitleClassLabel } from '$lib/jobs/title-class';
 import * as authStore from '$lib/stores/auth';
 
 vi.mock('$lib/stores/auth', async () => {
@@ -42,12 +43,14 @@ interface Overrides {
 	preview?: NamingPreviewItem;
 	editing?: boolean;
 	excludeError?: string | null;
+	classLabel?: TitleClassLabel | null;
 }
 
 function renderRow(track: TrackView, overrides: Overrides = {}) {
 	return renderComponent(JobTrackRowHarness, {
 		job: createJob(overrides.job ?? {}),
 		track,
+		classLabel: overrides.classLabel ?? null,
 		preview: overrides.preview,
 		tracksAreSeries: overrides.tracksAreSeries ?? false,
 		editing: overrides.editing ?? false,
@@ -130,6 +133,16 @@ beforeEach(() => {
 
 afterEach(() => {
 	cleanup();
+});
+
+describe('JobTrackRow title class', () => {
+	it('shows the class label in the meta pills, and none for a plain title', () => {
+		renderRow(pilot(), { classLabel: { text: 'Copy of #0', tone: 'muted' } });
+		expect(screen.getByTestId('track-class-label')).toHaveTextContent('Copy of #0');
+		cleanup();
+		renderRow(pilot());
+		expect(screen.queryByTestId('track-class-label')).toBeNull();
+	});
 });
 
 describe('JobTrackRow', () => {

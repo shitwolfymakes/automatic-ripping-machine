@@ -1,23 +1,32 @@
 import { describe, it, expect } from 'vitest';
 import { trackToRow, scanTitleToRow, nonEpisode } from '../review-rows';
 
+const none = () => null;
+
 describe('review-rows mappers', () => {
 	it('trackToRow carries the id + editable fields', () => {
-		const r = trackToRow({
-			id: 'trk_9',
-			index: 3,
-			title: 'Main',
-			year: 2001,
-			episode_number: 4,
-			excluded: false,
-			duration_seconds: 60,
-			output_path: 'o.mkv',
-			source_ref: 's'
-		} as any);
+		const r = trackToRow(
+			{
+				id: 'trk_9',
+				index: 3,
+				title: 'Main',
+				year: 2001,
+				episode_number: 4,
+				excluded: false,
+				duration_seconds: 60,
+				output_path: 'o.mkv',
+				source_ref: 's'
+			} as any,
+			none
+		);
 		expect(r).toEqual({
 			index: 3,
 			durationSeconds: 60,
-			sourceLabel: 'o.mkv',
+			sourceName: 'o.mkv',
+			sourceRef: 's',
+			titleClass: null,
+			classRef: null,
+			classLabel: null,
 			trackId: 'trk_9',
 			title: 'Main',
 			year: 2001,
@@ -29,30 +38,66 @@ describe('review-rows mappers', () => {
 	});
 
 	it('trackToRow falls back to the scan estimate before the rip and carries the role', () => {
-		const r = trackToRow({
-			id: 'trk_1',
-			index: 5,
-			duration_seconds: null,
-			expected_duration_seconds: 542,
-			role: 'extra',
-			source_ref: '5'
-		} as any);
+		const r = trackToRow(
+			{
+				id: 'trk_1',
+				index: 5,
+				duration_seconds: null,
+				expected_duration_seconds: 542,
+				role: 'extra',
+				source_ref: '5'
+			} as any,
+			none
+		);
 		expect(r.durationSeconds).toBe(542);
 		expect(r.role).toBe('extra');
 	});
 	it('trackToRow falls back to source_ref when output_path is empty', () => {
-		const r = trackToRow({
-			id: 't',
-			index: 0,
-			title: null,
-			year: null,
-			episode_number: null,
-			excluded: false,
-			duration_seconds: null,
-			output_path: null,
-			source_ref: 'B1_t00'
+		const r = trackToRow(
+			{
+				id: 't',
+				index: 0,
+				title: null,
+				year: null,
+				episode_number: null,
+				excluded: false,
+				duration_seconds: null,
+				output_path: null,
+				source_ref: 'B1_t00'
+			} as any,
+			none
+		);
+		expect(r.sourceName).toBe('B1_t00');
+	});
+
+	it('trackToRow carries the class, its ref and the label', () => {
+		const r = trackToRow(
+			{
+				id: 'd',
+				index: 4,
+				source_ref: '4',
+				playlist_name: '00801.mpls',
+				title_class: 'decoy',
+				title_class_ref: '0'
+			} as any,
+			(ref) => (ref === '0' ? 0 : null)
+		);
+		expect(r).toMatchObject({
+			sourceName: '00801.mpls',
+			titleClass: 'decoy',
+			classRef: '0',
+			classLabel: { text: 'Decoy playlist of #0', tone: 'muted' }
+		});
+	});
+
+	it('scanTitleToRow names the playlist before the stream file', () => {
+		const r = scanTitleToRow({
+			index: 2,
+			duration_seconds: 1,
+			source_file: 'a.m2ts',
+			playlist_name: '00800.mpls'
 		} as any);
-		expect(r.sourceLabel).toBe('B1_t00');
+		expect(r.sourceName).toBe('00800.mpls');
 	});
 
 	it('scanTitleToRow has no trackId and blank identity (read-only row)', () => {
@@ -60,7 +105,11 @@ describe('review-rows mappers', () => {
 		expect(r).toEqual({
 			index: 2,
 			durationSeconds: 100,
-			sourceLabel: 'x.mkv',
+			sourceName: 'x.mkv',
+			sourceRef: '2',
+			titleClass: null,
+			classRef: null,
+			classLabel: null,
 			trackId: null,
 			title: null,
 			year: null,
@@ -70,9 +119,9 @@ describe('review-rows mappers', () => {
 			excluded: false
 		});
 	});
-	it('scanTitleToRow tolerates a missing source_file', () => {
+	it('scanTitleToRow falls back to the title number without a source_file', () => {
 		const r = scanTitleToRow({ index: 0, duration_seconds: 10 } as any);
-		expect(r.sourceLabel).toBeNull();
+		expect(r.sourceName).toBe('0');
 	});
 });
 

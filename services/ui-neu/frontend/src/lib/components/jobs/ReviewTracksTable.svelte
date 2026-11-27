@@ -2,9 +2,18 @@
 	import { errorMessage as toErrorMessage } from '$lib/utils/errors';
 	import type { JobView, TrackView, ScanTitle } from '$lib/types/api.gen';
 	import { updateTrack } from '$lib/api/jobs';
-	import { trackToRow, scanTitleToRow, nonEpisode } from '$lib/jobs/review-rows';
+	import { trackToRow, scanTitleToRow, nonEpisode, type ReviewRow } from '$lib/jobs/review-rows';
+	import {
+		DECOY_GROUP_MIN,
+		decoyGroupText,
+		groupDecoys,
+		isDecoyGroup,
+		refIndexOf,
+		refText
+	} from '$lib/jobs/title-class';
 	import { formatTrackDuration } from '$lib/utils/format';
 	import { parseEpisodeNumber } from '$lib/jobs/track-edit';
+	import Glyph from '$lib/components/shared/Glyph.svelte';
 	import TrackTitleSearch from '../match/TrackTitleSearch.svelte';
 	import { isAdmin } from '$lib/stores/auth';
 	interface Props {
@@ -20,7 +29,12 @@
 	let { job, tracks, scanTitles = [], isVideo, isMusic, fileNames = new Map(), onrefresh }: Props = $props();
 
 	// Materialized tracks always win; scanned titles are the pre-rip fallback.
-	let rows = $derived(tracks.length ? tracks.map(trackToRow) : scanTitles.map(scanTitleToRow));
+	let refIndex = $derived(refIndexOf(tracks));
+	let rows = $derived(tracks.length ? tracks.map((t) => trackToRow(t, refIndex)) : scanTitles.map(scanTitleToRow));
+	let items = $derived(groupDecoys(rows, DECOY_GROUP_MIN));
+
+	// Which decoy groups are expanded, by the ref they copy.
+	let openDecoyGroups = $state<Set<string>>(new Set());
 
 	let openSearchTrackIds = $state<Set<string>>(new Set());
 	let errorMessage = $state<string | null>(null);
@@ -51,11 +65,134 @@
 		openSearchTrackIds = next;
 	}
 
+	function toggleDecoyGroup(key: string) {
+		// eslint-disable-next-line svelte/prefer-svelte-reactivity -- copy-on-write; reassigning the $state variable triggers updates
+		const next = new Set(openDecoyGroups);
+		if (next.has(key)) next.delete(key);
+		else next.add(key);
+		openDecoyGroups = next;
+	}
+
 	function handleTrackTitleApply(trackId: string) {
 		openSearchTrackIds = new Set([...openSearchTrackIds].filter((id) => id !== trackId));
 		onrefresh?.();
 	}
 </script>
+
+{#snippet trackRow(row: ReviewRow)}
+	{@const trackId = row.trackId}
+	<tr class="table-row" data-disabled={row.excluded}>
+		<td class="table-cell mono">{row.index}</td>
+		<td
+			class="table-cell {isVideo && trackId ? 'review-tracks-table-clickable' : ''}"
+			onclick={() => {
+				if (isVideo && trackId) toggleTrackSearch(trackId);
+			}}
+		>
+			{#if row.title}
+				<div class="flex items-center gap-1.5">
+					<span class="review-tracks-table-title">{row.title}</span>
+					{#if row.year}
+						<span class="review-tracks-table-faint">({row.year})</span>
+					{/if}
+				</div>
+			{:else if trackId}
+				<span class="review-tracks-table-faint"
+					>{job.title || 'Untitled'}{#if job.year}
+						({job.year}){/if}</span
+				>
+			{:else}
+				<span class="review-tracks-table-faint">-</span>
+			{/if}
+		</td>
+		{#if isVideo}
+			<td class="table-cell">
+				{#if trackId && fileNames.get(trackId)}
+					<!-- A session names the track: the generated name is the episode. -->
+					<span class="mono review-tracks-table-generated" data-testid="track-generated-name"
+						>{fileNames.get(trackId)}</span
+					>
+				{:else if trackId && nonEpisode(row)}
+					<span class="chip chip-sm" data-testid="track-role">{nonEpisode(row)}</span>
+				{:else if trackId}
+					<div class="review-tracks-table-episode">
+						<input
+							type="text"
+							value={row.episodeNumber ?? ''}
+							onchange={(e) => handleEpisodeNumberInput(trackId, e.currentTarget.value)}
+							placeholder="--"
+							disabled={row.excluded}
+							class="field-control review-tracks-table-episode-input"
+						/>
+						{#if row.episodeNumber != null && row.episodeName}
+							<span class="review-tracks-table-episode-name" data-testid="track-episode-name">{row.episodeName}</span>
+						{/if}
+					</div>
+				{:else}
+					<span class="review-tracks-table-faint">-</span>
+				{/if}
+			</td>
+		{/if}
+		<td class="table-cell review-tracks-table-secondary">{formatTrackDuration(row.durationSeconds)}</td>
+		<td class="table-cell">
+			{#if trackId && $isAdmin}
+				<input
+					type="checkbox"
+					aria-label="Include track {row.index}"
+					checked={!row.excluded}
+					onchange={(e) => handleTrackFieldUpdate(trackId, 'excluded', !e.currentTarget.checked)}
+					title="Include this track in transcode output (the disc still rips in full)"
+				/>
+			{:else if trackId}
+				<span class="review-tracks-table-faint">{row.excluded ? 'Excluded' : 'Included'}</span>
+			{:else}
+				<span class="review-tracks-table-faint">-</span>
+			{/if}
+		</td>
+		<td class="table-cell mono review-tracks-table-muted">
+			{row.sourceName}
+			{#if row.classLabel}
+				<div>
+					<span class="chip chip-sm {row.classLabel.tone === 'info' ? 'chip-info' : ''}" data-testid="track-class-label"
+						>{row.classLabel.text}</span
+					>
+				</div>
+			{/if}
+		</td>
+		{#if isVideo}
+			<td class="table-cell">
+				{#if trackId}
+					<button
+						type="button"
+						onclick={() => toggleTrackSearch(trackId)}
+						class="btn btn-icon review-tracks-table-search-btn"
+						aria-pressed={openSearchTrackIds.has(trackId)}
+						title={openSearchTrackIds.has(trackId) ? 'Close search' : 'Search title'}
+					>
+						<svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+							<circle cx="11" cy="11" r="8" /><path d="m21 21-4.35-4.35" />
+						</svg>
+					</button>
+				{/if}
+			</td>
+		{/if}
+	</tr>
+	{@const track = tracks.find((t) => t.id === trackId)}
+	{#if isVideo && trackId && track && openSearchTrackIds.has(trackId)}
+		<tr>
+			<td colspan="99" class="px-3 py-2">
+				<TrackTitleSearch
+					jobId={job.id}
+					{track}
+					mediaType={job.media_type}
+					onapply={() => handleTrackTitleApply(trackId)}
+					onclear={() => onrefresh?.()}
+					onclose={() => toggleTrackSearch(trackId)}
+				/>
+			</td>
+		</tr>
+	{/if}
+{/snippet}
 
 <div class="review-tracks-table-wrap">
 	{#if errorMessage}
@@ -80,111 +217,35 @@
 						</tr>
 					</thead>
 					<tbody>
-						{#each rows as row (row.trackId ?? `scan-${row.index}`)}
-							{@const trackId = row.trackId}
-							<tr class="table-row" data-disabled={row.excluded}>
-								<td class="table-cell mono">{row.index}</td>
-								<td
-									class="table-cell {isVideo && trackId ? 'review-tracks-table-clickable' : ''}"
-									onclick={() => {
-										if (isVideo && trackId) toggleTrackSearch(trackId);
-									}}
-								>
-									{#if row.title}
-										<div class="flex items-center gap-1.5">
-											<span class="review-tracks-table-title">{row.title}</span>
-											{#if row.year}
-												<span class="review-tracks-table-faint">({row.year})</span>
-											{/if}
-										</div>
-									{:else if trackId}
-										<span class="review-tracks-table-faint"
-											>{job.title || 'Untitled'}{#if job.year}
-												({job.year}){/if}</span
+						{#each items as item (isDecoyGroup(item) ? `decoys-${item.ref}` : (item.trackId ?? `scan-${item.index}`))}
+							{#if isDecoyGroup(item)}
+								{@const key = String(item.ref)}
+								{@const text = decoyGroupText(
+									item.members.length,
+									item.members.filter((m) => !m.excluded).length,
+									refText(item.ref, refIndex)
+								)}
+								<tr class="table-row">
+									<td colspan="99" class="table-cell">
+										<button
+											type="button"
+											class="btn btn-ghost btn-sm"
+											aria-expanded={openDecoyGroups.has(key)}
+											aria-label={text}
+											onclick={() => toggleDecoyGroup(key)}
 										>
-									{:else}
-										<span class="review-tracks-table-faint">-</span>
-									{/if}
-								</td>
-								{#if isVideo}
-									<td class="table-cell">
-										{#if trackId && fileNames.get(trackId)}
-											<!-- A session names the track: the generated name is the episode. -->
-											<span class="mono review-tracks-table-generated" data-testid="track-generated-name"
-												>{fileNames.get(trackId)}</span
-											>
-										{:else if trackId && nonEpisode(row)}
-											<span class="chip chip-sm" data-testid="track-role">{nonEpisode(row)}</span>
-										{:else if trackId}
-											<div class="review-tracks-table-episode">
-												<input
-													type="text"
-													value={row.episodeNumber ?? ''}
-													onchange={(e) => handleEpisodeNumberInput(trackId, e.currentTarget.value)}
-													placeholder="--"
-													disabled={row.excluded}
-													class="field-control review-tracks-table-episode-input"
-												/>
-												{#if row.episodeNumber != null && row.episodeName}
-													<span class="review-tracks-table-episode-name" data-testid="track-episode-name"
-														>{row.episodeName}</span
-													>
-												{/if}
-											</div>
-										{:else}
-											<span class="review-tracks-table-faint">-</span>
-										{/if}
-									</td>
-								{/if}
-								<td class="table-cell review-tracks-table-secondary">{formatTrackDuration(row.durationSeconds)}</td>
-								<td class="table-cell">
-									{#if trackId && $isAdmin}
-										<input
-											type="checkbox"
-											aria-label="Include track {row.index}"
-											checked={!row.excluded}
-											onchange={(e) => handleTrackFieldUpdate(trackId, 'excluded', !e.currentTarget.checked)}
-											title="Include this track in transcode output (the disc still rips in full)"
-										/>
-									{:else if trackId}
-										<span class="review-tracks-table-faint">{row.excluded ? 'Excluded' : 'Included'}</span>
-									{:else}
-										<span class="review-tracks-table-faint">-</span>
-									{/if}
-								</td>
-								<td class="table-cell mono review-tracks-table-muted">{row.sourceLabel}</td>
-								{#if isVideo}
-									<td class="table-cell">
-										{#if trackId}
-											<button
-												type="button"
-												onclick={() => toggleTrackSearch(trackId)}
-												class="btn btn-icon review-tracks-table-search-btn"
-												aria-pressed={openSearchTrackIds.has(trackId)}
-												title={openSearchTrackIds.has(trackId) ? 'Close search' : 'Search title'}
-											>
-												<svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-													<circle cx="11" cy="11" r="8" /><path d="m21 21-4.35-4.35" />
-												</svg>
-											</button>
-										{/if}
-									</td>
-								{/if}
-							</tr>
-							{@const track = tracks.find((t) => t.id === trackId)}
-							{#if isVideo && trackId && track && openSearchTrackIds.has(trackId)}
-								<tr>
-									<td colspan="99" class="px-3 py-2">
-										<TrackTitleSearch
-											jobId={job.id}
-											{track}
-											mediaType={job.media_type}
-											onapply={() => handleTrackTitleApply(trackId)}
-											onclear={() => onrefresh?.()}
-											onclose={() => toggleTrackSearch(trackId)}
-										/>
+											<Glyph name="chevron-right" class="chevron" />
+											{text}
+										</button>
 									</td>
 								</tr>
+								{#if openDecoyGroups.has(key)}
+									{#each item.members as member (member.index)}
+										{@render trackRow(member)}
+									{/each}
+								{/if}
+							{:else}
+								{@render trackRow(item)}
 							{/if}
 						{/each}
 					</tbody>
