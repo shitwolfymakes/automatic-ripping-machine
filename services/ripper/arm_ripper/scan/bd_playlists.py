@@ -1,10 +1,9 @@
 """Blu-ray playlist structure: BDMV/PLAYLIST/*.mpls read without mounting.
 
-Disc I/O (`_read_playlist_files`, the same no-mount pycdlib open path as
-`bd_meta`, with the 7-Zip UDF fallback and direct reads of a disc folder) is
-kept apart from the pure MPLS decoding (`parse_mpls`) and from the async scan
-step (`scan_playlists`) that bounds and times the read. Soft-fail: any error
-yields an empty list.
+Reading the disc is `playlist_extract`'s job (a killable 7-Zip subprocess into
+a temp dir); this module decodes the extracted bytes (`parse_mpls`, pure) and
+runs the async scan step (`scan_playlists`) that bounds, times and logs it.
+Soft-fail: any error or timeout yields an empty list.
 """
 
 from __future__ import annotations
@@ -13,19 +12,19 @@ import asyncio
 import logging
 import re
 import struct
+import tempfile
 import time
-from io import BytesIO
 from pathlib import Path
 
 from arm_common.schemas import BdPlaylist
 
+from arm_ripper.scan.playlist_extract import OK, extract_mpls
 from arm_ripper.source import is_folder_source
 
 logger = logging.getLogger("arm_ripper.scan.bd_playlists")
 
 PLAYLIST_TIMEOUT_SECONDS = 60.0
 
-_PLAYLIST_DIR = "/BDMV/PLAYLIST"
 _MPLS_RE = re.compile(r"^(\d{5}\.mpls)(?:;\d+)?$", re.IGNORECASE)
 _TICKS_PER_SECOND = 45000
 _MAGIC = b"MPLS"
@@ -98,89 +97,44 @@ def parse_mpls(data: bytes, name: str) -> BdPlaylist | None:
     )
 
 
-def _mpls_names(names: list[str]) -> dict[str, str]:
-    """{lower-cased playlist name: original identifier} for the .mpls entries in `names`."""
-    return {m.group(1).lower(): n for n in names if (m := _MPLS_RE.match(n))}
-
-
-def _read_playlists_pycdlib(source_path: str) -> dict[str, bytes]:
-    """Raises when pycdlib cannot open the image; {} when it has no /BDMV/PLAYLIST."""
-    from pycdlib import PyCdlib  # lazy: keep import cost off the hot path
-    from pycdlib.pycdlibexception import PyCdlibException
-
-    iso = PyCdlib()
-    iso.open(source_path)
-    try:
-        try:
-            names = [
-                child.file_identifier().decode("utf-8", "replace")
-                for child in iso.list_children(udf_path=_PLAYLIST_DIR)
-                if child is not None and not child.is_dir()
-            ]
-        except PyCdlibException:
-            return {}  # a DVD / CD: no BDMV tree, nothing to read
-        files: dict[str, bytes] = {}
-        for name, identifier in _mpls_names(names).items():
-            buf = BytesIO()
-            iso.get_file_from_iso_fp(buf, udf_path=f"{_PLAYLIST_DIR}/{identifier}")
-            files[name] = buf.getvalue()
-        return files
-    finally:
-        iso.close()
-
-
-def _read_playlists_udf(source_path: str) -> dict[str, bytes]:
-    """7-Zip fallback for a UDF-only image PyCdlib refuses (no ISO 9660 PVD)."""
-    from arm_ripper.scan import udf_image
-
-    prefix = _PLAYLIST_DIR.lstrip("/") + "/"
-    listing = udf_image.list_files(source_path) or []
-    inside = [path[len(prefix) :] for path, _size in listing if path.startswith(prefix)]
-    files: dict[str, bytes] = {}
-    for name, identifier in _mpls_names(inside).items():
-        data = udf_image.read_file(source_path, f"{prefix}{identifier}")
-        if data is not None:
-            files[name] = data
-    return files
-
-
-def _read_playlists_folder(folder: str) -> dict[str, bytes]:
-    """Read BDMV/PLAYLIST of a disc folder directly."""
-    directory = Path(folder) / "BDMV" / "PLAYLIST"
+def read_mpls_files(directory: Path) -> dict[str, bytes]:
+    """{lower-cased name: bytes} of the .mpls files under `directory`; {} when it is missing."""
     if not directory.is_dir():
         return {}
-    return {p.name.lower(): p.read_bytes() for p in directory.iterdir() if _MPLS_RE.match(p.name)}
+    return {p.name.lower(): p.read_bytes() for p in directory.rglob("*") if p.is_file() and _MPLS_RE.match(p.name)}
 
 
-def _read_playlist_files(source_path: str) -> dict[str, bytes]:
-    """{playlist name: raw bytes} for every .mpls on the disc; {} when there is none. Raises on I/O failure."""
-    if is_folder_source(source_path):
-        return _read_playlists_folder(source_path)
-    try:
-        return _read_playlists_pycdlib(source_path)
-    except Exception as e:  # noqa: BLE001 — pycdlib raises several flavours on an image it cannot open
-        logger.debug("bd playlists via pycdlib failed for %s: %s; trying 7z", source_path, e)
-        return _read_playlists_udf(source_path)
-
-
-def probe_bd_playlists(source_path: str) -> list[BdPlaylist]:
-    """Every parseable playlist on the disc, ordered by name. Never raises."""
-    try:
-        files = _read_playlist_files(source_path)
-    except Exception as e:  # noqa: BLE001
-        logger.debug("bd playlists probe failed for %s: %s", source_path, e)
-        return []
+def parse_playlists(files: dict[str, bytes]) -> list[BdPlaylist]:
+    """Every parseable playlist, ordered by name."""
     parsed = (parse_mpls(data, name) for name, data in sorted(files.items()))
     return [playlist for playlist in parsed if playlist is not None]
 
 
+async def _extract_and_read(source_path: str) -> tuple[dict[str, bytes], str]:
+    """Run the extraction into a temp dir and read what it left. The files are a few KB each on local disk."""
+    with tempfile.TemporaryDirectory(prefix="arm-mpls-") as tmp:
+        reason = await extract_mpls(source_path, Path(tmp), PLAYLIST_TIMEOUT_SECONDS)
+        return (read_mpls_files(Path(tmp)) if reason == OK else {}), reason
+
+
+async def _read_files(source_path: str) -> tuple[dict[str, bytes], str]:
+    """(files, reason). A disc folder is read directly (no drive behind it); anything else through 7-Zip."""
+    if is_folder_source(source_path):
+        return await asyncio.to_thread(read_mpls_files, Path(source_path) / "BDMV" / "PLAYLIST"), OK
+    return await _extract_and_read(source_path)
+
+
 async def scan_playlists(device_path: str) -> list[BdPlaylist]:
-    """Read the disc's playlists in a thread under PLAYLIST_TIMEOUT_SECONDS; log the count and elapsed time."""
+    """The disc's playlists, bounded by PLAYLIST_TIMEOUT_SECONDS; logs the count, elapsed time and outcome."""
     started = time.monotonic()
     try:
-        playlists = await asyncio.wait_for(asyncio.to_thread(probe_bd_playlists, device_path), PLAYLIST_TIMEOUT_SECONDS)
-    except asyncio.TimeoutError:
-        playlists = []
+        files, reason = await _read_files(device_path)
+    except Exception as e:  # noqa: BLE001 — soft-fail: this read is optional
+        logger.debug("bd playlists read failed for %s: %s", device_path, e)
+        files, reason = {}, "error"
+    playlists = parse_playlists(files)
     elapsed_ms = int((time.monotonic() - started) * 1000)
-    logger.info("bd_playlists device=%s count=%d elapsed_ms=%d", device_path, len(playlists), elapsed_ms)
+    logger.info(
+        "bd_playlists device=%s count=%d elapsed_ms=%d reason=%s", device_path, len(playlists), elapsed_ms, reason
+    )
     return playlists

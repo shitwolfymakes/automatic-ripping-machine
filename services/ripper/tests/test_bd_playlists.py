@@ -1,18 +1,19 @@
-"""BD playlist reader: MPLS parsing from in-memory bytes, disc reads from a pycdlib image in tmp_path."""
+"""BD playlist reader: MPLS parsing from in-memory bytes, disc reads through a fake 7-Zip on PATH."""
 
 from __future__ import annotations
 
-import io
+import asyncio
 import logging
+import os
+import signal
 import struct
 from pathlib import Path
-from typing import Any
 
 import pytest
 from arm_common.schemas import BdPlaylist
 
-from arm_ripper.scan import bd_playlists, udf_image
-from arm_ripper.scan.bd_playlists import parse_mpls, probe_bd_playlists, scan_playlists
+from arm_ripper.scan import bd_playlists, playlist_extract
+from arm_ripper.scan.bd_playlists import parse_mpls, parse_playlists, read_mpls_files, scan_playlists
 
 TICKS = 45000
 
@@ -99,124 +100,227 @@ def test_parse_non_ascii_clip_name_is_none() -> None:
     assert parse_mpls(mpls([bytes(item)]), "00001.mpls") is None
 
 
-# --- disc reads -------------------------------------------------------------------
+# --- fake 7-Zip on PATH ---------------------------------------------------------------
 
 
-def _write_image(path: Path, files: dict[str, bytes]) -> None:
-    import pycdlib
+def _fake_7zz(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, body: str) -> Path:
+    """A `7zz` shell script as the only executable on PATH; `body` runs with $OUT = the -o directory."""
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    script = bin_dir / "7zz"
+    script.write_text(
+        '#!/bin/sh\nfor a in "$@"; do case "$a" in -o*) OUT="${a#-o}";; esac; done\n' + body + "\n",
+    )
+    script.chmod(0o755)
+    monkeypatch.setenv("PATH", str(bin_dir))
+    return bin_dir
 
-    iso = pycdlib.PyCdlib()
-    iso.new(udf="2.60")
-    iso.add_directory("/BDMV", udf_path="/BDMV")
-    iso.add_directory("/BDMV/PLAYLIST", udf_path="/BDMV/PLAYLIST")
-    iso.add_directory("/BDMV/PLAYLIST/SUB", udf_path="/BDMV/PLAYLIST/sub")
-    for i, (name, data) in enumerate(files.items()):
-        iso.add_fp(io.BytesIO(data), len(data), f"/BDMV/PLAYLIST/F{i:07d}.;1", udf_path=f"/BDMV/PLAYLIST/{name}")
-    iso.write(str(path))
-    iso.close()
+
+def _alive(pid: int) -> bool:
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    return True
 
 
-def test_probe_reads_playlists_from_a_udf_image(tmp_path: Path) -> None:
+async def test_hung_read_is_killed_and_reaped_before_returning(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    pid_file = tmp_path / "pid"
+    _fake_7zz(tmp_path, monkeypatch, f"echo $$ > {pid_file}\nexec /bin/sleep 5")
+    monkeypatch.setattr(bd_playlists, "PLAYLIST_TIMEOUT_SECONDS", 0.3)
     image = tmp_path / "disc.iso"
-    _write_image(
-        image,
+    image.write_bytes(b"x")
+    with caplog.at_level(logging.INFO, logger="arm_ripper.scan.bd_playlists"):
+        assert await scan_playlists(str(image)) == []
+    pid = int(pid_file.read_text())
+    try:
+        assert not _alive(pid), "the read process is still running (or unreaped) after scan_playlists returned"
+    finally:
+        if _alive(pid):
+            os.kill(pid, signal.SIGKILL)
+    assert any("count=0" in r.getMessage() and "reason=timeout" in r.getMessage() for r in caplog.records)
+
+
+async def test_event_loop_keeps_running_and_no_executor_thread_reads_the_drive(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    src = tmp_path / "src"
+    (src / "BDMV" / "PLAYLIST").mkdir(parents=True)
+    (src / "BDMV" / "PLAYLIST" / "00001.mpls").write_bytes(mpls([_item("00002", 30.0)]))
+    _fake_7zz(tmp_path, monkeypatch, f'/bin/sleep 0.4\n/bin/cp -r {src}/. "$OUT"/')
+    image = tmp_path / "disc.iso"
+    image.write_bytes(b"x")
+    loop = asyncio.get_running_loop()
+    offloaded: list[object] = []
+    real = loop.run_in_executor
+    monkeypatch.setattr(loop, "run_in_executor", lambda *a, **k: (offloaded.append(a), real(*a, **k))[1])
+    ticks = 0
+
+    async def _ticker() -> None:
+        nonlocal ticks
+        while True:
+            await asyncio.sleep(0.02)
+            ticks += 1
+
+    task = asyncio.create_task(_ticker())
+    try:
+        playlists = await scan_playlists(str(image))
+    finally:
+        task.cancel()
+    assert [p.name for p in playlists] == ["00001.mpls"]
+    assert ticks >= 10  # the loop ran during the ~0.4 s read
+    assert offloaded == []  # the drive is read by a killable subprocess, not an uninterruptible thread
+
+
+def _copy_into_out(tmp_path: Path, files: dict[str, bytes]) -> str:
+    """Shell body that lays `files` out under $OUT/BDMV/PLAYLIST like `7zz x ... BDMV/PLAYLIST/*.mpls` does."""
+    src = tmp_path / "src" / "BDMV" / "PLAYLIST"
+    src.mkdir(parents=True)
+    for name, data in files.items():
+        (src / name).write_bytes(data)
+    return f'/bin/cp -r {tmp_path / "src"}/. "$OUT"/'
+
+
+async def test_scan_extracts_through_7z_and_parses(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    body = _copy_into_out(
+        tmp_path,
         {
-            "00800.mpls": mpls([_item("00001", 120.0)], marks=[1]),
+            "00800.MPLS": mpls([_item("00001", 120.0)], marks=[1]),
             "00001.mpls": mpls([_item("00002", 30.0)]),
             "notes.txt": b"not a playlist",
             "00003.mpls": b"garbage",
         },
     )
-    playlists = probe_bd_playlists(str(image))
+    _fake_7zz(tmp_path, monkeypatch, body)
+    playlists = await scan_playlists("/dev/sr0")
     assert [p.name for p in playlists] == ["00001.mpls", "00800.mpls"]
     assert playlists[1].chapter_count == 1
     assert playlists[1].duration_seconds == 120
 
 
-def test_probe_image_without_bdmv_is_empty(tmp_path: Path) -> None:
-    import pycdlib
-
-    image = tmp_path / "dvd.iso"
-    iso = pycdlib.PyCdlib()
-    iso.new(udf="2.60")
-    iso.add_directory("/VIDEO_TS", udf_path="/VIDEO_TS")
-    iso.write(str(image))
-    iso.close()
-    assert probe_bd_playlists(str(image)) == []
+async def test_scan_passes_device_and_pattern_to_7z(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    argv = tmp_path / "argv"
+    _fake_7zz(tmp_path, monkeypatch, f'printf "%s\\n" "$@" > {argv}')
+    await scan_playlists("/dev/sr0")
+    lines = argv.read_text().splitlines()
+    assert lines[0] == "x"
+    assert lines[-3:] == ["--", "/dev/sr0", "BDMV/PLAYLIST/*.mpls"]
 
 
-def test_probe_reads_a_disc_folder(tmp_path: Path) -> None:
+async def test_scan_disc_without_bdmv_is_empty(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _fake_7zz(tmp_path, monkeypatch, "exit 1")  # 7z warns "no files to process"
+    assert await scan_playlists("/dev/sr0") == []
+
+
+async def test_scan_reads_a_disc_folder_without_7z(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("PATH", "")
     folder = tmp_path / "disc"
     (folder / "BDMV" / "PLAYLIST").mkdir(parents=True)
     (folder / "BDMV" / "PLAYLIST" / "00001.MPLS").write_bytes(mpls([_item("00004", 10.0)]))
     (folder / "BDMV" / "PLAYLIST" / "readme.txt").write_bytes(b"x")
-    playlists = probe_bd_playlists(str(folder))
+    playlists = await scan_playlists(str(folder))
     assert [(p.name, p.clips) for p in playlists] == [("00001.mpls", [4])]
 
 
-def test_probe_folder_without_playlist_dir_is_empty(tmp_path: Path) -> None:
+async def test_scan_folder_without_playlist_dir_is_empty(tmp_path: Path) -> None:
     (tmp_path / "BDMV").mkdir()
-    assert probe_bd_playlists(str(tmp_path)) == []
+    assert await scan_playlists(str(tmp_path)) == []
 
 
-def _pycdlib_refuses(monkeypatch: pytest.MonkeyPatch) -> None:
-    import pycdlib
-
-    def _open(self: Any, *_a: Any, **_k: Any) -> None:
-        raise pycdlib.pycdlibexception.PyCdlibInvalidISO("Valid ISO9660 filesystems must have at least one PVD")
-
-    monkeypatch.setattr(pycdlib.PyCdlib, "open", _open)
-
-
-def test_probe_uses_7z_when_pycdlib_refuses(monkeypatch: pytest.MonkeyPatch) -> None:
-    _pycdlib_refuses(monkeypatch)
-    data = mpls([_item("00009", 60.0)])
-    monkeypatch.setattr(
-        udf_image,
-        "list_files",
-        lambda _p: [("BDMV/index.bdmv", 4), ("BDMV/PLAYLIST/00100.mpls", len(data)), ("BDMV/PLAYLIST/00101.mpls", 1)],
-    )
-    monkeypatch.setattr(udf_image, "read_file", lambda _p, inner: data if inner.endswith("00100.mpls") else None)
-    playlists = probe_bd_playlists("/source/x.iso")
-    assert [p.name for p in playlists] == ["00100.mpls"]
-
-
-def test_probe_empty_when_7z_unavailable(monkeypatch: pytest.MonkeyPatch) -> None:
-    _pycdlib_refuses(monkeypatch)
-    monkeypatch.setattr(udf_image, "list_files", lambda _p: None)
-    assert probe_bd_playlists("/source/x.iso") == []
-
-
-def test_probe_never_raises(monkeypatch: pytest.MonkeyPatch) -> None:
-    def _boom(_p: str) -> dict[str, bytes]:
-        raise OSError("disc gone")
-
-    monkeypatch.setattr(bd_playlists, "_read_playlist_files", _boom)
-    assert probe_bd_playlists("/dev/sr0") == []
-
-
-# --- scan_playlists ---------------------------------------------------------------
-
-
-async def test_scan_playlists_logs_count_and_elapsed(
-    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
-) -> None:
-    found = [BdPlaylist(name="00001.mpls", clips=[1], clip_seconds=[1.0], duration_seconds=1, chapter_count=0)]
-    monkeypatch.setattr(bd_playlists, "probe_bd_playlists", lambda _p: found)
-    with caplog.at_level(logging.INFO, logger="arm_ripper.scan.bd_playlists"):
-        assert await scan_playlists("/dev/sr0") == found
-    assert any(r.getMessage().startswith("bd_playlists device=/dev/sr0 count=1 elapsed_ms=") for r in caplog.records)
-
-
-async def test_scan_playlists_times_out_to_empty(
-    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
-) -> None:
-    import threading
-
-    release = threading.Event()
-    monkeypatch.setattr(bd_playlists, "probe_bd_playlists", lambda _p: release.wait(5) and [])
-    monkeypatch.setattr(bd_playlists, "PLAYLIST_TIMEOUT_SECONDS", 0.05)
+async def test_scan_without_7z_is_empty_and_logged(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog) -> None:
+    monkeypatch.setenv("PATH", str(tmp_path))
     with caplog.at_level(logging.INFO, logger="arm_ripper.scan.bd_playlists"):
         assert await scan_playlists("/dev/sr0") == []
-    release.set()
-    assert any("count=0" in r.getMessage() for r in caplog.records)
+    assert any("count=0" in r.getMessage() and "reason=no-7z" in r.getMessage() for r in caplog.records)
+
+
+async def test_scan_spawn_failure_is_empty(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog) -> None:
+    bin_dir = _fake_7zz(tmp_path, monkeypatch, "")
+    (bin_dir / "7zz").write_text("not a script, no shebang \x00")  # exec format error
+    with caplog.at_level(logging.INFO, logger="arm_ripper.scan.bd_playlists"):
+        assert await scan_playlists("/dev/sr0") == []
+    assert any("reason=spawn-failed" in r.getMessage() for r in caplog.records)
+
+
+async def test_scan_never_raises(monkeypatch: pytest.MonkeyPatch, caplog) -> None:
+    async def _boom(_p: str) -> tuple[dict[str, bytes], str]:
+        raise OSError("disc gone")
+
+    monkeypatch.setattr(bd_playlists, "_read_files", _boom)
+    with caplog.at_level(logging.INFO, logger="arm_ripper.scan.bd_playlists"):
+        assert await scan_playlists("/dev/sr0") == []
+    assert any("reason=error" in r.getMessage() for r in caplog.records)
+
+
+async def test_scan_logs_count_and_elapsed(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog) -> None:
+    _fake_7zz(tmp_path, monkeypatch, _copy_into_out(tmp_path, {"00001.mpls": mpls([_item("00002", 1.0)])}))
+    with caplog.at_level(logging.INFO, logger="arm_ripper.scan.bd_playlists"):
+        await scan_playlists("/dev/sr0")
+    assert any(
+        r.getMessage().startswith("bd_playlists device=/dev/sr0 count=1 elapsed_ms=")
+        and r.getMessage().endswith("reason=ok")
+        for r in caplog.records
+    )
+
+
+async def test_cancelled_scan_kills_and_reaps_the_read(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    pid_file = tmp_path / "pid"
+    _fake_7zz(tmp_path, monkeypatch, f"echo $$ > {pid_file}\nexec /bin/sleep 5")
+    task = asyncio.create_task(scan_playlists("/dev/sr0"))
+    while not pid_file.exists() or not pid_file.read_text().strip():
+        await asyncio.sleep(0.01)
+    pid = int(pid_file.read_text())
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    try:
+        assert not _alive(pid)
+    finally:
+        if _alive(pid):
+            os.kill(pid, signal.SIGKILL)
+
+
+def test_read_mpls_files_missing_directory(tmp_path: Path) -> None:
+    assert read_mpls_files(tmp_path / "nope") == {}
+
+
+def test_parse_playlists_orders_by_name_and_drops_garbage() -> None:
+    files = {"00002.mpls": mpls([_item("00001", 1.0)]), "00001.mpls": mpls([_item("00001", 1.0)]), "00003.mpls": b""}
+    assert [p.name for p in parse_playlists(files)] == ["00001.mpls", "00002.mpls"]
+
+
+class _WedgedProc:
+    """A child that ignores SIGKILL (drive I/O wedge): wait() never completes."""
+
+    pid = 4242
+    returncode: int | None = None
+
+    def __init__(self) -> None:
+        self.killed = False
+
+    def kill(self) -> None:
+        self.killed = True
+
+    async def wait(self) -> int:
+        await asyncio.sleep(60)
+        return -9
+
+
+async def test_reap_gives_up_on_a_wedged_child_instead_of_hanging(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    monkeypatch.setattr(playlist_extract, "REAP_TIMEOUT_SECONDS", 0.05)
+    proc = _WedgedProc()
+    with caplog.at_level(logging.ERROR, logger="arm_ripper.scan.playlist_extract"):
+        await playlist_extract._reap(proc)  # type: ignore[arg-type]
+    assert proc.killed
+    assert any("did not exit" in r.getMessage() for r in caplog.records)
+
+
+async def test_reap_leaves_a_finished_child_alone() -> None:
+    proc = _WedgedProc()
+    proc.returncode = 0
+    await playlist_extract._reap(proc)  # type: ignore[arg-type]
+    assert not proc.killed
