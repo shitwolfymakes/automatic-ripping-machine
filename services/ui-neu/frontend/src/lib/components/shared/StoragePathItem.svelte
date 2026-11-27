@@ -3,7 +3,7 @@
 	// and writable, how much space it has free, and how to fix it when it
 	// isn't.
 	import type { PathStatus, StorageRoot } from '$lib/types/api.gen';
-	import { freeLabel, pathState, storageHelp, storageLabel } from '$lib/dashboard/system-health';
+	import { freeLabel, pathState, placementLabel, storageHelp, storageLabel } from '$lib/dashboard/system-health';
 	import Glyph from '$lib/components/shared/Glyph.svelte';
 	import CopyBlock from '$lib/components/shared/CopyBlock.svelte';
 	import HealthItem from './HealthItem.svelte';
@@ -32,7 +32,10 @@
 		<span class="chip chip-sm {folder.writable ? 'chip-success' : 'chip-danger'}">
 			<Glyph name={folder.writable ? 'check' : 'x'} class="h-3 w-3" />{folder.writable ? 'Writable' : 'Not writable'}
 		</span>
-		<span class="chip chip-sm">{freeLabel(storage, folder.name)}</span>
+		<span class="chip chip-sm">{freeLabel(storage, folder.name, folder.placement)}</span>
+		{#if folder.placement}
+			<span class="chip chip-sm">{placementLabel(folder.placement)}</span>
+		{/if}
 	{/snippet}
 	{#if st !== 'ok'}
 		{#if folder.host_path}

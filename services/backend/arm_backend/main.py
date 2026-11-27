@@ -72,7 +72,7 @@ from arm_backend.seeders import run_seeders
 from arm_backend.thediscdb_schedule import thediscdb_refresh_loop
 from arm_backend.stager import TrackStager, set_active_stager, sweep_track_stages
 from arm_backend.transcode_dispatcher import TranscodeDispatcher, set_active_dispatcher
-from arm_backend.utils import ensure_roots, default_roots
+from arm_backend.utils import default_roots, disk_refresh_roots, ensure_roots
 from arm_backend.ws import WSHub
 from arm_backend.ws.router import router as ws_router
 from arm_common import Config, configure_service_logging
@@ -441,13 +441,8 @@ class _BackendServices:
 
     def _start_disk_refresher(self) -> None:
         """Start the periodic disk-usage refresh of the data roots."""
-        _roots_map = getattr(self._app.state, "system_paths", None) or {
-            "MEDIA_ROOT": settings.MEDIA_ROOT,
-            "RAW_ROOT": settings.RAW_ROOT,
-            "ISO_INGRESS_ROOT": settings.ISO_INGRESS_ROOT,
-            "LOG_DIR": "/logs",
-        }
-        self._disk_refresher = DiskRefresher(list(_roots_map.values()))
+        roots = disk_refresh_roots(getattr(self._app.state, "system_paths", None))
+        self._disk_refresher = DiskRefresher(roots)
         self._disk_refresher_task = asyncio.create_task(self._disk_refresher.run())
         self._app.state.disk_refresher = self._disk_refresher
 

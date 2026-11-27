@@ -47,7 +47,7 @@ function withConfig(patch: Record<string, unknown>) {
 	vi.mocked(fetchSettings).mockResolvedValueOnce({
 		config: { ...mockConfig, ...patch },
 		schema: mockSchema,
-		infra: { RAW_ROOT: '/raw' },
+		infra: { RAW_ROOT: '/raw', STAGING_ROOT: '/raw/.staging' },
 		arm_config: {},
 		transcoder_config: null
 	} as never);
@@ -210,7 +210,7 @@ vi.mock('$lib/api/settings', () => ({
 		Promise.resolve({
 			config: mockConfig,
 			schema: mockSchema,
-			infra: { RAW_ROOT: '/raw' },
+			infra: { RAW_ROOT: '/raw', STAGING_ROOT: '/raw/.staging' },
 			arm_config: {},
 			transcoder_config: null
 		})
@@ -492,7 +492,7 @@ describe('Settings Page', () => {
 						...mockSchema.groups.slice(2)
 					]
 				},
-				infra: { RAW_ROOT: '/raw' },
+				infra: { RAW_ROOT: '/raw', STAGING_ROOT: '/raw/.staging' },
 				arm_config: {},
 				transcoder_config: null
 			} as never);
@@ -803,7 +803,7 @@ describe('Settings Page', () => {
 						...mockSchema.groups.slice(2)
 					]
 				},
-				infra: { RAW_ROOT: '/raw' },
+				infra: { RAW_ROOT: '/raw', STAGING_ROOT: '/raw/.staging' },
 				arm_config: {},
 				transcoder_config: null
 			} as never);

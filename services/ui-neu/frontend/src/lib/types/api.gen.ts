@@ -3975,6 +3975,7 @@ export type PathStatus = {
      * Gid
      */
     gid?: number | null;
+    placement?: StoragePlacement | null;
 };
 
 /**
@@ -5214,6 +5215,13 @@ export type StatsResponse = {
 };
 
 /**
+ * StoragePlacement
+ *
+ * Where the staging area sits relative to the raw folder.
+ */
+export type StoragePlacement = 'inside_raw' | 'same_device' | 'separate_device';
+
+/**
  * StorageRoot
  */
 export type StorageRoot = {
@@ -5241,6 +5249,7 @@ export type StorageRoot = {
      * Percent
      */
     percent: number;
+    placement?: StoragePlacement | null;
 };
 
 /**

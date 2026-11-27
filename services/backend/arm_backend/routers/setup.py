@@ -38,7 +38,9 @@ router = APIRouter(prefix="/api/setup", tags=["setup"])
 # The diagnostics checks the "System check" step is about. Drives, the MakeMKV
 # key and decryption data are later steps' concern, so their warnings never
 # hold the system step in "attention". The UI's SystemStep uses the same set.
-_SYSTEM_STEP_CHECKS = frozenset({"config", "MEDIA_ROOT", "RAW_ROOT", "LOG_DIR", "ripper_manager", "transcoder"})
+_SYSTEM_STEP_CHECKS = frozenset(
+    {"config", "MEDIA_ROOT", "RAW_ROOT", "STAGING_ROOT", "LOG_DIR", "ripper_manager", "transcoder"}
+)
 
 
 def system_checks_ok(resp: SystemDiagnosticsResponse) -> bool:

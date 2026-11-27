@@ -63,6 +63,23 @@ describe('BottomStatsBar', () => {
 		expect(screen.getByText(/Raw/)).toBeInTheDocument();
 	});
 
+	it("draws a bar for a staging area on its own disk, and none for one that shares raw's", () => {
+		const store = resources as unknown as Writable<Record<string, unknown>>;
+		const staging = { name: 'STAGING_ROOT', path: '/staging', total_gb: 50, used_gb: 5, free_gb: 45, percent: 10 };
+		let saved: unknown;
+		store.update((r) => {
+			saved = r.storage;
+			return { ...r, storage: [{ ...staging, placement: 'separate_device' }] };
+		});
+		const view = renderComponent(BottomStatsBar);
+		expect(screen.getByText(/STAGING_ROOT/)).toBeInTheDocument();
+		view.unmount();
+		store.update((r) => ({ ...r, storage: [{ ...staging, placement: 'inside_raw' }] }));
+		renderComponent(BottomStatsBar);
+		expect(screen.queryByText(/STAGING_ROOT/)).toBeNull();
+		store.update((r) => ({ ...r, storage: saved }));
+	});
+
 	it('renders CPU, memory and per-root storage', () => {
 		renderComponent(BottomStatsBar);
 		expect(screen.getByText(/Raw/)).toBeInTheDocument();
