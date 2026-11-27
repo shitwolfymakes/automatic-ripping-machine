@@ -377,12 +377,11 @@ CONFIG_FIELD_META: list[ConfigFieldMeta] = [
     ),
     ConfigFieldMeta(
         key="auto_transcode_on_idle",
-        group="Transcoding",
+        group="Defaults",
         tier="operator",
-        label="Auto-apply default session after rip",
-        help="When a rip completes, automatically apply the drive's default session "
-        "(queue its transcodes). An explicit per-rip session choice always applies, "
-        "and the default session still shapes the rip either way.",
+        label="Apply these defaults automatically after each rip",
+        help="When a rip completes, apply its default session (the drive's default when it fits the disc, "
+        "else the media-type route) and queue its transcodes. A session chosen for one rip always applies.",
         type="bool",
         editable=True,
     ),

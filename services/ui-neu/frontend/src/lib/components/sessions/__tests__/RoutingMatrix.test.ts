@@ -1,3 +1,11 @@
+// Every branch of RoutingMatrix's own code is covered. The coverage tool
+// still reports eight open arms, all Svelte's `(...) ?? ''` arms, one per
+// `{...}` in a text or attribute value, and none of these values is ever
+// null: the media and disc labels in each select's aria-label, the select's
+// value (routeCellView gives '' for no route), each option's value (a
+// session's id is required), and the Other-routes label and session name, in
+// the row text and in the Clear button's aria-label (sessionNameFor falls
+// back to the id).
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { renderComponent, screen, fireEvent, cleanup, waitFor } from '$lib/testing/render';
 import type { SessionRouteView, SessionView } from '$lib/types/api.gen';
@@ -82,10 +90,10 @@ afterEach(async () => {
 describe('RoutingMatrix layout', () => {
 	it('shows the heading, the spec line and the four disc columns', async () => {
 		await renderMatrix();
-		expect(screen.getByRole('heading', { name: 'Routing' })).toBeInTheDocument();
+		expect(screen.getByRole('heading', { name: 'Defaults' })).toBeInTheDocument();
 		expect(
 			screen.getByText(
-				"A route applies the chosen session when a disc's identified media type matches. A drive's default session wins when it fits the disc's media type. A disc-type route (DVD, Blu-ray, CD) beats Any disc."
+				'These are all optional. Automatically apply a session to a media type and disc type. "Any disc" is overridden by the exact disc type\'s session when one is set.'
 			)
 		).toBeInTheDocument();
 		for (const col of ['Any disc', 'DVD', 'Blu-ray', 'CD']) {
@@ -250,6 +258,44 @@ describe('RoutingMatrix saves', () => {
 		fetchSessionRoutes.mockRejectedValue('boom');
 		renderComponent(RoutingMatrix, { props: {} });
 		expect(await screen.findByText('Failed to load session routes')).toBeInTheDocument();
+	});
+
+	it('two failed saves with overlapping reloads update the options in place', async () => {
+		// Each cell has its own pending key, so a second save can fail while the
+		// first one's reload is still in flight. The second reload then lands on a
+		// table the first one rebuilt, and each option updates without a rebuild.
+		const deferred = <T>() => {
+			let resolve!: (v: T) => void;
+			let reject!: (e: unknown) => void;
+			const promise = new Promise<T>((res, rej) => {
+				resolve = res;
+				reject = rej;
+			});
+			return { promise, resolve, reject };
+		};
+		const firstSave = deferred<SessionRouteView>();
+		const secondSave = deferred<SessionRouteView>();
+		const firstReload = deferred<SessionRouteView[]>();
+		const secondReload = deferred<SessionRouteView[]>();
+		const cd = await renderMatrix([], [music]);
+		upsertSessionRoute.mockReturnValueOnce(firstSave.promise).mockReturnValueOnce(secondSave.promise);
+		fetchSessionRoutes.mockReturnValueOnce(firstReload.promise).mockReturnValueOnce(secondReload.promise);
+		fetchSessions.mockResolvedValueOnce([music]).mockResolvedValueOnce([{ ...music, name: 'Music to ALAC' }]);
+		await fireEvent.change(cd, { target: { value: 'ses_music' } });
+		await fireEvent.change(screen.getByLabelText('Music, DVD'), { target: { value: 'ses_music' } });
+		expect(upsertSessionRoute).toHaveBeenCalledTimes(2);
+		firstSave.reject(new Error('save refused'));
+		expect(await screen.findByText('Loading...')).toBeInTheDocument();
+		secondSave.reject(new Error('save refused'));
+		await waitFor(() => expect(fetchSessionRoutes).toHaveBeenCalledTimes(3));
+		firstReload.resolve([]);
+		const rebuilt = (await screen.findByLabelText('Music, CD')) as HTMLSelectElement;
+		const option = rebuilt.options[1];
+		expect(option.textContent).toBe('Music to FLAC');
+		secondReload.resolve([]);
+		await waitFor(() => expect(option.textContent).toBe('Music to ALAC'));
+		expect(option.value).toBe('ses_music');
+		expect((screen.getByLabelText('Music, CD') as HTMLSelectElement).options[1]).toBe(option);
 	});
 
 	it('the feedback message goes away after 4 seconds', async () => {
