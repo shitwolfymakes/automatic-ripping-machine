@@ -1,12 +1,12 @@
 """Where the staging area sits relative to the raw folder.
 
 Two binds of one disk cannot hard link (EXDEV), so a stage outside raw is a full copy unless
-it lives on its own device. The pure decision is `staging_placement`; `root_placement` stats the
-two roots and applies it to the staging root only."""
-
-import os
+it lives on its own device. The pure decision is `staging_placement`; `root_placement` reads the
+device ids the disk refresher cached for the two roots (never the mount itself) and applies it
+to the staging root only."""
 
 from arm_backend.config import Settings, staging_inside_raw
+from arm_backend.disk_usage_cache import get_device
 from arm_common.schemas import StoragePlacement
 
 STAGING_ROOT_NAME = "STAGING_ROOT"
@@ -22,14 +22,9 @@ def staging_placement(inside: bool, staging_dev: int | None, raw_dev: int | None
     return StoragePlacement.SAME_DEVICE if staging_dev == raw_dev else StoragePlacement.SEPARATE_DEVICE
 
 
-def _device_of(path: str | None) -> int | None:
-    """The st_dev of `path`, or None when it cannot be stat-ed."""
-    if not path:
-        return None
-    try:
-        return os.stat(path).st_dev
-    except OSError:
-        return None
+def _cached_device(path: str | None) -> int | None:
+    """The st_dev the disk refresher cached for `path`; None when it has none yet."""
+    return get_device(path) if path else None
 
 
 def root_placement(name: str, roots: dict[str, str], s: Settings) -> StoragePlacement | None:
@@ -37,5 +32,5 @@ def root_placement(name: str, roots: dict[str, str], s: Settings) -> StoragePlac
     if name != STAGING_ROOT_NAME:
         return None
     return staging_placement(
-        staging_inside_raw(s), _device_of(roots.get(STAGING_ROOT_NAME)), _device_of(roots.get(RAW_ROOT_NAME))
+        staging_inside_raw(s), _cached_device(roots.get(STAGING_ROOT_NAME)), _cached_device(roots.get(RAW_ROOT_NAME))
     )

@@ -896,12 +896,14 @@ def test_diagnostics_lists_staging_with_placement_and_host_path(signing_key: byt
     db = FakeSession()
     _seed(db)
     app, token = _make_app(signing_key, db, tmp=tmp_path)
+    roots = app.state.system_paths
+    monkeypatch.setattr("arm_backend.storage_placement.get_device", lambda path: 1 if path in roots.values() else None)
     body = _diag(app, token)
     by_name = {p["name"]: p for p in body["paths"]}
     staging = by_name["STAGING_ROOT"]
     assert staging["exists"] is True and staging["writable"] is True
     assert staging["host_path"] == "/srv/arm/staging"
-    assert staging["placement"] == "same_device"  # two tmp dirs share one disk
+    assert staging["placement"] == "same_device"  # both roots cached on one device
     assert by_name["RAW_ROOT"]["placement"] is None
     assert {ch["name"]: ch["status"] for ch in body["checks"]}["STAGING_ROOT"] == "ok"
 

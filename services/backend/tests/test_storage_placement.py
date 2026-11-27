@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from pathlib import Path
-
 import pytest
 
 from arm_backend import storage_placement as sp
@@ -26,39 +24,40 @@ def test_staging_placement(inside: bool, staging_dev: int | None, raw_dev: int |
     assert sp.staging_placement(inside, staging_dev, raw_dev) == expected
 
 
-def test_device_of_reads_st_dev_and_tolerates_missing(tmp_path: Path) -> None:
-    assert sp._device_of(str(tmp_path)) == tmp_path.stat().st_dev
-    assert sp._device_of(str(tmp_path / "gone")) is None
-    assert sp._device_of(None) is None
+def _cache_devices(monkeypatch: pytest.MonkeyPatch, devices: dict[str, int]) -> None:
+    monkeypatch.setattr(sp, "get_device", lambda path: devices.get(path))
 
 
-def test_root_placement_is_only_set_for_staging(tmp_path: Path) -> None:
-    roots = {"RAW_ROOT": str(tmp_path), "STAGING_ROOT": str(tmp_path)}
+def test_root_placement_is_only_set_for_staging() -> None:
+    roots = {"RAW_ROOT": "/raw", "STAGING_ROOT": "/staging"}
     assert sp.root_placement("RAW_ROOT", roots, base_settings) is None
 
 
-def test_root_placement_inside_raw_when_staging_is_unset(tmp_path: Path) -> None:
+def test_root_placement_inside_raw_when_staging_is_unset() -> None:
     cfg = base_settings.model_copy(update={"ARM_HOST_STAGING_PATH": ""})
-    roots = {"RAW_ROOT": str(tmp_path), "STAGING_ROOT": str(tmp_path / ".staging")}
+    roots = {"RAW_ROOT": "/raw", "STAGING_ROOT": "/raw/.staging"}
     assert sp.root_placement("STAGING_ROOT", roots, cfg) == StoragePlacement.INSIDE_RAW
 
 
-def test_root_placement_same_device_for_a_separate_path_on_one_disk(tmp_path: Path) -> None:
-    (tmp_path / "raw").mkdir()
-    (tmp_path / "stage").mkdir()
-    cfg = base_settings.model_copy(update={"ARM_HOST_RAW_PATH": "/h/raw", "ARM_HOST_STAGING_PATH": "/h/stage"})
-    roots = {"RAW_ROOT": str(tmp_path / "raw"), "STAGING_ROOT": str(tmp_path / "stage")}
-    assert sp.root_placement("STAGING_ROOT", roots, cfg) == StoragePlacement.SAME_DEVICE
+_OUTSIDE = base_settings.model_copy(update={"ARM_HOST_RAW_PATH": "/h/raw", "ARM_HOST_STAGING_PATH": "/h/stage"})
+_ROOTS = {"RAW_ROOT": "/raw", "STAGING_ROOT": "/staging"}
 
 
-def test_root_placement_separate_device(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    cfg = base_settings.model_copy(update={"ARM_HOST_RAW_PATH": "/h/raw", "ARM_HOST_STAGING_PATH": "/h/stage"})
-    monkeypatch.setattr(sp, "_device_of", lambda path: 2 if path == "/staging" else 1)
-    roots = {"RAW_ROOT": "/raw", "STAGING_ROOT": "/staging"}
-    assert sp.root_placement("STAGING_ROOT", roots, cfg) == StoragePlacement.SEPARATE_DEVICE
+def test_root_placement_same_device_for_a_separate_path_on_one_disk(monkeypatch: pytest.MonkeyPatch) -> None:
+    _cache_devices(monkeypatch, {"/raw": 1, "/staging": 1})
+    assert sp.root_placement("STAGING_ROOT", _ROOTS, _OUTSIDE) == StoragePlacement.SAME_DEVICE
 
 
-def test_root_placement_unknown_when_staging_is_missing(tmp_path: Path) -> None:
-    cfg = base_settings.model_copy(update={"ARM_HOST_RAW_PATH": "/h/raw", "ARM_HOST_STAGING_PATH": "/h/stage"})
-    roots = {"RAW_ROOT": str(tmp_path), "STAGING_ROOT": str(tmp_path / "gone")}
-    assert sp.root_placement("STAGING_ROOT", roots, cfg) is None
+def test_root_placement_separate_device(monkeypatch: pytest.MonkeyPatch) -> None:
+    _cache_devices(monkeypatch, {"/raw": 1, "/staging": 2})
+    assert sp.root_placement("STAGING_ROOT", _ROOTS, _OUTSIDE) == StoragePlacement.SEPARATE_DEVICE
+
+
+def test_root_placement_unknown_before_the_refresher_has_cached_both(monkeypatch: pytest.MonkeyPatch) -> None:
+    _cache_devices(monkeypatch, {"/raw": 1})
+    assert sp.root_placement("STAGING_ROOT", _ROOTS, _OUTSIDE) is None
+
+
+def test_root_placement_unknown_without_a_staging_path(monkeypatch: pytest.MonkeyPatch) -> None:
+    _cache_devices(monkeypatch, {"/raw": 1})
+    assert sp.root_placement("STAGING_ROOT", {"RAW_ROOT": "/raw"}, _OUTSIDE) is None
