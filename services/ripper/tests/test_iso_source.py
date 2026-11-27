@@ -147,6 +147,16 @@ def test_makemkv_source_url_dev_for_device() -> None:
 # --- scan_disc command-line ------------------------------------------------
 
 
+@pytest.fixture(autouse=True)
+def _no_disc_playlists(monkeypatch: pytest.MonkeyPatch) -> None:
+    """scan_disc reads playlists off the source first (a 7z subprocess); keep these cmd-shape tests off it."""
+
+    async def _none(_source: str) -> list:
+        return []
+
+    monkeypatch.setattr(scan_makemkv, "scan_playlists", _none)
+
+
 @pytest.mark.asyncio
 async def test_scan_disc_uses_iso_source_url_for_iso_path(monkeypatch, tmp_path: Path) -> None:
     iso = tmp_path / "sintel.iso"
