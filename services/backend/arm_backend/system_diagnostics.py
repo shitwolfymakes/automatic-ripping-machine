@@ -15,9 +15,10 @@ from fastapi import Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import col, select
 
-from arm_backend.config import effective_transcode_capable, settings
+from arm_backend.config import effective_transcode_capable, root_host_path, settings
 from arm_backend.constants import CONFIG_SINGLETON_ID
 from arm_backend.makemkv_status import makemkv_state_detail
+from arm_backend.storage_placement import root_placement
 from arm_backend.ripper_manager import RipperManager
 from arm_backend.transcode_dispatcher import TranscodeDispatcher
 from arm_backend.transcode_queue import count_queued_encode_tasks
@@ -49,22 +50,19 @@ def system_roots(request: Request) -> dict[str, str]:
     return default_roots()
 
 
-# Host-side bind source for each container root, so the report can print the
-# exact `chown` the operator runs on the server.
-_HOST_PATH_SETTING = {
-    "MEDIA_ROOT": "ARM_HOST_MEDIA_PATH",
-    "RAW_ROOT": "ARM_HOST_RAW_PATH",
-    "LOG_DIR": "ARM_HOST_LOGS_PATH",
-}
-
-
-def _path_status(name: str, path: str) -> PathStatus:
+def _path_status(name: str, path: str, roots: dict[str, str]) -> PathStatus:
     exists = os.path.isdir(path)
     writable = exists and os.access(path, os.W_OK)
-    setting = _HOST_PATH_SETTING.get(name)
-    host = (getattr(settings, setting, "") or None) if setting else None
     return PathStatus(
-        name=name, path=path, exists=exists, writable=writable, host_path=host, uid=os.getuid(), gid=os.getgid()
+        name=name,
+        path=path,
+        exists=exists,
+        writable=writable,
+        # Host-side bind source, so the report can print the exact `chown` the operator runs.
+        host_path=root_host_path(name, settings),
+        uid=os.getuid(),
+        gid=os.getgid(),
+        placement=root_placement(name, roots, settings),
     )
 
 
@@ -94,7 +92,7 @@ def _path_checks(roots: dict[str, str]) -> tuple[list[PathStatus], list[SystemDi
     paths: list[PathStatus] = []
     checks: list[SystemDiagnosticCheck] = []
     for name, path in roots.items():
-        ps = _path_status(name, path)
+        ps = _path_status(name, path, roots)
         paths.append(ps)
         if ps.exists and ps.writable:
             checks.append(SystemDiagnosticCheck(name=name, status="ok"))

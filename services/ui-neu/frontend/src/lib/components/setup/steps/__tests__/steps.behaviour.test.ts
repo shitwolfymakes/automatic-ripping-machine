@@ -115,6 +115,22 @@ describe('SystemStep', () => {
 	});
 });
 
+describe('SystemStep staging', () => {
+	it('is held in attention by a staging problem', async () => {
+		diagnostics.mockResolvedValue({
+			status: 'warning',
+			checks: [
+				{ name: 'config', status: 'ok' },
+				{ name: 'STAGING_ROOT', status: 'warning', detail: '/staging: exists=False writable=False' }
+			],
+			paths: []
+		});
+		const { component } = renderComponent(SystemStep, { props: { view: view() } });
+		await screen.findByText(/problem to fix/);
+		expect(await (component as unknown as Step).commit()).toBe('attention');
+	});
+});
+
 describe('DrivesStep', () => {
 	it('with no drives: troubleshooting, the ISO env line, and attention', async () => {
 		diagnostics.mockResolvedValue({ status: 'ok', checks: [{ name: 'ripper_manager', status: 'ok' }], paths: [] });

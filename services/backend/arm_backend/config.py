@@ -276,7 +276,7 @@ def effective_transcode_capable(s: Settings) -> bool:
 DEFAULT_STAGING_RELPATH = ".staging"
 
 
-def _staging_inside_raw(s: Settings) -> bool:
+def staging_inside_raw(s: Settings) -> bool:
     """True when staging is unset, or is raw itself or a path under it (compared as normalised paths)."""
     if not s.ARM_HOST_STAGING_PATH:
         return True
@@ -299,7 +299,7 @@ def staging_root(s: Settings) -> Path:
 
     Inside raw (`<raw>/.staging`, or the configured subpath of raw) while staging shares raw's
     mount, so a stage can be a hard link (D26); `STAGING_ROOT` otherwise."""
-    if not _staging_inside_raw(s):
+    if not staging_inside_raw(s):
         return Path(s.STAGING_ROOT)
     return Path(s.RAW_ROOT) / _staging_relpath(s)
 
@@ -307,6 +307,25 @@ def staging_root(s: Settings) -> Path:
 def effective_staging_host_path(s: Settings) -> str:
     """The host path the transcoder mounts as /staging."""
     return s.ARM_HOST_STAGING_PATH or f"{s.ARM_HOST_RAW_PATH}/{DEFAULT_STAGING_RELPATH}"
+
+
+def root_host_path(name: str, s: Settings) -> str | None:
+    """The host-side bind source of a container root, or None when it is unknown.
+
+    Staging's host path is reported only once the host raw path is set: without it the
+    transcoder is not wired and `effective_staging_host_path` would name `/.staging`."""
+    match name:
+        case "MEDIA_ROOT":
+            host = s.ARM_HOST_MEDIA_PATH
+        case "RAW_ROOT":
+            host = s.ARM_HOST_RAW_PATH
+        case "LOG_DIR":
+            host = s.ARM_HOST_LOGS_PATH
+        case "STAGING_ROOT":
+            host = effective_staging_host_path(s) if s.ARM_HOST_RAW_PATH else ""
+        case _:
+            host = ""
+    return host or None
 
 
 settings = Settings()  # type: ignore[call-arg]  # fields loaded from env by pydantic-settings

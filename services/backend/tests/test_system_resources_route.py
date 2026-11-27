@@ -103,7 +103,37 @@ def test_resources_shape(signing_key: bytes, monkeypatch) -> None:
         "used_gb": 40.0,
         "free_gb": 60.0,
         "percent": 40.0,
+        "placement": None,
     }
+
+
+def test_resources_staging_root_carries_its_placement(signing_key: bytes, monkeypatch) -> None:
+    monkeypatch.setattr(system_mod.psutil, "cpu_percent", lambda interval=None: 1.0)
+    monkeypatch.setattr(
+        system_mod.psutil,
+        "virtual_memory",
+        lambda: SimpleNamespace(total=1073741824, used=0, available=1073741824, percent=0.0),
+    )
+    monkeypatch.setattr(system_mod.psutil, "sensors_temperatures", lambda: {})
+    monkeypatch.setattr(
+        system_mod, "system_roots", lambda request: {"RAW_ROOT": "/raw", "STAGING_ROOT": "/raw/.staging"}
+    )
+    monkeypatch.setattr(
+        system_mod,
+        "get_disk_usage",
+        lambda path: {"total": 1073741824, "used": 0, "free": 1073741824, "percent": 0.0},
+    )
+    monkeypatch.setattr(
+        system_mod, "root_placement", lambda name, roots, s: "inside_raw" if name == "STAGING_ROOT" else None
+    )
+
+    app, token = _make_app(signing_key)
+    with TestClient(app) as c:
+        resp = c.get("/api/system/resources", headers=_auth(token))
+
+    by_name = {r["name"]: r for r in resp.json()["storage"]}
+    assert by_name["STAGING_ROOT"]["placement"] == "inside_raw"
+    assert by_name["RAW_ROOT"]["placement"] is None
 
 
 def test_resources_omits_uncached_root(signing_key: bytes, monkeypatch) -> None:

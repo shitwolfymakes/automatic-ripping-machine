@@ -1,11 +1,18 @@
 // System health's labels, and the small decisions its summary and cards
 // make about a result, a check, a storage path or a service.
-import type { PathStatus, StorageRoot, SystemDiagnosticCheck, SystemDiagnosticsResponse } from '$lib/types/api.gen';
+import type {
+	PathStatus,
+	StoragePlacement,
+	StorageRoot,
+	SystemDiagnosticCheck,
+	SystemDiagnosticsResponse
+} from '$lib/types/api.gen';
 
 /** Operator-facing names for the storage roots. */
 export const STORAGE_LABELS: Record<string, string> = {
 	MEDIA_ROOT: 'Media library',
 	RAW_ROOT: 'Raw rips',
+	STAGING_ROOT: 'Staging',
 	LOG_DIR: 'Logs'
 };
 
@@ -13,6 +20,7 @@ export const STORAGE_LABELS: Record<string, string> = {
 export const STORAGE_HELP: Record<string, string> = {
 	MEDIA_ROOT: 'Finished files are filed here.',
 	RAW_ROOT: 'Rips land here before they are named and moved.',
+	STAGING_ROOT: 'Transcoders read rips from here. Copies are released after their transcodes.',
 	LOG_DIR: 'Rip and system logs.'
 };
 
@@ -25,6 +33,7 @@ export const SYSTEM_STEP_CHECKS: ReadonlySet<string> = new Set([
 	'config',
 	'MEDIA_ROOT',
 	'RAW_ROOT',
+	'STAGING_ROOT',
 	'LOG_DIR',
 	...SERVICE_CHECKS
 ]);
@@ -77,6 +86,7 @@ const CHECK_LABELS: Record<string, string> = {
 	config: 'Configuration',
 	MEDIA_ROOT: 'Media root',
 	RAW_ROOT: 'Raw root',
+	STAGING_ROOT: 'Staging area',
 	LOG_DIR: 'Log directory',
 	drives: 'Drives',
 	makemkv_key: 'MakeMKV key',
@@ -115,9 +125,30 @@ export function checkDetail(c: Pick<SystemDiagnosticCheck, 'status' | 'detail'>)
 	return c.detail ?? (c.status === 'ok' ? 'OK' : c.status);
 }
 
-/** How much space the named storage root has free, or that it is still
- * being measured. */
-export function freeLabel(storage: readonly StorageRoot[] | null, name: string): string {
+const PLACEMENT_LABELS: Record<StoragePlacement, string> = {
+	inside_raw: 'Inside raw (hard links)',
+	same_device: 'Same disk as raw (copies)',
+	separate_device: 'Separate disk'
+};
+
+/** Where the staging area sits relative to raw, in words. */
+export function placementLabel(placement: StoragePlacement): string {
+	return PLACEMENT_LABELS[placement];
+}
+
+/** Whether a root has no disk of its own: it lives inside raw or on raw's disk. */
+export function sharesRawDisk(placement: StoragePlacement | null | undefined): boolean {
+	return placement === 'inside_raw' || placement === 'same_device';
+}
+
+/** How much space the named storage root has free, that it shares raw's
+ * disk, or that it is still being measured. */
+export function freeLabel(
+	storage: readonly StorageRoot[] | null,
+	name: string,
+	placement?: StoragePlacement | null
+): string {
+	if (sharesRawDisk(placement)) return "Shares raw's disk";
 	const root = storage?.find((r) => r.name === name);
 	return root ? `${Math.round(root.free_gb)} GB free` : 'Measuring...';
 }

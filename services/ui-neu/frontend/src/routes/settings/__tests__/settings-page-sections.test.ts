@@ -120,7 +120,7 @@ function settingsOnce(over: Record<string, unknown> = {}) {
 	vi.mocked(fetchSettings).mockResolvedValueOnce({
 		config: mockConfig,
 		schema: mockSchema,
-		infra: { RAW_ROOT: '/raw' },
+		infra: { RAW_ROOT: '/raw', STAGING_ROOT: '/raw/.staging' },
 		arm_config: {},
 		transcoder_config: null,
 		...over
@@ -143,7 +143,7 @@ vi.mock('$lib/api/settings', () => ({
 		Promise.resolve({
 			config: mockConfig,
 			schema: mockSchema,
-			infra: { RAW_ROOT: '/raw' },
+			infra: { RAW_ROOT: '/raw', STAGING_ROOT: '/raw/.staging' },
 			arm_config: {},
 			transcoder_config: null
 		})

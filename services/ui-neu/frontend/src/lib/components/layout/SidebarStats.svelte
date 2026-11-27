@@ -4,7 +4,7 @@
 	// once the first poll has landed ($ready), so it never shows the empty
 	// initial snapshot.
 	import { resources } from '$lib/stores/resources.svelte';
-	import { barColor, filesHref } from '$lib/dashboard/resource-bars';
+	import { barColor, filesHref, storageBars } from '$lib/dashboard/resource-bars';
 	import VersionChip from './VersionChip.svelte';
 
 	// The panel is bottom-anchored, so anything arriving late at its foot (the
@@ -62,7 +62,7 @@
 		{#if $resources.storage.length}
 			<div class="stack stack-sm stats-bar-side-storage">
 				<p class="eyebrow sidebar-stats-heading">Storage</p>
-				{#each $resources.storage as s (s.path)}
+				{#each storageBars($resources.storage) as s (s.path)}
 					<a href={filesHref(s.name)} class="stats-bar-side-row">
 						<div class="stats-bar-side-label flex items-center justify-between">
 							<span>{s.name}</span>
