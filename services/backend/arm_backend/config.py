@@ -303,19 +303,28 @@ def _staging_relpath(s: Settings) -> str:
     return DEFAULT_STAGING_RELPATH if relpath == "." else relpath
 
 
+def _staging_location(s: Settings, raw_base: str, outside: str) -> str:
+    """The one staging rule: `raw_base/<staging relpath>` while staging is inside raw, else `outside`.
+
+    `raw_base` is raw as the caller sees it (backend mount or host path); `outside` is the caller's
+    own spelling of a staging area on a separate mount. Both `staging_root` and
+    `effective_staging_host_path` resolve through here so they always name the same folder."""
+    if not staging_inside_raw(s):
+        return outside
+    return os.path.join(os.path.normpath(raw_base), _staging_relpath(s))
+
+
 def staging_root(s: Settings) -> Path:
     """Where the backend reaches the staging area.
 
     Inside raw (`<raw>/.staging`, or the configured subpath of raw) while staging shares raw's
     mount, so a stage can be a hard link (D26); `STAGING_ROOT` otherwise."""
-    if not staging_inside_raw(s):
-        return Path(s.STAGING_ROOT)
-    return Path(s.RAW_ROOT) / _staging_relpath(s)
+    return Path(_staging_location(s, s.RAW_ROOT, s.STAGING_ROOT))
 
 
 def effective_staging_host_path(s: Settings) -> str:
-    """The host path the transcoder mounts as /staging."""
-    return s.ARM_HOST_STAGING_PATH or f"{s.ARM_HOST_RAW_PATH}/{DEFAULT_STAGING_RELPATH}"
+    """The host path the transcoder mounts as /staging: the host-side spelling of `staging_root`."""
+    return _staging_location(s, s.ARM_HOST_RAW_PATH, os.path.normpath(s.ARM_HOST_STAGING_PATH))
 
 
 def root_host_path(name: str, s: Settings) -> str | None:
