@@ -98,8 +98,8 @@ describe('trackTitleBody', () => {
 		expect(trackTitleBody({ ...title, year: 'abc' }).year).toBeUndefined();
 	});
 
-	it('sends an undefined edition when blank', () => {
-		expect(trackTitleBody({ ...title, edition: '  ' }).edition).toBeUndefined();
+	it('sends a null edition when blank, so a stored one is cleared', () => {
+		expect(trackTitleBody({ ...title, edition: '  ' }).edition).toBeNull();
 	});
 
 	it('sends an undefined poster when blank', () => {

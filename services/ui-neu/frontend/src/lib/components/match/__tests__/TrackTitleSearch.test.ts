@@ -162,6 +162,20 @@ describe('TrackTitleSearch', () => {
 			});
 		});
 
+		it('opens a picked result with the track edition and keeps it on Apply', async () => {
+			mockSearchMetadata.mockResolvedValue({ candidates: [createCandidate({ title: 'Picked' })] });
+			renderComponent(TrackTitleSearch, {
+				props: { jobId: 'job_3', track: createTrack({ id: 'trk_5', edition: 'Extended' }) }
+			});
+			await fireEvent.click(screen.getByText('Search'));
+			await waitFor(() => expect(screen.getByText('Picked')).toBeInTheDocument());
+			await fireEvent.click(screen.getByText('Picked'));
+			expect(screen.getByLabelText('Edition')).toHaveValue('Extended');
+			await fireEvent.click(screen.getByText('Apply'));
+			await waitFor(() => expect(mockUpdateTrack).toHaveBeenCalledTimes(1));
+			expect(mockUpdateTrack.mock.calls[0][2]).toMatchObject({ edition: 'Extended' });
+		});
+
 		it('applying with Type=Series sends role: episode', async () => {
 			mockSearchMetadata.mockResolvedValue({
 				candidates: [createCandidate({ title: 'Picked Show', kind: 'series' })]
@@ -227,15 +241,35 @@ describe('TrackTitleSearch', () => {
 			});
 		});
 
-		it('starts from the search fields and the track kind', async () => {
+		it('starts from the search fields, the track kind and the track edition', async () => {
 			renderComponent(TrackTitleSearch, {
-				props: { jobId: 'job_3', track: createTrack({ title: 'Show', year: 2001, role: 'episode' }) }
+				props: {
+					jobId: 'job_3',
+					track: createTrack({ title: 'Show', year: 2001, role: 'episode', edition: 'Directors Cut' })
+				}
 			});
 			await fireEvent.click(screen.getByRole('button', { name: 'Set by hand' }));
 			expect(screen.getByLabelText('Title')).toHaveValue('Show');
 			expect(screen.getByLabelText('Year')).toHaveValue('2001');
 			expect(screen.getByLabelText('Type')).toHaveValue('series');
+			expect(screen.getByLabelText('Edition')).toHaveValue('Directors Cut');
+		});
+
+		it('opens with an empty edition for a track that has none', async () => {
+			renderComponent(TrackTitleSearch, { props: { jobId: 'job_3', track: createTrack({ edition: null }) } });
+			await fireEvent.click(screen.getByRole('button', { name: 'Set by hand' }));
 			expect(screen.getByLabelText('Edition')).toHaveValue('');
+		});
+
+		it('sends a null edition when the stored one is blanked', async () => {
+			renderComponent(TrackTitleSearch, {
+				props: { jobId: 'job_3', track: createTrack({ id: 'trk_5', title: 'Alien', edition: 'Directors Cut' }) }
+			});
+			await fireEvent.click(screen.getByRole('button', { name: 'Set by hand' }));
+			await fireEvent.input(screen.getByLabelText('Edition'), { target: { value: '' } });
+			await fireEvent.click(screen.getByText('Apply'));
+			await waitFor(() => expect(mockUpdateTrack).toHaveBeenCalledTimes(1));
+			expect(mockUpdateTrack.mock.calls[0][2]).toMatchObject({ edition: null });
 		});
 
 		it('Back closes the form', async () => {

@@ -25,8 +25,8 @@ beforeEach(() => mockFetch.mockReset());
 //   PATCH /api/jobs/{job_id}  body: { tracks: [{ track_id, ... }] }
 // ---------------------------------------------------------------------------
 
-describe('clearTrackTitle (bulk-PATCH wrap, title reverts to automatic sources)', () => {
-	it('PATCHes /api/jobs/{id} reverting title and clearing the other override fields', async () => {
+describe('clearTrackTitle (bulk-PATCH wrap, title and edition revert to automatic sources)', () => {
+	it('PATCHes /api/jobs/{id} reverting title and edition and clearing the other override fields', async () => {
 		mockFetch.mockResolvedValue(jsonResponse({ id: 'job_1' }));
 		await clearTrackTitle('job_1', 'trk_3');
 		expect(mockFetch).toHaveBeenCalledWith(
@@ -34,7 +34,9 @@ describe('clearTrackTitle (bulk-PATCH wrap, title reverts to automatic sources)'
 			expect.objectContaining({
 				method: 'PATCH',
 				body: JSON.stringify({
-					tracks: [{ track_id: 'trk_3', year: null, imdb_id: null, poster_url: null, revert_fields: ['title'] }]
+					tracks: [
+						{ track_id: 'trk_3', year: null, imdb_id: null, poster_url: null, revert_fields: ['title', 'edition'] }
+					]
 				})
 			})
 		);

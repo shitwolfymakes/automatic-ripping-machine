@@ -506,7 +506,7 @@ describe('TrackTitleSearch apply', () => {
 		expect(mockUpdateTrack.mock.calls[0]).toStrictEqual([
 			'job_1',
 			'trk_4',
-			{ title: 'Trimmed', year: 1999, role: 'main', poster_url: undefined, edition: undefined }
+			{ title: 'Trimmed', year: 1999, role: 'main', poster_url: undefined, edition: null }
 		]);
 	});
 
@@ -520,7 +520,7 @@ describe('TrackTitleSearch apply', () => {
 		expect(mockUpdateTrack.mock.calls[0]).toStrictEqual([
 			'job_1',
 			'trk_4',
-			{ title: 'Show', year: undefined, role: 'episode', poster_url: 'https://img.test/p.jpg', edition: undefined }
+			{ title: 'Show', year: undefined, role: 'episode', poster_url: 'https://img.test/p.jpg', edition: null }
 		]);
 	});
 

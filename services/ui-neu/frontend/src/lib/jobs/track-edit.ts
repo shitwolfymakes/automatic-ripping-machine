@@ -34,8 +34,9 @@ export function trackOptionsBody(
 
 /**
  * The trimmed title; the year as a number, `undefined` when blank or not a
- * number; role `episode` for Series and `main` for Movie; the trimmed poster
- * and edition, `undefined` when blank.
+ * number; role `episode` for Series and `main` for Movie; the trimmed poster,
+ * `undefined` when blank; the trimmed edition, null when blank so a stored one
+ * is cleared.
  */
 export function trackTitleBody(f: {
 	title: string;
@@ -51,6 +52,6 @@ export function trackTitleBody(f: {
 		year: Number.isFinite(yr) ? yr : undefined,
 		role,
 		poster_url: f.posterUrl.trim() || undefined,
-		edition: f.edition.trim() || undefined
+		edition: f.edition.trim() || null
 	};
 }

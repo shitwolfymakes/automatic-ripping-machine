@@ -1714,6 +1714,28 @@ def test_patch_revert_drops_the_manual_edition(signing_key: bytes) -> None:
     assert db.rows["tracks"][0].edition is None
 
 
+def test_patch_null_edition_clears_a_manual_edition(signing_key: bytes) -> None:
+    """A blanked Edition field sends null: the operator's earlier edition is
+    gone from the track (and so from the output names)."""
+    db = FakeSession()
+    _seed_job_with_track(db)
+    db.rows["jobs"][0].metadata_json = {
+        "identity_claims": {"sources": {"manual": {"tracks": {"0": {"edition": "Directors Cut"}}}}}
+    }
+    track = db.rows["tracks"][0]
+    track.edition = "Directors Cut"
+    track.identity_provenance = {"edition": "manual"}
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as c:
+        r = c.patch(
+            f"/api/jobs/{_JOB_ID_A}",
+            json={"tracks": [{"track_id": _TRK_ID_A, "edition": None}]},
+            headers=_auth(token),
+        )
+    assert r.status_code == 200, r.text
+    assert db.rows["tracks"][0].edition is None
+
+
 def test_patch_revert_with_no_other_proposer_resets_to_default(signing_key: bytes) -> None:
     db = FakeSession()
     _seed_job_with_track(db)

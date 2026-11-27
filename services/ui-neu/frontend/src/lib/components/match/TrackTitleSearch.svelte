@@ -53,7 +53,7 @@
 			editYear = detail.year != null ? String(detail.year) : '';
 			editType = isSeriesKind(detail.kind) ? 'series' : 'movie';
 			editPosterUrl = detail.poster_url ?? '';
-			editEdition = '';
+			editEdition = track.edition ?? '';
 		}
 	});
 
@@ -66,7 +66,7 @@
 		editYear = yearInput.trim();
 		editType = isSeries ? 'series' : 'movie';
 		editPosterUrl = '';
-		editEdition = '';
+		editEdition = track.edition ?? '';
 		byHand = true;
 	}
 
