@@ -72,20 +72,20 @@ afterEach(() => {
 
 describe('JobInfoForm seeding', () => {
 	it('seeds every field from the job as text and digits', () => {
-		renderComponent(JobInfoForm, { props: { job: job() } });
+		renderComponent(JobInfoForm, { props: { isTv: true, job: job() } });
 		expect(values()).toEqual(['Star Knight', '1985', '2', '3', '4']);
 	});
 
 	it('seeds every null field as an empty string', () => {
 		renderComponent(JobInfoForm, {
-			props: { job: job({ title: null, year: null, season: null, disc_number: null, disc_total: null }) }
+			props: { isTv: true, job: job({ title: null, year: null, season: null, disc_number: null, disc_total: null }) }
 		});
 		expect(values()).toEqual(['', '', '', '', '']);
 	});
 
 	it('seeds a field the job leaves undefined as an empty string', () => {
 		renderComponent(JobInfoForm, {
-			props: { job: job({ season: undefined, disc_number: undefined, disc_total: undefined }) }
+			props: { isTv: true, job: job({ season: undefined, disc_number: undefined, disc_total: undefined }) }
 		});
 		expect(values()).toEqual(['Star Knight', '1985', '', '', '']);
 	});
@@ -106,7 +106,7 @@ describe('JobInfoForm seeding', () => {
 	];
 
 	it.each(FIELDS)('a rerender keeps a touched %s and re-seeds the other four', async (label, idx) => {
-		const { rerender } = renderComponent(JobInfoForm, { props: { job: job() } });
+		const { rerender } = renderComponent(JobInfoForm, { props: { isTv: true, job: job() } });
 		await typeInto(label, label === 'Title' ? 'My Edit' : '9');
 		await rerender({ job: job(CHANGED) });
 		const expected = ['Polled Title', '1999', '5', '6', '7'];
@@ -115,14 +115,14 @@ describe('JobInfoForm seeding', () => {
 	});
 
 	it('a rerender re-seeds a field that is cleared on the new job', async () => {
-		const { rerender } = renderComponent(JobInfoForm, { props: { job: job() } });
+		const { rerender } = renderComponent(JobInfoForm, { props: { isTv: true, job: job() } });
 		await rerender({ job: job({ title: null, year: null, season: null, disc_number: null, disc_total: null }) });
 		expect(values()).toEqual(['', '', '', '', '']);
 	});
 
 	it('Reset clears the marks and feedback, hides the save bar and re-seeds every field', async () => {
 		mockResolve.mockRejectedValueOnce(new Error('boom'));
-		renderComponent(JobInfoForm, { props: { job: job() } });
+		renderComponent(JobInfoForm, { props: { isTv: true, job: job() } });
 		await typeInto('Title', 'Edited');
 		await typeInto('Year', '2001');
 		await typeInto('Season', '8');
@@ -140,7 +140,7 @@ describe('JobInfoForm seeding', () => {
 
 describe('JobInfoForm request body', () => {
 	it('sends the trimmed title and every number as a number', async () => {
-		renderComponent(JobInfoForm, { props: { job: job() } });
+		renderComponent(JobInfoForm, { props: { isTv: true, job: job() } });
 		await typeInto('Title', '  New Title  ');
 		await typeInto('Year', '2001');
 		await typeInto('Disc number', '5');
@@ -157,7 +157,7 @@ describe('JobInfoForm request body', () => {
 	});
 
 	it('sends year, disc number and disc total as null when cleared', async () => {
-		renderComponent(JobInfoForm, { props: { job: job() } });
+		renderComponent(JobInfoForm, { props: { isTv: true, job: job() } });
 		await typeInto('Year', '');
 		await typeInto('Disc number', '');
 		await typeInto('Disc total', '');
@@ -172,7 +172,7 @@ describe('JobInfoForm request body', () => {
 	});
 
 	it('sends the season as a number when it was touched', async () => {
-		renderComponent(JobInfoForm, { props: { job: job() } });
+		renderComponent(JobInfoForm, { props: { isTv: true, job: job() } });
 		await typeInto('Season', '7');
 		await clickSave();
 		await waitFor(() => expect(mockResolve).toHaveBeenCalledTimes(1));
@@ -186,7 +186,7 @@ describe('JobInfoForm request body', () => {
 	});
 
 	it('sends the season as null when it was cleared', async () => {
-		renderComponent(JobInfoForm, { props: { job: job() } });
+		renderComponent(JobInfoForm, { props: { isTv: true, job: job() } });
 		await typeInto('Season', '');
 		await clickSave();
 		await waitFor(() => expect(mockResolve).toHaveBeenCalledTimes(1));
@@ -200,7 +200,7 @@ describe('JobInfoForm request body', () => {
 	});
 
 	it('sends no season key when Season was untouched', async () => {
-		renderComponent(JobInfoForm, { props: { job: job() } });
+		renderComponent(JobInfoForm, { props: { isTv: true, job: job() } });
 		await typeInto('Year', '1990');
 		await clickSave();
 		await waitFor(() => expect(mockResolve).toHaveBeenCalledTimes(1));
@@ -213,7 +213,7 @@ describe('JobInfoForm saved diff', () => {
 	async function saveAndGetDiff(before: Record<string, unknown>, resp: unknown) {
 		mockResolve.mockResolvedValue(resp as any);
 		const onsaved = vi.fn();
-		renderComponent(JobInfoForm, { props: { job: job(before), onsaved } });
+		renderComponent(JobInfoForm, { props: { isTv: true, job: job(before), onsaved } });
 		await typeInto('Year', '1990');
 		await clickSave();
 		await waitFor(() => expect(onsaved).toHaveBeenCalledTimes(1));
@@ -253,7 +253,7 @@ describe('JobInfoForm saved diff', () => {
 	it('reports no season change when a cleared season comes back the same', async () => {
 		mockResolve.mockResolvedValue({ job: job({ season: 2 }), fan_out: [] } as any);
 		const onsaved = vi.fn();
-		renderComponent(JobInfoForm, { props: { job: job({ season: 2 }), onsaved } });
+		renderComponent(JobInfoForm, { props: { isTv: true, job: job({ season: 2 }), onsaved } });
 		await typeInto('Season', '');
 		await clickSave();
 		await waitFor(() => expect(onsaved).toHaveBeenCalledTimes(1));
@@ -292,7 +292,7 @@ describe('JobInfoForm after a save', () => {
 		const calls: string[] = [];
 		const onrefresh = vi.fn(() => calls.push('refresh'));
 		const onsaved = vi.fn(() => calls.push('saved'));
-		renderComponent(JobInfoForm, { props: { job: job(), onrefresh, onsaved } });
+		renderComponent(JobInfoForm, { props: { isTv: true, job: job(), onrefresh, onsaved } });
 		await typeInto('Year', '1990');
 		await clickSave();
 		const saved = await screen.findByText('Saved');
@@ -307,7 +307,7 @@ describe('JobInfoForm after a save', () => {
 		['only onrefresh', { onrefresh: vi.fn() }],
 		['only onsaved', { onsaved: vi.fn() }]
 	])('saves cleanly with %s passed', async (_name, callbacks) => {
-		renderComponent(JobInfoForm, { props: { job: job(), ...callbacks } });
+		renderComponent(JobInfoForm, { props: { isTv: true, job: job(), ...callbacks } });
 		await typeInto('Year', '1990');
 		await clickSave();
 		expect(await screen.findByText('Saved')).toHaveAttribute('data-tone', 'success');
@@ -318,7 +318,7 @@ describe('JobInfoForm after a save', () => {
 		mockResolve.mockRejectedValueOnce(new Error('boom'));
 		const onrefresh = vi.fn();
 		const onsaved = vi.fn();
-		renderComponent(JobInfoForm, { props: { job: job(), onrefresh, onsaved } });
+		renderComponent(JobInfoForm, { props: { isTv: true, job: job(), onrefresh, onsaved } });
 		await typeInto('Year', '1990');
 		await clickSave();
 		expect(await screen.findByText('boom')).toHaveAttribute('data-tone', 'error');
@@ -331,7 +331,7 @@ describe('JobInfoForm after a save', () => {
 		mockResolve.mockRejectedValueOnce('nope');
 		const onrefresh = vi.fn();
 		const onsaved = vi.fn();
-		renderComponent(JobInfoForm, { props: { job: job(), onrefresh, onsaved } });
+		renderComponent(JobInfoForm, { props: { isTv: true, job: job(), onrefresh, onsaved } });
 		await typeInto('Year', '1990');
 		await clickSave();
 		expect(await screen.findByText('Save failed')).toHaveAttribute('data-tone', 'error');
@@ -343,7 +343,7 @@ describe('JobInfoForm after a save', () => {
 	it('shows Saving... with Save and Reset disabled while the request is pending', async () => {
 		let finish: (v: unknown) => void = () => {};
 		mockResolve.mockReturnValueOnce(new Promise((resolve) => (finish = resolve)) as any);
-		renderComponent(JobInfoForm, { props: { job: job() } });
+		renderComponent(JobInfoForm, { props: { isTv: true, job: job() } });
 		await typeInto('Year', '1990');
 		await clickSave();
 		expect(await screen.findByRole('button', { name: 'Saving...' })).toBeDisabled();
@@ -353,7 +353,7 @@ describe('JobInfoForm after a save', () => {
 	});
 
 	it('blank title keeps Save disabled', async () => {
-		renderComponent(JobInfoForm, { props: { job: job() } });
+		renderComponent(JobInfoForm, { props: { isTv: true, job: job() } });
 		await typeInto('Title', '   ');
 		expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled();
 		expect(mockResolve).not.toHaveBeenCalled();
@@ -362,12 +362,12 @@ describe('JobInfoForm after a save', () => {
 
 describe('JobInfoForm focus', () => {
 	it('puts the cursor in Season when focusField is season', async () => {
-		renderComponent(JobInfoForm, { props: { job: job(), focusField: 'season' } });
+		renderComponent(JobInfoForm, { props: { isTv: true, job: job(), focusField: 'season' } });
 		await waitFor(() => expect(screen.getByLabelText('Season')).toHaveFocus());
 	});
 
 	it('focuses no field without focusField', async () => {
-		renderComponent(JobInfoForm, { props: { job: job() } });
+		renderComponent(JobInfoForm, { props: { isTv: true, job: job() } });
 		await Promise.resolve();
 		for (const label of LABELS) expect(screen.getByLabelText(label)).not.toHaveFocus();
 	});
