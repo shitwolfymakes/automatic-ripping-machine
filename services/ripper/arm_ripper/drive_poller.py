@@ -155,6 +155,8 @@ class DrivePoller:
                 assert resolved is not None  # same invariant as the reattach arm above
                 await self._report_move(resolved)
 
+            self._cancel_scan_on_tray_left(state)
+
             if state != self._last_state:
                 logger.info("drive state %s -> %s", self._last_state, state)
                 self._last_state = state
@@ -166,6 +168,15 @@ class DrivePoller:
     def _went_absent(self, state: DriveState) -> bool:
         """True on the first tick the drive reads ABSENT."""
         return state is DriveState.ABSENT and self._last_state is not DriveState.ABSENT
+
+    def _tray_left(self, state: DriveState) -> bool:
+        """True when the disc just left: the previous reading was DISC_OK and this one is TRAY_OPEN or NO_DISC."""
+        return self._last_state is DriveState.DISC_OK and state in (DriveState.TRAY_OPEN, DriveState.NO_DISC)
+
+    def _cancel_scan_on_tray_left(self, state: DriveState) -> None:
+        """Cancel the pre-job scan when the disc leaves the drive, so makemkvcon is not left reading an empty tray."""
+        if self._tray_left(state) and self._controller.cancel_scan():
+            logger.info("disc left the drive (%s) during the pre-job scan — scan cancelled", state.name)
 
     def _came_back(self, state: DriveState) -> bool:
         """True on the first tick the drive reads present after an ABSENT run."""
