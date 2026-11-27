@@ -1,0 +1,4 @@
+[
+{"index":0,"duration_seconds":7200,"chapter_count":20,"size_bytes":30000000000,"source_file":"00100.mpls","segment_count":3,"segment_map":[10,11,12],"playlist_name":null,"angle":null,"stereo_3d":false},
+{"index":1,"duration_seconds":7200,"chapter_count":20,"size_bytes":42000000000,"source_file":"00101.mpls","segment_count":3,"segment_map":[10,11,12],"playlist_name":null,"angle":null,"stereo_3d":true}
+]

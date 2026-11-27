@@ -209,6 +209,12 @@ class TitleClass(StrEnum):
     DECOY = "decoy"
     # The kept title's clips plus one or two short extras (disclaimer, intro).
     VARIANT = "variant"
+    # Another angle of the kept title's playlist.
+    ANGLE = "angle"
+    # The kept title's clips minus one or two short ones (a copy without chapters).
+    SUBSET = "subset"
+    # The kept title's clips in the other dimension (the 2D twin of a 3D title, or the reverse).
+    VIEW = "view"
 
 
 class MediaType(StrEnum):

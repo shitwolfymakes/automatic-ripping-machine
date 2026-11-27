@@ -5452,7 +5452,7 @@ export type TemplatePreviewResponse = {
  * What the classifier (arm_common.title_classes) decides about one scanned
  * Blu-ray title.
  */
-export type TitleClass = 'primary' | 'edition' | 'duplicate' | 'decoy' | 'variant';
+export type TitleClass = 'primary' | 'edition' | 'duplicate' | 'decoy' | 'variant' | 'angle' | 'subset' | 'view';
 
 /**
  * TrackClaim
