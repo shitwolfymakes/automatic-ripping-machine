@@ -1,4 +1,4 @@
-"""Remove a deleted job's raw dir and media outputs from disk."""
+"""Remove a deleted job's raw dir, staging dir and media outputs from disk."""
 
 import logging
 import os
@@ -49,17 +49,35 @@ def _raw_dir_of(job_id: str, raw_root: Path) -> Path:
     return raw_root / os.path.basename(job_id)
 
 
-def _remove_raw_dir(raw_dir: Path, job_id: str) -> int:
-    """rmtree `raw_dir` if present. Returns 1 when removed, else 0."""
-    if not raw_dir.exists():
+def _staging_dir_of(job_id: str, staging_root: Path) -> Path:
+    """The staging dir for `job_id` under `staging_root`; raises ValueError on a bad id."""
+    # Same id validation and basename join as `_raw_dir_of`.
+    return _raw_dir_of(job_id, staging_root)
+
+
+def _remove_job_dir(job_dir: Path, job_id: str, what: str) -> int:
+    """rmtree `job_dir` if present. Returns 1 when removed, else 0."""
+    if not job_dir.exists():
         return 0
     try:
-        shutil.rmtree(raw_dir)
+        shutil.rmtree(job_dir)
     except OSError as exc:
-        logger.warning("delete: raw rmtree failed job_id=%s path=%s err=%s", job_id, raw_dir, exc)
+        logger.warning("delete: %s rmtree failed job_id=%s path=%s err=%s", what, job_id, job_dir, exc)
         return 0
-    logger.info("delete: rmtree raw_dir=%s job_id=%s", raw_dir, job_id)
+    logger.info("delete: rmtree %s_dir=%s job_id=%s", what, job_dir, job_id)
     return 1
+
+
+def _remove_raw_dir(raw_dir: Path, job_id: str) -> int:
+    """rmtree `raw_dir` if present. Returns 1 when removed, else 0."""
+    return _remove_job_dir(raw_dir, job_id, "raw")
+
+
+def remove_staging_dir(job_id: str, staging_root: Path) -> int:
+    """rmtree `staging_root/<job_id>` if present. Returns 1 when removed, else 0.
+
+    Raises ValueError on a malformed job id, before touching the filesystem."""
+    return _remove_job_dir(_staging_dir_of(job_id, staging_root), job_id, "staging")
 
 
 def _remove_disc_backup(path: Path, media_root: Path) -> bool:

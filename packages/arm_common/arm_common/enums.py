@@ -314,6 +314,16 @@ class TranscodeTaskStatus(StrEnum):
     FAILED = "failed"
 
 
+class StageStatus(StrEnum):
+    """Where one track's copy from /raw to staging stands."""
+
+    PENDING = "pending"  # waiting for the worker (new, resumed after restart, or retried)
+    COPYING = "copying"  # claimed by the worker
+    STAGED = "staged"  # final file at dest_path, committed
+    FAILED = "failed"  # attempts exhausted or unrecoverable (source gone); last_error says why
+    STALLED = "stalled"  # no bytes for ARM_STAGE_STALL_SECONDS; the worker re-queues or fails it
+
+
 class GpuVendor(StrEnum):
     VAAPI = "vaapi"
     NVENC = "nvenc"

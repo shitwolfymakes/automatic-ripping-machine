@@ -1,3 +1,5 @@
+import os
+from pathlib import Path
 from typing import Annotated, Literal
 
 from pydantic import field_validator
@@ -126,6 +128,16 @@ class Settings(BaseSettings):
     # at parse time. Empty string disables the dispatcher (used in tests).
     ARM_HOST_RAW_PATH: str = ""
     ARM_HOST_MEDIA_PATH: str = ""
+    # Host path of the staging area the transcoder reads from. Empty (the
+    # default) keeps staging inside raw, at `<raw>/.staging`, so a stage is a
+    # hard link on the same mount. See `staging_root`.
+    ARM_HOST_STAGING_PATH: str = ""
+    # Container path of staging when it lives outside raw.
+    STAGING_ROOT: str = "/staging"
+    # Seconds without a byte of progress before a copy to staging counts as stalled.
+    ARM_STAGE_STALL_SECONDS: int = 300
+    # Copy attempts before a stage fails for good.
+    ARM_STAGE_MAX_ATTEMPTS: int = 3
     ARM_HOST_LOGS_PATH: str = ""
     ARM_HOST_CERTS_PATH: str = ""
     # Host path of the ISO library (mounted read-only at ISO_INGRESS_ROOT).
@@ -267,6 +279,42 @@ def effective_transcode_capable(s: Settings) -> bool:
     flag (you cannot be incapable of something you have wired a host for);
     main.py warns about the contradictory combo at startup."""
     return s.ARM_TRANSCODE_CAPABLE or bool(s.ARM_TRANSCODE_DOCKER_HOST)
+
+
+DEFAULT_STAGING_RELPATH = ".staging"
+
+
+def _staging_inside_raw(s: Settings) -> bool:
+    """True when staging is unset, or is raw itself or a path under it (compared as normalised paths)."""
+    if not s.ARM_HOST_STAGING_PATH:
+        return True
+    raw = os.path.normpath(s.ARM_HOST_RAW_PATH)
+    staging = os.path.normpath(s.ARM_HOST_STAGING_PATH)
+    return staging == raw or staging.startswith(raw + os.sep)
+
+
+def _staging_relpath(s: Settings) -> str:
+    """Staging's path under raw: `.staging` unless the configured path names a subpath of raw."""
+    if not s.ARM_HOST_STAGING_PATH:
+        return DEFAULT_STAGING_RELPATH
+    relpath = os.path.relpath(s.ARM_HOST_STAGING_PATH, s.ARM_HOST_RAW_PATH)
+    # Raw itself is no staging area: a stage there would be its own source.
+    return DEFAULT_STAGING_RELPATH if relpath == "." else relpath
+
+
+def staging_root(s: Settings) -> Path:
+    """Where the backend reaches the staging area.
+
+    Inside raw (`<raw>/.staging`, or the configured subpath of raw) while staging shares raw's
+    mount, so a stage can be a hard link (D26); `STAGING_ROOT` otherwise."""
+    if not _staging_inside_raw(s):
+        return Path(s.STAGING_ROOT)
+    return Path(s.RAW_ROOT) / _staging_relpath(s)
+
+
+def effective_staging_host_path(s: Settings) -> str:
+    """The host path the transcoder mounts as /staging."""
+    return s.ARM_HOST_STAGING_PATH or f"{s.ARM_HOST_RAW_PATH}/{DEFAULT_STAGING_RELPATH}"
 
 
 settings = Settings()  # type: ignore[call-arg]  # fields loaded from env by pydantic-settings

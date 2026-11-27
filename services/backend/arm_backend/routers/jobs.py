@@ -14,7 +14,7 @@ from arm_backend.auto_session import (
     SessionNotFoundError,
     apply_session_internal,
 )
-from arm_backend.config import settings
+from arm_backend.config import settings, staging_root
 from arm_backend.db import get_session
 from arm_backend.identify_flow import pause_refuses_new_jobs
 from arm_backend.identity.apply import apply_identity_result, suggestion_to_result
@@ -22,7 +22,7 @@ from arm_backend.identity.manual_edits import apply_manual_edits
 from arm_backend.identity.resolve_service import identity_snapshot, resolve_identity
 from arm_backend.identity.stage_runner import EpisodeStageRunner
 from arm_backend.job_abandon import abandon_job_transition
-from arm_backend.job_files import delete_job_files
+from arm_backend.job_files import delete_job_files, remove_staging_dir
 from arm_backend.job_views import job_detail_view, job_list_views
 from arm_backend.log_reader import per_job_log_path
 from arm_backend.metadata.identity_payload import external_ids_of
@@ -458,10 +458,14 @@ def _bulk_delete_candidates(
     return list(rows)
 
 
-async def _clean_up_job_files(db: AsyncSession, job_id: str, *, raw_root: Path, media_root: Path) -> dict[str, int]:
-    """Delete a job's raw dir and recorded media outputs. Returns the counters."""
+async def _clean_up_job_files(
+    db: AsyncSession, job_id: str, *, raw_root: Path, media_root: Path, staging_root: Path
+) -> dict[str, int]:
+    """Delete a job's raw dir, staging dir and recorded media outputs. Returns the counters."""
     media_outputs = await _resolve_media_outputs(db, job_id)
-    return delete_job_files(job_id, media_outputs, raw_root=raw_root, media_root=media_root)
+    counters = delete_job_files(job_id, media_outputs, raw_root=raw_root, media_root=media_root)
+    counters["staging_dir_removed"] = remove_staging_dir(job_id, staging_root)
+    return counters
 
 
 def _log_delete_summary(job_id: str, counters: dict[str, int] | None) -> None:
@@ -470,9 +474,11 @@ def _log_delete_summary(job_id: str, counters: dict[str, int] | None) -> None:
         logger.info("delete job_id=%s delete_raw=False", job_id)
         return
     logger.info(
-        "delete job_id=%s delete_raw=True raw_dir_removed=%d media_files_removed=%d media_dirs_pruned=%d",
+        "delete job_id=%s delete_raw=True raw_dir_removed=%d staging_dir_removed=%d "
+        "media_files_removed=%d media_dirs_pruned=%d",
         job_id,
         counters["raw_dir_removed"],
+        counters["staging_dir_removed"],
         counters["media_files_removed"],
         counters["media_dirs_pruned"],
     )
@@ -484,10 +490,12 @@ def _log_bulk_delete_summary(deleted: int, skipped: int, totals: dict[str, int] 
         logger.info("delete-all jobs deleted=%d skipped=%d delete_raw=False", deleted, skipped)
         return
     logger.info(
-        "delete-all jobs deleted=%d skipped=%d delete_raw=True raw_dirs=%d media_files=%d media_dirs_pruned=%d",
+        "delete-all jobs deleted=%d skipped=%d delete_raw=True raw_dirs=%d staging_dirs=%d "
+        "media_files=%d media_dirs_pruned=%d",
         deleted,
         skipped,
         totals["raw_dir_removed"],
+        totals["staging_dir_removed"],
         totals["media_files_removed"],
         totals["media_dirs_pruned"],
     )
@@ -526,7 +534,11 @@ async def delete_job(
     counters: dict[str, int] | None = None
     if delete_raw:
         counters = await _clean_up_job_files(
-            db, job.id, raw_root=Path(settings.RAW_ROOT), media_root=Path(settings.MEDIA_ROOT)
+            db,
+            job.id,
+            raw_root=Path(settings.RAW_ROOT),
+            media_root=Path(settings.MEDIA_ROOT),
+            staging_root=staging_root(settings),
         )
 
     await db.delete(job)
@@ -560,15 +572,18 @@ async def delete_all_jobs(
 
     raw_root = Path(settings.RAW_ROOT)
     media_root = Path(settings.MEDIA_ROOT)
+    staging = staging_root(settings)
     deleted_ids: list[str] = []
     skipped: list[str] = []
-    totals = {"raw_dir_removed": 0, "media_files_removed": 0, "media_dirs_pruned": 0}
+    totals = {"raw_dir_removed": 0, "staging_dir_removed": 0, "media_files_removed": 0, "media_dirs_pruned": 0}
     for job in candidates:
         if job.status not in TERMINAL_JOB_STATUSES:
             skipped.append(job.id)
             continue
         if delete_raw:
-            counters = await _clean_up_job_files(db, job.id, raw_root=raw_root, media_root=media_root)
+            counters = await _clean_up_job_files(
+                db, job.id, raw_root=raw_root, media_root=media_root, staging_root=staging
+            )
             for k, v in counters.items():
                 totals[k] += v
         await db.delete(job)
