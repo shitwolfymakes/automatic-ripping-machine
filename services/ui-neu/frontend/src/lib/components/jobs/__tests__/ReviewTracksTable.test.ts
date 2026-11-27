@@ -89,4 +89,76 @@ describe('ReviewTracksTable', () => {
 		await fireEvent.click(box);
 		expect(updateTrack).toHaveBeenCalledWith(expect.anything(), 'trk_0', { excluded: true });
 	});
+
+	describe('rip copy', () => {
+		const GB = 1024 ** 3;
+		const four = (o: Partial<TrackView> = {}) =>
+			[0, 1, 2, 3].map((i) =>
+				track({ id: `trk_${i}`, index: i, source_ref: `${i}`, expected_size_bytes: 10 * GB, excluded: i > 1, ...o })
+			);
+		const render = (jobOverrides: Parameters<typeof createJob>[0], tracks: TrackView[]) =>
+			renderComponent(ReviewTracksTable, {
+				props: { job: createJob(jobOverrides), tracks, isVideo: true, isMusic: false }
+			});
+
+		it('says a per-title tick rips and transcodes the title', () => {
+			render({ status: 'awaiting_review', rip_invocation: 'per_title' }, four());
+			const box = screen.getByRole('checkbox', { name: 'Include track 0' });
+			expect(box).toHaveAttribute('title', 'Rip and transcode this title');
+			expect(box).toBeEnabled();
+		});
+
+		it('says an mkv all tick only includes the title in the transcode', () => {
+			render({ status: 'awaiting_review', rip_invocation: 'mkv_all' }, four());
+			expect(screen.getByRole('checkbox', { name: 'Include track 0' })).toHaveAttribute(
+				'title',
+				'Include this title in the transcode'
+			);
+		});
+
+		it('disables the box of a title that was not ripped', () => {
+			render({ status: 'ripped', rip_invocation: 'per_title' }, four({ status: 'skipped' }));
+			const box = screen.getByRole('checkbox', { name: 'Include track 3' });
+			expect(box).toBeDisabled();
+			expect(box).not.toBeChecked();
+			expect(box).toHaveAttribute('title', 'Not ripped: it was unticked when the rip started');
+		});
+
+		it('shows the size column and the per-title totals line', () => {
+			render({ status: 'awaiting_review', rip_invocation: 'per_title' }, four());
+			expect(screen.getByRole('columnheader', { name: 'Size' })).toBeInTheDocument();
+			expect(screen.getAllByText('~10 GB')).toHaveLength(4);
+			expect(screen.getByTestId('rip-plan-line')).toHaveTextContent('Rips 2 of 4 titles, about 20 GB');
+		});
+
+		it('shows the mkv all totals line, and the transcode count after Start', () => {
+			const { unmount } = renderComponent(ReviewTracksTable, {
+				props: {
+					job: createJob({ status: 'awaiting_review', rip_invocation: 'mkv_all' }),
+					tracks: four(),
+					isVideo: true,
+					isMusic: false
+				}
+			});
+			expect(screen.getByTestId('rip-plan-line')).toHaveTextContent('Rips all 4 titles, about 40 GB. 2 transcode.');
+			unmount();
+			render({ status: 'ripping', rip_invocation: 'mkv_all' }, four());
+			expect(screen.getByTestId('rip-plan-line')).toHaveTextContent('2 of 4 titles transcode');
+		});
+
+		it('has no totals line and a plain Include state for scanned titles and non-admins', () => {
+			renderComponent(ReviewTracksTable, {
+				props: {
+					job: createJob({ status: 'awaiting_review' }),
+					tracks: [],
+					scanTitles: [{ index: 0, duration_seconds: 60, size_bytes: 2048 }],
+					isVideo: true,
+					isMusic: false
+				}
+			});
+			expect(screen.queryByTestId('rip-plan-line')).toBeNull();
+			expect(screen.getByText('~2 KB')).toBeInTheDocument();
+			expect(screen.queryByRole('checkbox')).toBeNull();
+		});
+	});
 });

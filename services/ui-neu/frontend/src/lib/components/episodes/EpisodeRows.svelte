@@ -3,6 +3,8 @@
 	// Presentational only - the panel owns the data and the actions.
 	import { type EpisodeRow } from '../../episodes/episode-model';
 	import { SOURCE_LABEL } from '$lib/episodes/sources';
+	import { tickMeaning, tickTitle } from '$lib/jobs/rip-plan';
+	import type { JobView } from '$lib/types/api.gen';
 	import SeasonSelect from './SeasonSelect.svelte';
 
 	interface FileName {
@@ -10,6 +12,8 @@
 		path: string;
 	}
 	interface Props {
+		/** The job the rows belong to: its rip mode and state say what a tick does. */
+		job: Pick<JobView, 'rip_invocation' | 'status'>;
 		rows: EpisodeRow[];
 		fileNames: Map<string, FileName>;
 		matching?: boolean;
@@ -29,6 +33,7 @@
 		onexclude?: (trackId: string, excluded: boolean) => void;
 	}
 	let {
+		job,
 		rows,
 		fileNames,
 		matching = false,
@@ -135,7 +140,8 @@
 			aria-label="Include {row.ref}"
 			checked={!row.excluded}
 			onchange={(e) => onexclude?.(row.trackId, !e.currentTarget.checked)}
-			title="Include this track in transcode output (the disc still rips in full)"
+			title={tickTitle(tickMeaning(row, job))}
+			disabled={row.status === 'skipped'}
 		/>
 	{:else}
 		<span class="episode-rows-muted">{row.excluded ? 'Excluded' : 'Included'}</span>

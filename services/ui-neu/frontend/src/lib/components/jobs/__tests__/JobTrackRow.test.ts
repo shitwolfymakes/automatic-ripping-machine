@@ -355,6 +355,23 @@ describe('JobTrackRow', () => {
 			expect(onexcludedchange).toHaveBeenLastCalledWith('trk_2', false);
 		});
 
+		it('words the box by what a tick does', () => {
+			renderRow(pilot(), { job: { status: 'awaiting_review', rip_invocation: 'per_title' } });
+			expect(screen.getByRole('checkbox')).toHaveAttribute('title', 'Rip and transcode this title');
+			cleanup();
+			renderRow(pilot(), { job: { status: 'ripped', rip_invocation: 'per_title' } });
+			expect(screen.getByRole('checkbox')).toHaveAttribute('title', 'Include this title in the transcode');
+		});
+
+		it('disables the box of a title that was not ripped', () => {
+			renderRow(createTrack({ id: 'trk_3', index: 3, status: 'skipped', excluded: true }), {
+				job: { status: 'ripped', rip_invocation: 'per_title' }
+			});
+			const box = screen.getByRole('checkbox');
+			expect(box).toBeDisabled();
+			expect(box).toHaveAttribute('title', 'Not ripped: it was unticked when the rip started');
+		});
+
 		it('shows why the last toggle failed under the checkbox', () => {
 			renderRow(pilot(), { excludeError: 'denied' });
 			expect(screen.getByRole('alert')).toHaveTextContent('denied');

@@ -4,6 +4,7 @@ import type {
 	JobView,
 	MatchPreview,
 	TrackIdentityView,
+	TrackStatus,
 	TrackView
 } from '$lib/types/api.gen';
 import { activeSource, EPISODE_PREFIX, notConfigured, SOURCE_LABEL } from '$lib/episodes/sources';
@@ -25,8 +26,10 @@ export interface EpisodeRow {
 	/** The track's saved season; null when none is set (never assumed). */
 	season: number | null;
 	seconds: number | null;
-	/** Left out of the transcode output (the disc still rips in full). */
+	/** Left out of the transcode output. */
 	excluded: boolean;
+	/** The track's rip status; a skipped one was never ripped. */
+	status: TrackStatus;
 	/** The picker option that is this row's current placement ('' when none): a
 	 * role value, or the episode's `placementValue`. */
 	pickValue: string;
@@ -137,6 +140,7 @@ export function buildRows(
 			season: t?.season ?? track.season ?? null,
 			seconds: track.duration_seconds ?? track.expected_duration_seconds ?? null,
 			excluded: track.excluded ?? false,
+			status: track.status,
 			pickValue
 		};
 	});

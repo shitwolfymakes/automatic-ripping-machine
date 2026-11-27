@@ -238,6 +238,8 @@
 					{isPostRip}
 					{episodeRow}
 					{sourceRow}
+					{tracks}
+					{isReviewGate}
 					{appliedSession}
 					onopenseason={sections.openSeason}
 					onopenepisodes={() => sections.open('episodes')}

@@ -5,6 +5,7 @@
 	import { trackToRow, scanTitleToRow, nonEpisode } from '$lib/jobs/review-rows';
 	import { formatTrackDuration } from '$lib/utils/format';
 	import { parseEpisodeNumber } from '$lib/jobs/track-edit';
+	import { ripPlanLine, ripPlanSummary, tickMeaning, tickTitle } from '$lib/jobs/rip-plan';
 	import TrackTitleSearch from '../match/TrackTitleSearch.svelte';
 	import { isAdmin } from '$lib/stores/auth';
 	interface Props {
@@ -21,6 +22,8 @@
 
 	// Materialized tracks always win; scanned titles are the pre-rip fallback.
 	let rows = $derived(tracks.length ? tracks.map(trackToRow) : scanTitles.map(scanTitleToRow));
+
+	let plan = $derived(ripPlanSummary(tracks, job));
 
 	let openSearchTrackIds = $state<Set<string>>(new Set());
 	let errorMessage = $state<string | null>(null);
@@ -74,6 +77,7 @@
 							<th class="table-header">{isMusic ? 'Name' : 'Title'}</th>
 							{#if isVideo}<th class="table-header">Episode</th>{/if}
 							<th class="table-header">Length</th>
+							<th class="table-header">Size</th>
 							<th class="table-header">Include</th>
 							<th class="table-header">Source</th>
 							{#if isVideo}<th class="table-header w-8"></th>{/if}
@@ -82,6 +86,7 @@
 					<tbody>
 						{#each rows as row (row.trackId ?? `scan-${row.index}`)}
 							{@const trackId = row.trackId}
+							{@const track = tracks.find((t) => t.id === trackId)}
 							<tr class="table-row" data-disabled={row.excluded}>
 								<td class="table-cell mono">{row.index}</td>
 								<td
@@ -137,14 +142,17 @@
 									</td>
 								{/if}
 								<td class="table-cell review-tracks-table-secondary">{formatTrackDuration(row.durationSeconds)}</td>
+								<td class="table-cell mono review-tracks-table-secondary">{row.sizeLabel}</td>
 								<td class="table-cell">
-									{#if trackId && $isAdmin}
+									{#if track && $isAdmin}
+										{@const meaning = tickMeaning(track, job)}
 										<input
 											type="checkbox"
 											aria-label="Include track {row.index}"
 											checked={!row.excluded}
-											onchange={(e) => handleTrackFieldUpdate(trackId, 'excluded', !e.currentTarget.checked)}
-											title="Include this track in transcode output (the disc still rips in full)"
+											onchange={(e) => handleTrackFieldUpdate(track.id, 'excluded', !e.currentTarget.checked)}
+											title={tickTitle(meaning)}
+											disabled={meaning === 'not-ripped'}
 										/>
 									{:else if trackId}
 										<span class="review-tracks-table-faint">{row.excluded ? 'Excluded' : 'Included'}</span>
@@ -171,7 +179,6 @@
 									</td>
 								{/if}
 							</tr>
-							{@const track = tracks.find((t) => t.id === trackId)}
 							{#if isVideo && trackId && track && openSearchTrackIds.has(trackId)}
 								<tr>
 									<td colspan="99" class="px-3 py-2">
@@ -190,6 +197,9 @@
 					</tbody>
 				</table>
 			</div>
+			{#if plan}
+				<p class="review-tracks-table-muted" data-testid="rip-plan-line">{ripPlanLine(plan)}</p>
+			{/if}
 		</div>
 	{:else}
 		<p class="review-tracks-table-empty">No tracks yet.</p>
