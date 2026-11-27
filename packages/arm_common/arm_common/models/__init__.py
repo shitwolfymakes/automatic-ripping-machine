@@ -12,6 +12,7 @@ from arm_common.models.session import Session
 from arm_common.models.session_application import SessionApplication
 from arm_common.models.session_route import SessionRoute
 from arm_common.models.track import Track
+from arm_common.models.track_stage import TrackStage
 from arm_common.models.handbrake_schema import HandbrakeSchemaRecord
 from arm_common.models.transcode_preset import TranscodePreset
 from arm_common.models.transcode_task import TranscodeTask
@@ -35,6 +36,7 @@ __all__ = [
     "SessionApplication",
     "SessionRoute",
     "Track",
+    "TrackStage",
     "HandbrakeSchemaRecord",
     "TranscodePreset",
     "TranscodeTask",

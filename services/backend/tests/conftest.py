@@ -31,3 +31,8 @@ def _unspaced_musicbrainz_calls(monkeypatch: pytest.MonkeyPatch) -> None:
     from arm_backend.metadata import musicbrainz
 
     monkeypatch.setattr(musicbrainz, "_MIN_INTERVAL_SECONDS", 0.0)
+
+
+# The staging tests' database fixture (real aiosqlite, a recording hub); imported last so the
+# environment above is in place before `arm_backend` loads.
+from tests._stage_env import env  # noqa: E402, F401

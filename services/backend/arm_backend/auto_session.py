@@ -37,6 +37,8 @@ from arm_backend.session_routing import (
     resolve_routed_session_id,
     routing_media_type,
 )
+from arm_backend.stager import wake_active_stager
+from arm_backend.staging import ensure_stage_rows
 from arm_backend.transcode_apply import (
     ResolvedTask,
     compute_outputs,
@@ -520,6 +522,24 @@ def _queue_tasks(
     return new_tasks
 
 
+async def _stage_resolved_tracks(
+    db: AsyncSession,
+    hub: WSHub | None,
+    transcode_preset: TranscodePreset | None,
+    tracks: list[Track],
+    resolved: list[ResolvedTask],
+) -> None:
+    """Queue a stage row for each track an encode task reads, and wake the stager.
+
+    Passthrough tasks move straight from raw to media, so they stage nothing."""
+    if is_passthrough_preset(transcode_preset):
+        return
+    resolved_ids = {r.track_id for r in resolved}
+    created = await ensure_stage_rows(db, settings, [t for t in tracks if t.id in resolved_ids], hub)
+    if created:
+        wake_active_stager()
+
+
 async def _announce_queued(
     hub: WSHub | None,
     db: AsyncSession,
@@ -786,6 +806,7 @@ async def fan_out_tasks_for_application(
         application.status = SessionApplicationStatus.QUEUED
 
     new_tasks = _queue_tasks(db, application, resolved)
+    await _stage_resolved_tracks(db, hub, transcode_preset, tracks, resolved)
     await _announce_queued(hub, db, application, sess, job, source, new_tasks)
 
     return ApplySessionOutcome(

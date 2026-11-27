@@ -759,3 +759,107 @@ def test_delete_job_files_unlinks_a_symlinked_file_but_keeps_its_target(tmp_path
     assert counters["media_files_removed"] == 1
     assert not link.is_symlink()
     assert target.exists()
+
+
+# ---- staging dir cleanup (#708) ------------------------------------------
+
+
+_JOB_A = "job_01JZXR7K3M5Q8N4VWA00000002"
+_JOB_B = "job_01JZXR7K3M5Q8N4VWA00000003"
+
+
+def _stage_file(raw_root: Path, job_id: str) -> Path:
+    staged = raw_root / ".staging" / job_id / "title00.mkv"
+    staged.parent.mkdir(parents=True)
+    staged.write_bytes(b"staged")
+    return staged
+
+
+def test_delete_with_delete_raw_removes_the_staging_dir_and_only_that_jobs(
+    signing_key: bytes, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    raw_root = tmp_path / "raw"
+    raw_root.mkdir()
+    gone = _stage_file(raw_root, _JOB_A)
+    other = _stage_file(raw_root, _JOB_B)
+    monkeypatch.setattr(jobs_router.settings, "RAW_ROOT", str(raw_root))
+    monkeypatch.setattr(jobs_router.settings, "MEDIA_ROOT", str(tmp_path / "media"))
+
+    async def _no_outputs(_db: Any, _job_id: str) -> list[Path]:
+        return []
+
+    monkeypatch.setattr(jobs_router, "_resolve_media_outputs", _no_outputs)
+    db = FakeSession()
+    _seed_admin(db)
+    db.rows["jobs"] = [_make_job(_JOB_A, status=JobStatus.RIPPED)]
+    app, token = _make_app(signing_key, db, _CapturingHub())
+    with TestClient(app) as client:
+        r = client.delete(f"/api/jobs/{_JOB_A}?delete_raw=true", headers=_auth(token))
+    assert r.status_code == 204
+    assert not gone.parent.exists()
+    assert other.exists()  # a sibling job's staged copy, and the staging root, stay
+
+
+def test_delete_without_delete_raw_leaves_the_staging_dir(
+    signing_key: bytes, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    raw_root = tmp_path / "raw"
+    raw_root.mkdir()
+    staged = _stage_file(raw_root, _JOB_A)
+    monkeypatch.setattr(jobs_router.settings, "RAW_ROOT", str(raw_root))
+    db = FakeSession()
+    _seed_admin(db)
+    db.rows["jobs"] = [_make_job(_JOB_A, status=JobStatus.RIPPED)]
+    app, token = _make_app(signing_key, db, _CapturingHub())
+    with TestClient(app) as client:
+        assert client.delete(f"/api/jobs/{_JOB_A}", headers=_auth(token)).status_code == 204
+    assert staged.exists()
+
+
+def test_bulk_delete_with_raw_removes_each_terminal_jobs_staging_dir(
+    signing_key: bytes, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    raw_root = tmp_path / "raw"
+    raw_root.mkdir()
+    done = _stage_file(raw_root, _JOB_A)
+    running = _stage_file(raw_root, "job_01JZXR7K3M5Q8N4VWA00000008")
+    monkeypatch.setattr(jobs_router.settings, "RAW_ROOT", str(raw_root))
+    monkeypatch.setattr(jobs_router.settings, "MEDIA_ROOT", str(tmp_path / "media"))
+
+    async def _no_outputs(_db: Any, _job_id: str) -> list[Path]:
+        return []
+
+    monkeypatch.setattr(jobs_router, "_resolve_media_outputs", _no_outputs)
+    db = FakeSession()
+    _seed_admin(db)
+    db.rows["jobs"] = [
+        _make_job(_JOB_A, status=JobStatus.RIPPED),
+        _make_job("job_01JZXR7K3M5Q8N4VWA00000008", status=JobStatus.RIPPING),
+    ]
+    app, token = _make_app(signing_key, db, _CapturingHub())
+    with TestClient(app) as client:
+        assert client.delete("/api/jobs?delete_raw=true", headers=_auth(token)).status_code == 200
+    assert not done.parent.exists()
+    assert running.exists()
+
+
+def test_remove_staging_dir_removes_the_job_dir_and_is_idempotent(tmp_path: Path) -> None:
+    staged = _stage_file(tmp_path, _JOB_A)
+    staging_root = tmp_path / ".staging"
+    assert job_files.remove_staging_dir(_JOB_A, staging_root) == 1
+    assert not staged.parent.exists() and staging_root.exists()
+    assert job_files.remove_staging_dir(_JOB_A, staging_root) == 0
+
+
+def test_remove_staging_dir_logs_an_rmtree_failure(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    staged = _stage_file(tmp_path, _JOB_A)
+
+    def _deny(_path: Any) -> None:
+        raise OSError("busy")
+
+    monkeypatch.setattr(job_files.shutil, "rmtree", _deny)
+    assert job_files.remove_staging_dir(_JOB_A, tmp_path / ".staging") == 0
+    assert staged.exists()
+    assert "staging rmtree failed" in caplog.text

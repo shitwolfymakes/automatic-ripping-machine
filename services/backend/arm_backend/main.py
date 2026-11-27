@@ -70,6 +70,7 @@ from arm_backend.routers import (
 from arm_backend.constants import CONFIG_SINGLETON_ID
 from arm_backend.seeders import run_seeders
 from arm_backend.thediscdb_schedule import thediscdb_refresh_loop
+from arm_backend.stager import TrackStager, set_active_stager, sweep_track_stages
 from arm_backend.transcode_dispatcher import TranscodeDispatcher, set_active_dispatcher
 from arm_backend.utils import ensure_roots, default_roots
 from arm_backend.ws import WSHub
@@ -78,6 +79,10 @@ from arm_common import Config, configure_service_logging
 
 configure_service_logging("arm-backend", level=settings.ARM_LOG_LEVEL)
 logger = logging.getLogger("arm_backend")
+
+
+# Covers the copy stopping at a chunk boundary; the compose stop_grace_period must outlast it.
+STAGER_STOP_TIMEOUT_SECONDS = 20.0
 
 
 def _run_migrations() -> None:
@@ -118,6 +123,14 @@ async def _sweep_orphaned_applications(dispatcher: TranscodeDispatcher) -> int:
     return orphaned
 
 
+async def _sweep_track_stages() -> int:
+    """Reconcile stage rows with the disk after a restart, on a session of its own; returns how many it touched."""
+    async with SessionLocal() as db:
+        touched = await sweep_track_stages(db, settings)
+        await db.commit()
+    return touched
+
+
 async def _load_signing_key() -> bytes:
     """Read the session signing key the first-boot seeders stored on the
     config row."""
@@ -136,6 +149,7 @@ class _BackendServices:
     _thediscdb_refresh_task: asyncio.Task[None]
     _release_check_task: asyncio.Task[None]
     _dispatcher_task: asyncio.Task[None]
+    _stager_task: asyncio.Task[None]
     _iso_watchdog_task: asyncio.Task[None] | None
     _notification_task: asyncio.Task[None]
     _log_tailer_task: asyncio.Task[None]
@@ -150,6 +164,7 @@ class _BackendServices:
 
     def __init__(self, app: FastAPI) -> None:
         self._app = app
+        self._stager: TrackStager | None = None
 
     async def start(self) -> None:
         _run_migrations()
@@ -206,7 +221,13 @@ class _BackendServices:
             "backend startup: reconciled %d orphaned session_application(s)",
             "startup orphaned-application sweep failed: %s",
         )
+        await _startup_sweep(
+            _sweep_track_stages,
+            "backend startup: reconciled %d track stage item(s)",
+            "startup track-stage sweep failed: %s",
+        )
         self._start_transcode_dispatcher()
+        self._start_stager()
         gpu_probe_runner = self._start_gpu_probe_runner()
         handbrake_schema_runner = self._start_handbrake_schema_runner()
 
@@ -232,6 +253,8 @@ class _BackendServices:
             # cancelled probe removes its container.
             ("gpu probe runner", gpu_probe_runner.shutdown),
             ("handbrake schema runner", handbrake_schema_runner.shutdown),
+            # Before the dispatcher: the stager stops at a chunk boundary and needs the DB.
+            ("track stager", self._stop_stager),
             ("transcode dispatcher", self._stop_transcode_dispatcher),
             ("episode stage runner", self._app.state.episode_stage.shutdown),
             ("metadata dispatcher", self._app.state.dispatcher.aclose),
@@ -304,6 +327,17 @@ class _BackendServices:
         self._dispatcher_task = asyncio.create_task(self._transcode_dispatcher.run())
         self._app.state.transcode_dispatcher = self._transcode_dispatcher
         set_active_dispatcher(self._transcode_dispatcher)
+
+    def _start_stager(self) -> None:
+        """Start the track stager and publish its wake hook, when the host paths are configured."""
+        if not self._transcode_dispatcher.host_paths_set():
+            logger.info("staging host paths not set; the track stager is not started")
+            return
+        stager = TrackStager(settings, self._app.state.ws_hub, SessionLocal)
+        self._stager = stager
+        self._stager_task = asyncio.create_task(stager.run())
+        self._app.state.stager = stager
+        set_active_stager(stager)
 
     async def _load_handbrake_schema_store(self) -> None:
         """Publish the schema store with the newest stored dump loaded, so claim and register have a schema
@@ -462,6 +496,16 @@ class _BackendServices:
             await asyncio.wait_for(self._notification_task, timeout=10.0)
         except asyncio.TimeoutError:  # pragma: no cover, only if the dispatcher hangs >10s on shutdown
             self._notification_task.cancel()
+
+    async def _stop_stager(self) -> None:
+        if self._stager is None:
+            return
+        set_active_stager(None)
+        try:
+            await asyncio.wait_for(self._stager.stop(), timeout=STAGER_STOP_TIMEOUT_SECONDS)
+        except asyncio.TimeoutError:
+            logger.warning("track stager did not stop within %.0f s; cancelling it", STAGER_STOP_TIMEOUT_SECONDS)
+            self._stager_task.cancel()
 
     async def _stop_transcode_dispatcher(self) -> None:
         # transcode_dispatcher/dispatcher_task are unconditionally set above
