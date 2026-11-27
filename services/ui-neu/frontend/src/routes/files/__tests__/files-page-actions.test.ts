@@ -381,6 +381,20 @@ describe('listing states', () => {
 		expect(screen.getByRole('button', { name: /^Delete 1$/ })).toBeDisabled();
 	});
 
+	it('explains the staging root is managed by ARM and disables its write controls', async () => {
+		mockFetchRoots.mockResolvedValue([
+			...defaultRoots,
+			{ key: 'STAGING', label: 'Staging', path: '/media/raw/.staging', writable: false }
+		]);
+		dirs['STAGING::'] = listing([file('t.mkv', { size: 1 })], { root: 'STAGING', readonly: true });
+		setUrl('http://localhost/files?root=STAGING');
+		await renderPage('t.mkv');
+		expect(screen.getByText(/Staging is managed by ARM/)).toBeInTheDocument();
+		expect(screen.queryByText(/read-only mount/)).not.toBeInTheDocument();
+		const rowButtons = within(row('t.mkv')).getAllByTitle('Read-only mount');
+		rowButtons.forEach((b) => expect(b).toBeDisabled());
+	});
+
 	it('shows no read-only banner on a writable mount', async () => {
 		await renderPage();
 		expect(screen.queryByText(/read-only mount/)).not.toBeInTheDocument();

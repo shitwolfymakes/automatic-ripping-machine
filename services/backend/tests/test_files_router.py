@@ -290,3 +290,26 @@ def test_delete_oserror_returns_500(app, monkeypatch):
         r = c.request("DELETE", "/api/files", params={"root": "MEDIA", "subpath": "a.mkv"}, headers=_auth(app))
     assert r.status_code == 500
     assert r.json()["detail"] == "filesystem_error"
+
+
+def test_staging_root_browse_ok_and_writes_403(app, tmp_path, monkeypatch):
+    raw = tmp_path / "raw"
+    (raw / ".staging" / "job1").mkdir(parents=True)
+    (raw / "rip").mkdir()
+    monkeypatch.setitem(fb.ROOTS, "RAW", FileRoot(key="RAW", label="Raw", path=str(raw), writable=True))
+    monkeypatch.setitem(
+        fb.ROOTS, "STAGING", FileRoot(key="STAGING", label="Staging", path=str(raw / ".staging"), writable=False)
+    )
+    with TestClient(app) as c:
+        h = _auth(app)
+        roots = {x["key"]: x for x in c.get("/api/files/roots", headers=h).json()}
+        assert roots["STAGING"]["writable"] is False
+        ls = c.get("/api/files/list", params={"root": "STAGING"}, headers=h)
+        assert [e["name"] for e in ls.json()["entries"]] == ["job1"]
+        r = c.delete("/api/files", params={"root": "STAGING", "subpath": "job1"}, headers=h)
+        assert (r.status_code, r.json()["detail"]) == (403, "read_only_root")
+        raw_ls = c.get("/api/files/list", params={"root": "RAW"}, headers=h)
+        assert [e["name"] for e in raw_ls.json()["entries"]] == ["rip"]
+        r = c.delete("/api/files", params={"root": "RAW", "subpath": ".staging/job1"}, headers=h)
+        assert (r.status_code, r.json()["detail"]) == (403, "staging_protected")
+    assert (raw / ".staging" / "job1").exists()

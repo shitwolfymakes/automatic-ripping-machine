@@ -27,6 +27,7 @@
 	import LoadState from '$lib/components/shared/LoadState.svelte';
 	import OrphanFoldersModal from '$lib/components/files/OrphanFoldersModal.svelte';
 	import { features } from '$lib/features';
+	import { readonlyNotice } from '$lib/files/root-notice';
 	import NewFolderRow from '$lib/components/files/NewFolderRow.svelte';
 	import HoldUntil from '$lib/components/shared/HoldUntil.svelte';
 
@@ -252,7 +253,7 @@
 	{#if browser.isReadonly}
 		<div class="alert alert-warning cluster files-page-readonly-banner">
 			<Glyph name="lock" class="h-4 w-4 shrink-0 files-page-readonly-icon" />
-			<p>This directory is on a read-only mount. File operations are disabled.</p>
+			<p>{readonlyNotice(browser.current.root)}</p>
 		</div>
 	{/if}
 

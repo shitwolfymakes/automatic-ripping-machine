@@ -24,6 +24,7 @@ router = APIRouter(prefix="/api/files", tags=["files"])
 _STATUS = {
     "read_only_root": status.HTTP_403_FORBIDDEN,
     "dest_not_writable": status.HTTP_403_FORBIDDEN,
+    "staging_protected": status.HTTP_403_FORBIDDEN,
     "not_found": status.HTTP_404_NOT_FOUND,
     "already_exists": status.HTTP_409_CONFLICT,
 }
