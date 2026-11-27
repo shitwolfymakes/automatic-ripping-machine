@@ -74,6 +74,9 @@ ENV DEBIAN_FRONTEND=noninteractive \
 # Runtime deps: MakeMKV handles its own DVD CSS, so we deliberately skip
 # libdvd-pkg / libdvdcss here. Keeps the image to main-repo packages only and
 # avoids enabling contrib / non-free.
+# openjdk-17-jre-headless: makemkvcon runs the BD-J (Java) menu code to pick the
+# real playlist on Java-menu Blu-rays and finds java on PATH. Without it those
+# discs scan with the wrong or no titles. Costs about 200 MB (image ~600 -> ~800 MB).
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         tini \
@@ -94,6 +97,7 @@ RUN apt-get update \
         7zip \
         libtesseract5 \
         liblept5 \
+        openjdk-17-jre-headless \
     && rm -rf /var/lib/apt/lists/*
 
 # Pull MakeMKV binaries + libs from the build stage. The bin tarball installs
