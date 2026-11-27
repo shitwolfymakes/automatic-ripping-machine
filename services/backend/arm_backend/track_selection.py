@@ -1,6 +1,6 @@
 from arm_common import TrackStatus, DiscType, OutputMode, RipPreset, Track, TrackKind, TrackSelection
 from arm_common.schemas import ScanResult, ScanTitle, TrackFilters
-from arm_common.title_classes import MAIN_FEATURE_MIN_SECONDS
+from arm_common.title_classes import KEPT_CLASSES, MAIN_FEATURE_MIN_SECONDS, TitleClass, TitleVerdict, classify_titles
 
 ALL_TRACKS_MIN_SECONDS = 60
 
@@ -63,22 +63,56 @@ def _apply_custom_filters(titles: list[ScanTitle], filters: TrackFilters) -> lis
     return candidates
 
 
-def _select_video(scan: ScanResult, rip_preset: RipPreset, job_id: str) -> list[Track]:
+def _classify(scan: ScanResult, preferred: frozenset[int]) -> dict[int, TitleVerdict]:
+    """Verdicts for every title of a Blu-ray scan; `{}` for any other disc, which
+    leaves every title a candidate."""
+    if scan.disc_type != DiscType.BLURAY:
+        return {}
+    return classify_titles(scan.titles, preferred=preferred)
+
+
+def _kept_titles(titles: list[ScanTitle], verdicts: dict[int, TitleVerdict]) -> list[ScanTitle]:
+    """The titles the classifier keeps; all of them when there are no verdicts."""
+    if not verdicts:
+        return titles
+    return [t for t in titles if verdicts[t.index].title_class in KEPT_CLASSES]
+
+
+def _main_feature(candidates: list[ScanTitle], verdicts: dict[int, TitleVerdict]) -> list[ScanTitle]:
+    """Every edition of a multi-edition disc; else the longest candidate of at
+    least MAIN_FEATURE_MIN_SECONDS, or the longest of all when none is that long."""
+    edition_indices = {i for i, v in verdicts.items() if v.title_class == TitleClass.EDITION}
+    editions = [t for t in candidates if t.index in edition_indices]
+    if editions:
+        return editions
+    eligible = [t for t in candidates if t.duration_seconds >= MAIN_FEATURE_MIN_SECONDS]
+    return [max(eligible or candidates, key=lambda t: t.duration_seconds)]
+
+
+def _custom_pool(titles: list[ScanTitle], candidates: list[ScanTitle], filters: TrackFilters) -> list[ScanTitle]:
+    """An operator allowlist picks from every title, classification ignored;
+    without one the filters run over the classifier's candidates."""
+    return titles if filters.title_indices is not None else candidates
+
+
+def _select_video(scan: ScanResult, rip_preset: RipPreset, job_id: str, preferred: frozenset[int]) -> list[Track]:
     titles = scan.titles
     if not titles:
         return []
+    verdicts = _classify(scan, preferred)
+    candidates = _kept_titles(titles, verdicts)
     rule = rip_preset.track_selection
     if rule == TrackSelection.MAIN_FEATURE:
-        eligible = [t for t in titles if t.duration_seconds >= MAIN_FEATURE_MIN_SECONDS]
-        chosen = max(eligible or titles, key=lambda t: t.duration_seconds)
-        return [_video_track(job_id, chosen)]
+        return [_video_track(job_id, t) for t in _main_feature(candidates, verdicts)]
     if rule == TrackSelection.ALL_TRACKS:
-        return [_video_track(job_id, t) for t in titles if t.duration_seconds >= ALL_TRACKS_MIN_SECONDS]
+        return [_video_track(job_id, t) for t in candidates if t.duration_seconds >= ALL_TRACKS_MIN_SECONDS]
     if rule == TrackSelection.ARCHIVE:
-        return [_video_track(job_id, t) for t in titles]
+        return [_video_track(job_id, t) for t in candidates]
     if rule == TrackSelection.CUSTOM:
         filters = _parse_filters(rip_preset)
-        return [_video_track(job_id, t) for t in _apply_custom_filters(titles, filters)]
+        return [
+            _video_track(job_id, t) for t in _apply_custom_filters(_custom_pool(titles, candidates, filters), filters)
+        ]
     # Unreachable: TrackSelection enum is exhaustively handled above.
     raise TrackSelectionError(f"unknown track_selection: {rule}")  # pragma: no cover
 
@@ -127,19 +161,25 @@ def _whole_disc_tracks(job_id: str, scan: ScanResult, rip_preset: RipPreset) -> 
     return None
 
 
-def select_tracks(job_id: str, scan: ScanResult, rip_preset: RipPreset) -> list[Track]:
-    """Apply rip-preset track-selection rules to a scan."""
+def select_tracks(
+    job_id: str, scan: ScanResult, rip_preset: RipPreset, *, preferred: frozenset[int] = frozenset()
+) -> list[Track]:
+    """Apply rip-preset track-selection rules to a scan. `preferred` are the
+    title indices a metadata source calls the main feature; the classifier uses
+    them to break ties between look-alike titles."""
     whole = _whole_disc_tracks(job_id, scan, rip_preset)
     if whole is not None:
         return whole
     if scan.disc_type in (DiscType.DVD, DiscType.BLURAY):
-        return _select_video(scan, rip_preset, job_id)
+        return _select_video(scan, rip_preset, job_id, preferred)
     if scan.disc_type == DiscType.CD:
         return _select_audio(scan, rip_preset, job_id)
     raise TrackSelectionError(f"cannot select tracks for disc_type={scan.disc_type}")
 
 
-def select_tracks_for_review(job_id: str, scan: ScanResult, rip_preset: RipPreset) -> list[Track]:
+def select_tracks_for_review(
+    job_id: str, scan: ScanResult, rip_preset: RipPreset, *, preferred: frozenset[int] = frozenset()
+) -> list[Track]:
     """Persist EVERY scanned title as a Track for the timed review gate, marking
     preset-rejected titles `excluded=True` (the default keep/drop set) so the
     review UI shows the full title list and the operator can re-enable any.
@@ -155,7 +195,7 @@ def select_tracks_for_review(job_id: str, scan: ScanResult, rip_preset: RipPrese
     if whole is not None:
         return whole
 
-    kept_refs = {t.source_ref for t in select_tracks(job_id, scan, rip_preset)}
+    kept_refs = {t.source_ref for t in select_tracks(job_id, scan, rip_preset, preferred=preferred)}
     is_cd = scan.disc_type == DiscType.CD
     rows: list[Track] = []
     for title in scan.titles:
