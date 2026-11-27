@@ -13,8 +13,12 @@
 		onsaved?: (changed: { season: boolean; disc: boolean }) => void;
 		/** A field to put the cursor in when the form opens (the card's "Season not set" link). */
 		focusField?: 'season' | null;
+		isTv: boolean;
 	}
-	let { job, onrefresh, onsaved, focusField = null }: Props = $props();
+	let { job, onrefresh, onsaved, focusField = null, isTv }: Props = $props();
+	let provenanceFields = $derived(
+		isTv ? (['season', 'disc_number', 'disc_total'] as const) : (['disc_number', 'disc_total'] as const)
+	);
 	let seasonInput = $state<HTMLInputElement | undefined>(undefined);
 	$effect(() => {
 		if (focusField === 'season') seasonInput?.focus();
@@ -110,18 +114,20 @@
 	<!-- Disc section -->
 	<p class="eyebrow mb-2 mt-4">Disc</p>
 	<div class="flex gap-3">
-		<label class="field w-28">
-			<span class="field-label job-info-form-small-label">Season</span>
-			<input
-				bind:this={seasonInput}
-				aria-label="Season"
-				type="number"
-				bind:value={season}
-				oninput={() => (touched = { ...touched, season: true })}
-				disabled={!resolvable}
-				placeholder="-"
-			/>
-		</label>
+		{#if isTv}
+			<label class="field w-28">
+				<span class="field-label job-info-form-small-label">Season</span>
+				<input
+					bind:this={seasonInput}
+					aria-label="Season"
+					type="number"
+					bind:value={season}
+					oninput={() => (touched = { ...touched, season: true })}
+					disabled={!resolvable}
+					placeholder="-"
+				/>
+			</label>
+		{/if}
 		<label class="field w-28">
 			<span class="field-label job-info-form-small-label">Disc number</span>
 			<input
@@ -146,9 +152,13 @@
 		</label>
 	</div>
 	<p class="field-help mt-1.5">
-		For TV box sets, the season on this disc and the disc's position in it. Leave blank when unknown.
+		{#if isTv}
+			For TV box sets, the season on this disc and the disc's position in it. Leave blank when unknown.
+		{:else}
+			For multi-disc releases, the disc's position in the release. Leave blank when unknown.
+		{/if}
 	</p>
-	{#each ['season', 'disc_number', 'disc_total'] as const as field (field)}
+	{#each provenanceFields as field (field)}
 		{@const line = provenanceLine(field, job.identity_provenance)}
 		{#if line && job[field] != null}
 			<p class="field-help">{line}</p>

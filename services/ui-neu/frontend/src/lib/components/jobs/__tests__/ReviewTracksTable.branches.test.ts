@@ -42,7 +42,7 @@ const candidate: MetadataCandidate = {
 
 function renderTable(props: Record<string, unknown> = {}) {
 	return renderComponent(ReviewTracksTable, {
-		props: { job: createJob({ media_type: 'tv' }), tracks: [], isVideo: true, isMusic: false, ...props }
+		props: { job: createJob({ media_type: 'tv' }), tracks: [], isVideo: true, isTv: true, isMusic: false, ...props }
 	});
 }
 
@@ -56,6 +56,12 @@ afterEach(() => {
 });
 
 describe('ReviewTracksTable header', () => {
+	it('drops the Episode column on a movie but keeps the search column', () => {
+		renderTable({ tracks: [track({ id: 'a' })], isTv: false });
+		expect(screen.queryByRole('columnheader', { name: 'Episode' })).toBeNull();
+		expect(screen.getByRole('button', { name: /search/i })).toBeInTheDocument();
+	});
+
 	it('titles a track list "Tracks (N)" with Title, Episode and search columns for video', () => {
 		renderTable({ tracks: [track({ id: 'a' }), track({ id: 'b', index: 1 })] });
 		expect(screen.getByRole('heading', { name: 'Tracks (2)' })).toBeInTheDocument();
@@ -70,7 +76,7 @@ describe('ReviewTracksTable header', () => {
 	});
 
 	it('calls the first column Name for music and drops the video columns', () => {
-		renderTable({ tracks: [track({ id: 'a' })], isVideo: false, isMusic: true });
+		renderTable({ tracks: [track({ id: 'a' })], isVideo: false, isTv: false, isMusic: true });
 		expect(screen.getByRole('columnheader', { name: 'Name' })).toBeInTheDocument();
 		expect(screen.queryByRole('columnheader', { name: 'Title' })).toBeNull();
 		expect(screen.queryByRole('columnheader', { name: 'Episode' })).toBeNull();
