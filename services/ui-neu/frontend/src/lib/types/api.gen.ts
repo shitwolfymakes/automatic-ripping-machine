@@ -5183,6 +5183,13 @@ export type SourceSummary = {
 };
 
 /**
+ * StageStatus
+ *
+ * Where one track's copy from /raw to staging stands.
+ */
+export type StageStatus = 'pending' | 'copying' | 'staged' | 'failed' | 'stalled';
+
+/**
  * StatsResponse
  */
 export type StatsResponse = {
@@ -5535,6 +5542,39 @@ export type TrackRole = 'main' | 'episode' | 'extra' | 'trailer' | 'other';
 export type TrackSelection = 'main_feature' | 'all_tracks' | 'archive' | 'custom';
 
 /**
+ * TrackStageView
+ *
+ * A track's staging copy (raw to /staging): the state the job page shows beside the track.
+ */
+export type TrackStageView = {
+    status: StageStatus;
+    /**
+     * Bytes Durable
+     */
+    bytes_durable: number;
+    /**
+     * Source Size
+     */
+    source_size?: number | null;
+    /**
+     * Linked
+     */
+    linked?: boolean | null;
+    /**
+     * Attempts
+     */
+    attempts: number;
+    /**
+     * Last Error
+     */
+    last_error?: string | null;
+    /**
+     * Staged At
+     */
+    staged_at?: string | null;
+};
+
+/**
  * TrackStatus
  */
 export type TrackStatus = 'queued' | 'in_progress' | 'done' | 'failed';
@@ -5685,6 +5725,7 @@ export type TrackView = {
     identity_provenance?: {
         [key: string]: string;
     } | null;
+    stage?: TrackStageView | null;
 };
 
 /**
@@ -7039,6 +7080,40 @@ export type UpdateJobApiJobsJobIdPatchResponses = {
 };
 
 export type UpdateJobApiJobsJobIdPatchResponse = UpdateJobApiJobsJobIdPatchResponses[keyof UpdateJobApiJobsJobIdPatchResponses];
+
+export type RetryTrackStageApiJobsJobIdTracksTrackIdStageRetryPostData = {
+    body?: never;
+    path: {
+        /**
+         * Job Id
+         */
+        job_id: string;
+        /**
+         * Track Id
+         */
+        track_id: string;
+    };
+    query?: never;
+    url: '/api/jobs/{job_id}/tracks/{track_id}/stage/retry';
+};
+
+export type RetryTrackStageApiJobsJobIdTracksTrackIdStageRetryPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type RetryTrackStageApiJobsJobIdTracksTrackIdStageRetryPostError = RetryTrackStageApiJobsJobIdTracksTrackIdStageRetryPostErrors[keyof RetryTrackStageApiJobsJobIdTracksTrackIdStageRetryPostErrors];
+
+export type RetryTrackStageApiJobsJobIdTracksTrackIdStageRetryPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: TrackStageView;
+};
+
+export type RetryTrackStageApiJobsJobIdTracksTrackIdStageRetryPostResponse = RetryTrackStageApiJobsJobIdTracksTrackIdStageRetryPostResponses[keyof RetryTrackStageApiJobsJobIdTracksTrackIdStageRetryPostResponses];
 
 export type AbandonJobApiJobsJobIdAbandonPostData = {
     /**

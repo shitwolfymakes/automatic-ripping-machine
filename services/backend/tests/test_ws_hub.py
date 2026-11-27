@@ -103,6 +103,26 @@ async def test_progress_throttle_collapses_bursts() -> None:
     assert ws.sent[0]["payload"]["progress_pct"] == 0
 
 
+async def test_staging_progress_is_throttled_per_track_and_never_persisted() -> None:
+    hub = WSHub()
+    ws = _FakeWS()
+    session = _FakeSession()
+    await hub.subscribe(ws, "staging.progress.trk_1")  # type: ignore[arg-type]
+
+    for done in range(5):
+        await hub.emit(
+            topic="staging.progress.trk_1",
+            event_type="stage.progress",
+            payload={"track_id": "trk_1", "bytes_done": done},
+            persist=False,
+            track_id="trk_1",
+            session=session,  # type: ignore[arg-type]
+        )
+
+    assert [f["payload"]["bytes_done"] for f in ws.sent] == [0]
+    assert session.added == []
+
+
 async def test_progress_throttle_admits_after_window() -> None:
     hub = WSHub()
     ws = _FakeWS()

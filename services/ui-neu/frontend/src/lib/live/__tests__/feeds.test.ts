@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createRipFeed, estimateEtaSeconds, transcodeSample } from '../feeds';
+import { copyPercent, createRipFeed, estimateEtaSeconds, stageSample, transcodeSample } from '../feeds';
 
 describe('rip feed', () => {
 	it('no ETA on the first tick', () => {
@@ -200,5 +200,34 @@ describe('estimateEtaSeconds', () => {
 		['an unparseable start', 'not a date', 50]
 	])('is null with %s', (_name, startedAt, pct) => {
 		expect(estimateEtaSeconds(startedAt, pct, at(100))).toBeNull();
+	});
+});
+
+describe('stageSample', () => {
+	it('reads a staging progress message with the percent of the file copied', () => {
+		expect(
+			stageSample({ track_id: 't1', bytes_done: 250, bytes_total: 1000, rate_bps: 50, eta_seconds: 15 })
+		).toMatchObject({ pct: 25, bytesDone: 250, bytesTotal: 1000, rateBps: 50, etaSeconds: 15, trackId: 't1' });
+	});
+
+	it('has no percent or ETA when the message carries none', () => {
+		expect(stageSample({ track_id: 't1' })).toMatchObject({ pct: null, etaSeconds: null, rateBps: null });
+	});
+
+	it('clamps a negative ETA to zero', () => {
+		expect(stageSample({ eta_seconds: -3 }).etaSeconds).toBe(0);
+	});
+});
+
+describe('copyPercent', () => {
+	it.each([
+		['halfway', 5, 10, 50],
+		['over the total', 12, 10, 100],
+		['nothing copied', 0, 10, 0],
+		['an unknown done', null, 10, null],
+		['an unknown total', 5, null, null],
+		['an empty file', 0, 0, null]
+	])('is %s', (_name, done, total, expected) => {
+		expect(copyPercent(done, total)).toBe(expected);
 	});
 });

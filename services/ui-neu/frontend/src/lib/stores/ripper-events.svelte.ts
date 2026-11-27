@@ -1,11 +1,11 @@
-// Instant status refresh from `ripper.events` and `transcode.events`. A
+// Instant status refresh from `ripper.events`, `transcode.events` and `staging.events`. A
 // NOTIFIER, not a data store: it holds no job state. It subscribes once to
-// the bare `ripper.events` and `transcode.events` topics, coalesces the
+// the bare `ripper.events`, `transcode.events` and `staging.events` topics, coalesces the
 // job_ids seen within a debounce window, and invokes each registered
 // listener once per flush with the accumulated set, plus the event types
 // seen per job in that window (for listeners that care which event fired,
 // e.g. job.identity_updated). Every listener (the dashboard included)
-// therefore also refreshes on transcode lifecycle events, debounced. The
+// therefore also refreshes on transcode and staging lifecycle events, debounced. The
 // name predates the transcode topic and is kept.
 // Listeners re-run their own existing fetchers; polling stays untouched as
 // reconciliation (WS down => exactly today's behavior).
@@ -73,7 +73,7 @@ function flush(): void {
 export function startRipperEvents(): void {
 	wsClient.start();
 	if (unsubs.length === 0) {
-		unsubs = [wsClient.subscribe('ripper.events', onEvent), wsClient.subscribe('transcode.events', onEvent)];
+		unsubs = ['ripper.events', 'transcode.events', 'staging.events'].map((topic) => wsClient.subscribe(topic, onEvent));
 	}
 }
 

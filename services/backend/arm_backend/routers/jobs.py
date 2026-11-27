@@ -27,8 +27,10 @@ from arm_backend.log_reader import per_job_log_path
 from arm_backend.metadata.identity_payload import external_ids_of
 from arm_backend.path_template import TemplateValidationError
 from arm_backend.routers._deps import get_hub, get_stage_runner
-from arm_backend.routers._params import JobIdParam
+from arm_backend.routers._params import JobIdParam, TrackIdParam
 from arm_backend.constants import CONFIG_SINGLETON_ID
+from arm_backend.stager import wake_active_stager
+from arm_backend.staging import StageNotRetryable, retry_failed_stage, stage_for_track
 from arm_backend.ws import WSHub
 from arm_common import (
     Config,
@@ -39,6 +41,7 @@ from arm_common import (
     JobStatus,
     MediaType,
     Session,
+    TrackStage,
     TranscodeTaskStatus,
     User,
 )
@@ -60,6 +63,7 @@ from arm_common.schemas import (
     ResolveRequest,
     ResolveResponse,
     SessionApplicationView,
+    TrackStageView,
     TranscodeTaskView,
 )
 from arm_common.enums import (
@@ -185,6 +189,30 @@ async def get_job_detail(
     if job is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown job_id: {job_id}")
     return await job_detail_view(session, job)
+
+
+@router.post("/{job_id}/tracks/{track_id}/stage/retry", response_model=TrackStageView)
+async def retry_track_stage(
+    job_id: JobIdParam,
+    track_id: TrackIdParam,
+    _: User = Depends(require_writer),
+    db: AsyncSession = Depends(get_session),
+    hub: WSHub = Depends(get_hub),
+) -> TrackStage:
+    """Re-queue a FAILED staging copy with a fresh attempt budget and wake the stager."""
+    stage = await stage_for_track(db, track_id)
+    if stage is None or stage.job_id != job_id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"no stage for track_id: {track_id}")
+    try:
+        await retry_failed_stage(db, hub, stage)
+    except StageNotRetryable as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT, detail=f"only a failed stage can be retried, got {exc}"
+        ) from exc
+    await db.commit()
+    wake_active_stager()
+    logger.info("stage retry job_id=%s track_id=%s", job_id, track_id)
+    return stage
 
 
 @router.post("/{job_id}/abandon", response_model=JobView)

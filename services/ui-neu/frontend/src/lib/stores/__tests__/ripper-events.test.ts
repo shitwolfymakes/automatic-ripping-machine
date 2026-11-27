@@ -138,13 +138,14 @@ describe('ripperEvents store', () => {
 	it('start is subscribe-once; stop unsubscribes and clears pending ids', () => {
 		startRipperEvents();
 		startRipperEvents();
-		expect(subscribeMock).toHaveBeenCalledTimes(2);
+		expect(subscribeMock).toHaveBeenCalledTimes(3);
 		expect(subscribeMock).toHaveBeenCalledWith('ripper.events', expect.any(Function));
 		expect(subscribeMock).toHaveBeenCalledWith('transcode.events', expect.any(Function));
+		expect(subscribeMock).toHaveBeenCalledWith('staging.events', expect.any(Function));
 		const listener = listen();
 		emit(eventEnv('job_a'));
 		stopRipperEvents();
-		expect(unsubscribeSpy).toHaveBeenCalledTimes(2);
+		expect(unsubscribeSpy).toHaveBeenCalledTimes(3);
 		vi.advanceTimersByTime(300);
 		expect(listener).not.toHaveBeenCalled(); // pending ids were cleared
 	});

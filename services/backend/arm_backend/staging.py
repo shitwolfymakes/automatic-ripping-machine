@@ -139,3 +139,19 @@ async def release_if_settled(db: AsyncSession, track_id: str) -> Path | None:
         return None
     await db.delete(stage)
     return Path(stage.dest_path)
+
+
+class StageNotRetryable(Exception):
+    """The stage is not FAILED, so there is nothing to retry."""
+
+
+async def retry_failed_stage(db: AsyncSession, hub: WSHub, stage: TrackStage) -> None:
+    """Re-queue a FAILED stage with a fresh attempt budget and announce it. Flushes; does not commit.
+
+    Raises `StageNotRetryable` for any other status."""
+    if stage.status != StageStatus.FAILED:
+        raise StageNotRetryable(enum_value_str(stage.status))
+    stage.status = StageStatus.PENDING
+    stage.attempts = 0
+    await db.flush()
+    await emit_stage_event(hub, db, "stage.retried", stage)

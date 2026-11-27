@@ -18,7 +18,8 @@ import type {
 	ApplySessionResponse,
 	ManualTriggerRequest,
 	ManualTriggerResponse,
-	RipAgainResponse
+	RipAgainResponse,
+	TrackStageView
 } from '$lib/types/api.gen';
 import { apiFetch, apiFetchResponse, post } from './client';
 
@@ -327,6 +328,11 @@ export function fetchNamingVariables(): Promise<NamingVariablesResponse> {
 
 // on_previously_ripped: rip a ripped job's disc again. Starts a held copy of
 // the disc if one is waiting, otherwise lets the next insert through once.
+// Re-queue a failed staging copy with a fresh attempt budget.
+export function retryTrackStage(jobId: string, trackId: string): Promise<TrackStageView> {
+	return post<TrackStageView>(`/api/jobs/${jobId}/tracks/${trackId}/stage/retry`);
+}
+
 export function ripAgain(id: string): Promise<RipAgainResponse> {
 	return apiFetch<RipAgainResponse>(`/api/jobs/${id}/rip-again`, { method: 'POST' });
 }

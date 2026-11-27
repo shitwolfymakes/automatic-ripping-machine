@@ -15,7 +15,7 @@ from arm_common import Drive, Job, TranscodeTask, TranscodeTaskStatus
 
 
 # Bare topics: no scope id follows the prefix.
-_UNSCOPED_TOPICS: frozenset[str] = frozenset({"ripper.events", "transcode.events", "system.events"})
+_UNSCOPED_TOPICS: frozenset[str] = frozenset({"ripper.events", "transcode.events", "staging.events", "system.events"})
 
 
 def _split(topic: str) -> tuple[str, str | None]:
@@ -32,7 +32,9 @@ def _split(topic: str) -> tuple[str, str | None]:
     return (topic, None)
 
 
-_UI_TOPIC_PREFIXES_WITH_SCOPE: frozenset[str] = frozenset({"ripper.progress", "transcode.progress", "logs"})
+_UI_TOPIC_PREFIXES_WITH_SCOPE: frozenset[str] = frozenset(
+    {"ripper.progress", "transcode.progress", "staging.progress", "logs"}
+)
 
 
 type _ServiceRule = Callable[[ServicePrincipal, str, str | None, AsyncSession], Awaitable[bool]]

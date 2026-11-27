@@ -23,7 +23,8 @@ import {
 	triggerManual,
 	startWaitingJob,
 	pauseWaitingJob,
-	ripAgain
+	ripAgain,
+	retryTrackStage
 } from '../jobs';
 
 const mockApiFetch = vi.mocked(apiFetch);
@@ -139,6 +140,13 @@ describe('job/track edits via bulk-PATCH', () => {
 			method: 'PATCH',
 			body: JSON.stringify({ poster_url_manual: 'http://x/p.jpg' })
 		});
+	});
+});
+
+describe('retryTrackStage', () => {
+	it('POSTs /api/jobs/{job}/tracks/{track}/stage/retry', async () => {
+		await retryTrackStage('job_1', 'trk_1');
+		expect(vi.mocked(post)).toHaveBeenCalledWith('/api/jobs/job_1/tracks/trk_1/stage/retry');
 	});
 });
 
