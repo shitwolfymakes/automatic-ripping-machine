@@ -41,7 +41,7 @@ function str(value: unknown): string | null {
 	return typeof value === 'string' ? value : null;
 }
 
-const EMPTY_SAMPLE: LiveSample = {
+export const EMPTY_SAMPLE: LiveSample = {
 	pct: null,
 	etaSeconds: null,
 	fps: null,
@@ -122,6 +122,27 @@ export function transcodeSample(payload: Payload): LiveSample {
 		avgFps: num(payload.avg_fps),
 		pass: str(payload.current_pass)
 	};
+}
+
+/** A staging progress message (raw to /staging copy) as a sample; the percent is the bytes copied of the file. */
+export function stageSample(payload: Payload): LiveSample {
+	const bytesDone = num(payload.bytes_done);
+	const bytesTotal = num(payload.bytes_total);
+	return {
+		...EMPTY_SAMPLE,
+		pct: copyPercent(bytesDone, bytesTotal),
+		etaSeconds: nonNegative(num(payload.eta_seconds)),
+		bytesDone,
+		bytesTotal,
+		rateBps: num(payload.rate_bps),
+		trackId: str(payload.track_id)
+	};
+}
+
+/** Percent of `total` copied, or null when either is unknown or there is nothing to copy. */
+export function copyPercent(done: number | null, total: number | null): number | null {
+	if (done === null || total === null || total <= 0) return null;
+	return Math.min(100, (done / total) * 100);
 }
 
 /**

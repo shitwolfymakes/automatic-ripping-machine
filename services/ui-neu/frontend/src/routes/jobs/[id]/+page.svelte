@@ -284,6 +284,7 @@
 					onexcludedchange={jobDetail.setExcluded}
 					excludeError={jobDetail.excludeError}
 					ontitleapplied={() => jobDetail.load()}
+					onstageretried={() => jobDetail.load()}
 				/>
 			{/if}
 

@@ -15,6 +15,7 @@ from arm_common.enums import (
     MediaType,
     RipInvocation,
     SessionApplicationStatus,
+    StageStatus,
     TitleClass,
     TrackKind,
     TrackRole,
@@ -383,6 +384,20 @@ class JobUpdateRequest(BaseModel):
     tracks: list[TrackEditRequest] | None = None
 
 
+class TrackStageView(BaseModel):
+    """A track's staging copy (raw to /staging): the state the job page shows beside the track."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    status: StageStatus
+    bytes_durable: int
+    source_size: int | None = None
+    linked: bool | None = None
+    attempts: int
+    last_error: str | None = None
+    staged_at: datetime | None = None
+
+
 class TrackView(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -437,6 +452,9 @@ class TrackView(BaseModel):
     custom_filename: str | None = None
     # {attribute: source_id} for resolver-managed fields (display-only).
     identity_provenance: dict[str, str] | None = None
+    # The track's staging copy; None when it has no stage row (passthrough, pre-apply).
+    # Display-only, set by get_job_detail.
+    stage: TrackStageView | None = None
 
 
 class RipStartResponse(BaseModel):

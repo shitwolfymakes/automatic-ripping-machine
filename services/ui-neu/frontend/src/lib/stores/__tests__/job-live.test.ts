@@ -226,6 +226,22 @@ describe('JobLiveStore', () => {
 		expect(store.task('k9')).toBeNull();
 	});
 
+	it('followStage holds the staging topic, reads its sample and releases it once', () => {
+		const store = new JobLiveStore();
+		const offA = store.followStage('t1');
+		const offB = store.followStage('t1');
+		expect(subscribe).toHaveBeenCalledTimes(1);
+		expect(store.stage('t1')).toBeNull();
+		tick('staging.progress.t1', { track_id: 't1', bytes_done: 5, bytes_total: 10, rate_bps: 2 });
+		expect(store.stage('t1')).toMatchObject({ pct: 50, bytesDone: 5, rateBps: 2 });
+		offA();
+		offA();
+		expect(handlers.has('staging.progress.t1')).toBe(true);
+		offB();
+		expect(handlers.has('staging.progress.t1')).toBe(false);
+		expect(store.stage('t1')).toBeNull();
+	});
+
 	it('task() reads a row alone when there is no live sample', () => {
 		const store = new JobLiveStore();
 		expect(store.task('k1', row({ current_pass: '1/2' }))).toMatchObject({ taskId: 'k1', pct: 10, pass: '1/2' });

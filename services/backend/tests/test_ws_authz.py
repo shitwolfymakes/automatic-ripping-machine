@@ -104,6 +104,24 @@ async def test_ui_can_subscribe_to_ui_topics(session: Any) -> None:
     assert await can_subscribe(ui, "logs.job_01JZXR7K3M5Q8N4VWA00000005", session) is True
 
 
+async def test_ui_can_subscribe_to_staging_topics(session: Any) -> None:
+    ui = UIPrincipal(user_id="u_1", username="admin")
+    assert await can_subscribe(ui, "staging.events", session) is True
+    assert await can_subscribe(ui, "staging.progress.trk_01JZXR7K3M5Q8N4VWA00000005", session) is True
+    # The scoped topic needs its track id.
+    assert await can_subscribe(ui, "staging.progress", session) is False
+
+
+async def test_services_cannot_subscribe_or_publish_staging_topics(session: Any) -> None:
+    for p in (
+        ServicePrincipal(kind="ripper", hostname="arm-ripper-A"),
+        ServicePrincipal(kind="transcoder", hostname="t1", task_id="tsk_1"),
+    ):
+        assert await can_subscribe(p, "staging.events", session) is False
+        assert await can_subscribe(p, "staging.progress.trk_1", session) is False
+        assert await can_publish(p, "staging.progress.trk_1", session) is False
+
+
 async def test_ui_cannot_subscribe_to_command_topics(session: Any) -> None:
     ui = UIPrincipal(user_id="u_1", username="admin")
     assert await can_subscribe(ui, "ripper.commands.drv_A", session) is False

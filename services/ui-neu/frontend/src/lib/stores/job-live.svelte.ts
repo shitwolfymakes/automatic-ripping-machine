@@ -8,11 +8,12 @@
 // Transcode: follows transcode.progress.{task} for each in-progress task of a
 // watched job (found from the dashboard store's active_transcodes rows) and for
 // every task passed to followTask.
+// Staging: follows staging.progress.{track} for each track passed to followStage.
 import { untrack } from 'svelte';
 import { wsClient } from '$lib/api/ws';
 import { dashboard } from '$lib/stores/dashboard';
 import type { JobView, TranscodeTaskView } from '$lib/types/api.gen';
-import { createRipFeed, estimateEtaSeconds, transcodeSample, type LiveSample } from '$lib/live/feeds';
+import { createRipFeed, estimateEtaSeconds, stageSample, transcodeSample, type LiveSample } from '$lib/live/feeds';
 
 export interface TaskLive extends LiveSample {
 	taskId: string;
@@ -83,6 +84,7 @@ function mergeTask(
 export class JobLiveStore {
 	#rip = $state<Record<string, LiveSample>>({});
 	#samples = $state<Record<string, LiveSample>>({});
+	#stages = $state<Record<string, LiveSample>>({});
 	#rows = $state<TranscodeTaskView[]>([]);
 
 	#topics = new RefCountedTopics();
@@ -124,6 +126,20 @@ export class JobLiveStore {
 			untrack(() => this.#releaseTask(taskId));
 		};
 	};
+
+	/** Follow one track's staging copy by id (TrackStageRow); returns the unfollow. */
+	followStage = (trackId: string): (() => void) => {
+		untrack(() => this.#acquireStage(trackId));
+		let done = false;
+		return () => {
+			if (done) return;
+			done = true;
+			untrack(() => this.#releaseStage(trackId));
+		};
+	};
+
+	/** The live staging sample for a track, or null before its first report; reactive. */
+	stage = (trackId: string): LiveSample | null => this.#stages[trackId] ?? null;
 
 	/** The live record for a job; reactive. */
 	get = (jobId: string): JobLive => {
@@ -182,6 +198,17 @@ export class JobLiveStore {
 	#releaseTask(taskId: string): void {
 		if (!this.#topics.release(`transcode.progress.${taskId}`)) return;
 		this.#samples = Object.fromEntries(Object.entries(this.#samples).filter(([id]) => id !== taskId));
+	}
+
+	#acquireStage(trackId: string): void {
+		this.#topics.acquire(`staging.progress.${trackId}`, (env) => {
+			this.#stages = { ...this.#stages, [trackId]: stageSample(env.payload) };
+		});
+	}
+
+	#releaseStage(trackId: string): void {
+		if (!this.#topics.release(`staging.progress.${trackId}`)) return;
+		this.#stages = Object.fromEntries(Object.entries(this.#stages).filter(([id]) => id !== trackId));
 	}
 
 	#unwatchJob(jobId: string): void {

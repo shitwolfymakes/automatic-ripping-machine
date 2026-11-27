@@ -16,6 +16,7 @@ from arm_backend.session_drain import after_rip, cancel_parked_applications
 from arm_backend.config import settings
 from arm_backend.crash_recovery import reset_job_for_recovery
 from arm_backend.db import get_session
+from arm_backend.early_staging import stage_finished_track
 from arm_backend.metadata import MetadataDispatcher
 from arm_backend.job_failure import fail_job
 from arm_backend.identify_flow import DiscAlreadyRippedError, IdentifyFlow, RippingPausedError, UnknownDriveError
@@ -859,6 +860,8 @@ async def update_track(
     await session.commit()
     await session.refresh(track)
     await _emit_track_event(session, hub, track, new_status)
+    if new_status == TrackStatus.DONE:
+        await stage_finished_track(session, hub, track)
 
     return TrackView.model_validate(track)
 

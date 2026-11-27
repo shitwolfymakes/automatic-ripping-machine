@@ -33,6 +33,7 @@ const setRole = (authStore as unknown as { __setRole: (r: string | null) => void
 
 const onexcludedchange = vi.fn();
 const ontitleapplied = vi.fn();
+const onstageretried = vi.fn();
 const ontoggleedit = vi.fn();
 const oncloseedit = vi.fn();
 
@@ -55,7 +56,8 @@ function renderRow(track: TrackView, overrides: Overrides = {}) {
 		oncloseedit,
 		onexcludedchange,
 		excludeError: overrides.excludeError,
-		ontitleapplied
+		ontitleapplied,
+		onstageretried
 	});
 }
 
@@ -302,6 +304,28 @@ describe('JobTrackRow', () => {
 		cleanup();
 		renderRow(createTrack({ id: 'trk_2', status: 'done', transcode_status: 'done', transcode_fps: 30 }));
 		expect(text(cell('Transcode'))).not.toContain('fps');
+	});
+
+	it('says "Waiting for files" for a queued encode whose staged copy is not ready', () => {
+		const stage = { status: 'pending', bytes_durable: 0, attempts: 0 } as TrackView['stage'];
+		renderRow(createTrack({ id: 'trk_1', status: 'done', transcode_status: 'queued', stage }));
+		expect(text(cell('Transcode'))).toBe('Waiting for files');
+		cleanup();
+		renderRow(createTrack({ id: 'trk_1', status: 'done', transcode_status: 'queued', stage: null }));
+		expect(text(cell('Transcode'))).not.toContain('Waiting for files');
+	});
+
+	it('adds a staging line under a track whose copy has not finished, and none once staged', () => {
+		const stage = (status: string) =>
+			({ status, bytes_durable: 0, attempts: 1, last_error: 'boom' }) as TrackView['stage'];
+		renderRow(createTrack({ id: 'trk_1', status: 'done', stage: stage('failed') }));
+		expect(screen.getByTestId('track-stage-row')).toBeInTheDocument();
+		cleanup();
+		renderRow(createTrack({ id: 'trk_1', status: 'done', stage: stage('staged') }));
+		expect(screen.queryByTestId('track-stage-row')).toBeNull();
+		cleanup();
+		renderRow(createTrack({ id: 'trk_1', status: 'done', stage: null }));
+		expect(screen.queryByTestId('track-stage-row')).toBeNull();
 	});
 
 	it("shows a failed track's last error under its row, and nothing for other cases", () => {

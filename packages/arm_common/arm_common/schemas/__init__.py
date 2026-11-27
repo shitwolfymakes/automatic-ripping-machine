@@ -105,6 +105,7 @@ from arm_common.schemas.jobs import (
     RipProgressSummary,
     RipStartResponse,
     TrackEditRequest,
+    TrackStageView,
     TrackView,
     TranscodeProgressSummary,
 )
@@ -420,6 +421,7 @@ __all__ = [
     "TrackClaim",
     "TrackEditRequest",
     "TrackFilters",
+    "TrackStageView",
     "TrackUpdateRequest",
     "TrackView",
     "TranscodePresetCreateRequest",

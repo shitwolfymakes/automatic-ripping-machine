@@ -44,6 +44,7 @@ from arm_common import (
 )
 from arm_common.enums import TrackKind, TrackRole
 from arm_common.models import Track
+from arm_common import StageStatus, TrackStage
 from arm_common.models.user import GUEST_ROLE
 
 from tests._fakes import FakeSession
@@ -281,6 +282,40 @@ def test_get_job_detail_found(signing_key: bytes) -> None:
     assert body["job"]["id"] == "job_01JZXR7K3M5Q8N4VWA00000001"
     assert [t["id"] for t in body["tracks"]] == ["t1"]
     assert [f["algo"] for f in body["fingerprints"]] == ["crc64"]
+
+
+def test_get_job_detail_carries_each_tracks_stage(signing_key: bytes) -> None:
+    db = FakeSession()
+    app, token = _make_app(signing_key, db)
+    db.rows["jobs"] = [_job("job_01JZXR7K3M5Q8N4VWA00000001", status=JobStatus.RIPPED)]
+    db.rows["tracks"] = [_track("t1", status=TrackStatus.DONE), _track("t2", status=TrackStatus.DONE, index=2)]
+    db.rows["track_stages"] = [
+        TrackStage(
+            id="stg_1",
+            track_id="t1",
+            job_id="job_01JZXR7K3M5Q8N4VWA00000001",
+            status=StageStatus.FAILED,
+            source_path="/raw/a.mkv",
+            dest_path="/staging/a.mkv",
+            source_size=100,
+            bytes_durable=40,
+            attempts=3,
+            last_error="No space left on device",
+        )
+    ]
+    with TestClient(app) as client:
+        r = client.get("/api/jobs/job_01JZXR7K3M5Q8N4VWA00000001", headers=_auth(token))
+    stages = {t["id"]: t["stage"] for t in r.json()["tracks"]}
+    assert stages["t2"] is None
+    assert stages["t1"] == {
+        "status": "failed",
+        "bytes_durable": 40,
+        "source_size": 100,
+        "linked": None,
+        "attempts": 3,
+        "last_error": "No space left on device",
+        "staged_at": None,
+    }
 
 
 def test_get_job_detail_404(signing_key: bytes) -> None:
@@ -2505,3 +2540,71 @@ def test_job_detail_reports_the_rip_invocation(signing_key: bytes, monkeypatch: 
     with TestClient(app) as client:
         r = client.get("/api/jobs/job_01JZXR7K3M5Q8N4VWA00000001", headers=_auth(token))
     assert r.json()["job"]["rip_invocation"] == "per_title"
+
+
+# --- retry_track_stage -------------------------------------------------------
+
+_JOB_ID = "job_01JZXR7K3M5Q8N4VWA00000001"
+_TRK_ID = "trk_01JZXR7K3M5Q8N4VWA00000001"
+_RETRY_URL = f"/api/jobs/{_JOB_ID}/tracks/{_TRK_ID}/stage/retry"
+
+
+def _stage_row(status: StageStatus, job_id: str = _JOB_ID) -> TrackStage:
+    return TrackStage(
+        id="stg_1",
+        track_id=_TRK_ID,
+        job_id=job_id,
+        status=status,
+        source_path="/raw/a.mkv",
+        dest_path="/staging/a.mkv",
+        attempts=3,
+        last_error="boom",
+    )
+
+
+def test_retry_requeues_a_failed_stage_and_wakes_the_stager(
+    signing_key: bytes, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    woken: list[int] = []
+    monkeypatch.setattr(jobs_router, "wake_active_stager", lambda: woken.append(1))
+    db = FakeSession()
+    hub = _Hub()
+    app, token = _make_app(signing_key, db, hub)
+    stage = _stage_row(StageStatus.FAILED)
+    db.rows["track_stages"] = [stage]
+    with TestClient(app) as client:
+        r = client.post(_RETRY_URL, headers=_auth(token))
+    assert r.status_code == 200
+    assert r.json()["status"] == "pending"
+    assert (stage.status, stage.attempts) == (StageStatus.PENDING, 0)
+    assert db.committed == 1 and woken == [1]
+    assert [e["event_type"] for e in hub.events] == ["stage.retried"]
+
+
+def test_retry_404_without_a_stage(signing_key: bytes) -> None:
+    db = FakeSession()
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as client:
+        r = client.post(_RETRY_URL, headers=_auth(token))
+    assert r.status_code == 404
+
+
+def test_retry_404_for_another_jobs_stage(signing_key: bytes) -> None:
+    db = FakeSession()
+    app, token = _make_app(signing_key, db)
+    db.rows["track_stages"] = [_stage_row(StageStatus.FAILED, job_id="job_01JZXR7K3M5Q8N4VWA00000002")]
+    with TestClient(app) as client:
+        r = client.post(_RETRY_URL, headers=_auth(token))
+    assert r.status_code == 404
+
+
+def test_retry_409_unless_the_stage_failed(signing_key: bytes) -> None:
+    db = FakeSession()
+    app, token = _make_app(signing_key, db)
+    stage = _stage_row(StageStatus.COPYING)
+    db.rows["track_stages"] = [stage]
+    with TestClient(app) as client:
+        r = client.post(_RETRY_URL, headers=_auth(token))
+    assert r.status_code == 409
+    assert "got copying" in r.json()["detail"]
+    assert stage.status == StageStatus.COPYING and db.committed == 0
