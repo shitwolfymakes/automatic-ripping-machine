@@ -127,6 +127,7 @@ from arm_common.schemas.naming import (
 )
 from arm_common.schemas.ripper import (
     BdDiscMeta,
+    BdPlaylist,
     DiscFingerprintInput,
     IdentifyRequest,
     JobCompleteRequest,
@@ -250,6 +251,7 @@ __all__ = [
     "AbandonJobRequest",
     "AppriseChannelConfig",
     "BdDiscMeta",
+    "BdPlaylist",
     "BashChannelConfig",
     "BashPreviewRequest",
     "BashPreviewResult",

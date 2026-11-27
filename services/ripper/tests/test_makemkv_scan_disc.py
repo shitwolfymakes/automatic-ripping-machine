@@ -14,7 +14,7 @@ from typing import Any  # noqa: E402
 
 import pytest  # noqa: E402
 from arm_common.enums import DiscType  # noqa: E402
-from arm_common.schemas import DiscFingerprintInput  # noqa: E402
+from arm_common.schemas import BdPlaylist, DiscFingerprintInput  # noqa: E402
 
 import arm_ripper.scan.makemkv as makemkv_mod  # noqa: E402
 from arm_ripper.scan.disc_probe import DiscProbe  # noqa: E402
@@ -82,6 +82,16 @@ def _spawn(monkeypatch: pytest.MonkeyPatch, proc: _Proc) -> None:
         return proc
 
     monkeypatch.setattr(makemkv_mod.asyncio, "create_subprocess_exec", _factory)
+
+
+@pytest.fixture(autouse=True)
+def _no_disc_playlists(monkeypatch: pytest.MonkeyPatch) -> None:
+    """scan_disc reads playlists off the device first; keep the tests off real I/O."""
+
+    async def _none(_device: str) -> list[BdPlaylist]:
+        return []
+
+    monkeypatch.setattr(makemkv_mod, "scan_playlists", _none)
 
 
 def _run_ok(monkeypatch: pytest.MonkeyPatch, stdout: bytes, probe: DiscProbe) -> list[bool]:
@@ -212,6 +222,32 @@ async def test_missing_cinfo_and_no_titles_is_unknown_and_not_bluray(monkeypatch
 
     assert result.disc_type == DiscType.UNKNOWN
     assert flags == [False]
+
+
+async def test_scan_carries_playlists_read_before_makemkvcon(monkeypatch: pytest.MonkeyPatch) -> None:
+    order: list[str] = []
+    found = [BdPlaylist(name="00800.mpls", clips=[1, 2], clip_seconds=[5.0, 6.5], duration_seconds=12, chapter_count=3)]
+
+    async def _playlists(device: str) -> list[BdPlaylist]:
+        order.append(f"playlists:{device}")
+        return found
+
+    async def _factory(*_a: Any, **_kw: Any) -> _Proc:
+        order.append("makemkvcon")
+        return _Proc(_Stream(b'CINFO:1,6206,"Blu-ray disc"\n'))
+
+    monkeypatch.setattr(makemkv_mod, "scan_playlists", _playlists)
+    monkeypatch.setattr(makemkv_mod.asyncio, "create_subprocess_exec", _factory)
+
+    async def _probe(_device: str, *, bluray: bool) -> DiscProbe:
+        return DiscProbe(crc64=None)
+
+    monkeypatch.setattr(makemkv_mod, "probe_disc", _probe)
+
+    result = await scan_disc("/dev/sr0")
+
+    assert result.playlists == found
+    assert order == ["playlists:/dev/sr0", "makemkvcon"]
 
 
 def test_fingerprints_all_present_in_fixed_order() -> None:

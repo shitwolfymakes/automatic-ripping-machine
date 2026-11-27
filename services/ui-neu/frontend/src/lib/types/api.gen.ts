@@ -277,6 +277,38 @@ export type BdDiscMeta = {
 };
 
 /**
+ * BdPlaylist
+ *
+ * One Blu-ray playlist (`BDMV/PLAYLIST/<name>.mpls`) as the ripper read it off the disc.
+ */
+export type BdPlaylist = {
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Clips
+     */
+    clips: Array<number>;
+    /**
+     * Clip Seconds
+     */
+    clip_seconds: Array<number>;
+    /**
+     * Duration Seconds
+     */
+    duration_seconds: number;
+    /**
+     * Chapter Count
+     */
+    chapter_count: number;
+    /**
+     * Multi Angle
+     */
+    multi_angle?: boolean;
+};
+
+/**
  * Body_upload_theme_api_themes_post
  */
 export type BodyUploadThemeApiThemesPost = {
@@ -4496,6 +4528,10 @@ export type ScanResult = {
      */
     fingerprints?: Array<DiscFingerprintInput>;
     bd_meta?: BdDiscMeta | null;
+    /**
+     * Playlists
+     */
+    playlists?: Array<BdPlaylist>;
     /**
      * Raw
      */
