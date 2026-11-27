@@ -4608,6 +4608,14 @@ export type ScanTitle = {
      * Playlist Name
      */
     playlist_name?: string | null;
+    /**
+     * Angle
+     */
+    angle?: number | null;
+    /**
+     * Stereo 3D
+     */
+    stereo_3d?: boolean;
 };
 
 /**

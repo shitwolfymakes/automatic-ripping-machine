@@ -16390,6 +16390,22 @@
               }
             ],
             "title": "Playlist Name"
+          },
+          "angle": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Angle"
+          },
+          "stereo_3d": {
+            "type": "boolean",
+            "title": "Stereo 3D",
+            "default": false
           }
         },
         "type": "object",
