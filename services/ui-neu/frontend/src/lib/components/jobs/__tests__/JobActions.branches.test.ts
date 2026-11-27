@@ -359,12 +359,5 @@ describe('JobActions branches', () => {
 			expect(screen.queryAllByRole('button')).toHaveLength(0);
 			expect(container.querySelector('.job-actions-row')).toBeNull();
 		});
-
-		it('sets data-compact on every button', () => {
-			renderComponent(JobActions, { props: { job: allButtonsJob(), compact: true } });
-			const buttons = allButtons();
-			expect(buttons).toHaveLength(3);
-			for (const b of buttons) expect(b).toHaveAttribute('data-compact', 'true');
-		});
 	});
 });

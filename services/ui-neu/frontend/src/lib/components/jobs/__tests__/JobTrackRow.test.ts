@@ -2,7 +2,8 @@
 // each text or attribute `{...}` below compiles to `(...) ?? ''`, and each sits
 // inside an #if on the same value. The track's year, the job's year, the
 // track's IMDb link, the attempt count (inside `attempts > 1`) and the failed
-// track's last error.
+// track's last error. Also the track number in a song row's title editor
+// label (`Track {track.index} title`), a number that is never nullish.
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderComponent, screen, cleanup, waitFor, fireEvent, within } from '$lib/testing/render';
 import JobTrackRowHarness from './JobTrackRowHarness.svelte';
@@ -42,6 +43,9 @@ interface Overrides {
 	preview?: NamingPreviewItem;
 	editing?: boolean;
 	excludeError?: string | null;
+	musicTracks?: { number: number; title: string; rawTitle: string; durationLabel: string }[];
+	canEditSongs?: boolean;
+	onsongsave?: (index: number, raw: string) => Promise<void>;
 }
 
 function renderRow(track: TrackView, overrides: Overrides = {}) {
@@ -51,6 +55,9 @@ function renderRow(track: TrackView, overrides: Overrides = {}) {
 		preview: overrides.preview,
 		tracksAreSeries: overrides.tracksAreSeries ?? false,
 		editing: overrides.editing ?? false,
+		musicTracks: overrides.musicTracks,
+		canEditSongs: overrides.canEditSongs,
+		onsongsave: overrides.onsongsave,
 		ontoggleedit,
 		oncloseedit,
 		onexcludedchange,
@@ -379,5 +386,49 @@ describe('JobTrackRow', () => {
 			await fireEvent.click(await screen.findByRole('button', { name: 'Apply' }));
 			await waitFor(() => expect(ontitleapplied).toHaveBeenCalledTimes(1));
 		});
+	});
+});
+
+describe('JobTrackRow CD song titles', () => {
+	const song = { number: 1, title: 'Birds', rawTitle: 'Birds', durationLabel: '-' };
+	const audio = (over: Partial<TrackView> = {}) =>
+		createTrack({ id: 'trk_a', index: 1, kind: 'audio_track', title: 'Two Windows', ...over });
+
+	beforeEach(() => {
+		ontoggleedit.mockReset();
+		setRole('admin');
+	});
+	afterEach(cleanup);
+
+	it("shows a CD audio row's song title", () => {
+		renderRow(audio(), { job: { disc_type: 'cd' }, musicTracks: [song], canEditSongs: true });
+		expect(within(cell('Title')).getByText('Birds')).toBeInTheDocument();
+	});
+
+	it('edits the song title in place and reports the track number', async () => {
+		const onsongsave = vi.fn().mockResolvedValue(undefined);
+		renderRow(audio(), { job: { disc_type: 'cd' }, musicTracks: [song], canEditSongs: true, onsongsave });
+		await fireEvent.click(within(cell('Title')).getByRole('button', { name: 'Edit Track 1 title' }));
+		const input = within(cell('Title')).getByRole('textbox');
+		await fireEvent.input(input, { target: { value: 'Birds Flying High' } });
+		await fireEvent.keyDown(input, { key: 'Enter' });
+		await waitFor(() => expect(onsongsave).toHaveBeenCalledWith(1, 'Birds Flying High'));
+		expect(ontoggleedit).not.toHaveBeenCalled();
+	});
+
+	it('keeps the title search toggle on a non-audio CD row and on a video row', async () => {
+		renderRow(audio({ kind: 'data_dump' }), { job: { disc_type: 'cd' }, musicTracks: [song], canEditSongs: true });
+		await fireEvent.click(within(cell('Title')).getByRole('button'));
+		expect(ontoggleedit).toHaveBeenCalledTimes(1);
+		cleanup();
+		renderRow(pilot(), { musicTracks: [song], canEditSongs: true });
+		await fireEvent.click(within(cell('Title')).getByRole('button'));
+		expect(ontoggleedit).toHaveBeenCalledTimes(2);
+	});
+
+	it('shows the song title without an editor when songs cannot be edited', () => {
+		renderRow(audio(), { job: { disc_type: 'cd' }, musicTracks: [song], canEditSongs: false });
+		expect(within(cell('Title')).queryByRole('button')).not.toBeInTheDocument();
+		expect(within(cell('Title')).getByText('Birds')).toBeInTheDocument();
 	});
 });

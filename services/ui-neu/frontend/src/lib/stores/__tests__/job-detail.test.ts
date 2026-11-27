@@ -11,7 +11,7 @@ vi.mock('$app/navigation', () => ({ goto: vi.fn() }));
 
 import { goto } from '$app/navigation';
 import { fetchJob, fetchNamingPreview, resolveJob, updateTrack } from '$lib/api/jobs';
-import { buildResolveBody } from '$lib/jobs/resolve';
+import { buildResolveBody, cdEditBody } from '$lib/jobs/resolve';
 import { ApiError } from '$lib/api/client';
 import { createJob, createTrack, createJobDetail } from '$lib/__fixtures__/job';
 import { JobDetail } from '../job-detail.svelte';
@@ -363,5 +363,103 @@ describe('JobDetail saveFact', () => {
 		expect(await d.saveFact('title', 'Dune')).toBe(false);
 		expect(mockResolve).toHaveBeenCalledWith('job_1', buildResolveBody(job, 'title', 'Dune'));
 		expect(mockFetchJob).toHaveBeenCalledTimes(1);
+	});
+});
+
+describe('JobDetail CD fields', () => {
+	const cdMeta = {
+		music: { artist: 'Lali', album: 'Two Windows', tracks: [{ title: 'A' }] },
+		scan_result: { titles: [{}, {}, {}] }
+	};
+
+	it('pads the music tracks to the scan count on a CD', () => {
+		const d = detailWith({ disc_type: 'cd', metadata_json: cdMeta as never });
+		expect(d.cdTrackCount).toBe(3);
+		expect(d.musicTracks).toHaveLength(3);
+	});
+
+	it('saveCdField sends the CD edit body and reloads the job', async () => {
+		const d = detailWith({ id: 'job_1', disc_type: 'cd', metadata_json: cdMeta as never });
+		const job = d.detail!.job;
+		mockResolve.mockResolvedValue({ job } as never);
+		await d.saveCdField({ field: 'track', index: 2 }, 'Two');
+		expect(mockResolve).toHaveBeenCalledWith('job_1', cdEditBody(job, { field: 'track', index: 2 }, 'Two', 3));
+		expect(mockFetchJob).toHaveBeenCalledTimes(1);
+	});
+
+	it('a title edit on a CD saves it as the album', async () => {
+		const d = detailWith({ id: 'job_1', disc_type: 'cd', metadata_json: cdMeta as never });
+		mockResolve.mockResolvedValue({ job: d.detail!.job } as never);
+		expect(await d.saveFact('title', 'New')).toBe(false);
+		const body = mockResolve.mock.calls[0][1];
+		expect(body.title).toBe('New');
+		expect(body.music?.album).toBe('New');
+	});
+
+	it("builds a second quick save from the first save's result, so it keeps the first change", async () => {
+		const d = detailWith({ id: 'job_1', disc_type: 'cd', metadata_json: cdMeta as never });
+		const before = d.detail!.job;
+		let finishFirst: (v: unknown) => void = () => {};
+		mockResolve.mockImplementationOnce(() => new Promise((r) => (finishFirst = r)) as never);
+		mockResolve.mockResolvedValue({ job: before } as never);
+		const afterFirst = { ...cdMeta, music: { ...cdMeta.music, tracks: [{ title: 'One' }] } };
+		mockFetchJob.mockResolvedValue(createJobDetail({ disc_type: 'cd', metadata_json: afterFirst } as never));
+		const first = d.saveCdField({ field: 'track', index: 1 }, 'One');
+		const second = d.saveCdField({ field: 'track', index: 2 }, 'Two');
+		await vi.waitFor(() => expect(mockResolve).toHaveBeenCalledTimes(1));
+		finishFirst({ job: before });
+		await Promise.all([first, second]);
+		const secondBody = mockResolve.mock.calls[1][1];
+		expect(secondBody.music?.tracks?.[0]?.title).toBe('One');
+		expect(secondBody.music?.tracks?.[1]?.title).toBe('Two');
+	});
+
+	it('a failed save does not block the next one', async () => {
+		const d = detailWith({ id: 'job_1', disc_type: 'cd', metadata_json: cdMeta as never });
+		mockResolve.mockRejectedValueOnce(new Error('boom'));
+		mockResolve.mockResolvedValue({ job: d.detail!.job } as never);
+		await expect(d.saveCdField({ field: 'artist' }, 'X')).rejects.toThrow('boom');
+		await d.saveCdField({ field: 'artist' }, 'Y');
+		expect(mockResolve).toHaveBeenCalledTimes(2);
+	});
+
+	it('skips a queued save when another job was loaded before it ran', async () => {
+		const d = detailWith({ id: 'job_A', disc_type: 'cd', metadata_json: cdMeta as never });
+		let finishFirst: (v: unknown) => void = () => {};
+		mockResolve.mockImplementationOnce(() => new Promise((r) => (finishFirst = r)) as never);
+		const first = d.saveCdField({ field: 'track', index: 1 }, 'One');
+		const second = d.saveCdField({ field: 'artist' }, 'Typed on A');
+		await vi.waitFor(() => expect(mockResolve).toHaveBeenCalledTimes(1));
+		mockFetchJob.mockResolvedValue(createJobDetail({ id: 'job_B', disc_type: 'cd', metadata_json: cdMeta } as never));
+		await d.load();
+		finishFirst({ job: d.detail!.job });
+		await first;
+		await expect(second).rejects.toThrow('A different job is open now');
+		expect(mockResolve).toHaveBeenCalledTimes(1);
+		expect(mockResolve).not.toHaveBeenCalledWith('job_B', expect.anything());
+	});
+
+	it('skips a queued save when the reload after the previous save failed, then saves once a reload succeeds', async () => {
+		const d = detailWith({ id: 'job_1', disc_type: 'cd', metadata_json: cdMeta as never });
+		mockResolve.mockResolvedValue({ job: d.detail!.job } as never);
+		mockFetchJob.mockResolvedValue(createJobDetail({ id: 'job_1', disc_type: 'cd', metadata_json: cdMeta } as never));
+		mockFetchJob.mockRejectedValueOnce(new Error('offline'));
+		const first = d.saveCdField({ field: 'track', index: 1 }, 'One');
+		const second = d.saveCdField({ field: 'track', index: 2 }, 'Two');
+		await first;
+		await expect(second).rejects.toThrow('did not reload after the last save');
+		expect(mockResolve).toHaveBeenCalledTimes(1);
+		await d.load();
+		await d.saveCdField({ field: 'track', index: 2 }, 'Two');
+		expect(mockResolve).toHaveBeenCalledTimes(2);
+	});
+
+	it('rejects a save queued with no job loaded', async () => {
+		await expect(newDetail().saveCdField({ field: 'artist' }, 'X')).rejects.toThrow('A different job is open now');
+		expect(mockResolve).not.toHaveBeenCalled();
+	});
+
+	it('has a CD track count of 0 with no job loaded', () => {
+		expect(newDetail().cdTrackCount).toBe(0);
 	});
 });

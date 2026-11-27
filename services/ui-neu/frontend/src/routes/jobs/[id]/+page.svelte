@@ -17,7 +17,6 @@
 	import JobMusicTracklist from '$lib/components/jobs/JobMusicTracklist.svelte';
 	import MusicSearch from '$lib/components/music/MusicSearch.svelte';
 	import EpisodeMatchPanel from '$lib/components/episodes/EpisodeMatchPanel.svelte';
-	import IdentifyDialog from '$lib/components/jobs/IdentifyDialog.svelte';
 	import ApplySessionDialog from '$lib/components/jobs/ApplySessionDialog.svelte';
 	import StageRail from '$lib/components/jobs/StageRail.svelte';
 	import LiveProgressLine from '$lib/components/jobs/LiveProgressLine.svelte';
@@ -30,6 +29,7 @@
 	import { applyNote, identifyNote } from '$lib/jobs/action-notes';
 	import { fetchSessions } from '$lib/api/sessions';
 	import { buildMetadataFields } from '$lib/jobs/fields';
+	import { cdIdentityMissing } from '$lib/music/identity-gaps';
 	import LoadState from '$lib/components/shared/LoadState.svelte';
 	import SkeletonCard from '$lib/components/shared/SkeletonCard.svelte';
 	import JobRawMetadata from '$lib/components/jobs/JobRawMetadata.svelte';
@@ -50,7 +50,6 @@
 	const matching = new EpisodeMatching();
 
 	// Dialog visibility + a transient note shown after a resolve/apply lands.
-	let showIdentify = $state(false);
 	let showApply = $state(false);
 	let actionNote = $state<string | null>(null);
 	let noteTimer: ReturnType<typeof setTimeout> | null = null;
@@ -64,7 +63,6 @@
 	}
 
 	function handleIdentified(resp: ResolveResponse) {
-		showIdentify = false;
 		jobDetail.load();
 		const note = identifyNote(resp);
 		if (note) flashNote(note);
@@ -87,6 +85,8 @@
 	async function saveFact(field: EditableJobField | 'title', raw: string) {
 		if (await jobDetail.saveFact(field, raw)) matching.start();
 	}
+
+	const saveSong = (index: number, raw: string) => jobDetail.saveCdField({ field: 'track', index }, raw);
 
 	function handleSeriesApplied() {
 		panels.active = 'episodes';
@@ -187,7 +187,6 @@
 						{job}
 						{jobDetail}
 						onmediatypechanged={handleMediaTypeChanged}
-						onidentify={() => (showIdentify = true)}
 						onapply={() => (showApply = true)}
 						ondelete={() => goto('/')}
 					/>
@@ -196,12 +195,32 @@
 				<!-- A confident match identify held for confirmation (auto-apply off). -->
 				{#if identitySuggestionOf(job)}
 					<div class="job-detail-suggestion">
-						<IdentitySuggestionBanner
-							{job}
-							canAct={$isAdmin && jobDetail.canResolve}
-							onaccepted={handleIdentified}
-							onsearch={() => (showIdentify = true)}
-						/>
+						<IdentitySuggestionBanner {job} canAct={$isAdmin && jobDetail.canResolve} onaccepted={handleIdentified} />
+					</div>
+				{/if}
+
+				<!-- A CD not yet identified: it counts as identified once nothing is missing. -->
+				{#if job.cd_identity_gaps}
+					<div class="job-detail-suggestion">
+						<div class="alert alert-info" data-testid="cd-identity-missing">
+							<p class="alert-title flex items-center gap-2"><Glyph name="info" />CD not identified yet</p>
+							<p class="alert-body">
+								ARM counts this CD as identified once it has an album and an artist; track titles are optional. Still
+								missing: {cdIdentityMissing(job.cd_identity_gaps)}.
+							</p>
+						</div>
+					</div>
+				{/if}
+
+				<!-- A TV disc with no show id: its episodes can't be matched automatically. -->
+				{#if $isAdmin && jobDetail.canResolve && jobDetail.isVideoDisc && (job.looks_episodic || job.media_type === 'tv') && !job.has_series}
+					<div class="job-detail-suggestion">
+						<div class="alert alert-info" data-testid="no-show-id-note">
+							<p class="alert-title flex items-center gap-2"><Glyph name="info" />No show id yet</p>
+							<p class="alert-body">
+								Without a search result ARM has no show id, so episodes can't be matched automatically.
+							</p>
+						</div>
 					</div>
 				{/if}
 
@@ -213,11 +232,16 @@
 					</div>
 
 					<!-- Metadata grid -->
-					<JobFactsGrid fields={metadataFields} canEdit={$isAdmin && jobDetail.canResolve} onsave={saveFact} />
+					<JobFactsGrid
+						fields={metadataFields}
+						canEdit={$isAdmin && jobDetail.canResolve}
+						onsave={saveFact}
+						ontextsave={(field, raw) => jobDetail.saveCdField({ field }, raw)}
+					/>
 				</div>
 
 				<!-- Panel toggle bar: poster override (manual poster_url_manual quick-edit).
-			     Disc identity commits through the IdentifyDialog (resolve), not here. -->
+			     Disc identity is edited in place above and searched from these tabs. -->
 				<JobPanelTabs {job} {jobDetail} {panels} />
 
 				<!-- Active panel content -->
@@ -276,6 +300,9 @@
 					onexcludedchange={jobDetail.setExcluded}
 					excludeError={jobDetail.excludeError}
 					ontitleapplied={() => jobDetail.load()}
+					musicTracks={jobDetail.musicTracks}
+					canEditSongs={$isAdmin && jobDetail.canResolve}
+					onsongsave={saveSong}
 				/>
 			{/if}
 
@@ -284,12 +311,16 @@
 				<JobFingerprints fingerprints={d.fingerprints} />
 			{/if}
 
-			<!-- Music tracklist (CD jobs; read-only). Fallback ONLY when there are no
+			<!-- Music tracklist (CD jobs, titles set in place). Fallback ONLY when there are no
 		     real Track rows yet — once the disc has tracks (which carry the mapped
 		     song titles), the Tracks table above is authoritative and this would
 		     just duplicate it. Mirrors neu's single-section behavior. -->
 			{#if tracks.length === 0 && jobDetail.musicTracks.length > 0}
-				<JobMusicTracklist tracks={jobDetail.musicTracks} />
+				<JobMusicTracklist
+					tracks={jobDetail.musicTracks}
+					canEdit={$isAdmin && jobDetail.canResolve}
+					onsave={saveSong}
+				/>
 			{/if}
 
 			<!-- Live, per-service job log (backend + ripper + transcode aggregated) -->
@@ -301,14 +332,6 @@
 			{/if}
 		</div>
 
-		{#if showIdentify}
-			<IdentifyDialog
-				{job}
-				drives={$dashboard.drives}
-				onclose={() => (showIdentify = false)}
-				onidentified={handleIdentified}
-			/>
-		{/if}
 		{#if showApply}
 			<ApplySessionDialog {job} onclose={() => (showApply = false)} onapplied={handleApplied} />
 		{/if}
