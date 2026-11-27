@@ -16,6 +16,7 @@ export function createDrive(overrides: Partial<DriveView> = {}): DriveView {
 		rip_speed: null,
 		drive_mode: null,
 		uhd_capable: false,
+		rip_end_on_completion_message: null,
 		prescan_cache_mb: null,
 		prescan_timeout: null,
 		prescan_retries: null,

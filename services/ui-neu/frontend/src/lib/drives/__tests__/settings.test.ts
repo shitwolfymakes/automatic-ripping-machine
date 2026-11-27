@@ -1,5 +1,14 @@
 import { describe, it, expect } from 'vitest';
-import { numberInputText, parsePrescanInput, parseRipSpeed, PRESCAN_FIELDS, prescanInputTexts } from '../settings';
+import {
+	numberInputText,
+	onOffLabel,
+	overrideChoice,
+	parseOverrideChoice,
+	parsePrescanInput,
+	parseRipSpeed,
+	PRESCAN_FIELDS,
+	prescanInputTexts
+} from '../settings';
 
 describe('prescanInputTexts', () => {
 	it('shows four blank inputs when there is no drive', () => {
@@ -116,5 +125,25 @@ describe('numberInputText', () => {
 	it('writes null and undefined as blank', () => {
 		expect(numberInputText(null)).toBe('');
 		expect(numberInputText(undefined)).toBe('');
+	});
+});
+
+describe('override choices', () => {
+	it('shows a stored override as On or Off and no override as the default', () => {
+		expect(overrideChoice(true)).toBe('on');
+		expect(overrideChoice(false)).toBe('off');
+		expect(overrideChoice(null)).toBe('');
+		expect(overrideChoice(undefined)).toBe('');
+	});
+
+	it('saves On and Off as booleans and the default as null, which clears the override', () => {
+		expect(parseOverrideChoice('on')).toBe(true);
+		expect(parseOverrideChoice('off')).toBe(false);
+		expect(parseOverrideChoice('')).toBeNull();
+	});
+
+	it('names the global value the default option follows', () => {
+		expect(onOffLabel(true)).toBe('On');
+		expect(onOffLabel(false)).toBe('Off');
 	});
 });

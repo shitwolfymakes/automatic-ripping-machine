@@ -8906,6 +8906,17 @@
             ],
             "title": "Block On Miss"
           },
+          "rip_end_on_completion_message": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rip End On Completion Message"
+          },
           "community_keydb_enabled": {
             "anyOf": [
               {
@@ -9276,6 +9287,10 @@
             "type": "boolean",
             "title": "Block On Miss"
           },
+          "rip_end_on_completion_message": {
+            "type": "boolean",
+            "title": "Rip End On Completion Message"
+          },
           "community_keydb_enabled": {
             "type": "boolean",
             "title": "Community Keydb Enabled"
@@ -9484,6 +9499,7 @@
           "auto_transcode_on_idle",
           "auto_rip_on_insert",
           "block_on_miss",
+          "rip_end_on_completion_message",
           "community_keydb_enabled",
           "drive_scan_interval_seconds",
           "drive_detected_prune_days",
@@ -9992,6 +10008,17 @@
             ],
             "title": "Uhd Capable"
           },
+          "rip_end_on_completion_message": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rip End On Completion Message"
+          },
           "prescan_cache_mb": {
             "anyOf": [
               {
@@ -10425,6 +10452,17 @@
             ],
             "title": "Uhd Capable"
           },
+          "rip_end_on_completion_message": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rip End On Completion Message"
+          },
           "prescan_cache_mb": {
             "anyOf": [
               {
@@ -10579,6 +10617,17 @@
               }
             ],
             "title": "Uhd Capable"
+          },
+          "rip_end_on_completion_message": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rip End On Completion Message"
           },
           "prescan_cache_mb": {
             "anyOf": [
@@ -10797,6 +10846,7 @@
           "rip_speed",
           "drive_mode",
           "uhd_capable",
+          "rip_end_on_completion_message",
           "prescan_cache_mb",
           "prescan_timeout",
           "prescan_retries",
@@ -16064,13 +16114,18 @@
           "rip_invocation": {
             "$ref": "#/components/schemas/RipInvocation",
             "default": "mkv_all"
+          },
+          "end_on_completion_message": {
+            "type": "boolean",
+            "title": "End On Completion Message"
           }
         },
         "type": "object",
         "required": [
           "job_id",
           "rip_preset_id",
-          "tracks"
+          "tracks",
+          "end_on_completion_message"
         ],
         "title": "RipStartResponse"
       },

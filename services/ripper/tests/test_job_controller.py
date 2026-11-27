@@ -118,6 +118,7 @@ class FakeClient:
     async def rip_start(self, job_id: str) -> RipStartResponse:
         self.rip_start_calls.append(job_id)
         return RipStartResponse(
+            end_on_completion_message=False,
             job_id=job_id,
             rip_preset_id="rpr_builtin_movie_archive",
             tracks=[],
@@ -129,6 +130,7 @@ class FakeClient:
     async def resume(self, job_id: str) -> RipStartResponse:
         self.resume_calls.append(job_id)
         return RipStartResponse(
+            end_on_completion_message=False,
             job_id=job_id,
             rip_preset_id="rpr_builtin_movie_archive",
             tracks=[],
@@ -1789,7 +1791,7 @@ async def test_fail_unfinished_starts_unstarted_tracks_then_fails_them(caplog, r
         job_id="job_x",
         disc_type=DiscType.BLURAY,
         device_path="/dev/sr0",
-        rip_start=RipStartResponse(job_id="job_x", rip_preset_id="rpr", tracks=tracks),
+        rip_start=RipStartResponse(end_on_completion_message=False, job_id="job_x", rip_preset_id="rpr", tracks=tracks),
     )
     rip._unfinished = {"trk_1", "trk_2"}
     rip._started = {"trk_1"}

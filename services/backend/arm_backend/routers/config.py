@@ -75,6 +75,7 @@ def _to_view(cfg: Config) -> ConfigView:
         auto_transcode_on_idle=cfg.auto_transcode_on_idle,
         auto_rip_on_insert=cfg.auto_rip_on_insert,
         block_on_miss=cfg.block_on_miss,
+        rip_end_on_completion_message=bool(cfg.rip_end_on_completion_message),
         # `bool(...)` coerces the None a bare in-memory Config carries (these
         # columns' server_default is DB-level only) to False, so _to_view works
         # for rows/fixtures predating them. The sibling bools above predate their

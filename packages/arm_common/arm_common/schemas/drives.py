@@ -43,6 +43,7 @@ class DriveView(BaseModel):
     rip_speed: int | None
     drive_mode: DriveMode | None
     uhd_capable: bool | None
+    rip_end_on_completion_message: bool | None
     prescan_cache_mb: int | None
     prescan_timeout: int | None
     prescan_retries: int | None
@@ -85,6 +86,7 @@ class DriveUpdateRequest(BaseModel):
     rip_speed: int | None = None
     drive_mode: DriveMode | None = None
     uhd_capable: bool | None = None
+    rip_end_on_completion_message: bool | None = None
     prescan_cache_mb: int | None = None
     prescan_timeout: int | None = None
     prescan_retries: int | None = None

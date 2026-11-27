@@ -104,3 +104,26 @@ def test_thediscdb_refresh_days_round_trips(signing_key: bytes) -> None:
     assert patched.status_code == 200, patched.text
     assert db.rows["config"][0].thediscdb_refresh_days == 3
     assert got.json()["thediscdb_refresh_days"] == 3
+
+
+def test_rip_end_on_completion_message_defaults_off_and_round_trips(signing_key: bytes) -> None:
+    db = FakeSession()
+    _seed(db)
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as c:
+        before = c.get("/api/config", headers=_auth(token))
+        patched = c.patch("/api/config", json={"rip_end_on_completion_message": True}, headers=_auth(token))
+        got = c.get("/api/config", headers=_auth(token))
+    assert before.json()["rip_end_on_completion_message"] is False
+    assert patched.status_code == 200, patched.text
+    assert db.rows["config"][0].rip_end_on_completion_message is True
+    assert got.json()["rip_end_on_completion_message"] is True
+
+
+def test_rip_end_on_completion_message_rejects_a_non_bool(signing_key: bytes) -> None:
+    db = FakeSession()
+    _seed(db)
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as c:
+        r = c.patch("/api/config", json={"rip_end_on_completion_message": "maybe"}, headers=_auth(token))
+    assert r.status_code == 422

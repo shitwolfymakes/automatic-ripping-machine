@@ -6,10 +6,14 @@
 	import {
 		FIELD_IDS,
 		numberInputText,
+		onOffLabel,
+		overrideChoice,
+		parseOverrideChoice,
 		parsePrescanInput,
 		parseRipSpeed,
 		PRESCAN_FIELDS,
 		prescanInputTexts,
+		type GlobalRipSettings,
 		type PrescanField,
 		type PrescanKey
 	} from '$lib/drives/settings';
@@ -25,17 +29,28 @@
 		sessions: SessionView[];
 		/** The global prescan defaults, shown as the inputs' placeholders. */
 		globalDefaults?: Partial<Record<PrescanKey, number>>;
+		/** The global rip settings, named by each rip override's Default option. */
+		globalRip?: GlobalRipSettings;
 		/** Called after a setting is saved. */
 		onupdate?: () => void | Promise<void>;
 	}
 
-	let { drive, open = $bindable(false), sessions, globalDefaults = {}, onupdate }: Props = $props();
+	let {
+		drive,
+		open = $bindable(false),
+		sessions,
+		globalDefaults = {},
+		globalRip = { rip_end_on_completion_message: false },
+		onupdate
+	}: Props = $props();
 
 	let savingDefaultSession = $state(false);
 	let defaultSessionError = $state<string | null>(null);
 	let speedInput = $state('');
 	let savingSpeed = $state(false);
 	let savingPrescan = $state(false);
+	let savingEndOnCompletion = $state(false);
+	let endOnCompletionError = $state<string | null>(null);
 
 	// Prescan override inputs - empty string means "use global default"
 	let prescanInputs = $state<Record<PrescanKey, string>>(prescanInputTexts(undefined));
@@ -95,6 +110,19 @@
 		}
 	}
 
+	async function saveEndOnCompletion(choice: string) {
+		savingEndOnCompletion = true;
+		endOnCompletionError = null;
+		try {
+			await updateDrive(drive.id, { rip_end_on_completion_message: parseOverrideChoice(choice) });
+			onupdate?.();
+		} catch (e) {
+			endOnCompletionError = errorMessage(e, 'Failed to save the setting');
+		} finally {
+			savingEndOnCompletion = false;
+		}
+	}
+
 	async function saveDefaultSession(value: string) {
 		savingDefaultSession = true;
 		defaultSessionError = null;
@@ -147,6 +175,32 @@
 				/>
 			</div>
 			<p class="field-help">Empty = max speed. Lower values help with read errors on problematic discs.</p>
+		</div>
+
+		<div class="field">
+			<FieldLabel
+				for="end-on-completion-{drive.id}"
+				label="End each title on MakeMKV's completion message"
+				docsId={FIELD_IDS.rip_end_on_completion_message}
+			/>
+			<select
+				id="end-on-completion-{drive.id}"
+				data-testid="drive-end-on-completion"
+				value={overrideChoice(drive.rip_end_on_completion_message)}
+				onchange={(e) => saveEndOnCompletion((e.currentTarget as HTMLSelectElement).value)}
+				disabled={savingEndOnCompletion}
+			>
+				<option value="">Default ({onOffLabel(globalRip.rip_end_on_completion_message)})</option>
+				<option value="on">On</option>
+				<option value="off">Off</option>
+			</select>
+			<p class="field-help">
+				Finish each title as soon as MakeMKV reports the copy complete and the file is closed, instead of waiting for
+				MakeMKV to exit. Default follows the Ripping setting.
+			</p>
+			{#if endOnCompletionError}
+				<p class="field-error" data-testid="drive-end-on-completion-error">{endOnCompletionError}</p>
+			{/if}
 		</div>
 
 		<div class="stack drive-card-prescan-section">

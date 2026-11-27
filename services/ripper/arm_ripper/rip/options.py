@@ -1,0 +1,15 @@
+"""How a DVD/BD rip is run, as the backend resolved it for the job."""
+
+from dataclasses import dataclass
+
+
+@dataclass(frozen=True)
+class RipOptions:
+    """The per-rip choices that travel from the rip-start response down to makemkvcon.
+
+    `per_title` rips each ticked title in its own invocation instead of one `mkv … all`. `end_on_completion` ends a
+    makemkvcon run once it has reported the copy complete and its files are closed, instead of waiting for it to exit.
+    """
+
+    per_title: bool = False
+    end_on_completion: bool = False

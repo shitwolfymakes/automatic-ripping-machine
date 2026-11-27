@@ -162,6 +162,19 @@ describe('setup step field selection', () => {
 		expect(iso?.title).toBe('ISO Ripping');
 		expect(out.map((s) => s.title)).not.toContain('Ripping');
 	});
+
+	it('puts the end-on-completion toggle in a Disc reading section after the review gate', () => {
+		const out = sectionFields('Ripping', [
+			f('auto_rip_on_insert'),
+			f('hold_for_review'),
+			f('rip_end_on_completion_message')
+		]);
+		const titles = out.map((s) => s.title);
+		const reading = out.find((s) => s.title === 'Disc reading');
+		expect(reading?.fields.map((x) => x.key)).toEqual(['rip_end_on_completion_message']);
+		expect(reading?.blurb).toBe('How MakeMKV reads a DVD or Blu-ray.');
+		expect(titles.indexOf('Disc reading')).toBe(titles.indexOf('Review gate') + 1);
+	});
 });
 
 describe('settingsTabFor', () => {
