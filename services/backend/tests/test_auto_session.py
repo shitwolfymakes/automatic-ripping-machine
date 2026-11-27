@@ -699,12 +699,11 @@ async def test_auto_lookup_tolerates_duplicate_rows(tmp_path: Path, monkeypatch:
 
 
 @pytest.mark.asyncio
-async def test_auto_apply_of_encode_drive_default_skips_and_creates_nothing_when_disabled(tmp_path: Path) -> None:
-    """`maybe_auto_apply_session` (rip-complete's drive-default auto-apply)
-    runs this exact engine with `source="auto"`; with the runtime toggle
-    off, an encode-preset session's auto-apply must skip with
-    `skipped_reason="transcode_disabled"` (which the caller logs at WARN)
-    and persist nothing — no application, no task, no WS event."""
+async def test_auto_apply_of_encode_session_parks_while_transcoding_is_off(tmp_path: Path) -> None:
+    """#607: rip-complete's auto apply of an encode session with transcoding
+    switched off parks a WAITING_IDENTIFY application (no tasks, no WS event),
+    so switching transcoding back on promotes it. It used to skip and persist
+    nothing, which left the rip in /raw with nothing to pick it up."""
     _set_media_root(tmp_path)
     db = FakeSession()
     job = _seed(db)
@@ -721,12 +720,65 @@ async def test_auto_apply_of_encode_drive_default_skips_and_creates_nothing_when
         hub=hub,  # type: ignore[arg-type]
     )
 
-    assert outcome.skipped_reason == "transcode_disabled"
-    assert outcome.application is None
+    assert outcome.skipped_reason is None
+    assert outcome.application is not None
+    assert outcome.application.status == SessionApplicationStatus.WAITING_IDENTIFY
+    assert [a.session_id for a in db.rows["session_applications"]] == ["ses_x"]
     assert outcome.tasks == []
-    assert db.rows["session_applications"] == []
     assert db.rows["transcode_tasks"] == []
     assert hub.events == []
+
+
+@pytest.mark.asyncio
+async def test_auto_apply_of_encode_session_on_a_ripper_only_box_skips_and_creates_nothing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A deployment that cannot transcode never will without a re-install, so
+    parking there would show a job as waiting forever: the skip stays."""
+    from arm_backend import config as bcfg
+
+    _set_media_root(tmp_path)
+    monkeypatch.setattr(bcfg.settings, "ARM_TRANSCODE_CAPABLE", False)
+    monkeypatch.setattr(bcfg.settings, "ARM_TRANSCODE_DOCKER_HOST", "")
+    db = FakeSession()
+    job = _seed(db)
+    db.rows["config"] = [Config(id=1, transcode_enabled=True)]
+
+    outcome = await apply_session_internal(
+        db,
+        job=job,
+        session_id="ses_x",
+        overwrite=False,
+        created_by_user_id=None,
+        source="auto",
+        hub=CapturingHub(),  # type: ignore[arg-type]
+    )
+
+    assert outcome.skipped_reason == "transcode_disabled"
+    assert outcome.application is None
+    assert db.rows["session_applications"] == []
+
+
+@pytest.mark.asyncio
+async def test_manual_apply_of_encode_session_is_still_refused_while_transcoding_is_off(tmp_path: Path) -> None:
+    """Only the unattended rip-complete apply parks; a click on Apply keeps its 422."""
+    _set_media_root(tmp_path)
+    db = FakeSession()
+    job = _seed(db)
+    db.rows["config"] = [Config(id=1, transcode_enabled=False)]
+
+    outcome = await apply_session_internal(
+        db,
+        job=job,
+        session_id="ses_x",
+        overwrite=False,
+        created_by_user_id=None,
+        source="manual",
+        hub=CapturingHub(),  # type: ignore[arg-type]
+    )
+
+    assert outcome.skipped_reason == "transcode_disabled"
+    assert db.rows["session_applications"] == []
 
 
 @pytest.mark.asyncio
@@ -915,9 +967,9 @@ async def test_fan_out_parks_encoder_unavailable_application_but_promotes_passth
 
 
 @pytest.mark.asyncio
-async def test_auto_apply_transcode_disabled_wins_over_encoder_unavailable(tmp_path: Path) -> None:
+async def test_apply_transcode_disabled_wins_over_encoder_unavailable(tmp_path: Path) -> None:
     """When both gates would fire (transcoding off AND no eligible device),
-    the transcode_disabled gate reports first."""
+    the transcode_disabled gate reports first (the manual route's 422)."""
     _set_media_root(tmp_path)
     db = FakeSession()
     job = _seed(db)
@@ -931,7 +983,7 @@ async def test_auto_apply_transcode_disabled_wins_over_encoder_unavailable(tmp_p
         session_id="ses_vendor",
         overwrite=False,
         created_by_user_id=None,
-        source="auto",
+        source="manual",
         hub=hub,  # type: ignore[arg-type]
     )
 
