@@ -112,12 +112,12 @@ mounts="$(awk '
 ' <<<"${cfg}")"
 check "backend /raw is the chosen folder, spaces and all" "arm-backend|${RAW_PATH}|/raw" "$(grep '^arm-backend|.*|/raw$' <<<"${mounts}")"
 check "backend /media is the chosen folder" "arm-backend|${MEDIA_PATH}|/media" "$(grep '^arm-backend|.*|/media$' <<<"${mounts}")"
-check "backend /staging defaults to a folder inside the arm folder" "yes" \
-    "$(grep -q "^arm-backend|${ARM_DIR}/.*|/staging\$" <<<"${mounts}" && echo yes || echo no)"
+check "backend /staging defaults to .staging inside the chosen raw folder" "arm-backend|${RAW_PATH}/.staging|/staging" \
+    "$(grep '^arm-backend|.*|/staging$' <<<"${mounts}")"
 stray=""
 while IFS='|' read -r svc src target; do
     case "${src}" in
-        "${ARM_DIR}"/*|"${RAW_PATH}"|"${MEDIA_PATH}"|/var/run/docker.sock|/dev/disk) ;;
+        "${ARM_DIR}"/*|"${RAW_PATH}"|"${RAW_PATH}"/*|"${MEDIA_PATH}"|/var/run/docker.sock|/dev/disk) ;;
         /*) stray+="${svc}:${src} " ;;
         *)  ;;   # a named volume
     esac

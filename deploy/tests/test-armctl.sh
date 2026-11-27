@@ -275,6 +275,19 @@ check "staging: offload with a staging folder is accepted" "ok" \
 check "staging: a local profile may leave it empty" "ok" \
     "$( (PROFILE=full; STAGING_PATH=""; require_offload_staging; echo ok) 2>&1 )"
 
+check "staging: unset, the host path is .staging inside raw" "/mnt/r/.staging" \
+    "$(RAW_PATH=/mnt/r; STAGING_PATH=""; staging_host_path)"
+check "staging: a chosen folder is the host path" "/mnt/nas/s" \
+    "$(RAW_PATH=/mnt/r; STAGING_PATH=/mnt/nas/s; staging_host_path)"
+RAW_PATH="${ARM_DIR}/raw"; STAGING_PATH=""
+( prepare_storage "${RAW_PATH}"; prepare_staging )
+check "staging: the default folder inside raw is created for this user" "yes" \
+    "$( [[ -d "${RAW_PATH}/.staging" && -O "${RAW_PATH}/.staging" ]] && echo yes || echo no )"
+STAGING_PATH="${TMPROOT}/staging-nas/s"
+( prepare_staging )
+check "staging: a chosen folder is created" "yes" "$( [[ -d "${STAGING_PATH}" ]] && echo yes || echo no )"
+STAGING_PATH=""
+
 # --- detect: network filesystem warning for raw ------------------------------
 # stat is stubbed in a subshell to print the filesystem type under test.
 raw_warn() {  # <fs type> [raw path]: stderr of warn_raw_network_fs, plus its rc
