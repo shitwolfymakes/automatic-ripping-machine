@@ -203,3 +203,74 @@ def test_list_drives_returns_all(signing_key: bytes) -> None:
         r = client.get("/api/drives", headers=_auth(token))
     assert r.status_code == 200, r.text
     assert len(r.json()) == 2
+
+
+class _Hub:
+    def __init__(self) -> None:
+        self.events: list[dict] = []
+
+    async def emit(self, topic, event_type, payload, *, session=None, **_kw) -> None:
+        self.events.append({"topic": topic, "event_type": event_type, "payload": payload})
+
+
+def _cancel_scan_client(signing_key: bytes, db: FakeSession) -> tuple[TestClient, str, _Hub]:
+    app, token = _make_app(signing_key, db)
+    hub = _Hub()
+    app.state.ws_hub = hub
+    return TestClient(app), token, hub
+
+
+def test_cancel_scan_emits_the_command_to_the_drives_ripper(signing_key: bytes) -> None:
+    db = FakeSession()
+    _seed(db)
+    db.rows["jobs"] = []
+    client, token, hub = _cancel_scan_client(signing_key, db)
+    with client:
+        r = client.post("/api/drives/drv_frsh000000000000000000001/cancel-scan", headers=_auth(token))
+    assert r.status_code == 204, r.text
+    assert hub.events == [
+        {"topic": "ripper.commands.drv_frsh000000000000000000001", "event_type": "scan.cancel", "payload": {}}
+    ]
+
+
+def test_cancel_scan_unknown_drive_is_404(signing_key: bytes) -> None:
+    db = FakeSession()
+    _seed(db)
+    client, token, hub = _cancel_scan_client(signing_key, db)
+    with client:
+        r = client.post("/api/drives/drv_nope/cancel-scan", headers=_auth(token))
+    assert r.status_code == 404
+    assert hub.events == []
+
+
+def test_cancel_scan_with_a_live_job_is_409(signing_key: bytes) -> None:
+    from arm_common import DiscType, Job, JobStatus
+
+    db = FakeSession()
+    _seed(db)
+    db.rows["jobs"] = [
+        Job(
+            id="job_01JZXR7K3M5Q8N4VWA00000001",
+            drive_id="drv_frsh000000000000000000001",
+            disc_type=DiscType.DVD,
+            status=JobStatus.RIPPING,
+            metadata_json={},
+            resumed_from_crash=False,
+        )
+    ]
+    client, token, hub = _cancel_scan_client(signing_key, db)
+    with client:
+        r = client.post("/api/drives/drv_frsh000000000000000000001/cancel-scan", headers=_auth(token))
+    assert r.status_code == 409
+    assert hub.events == []
+
+
+def test_cancel_scan_needs_write_access(signing_key: bytes) -> None:
+    db = FakeSession()
+    _seed(db)
+    client, _, hub = _cancel_scan_client(signing_key, db)
+    guest, _ = issue_access_token("usr_guest", "guest", signing_key)
+    with client:
+        r = client.post("/api/drives/drv_frsh000000000000000000001/cancel-scan", headers=_auth(guest))
+    assert r.status_code == 403
+    assert hub.events == []

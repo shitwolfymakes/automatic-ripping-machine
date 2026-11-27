@@ -4,7 +4,13 @@
 	import { sessionOptionLabel } from '$lib/sessions/routes';
 	import { DriveCardActions } from '$lib/stores/drive-card-actions.svelte';
 	import { defaultSessionChoices, manualRipSessionChoices } from '$lib/sessions/sessions';
-	import { hasLiveJob, isDriveDetached, prescanOverrideCount, startRipBlockedReason } from '$lib/drives/drives';
+	import {
+		cancelScanLabel,
+		hasLiveJob,
+		isDriveDetached,
+		prescanOverrideCount,
+		startRipBlockedReason
+	} from '$lib/drives/drives';
 	import type { PrescanKey } from '$lib/drives/settings';
 	import DriveSettingsPanel from './DriveSettingsPanel.svelte';
 	import DriveCardHeader from './DriveCardHeader.svelte';
@@ -35,6 +41,7 @@
 
 	const isDetached = $derived(isDriveDetached(drive));
 	const startRipBlocked = $derived(startRipBlockedReason(drive));
+	const cancelLabel = $derived(cancelScanLabel(drive));
 	const prescanOverrides = $derived(prescanOverrideCount(drive));
 
 	const pickerSessions = $derived(manualRipSessionChoices(sessions, transcodePresets, $transcoderEnabled));
@@ -150,6 +157,20 @@
 			{actions.triggering ? 'Starting...' : 'Start rip'}
 		</button>
 
+		{#if cancelLabel}
+			<button
+				type="button"
+				data-testid="drive-cancel-scan"
+				onclick={() => actions.cancelScan(drive.id)}
+				disabled={actions.cancellingScan}
+				aria-label={cancelLabel}
+				title="Stop the scan of the loaded disc"
+				class="btn btn-sm drive-card-cancel-scan-btn"
+			>
+				{actions.cancellingScan ? 'Cancelling...' : cancelLabel}
+			</button>
+		{/if}
+
 		<div class="drive-card-action-divider"></div>
 
 		<button
@@ -177,6 +198,10 @@
 
 	{#if actions.manualError}
 		<p class="field-error mt-1 drive-card-error" data-testid="drive-manual-error">{actions.manualError}</p>
+	{/if}
+
+	{#if actions.cancelScanError}
+		<p class="field-error mt-1 drive-card-error" data-testid="drive-cancel-scan-error">{actions.cancelScanError}</p>
 	{/if}
 
 	{#if actions.unenrollError}
@@ -329,6 +354,7 @@
 		background: var(--color-primary-tint-3);
 		color: var(--color-primary-text);
 	}
+	.drive-card-cancel-scan-btn,
 	.drive-card-unenroll-btn {
 		min-height: auto;
 		padding: 0.375rem 0.5rem;

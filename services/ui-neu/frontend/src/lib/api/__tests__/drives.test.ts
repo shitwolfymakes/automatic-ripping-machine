@@ -19,7 +19,8 @@ import {
 	enrollDrive,
 	ignoreDrive,
 	unignoreDrive,
-	unenrollDrive
+	unenrollDrive,
+	cancelDriveScan
 } from '../drives';
 
 beforeEach(() => mockFetch.mockReset());
@@ -116,5 +117,16 @@ describe('unenrollDrive', () => {
 		mockFetch.mockResolvedValue(emptyResponse());
 		await expect(unenrollDrive('drv_x')).resolves.toBeUndefined();
 		expect(mockFetch).toHaveBeenCalledWith('/api/drives/drv_x/unenroll', expect.objectContaining({ method: 'POST' }));
+	});
+});
+
+describe('cancelDriveScan', () => {
+	it('POSTs /api/drives/:id/cancel-scan and resolves without reading a body', async () => {
+		mockFetch.mockResolvedValue(emptyResponse());
+		await expect(cancelDriveScan('drv_x')).resolves.toBeUndefined();
+		expect(mockFetch).toHaveBeenCalledWith(
+			'/api/drives/drv_x/cancel-scan',
+			expect.objectContaining({ method: 'POST' })
+		);
 	});
 });

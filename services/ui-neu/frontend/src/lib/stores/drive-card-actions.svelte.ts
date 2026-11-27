@@ -1,8 +1,8 @@
-// The full drive card's actions: manual rip, unenroll, 4K and rip mode, with
+// The full drive card's actions: manual rip, cancel scan, unenroll, 4K and rip mode, with
 // each one's busy flag, the unenroll confirmation and the two error
 // messages.
 import type { DriveView } from '$lib/types/api.gen';
-import { unenrollDrive, updateDrive } from '$lib/api/drives';
+import { cancelDriveScan, unenrollDrive, updateDrive } from '$lib/api/drives';
 import { triggerManual } from '$lib/api/jobs';
 import { errorMessage } from '$lib/utils/errors';
 
@@ -13,6 +13,8 @@ export class DriveCardActions {
 	unenrolling = $state(false);
 	unenrollError = $state<string | null>(null);
 	confirmUnenrollOpen = $state(false);
+	cancellingScan = $state(false);
+	cancelScanError = $state<string | null>(null);
 	togglingUhd = $state(false);
 	togglingMode = $state(false);
 
@@ -35,6 +37,20 @@ export class DriveCardActions {
 			this.manualError = errorMessage(e, 'Manual rip failed');
 		} finally {
 			this.triggering = false;
+		}
+	};
+
+	cancelScan = async (driveId: string): Promise<void> => {
+		if (this.cancellingScan) return;
+		this.cancellingScan = true;
+		this.cancelScanError = null;
+		try {
+			await cancelDriveScan(driveId);
+			this.#refresh();
+		} catch (e) {
+			this.cancelScanError = errorMessage(e, 'Cancel scan failed');
+		} finally {
+			this.cancellingScan = false;
 		}
 	};
 

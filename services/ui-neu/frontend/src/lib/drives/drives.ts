@@ -111,3 +111,15 @@ export function connectionLabel(d: DriveView): string | null {
 			return null;
 	}
 }
+
+export const CANCEL_SCAN_LABEL = 'Cancel scan';
+
+/**
+ * The label of the drive card's Cancel button, or null when there is nothing to cancel. A drive scans before it has
+ * a job (the card has no scan flag of its own), so the button is offered while a disc is loaded, no job exists and
+ * the ripper is reachable; the ripper ignores the command when it is not scanning.
+ */
+export function cancelScanLabel(d: DriveView): string | null {
+	const canScan = d.media_status === 'loaded' && !hasLiveJob(d) && !isDriveDetached(d) && !isRipperOfflinePresent(d);
+	return canScan ? CANCEL_SCAN_LABEL : null;
+}
