@@ -58,4 +58,10 @@ describe('ActiveJobRow expanded panel', () => {
 		expect(within(panel).getAllByText(/Last Crusade/)).toHaveLength(1);
 		expect(within(panel).queryByRole('img', { name: /Last Crusade/ })).toBeNull();
 	});
+
+	it('shows the header progress in the Progress cell', async () => {
+		await renderExpanded();
+		const cell = screen.getByText('Progress', { selector: 'td' }).nextElementSibling as HTMLElement;
+		expect(cell).toHaveTextContent('1h 1m left');
+	});
 });

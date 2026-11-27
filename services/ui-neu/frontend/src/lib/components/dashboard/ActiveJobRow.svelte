@@ -197,7 +197,14 @@
 		<!-- Expanded detail -->
 		{#if expanded}
 			<div transition:slide={{ duration: 200 }} class="job-active-row-expanded">
-				<ActiveJobRowDetails {job} {typeConfig} {active} stageWords={ripStageWords(live.rip?.phase ?? null)} />
+				<ActiveJobRowDetails
+					{job}
+					{typeConfig}
+					{active}
+					stageWords={ripStageWords(live.rip?.phase ?? null)}
+					{sample}
+					colorVar={accentVar}
+				/>
 			</div>
 		{/if}
 	</div>

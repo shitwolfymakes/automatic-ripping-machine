@@ -2,6 +2,8 @@
 	// The active job row's expanded panel: the large poster, the title link and
 	// the job's facts in a table.
 	import type { JobView } from '$lib/types/api.gen';
+	import LiveProgressLine from '../../jobs/LiveProgressLine.svelte';
+	import type { LiveSample } from '$lib/live/feeds';
 	import StatusBadge from '../../shared/StatusBadge.svelte';
 	import DiscTypeIcon from '../../shared/DiscTypeIcon.svelte';
 	import PosterImage from '../../shared/PosterImage.svelte';
@@ -18,9 +20,13 @@
 		active: boolean;
 		/** The ripper's current stage in words, if it reported one. */
 		stageWords: string | null;
+		/** The live sample the row's header shows, so both read the same progress. */
+		sample: LiveSample | null;
+		/** The progress bar's colour variable. */
+		colorVar: string | null;
 	}
 
-	let { job, typeConfig, active, stageWords }: Props = $props();
+	let { job, typeConfig, active, stageWords, sample, colorVar }: Props = $props();
 
 	// No tracks, or a total of 0, hides the count.
 	let tracksLabel = $derived(
@@ -90,9 +96,12 @@
 				<tr>
 					<td class="job-active-row-detail-label">Progress</td>
 					<td class="job-active-row-detail-value" colspan="3">
+						{#if active && sample?.pct != null}
+							<LiveProgressLine {sample} {colorVar} />
+						{/if}
 						{#if active && stageWords}
 							{stageWords}
-						{:else}
+						{:else if !(active && sample?.pct != null)}
 							-
 						{/if}
 					</td>

@@ -19,6 +19,8 @@ function renderDetails(overrides: Partial<JobView> = {}, props: Record<string, u
 			typeConfig: getVideoTypeConfig(null, job.disc_type ?? null),
 			active: false,
 			stageWords: null,
+			sample: null,
+			colorVar: null,
 			...props
 		}
 	} as Defaults);
@@ -29,6 +31,18 @@ function valueCell(label: string): HTMLElement {
 	const labelCell = screen.getByText(label, { selector: 'td' });
 	return labelCell.nextElementSibling as HTMLElement;
 }
+
+const SAMPLE = {
+	pct: 3,
+	etaSeconds: 3660,
+	fps: null,
+	avgFps: null,
+	pass: null,
+	bytesDone: null,
+	bytesTotal: null,
+	rateBps: null,
+	phase: null
+};
 
 describe('ActiveJobRowDetails', () => {
 	afterEach(cleanup);
@@ -128,5 +142,27 @@ describe('ActiveJobRowDetails', () => {
 		const { container } = renderDetails({ disc_type: 'bluray', poster_url: 'http://x/p.jpg' });
 		expect(container.querySelector('.job-active-row-poster-lg')).not.toBeNull();
 		expect(container.querySelector('.job-active-row-poster-lg-square')).toBeNull();
+	});
+
+	it('shows the live progress line, as the row header does, while active', () => {
+		renderDetails({}, { active: true, sample: SAMPLE });
+		expect(valueCell('Progress')).toHaveTextContent('1h 1m left');
+		expect(valueCell('Progress')).not.toHaveTextContent('-');
+	});
+
+	it('shows the live progress line with the stage words when both are known', () => {
+		renderDetails({}, { active: true, sample: SAMPLE, stageWords: 'Copying to shared storage' });
+		expect(valueCell('Progress')).toHaveTextContent('1h 1m left');
+		expect(valueCell('Progress')).toHaveTextContent('Copying to shared storage');
+	});
+
+	it('shows a dash when active with no figure and no stage yet', () => {
+		renderDetails({}, { active: true, sample: { ...SAMPLE, pct: null } });
+		expect(valueCell('Progress').textContent?.trim()).toBe('-');
+	});
+
+	it('shows no progress line when the job is not active', () => {
+		renderDetails({}, { active: false, sample: SAMPLE });
+		expect(valueCell('Progress').textContent?.trim()).toBe('-');
 	});
 });
