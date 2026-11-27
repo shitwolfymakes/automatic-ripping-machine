@@ -50,14 +50,14 @@ afterEach(() => {
 
 describe('JobInfoForm', () => {
 	it('seeds Title and Year from the job', () => {
-		renderComponent(JobInfoForm, { props: { job: job() } });
+		renderComponent(JobInfoForm, { props: { isTv: true, job: job() } });
 		expect((screen.getByLabelText('Title') as HTMLInputElement).value).toBe('Star Knight');
 		expect((screen.getByLabelText('Year') as HTMLInputElement).value).toBe('1985');
 	});
 
 	it('Save calls resolveJob once with the form body', async () => {
 		const onrefresh = vi.fn();
-		renderComponent(JobInfoForm, { props: { job: job(), onrefresh } });
+		renderComponent(JobInfoForm, { props: { isTv: true, job: job(), onrefresh } });
 		await fireEvent.input(screen.getByLabelText('Year'), { target: { value: '1986' } });
 		await fireEvent.click(screen.getByRole('button', { name: 'Save' }));
 		await waitFor(() => expect(mockResolve).toHaveBeenCalledTimes(1));
@@ -71,7 +71,7 @@ describe('JobInfoForm', () => {
 	});
 
 	it('Save sends the seeded title even on a disc-only change', async () => {
-		renderComponent(JobInfoForm, { props: { job: job() } });
+		renderComponent(JobInfoForm, { props: { isTv: true, job: job() } });
 		await fireEvent.input(screen.getByLabelText('Disc number'), { target: { value: '2' } });
 		await fireEvent.input(screen.getByLabelText('Disc total'), { target: { value: '3' } });
 		await fireEvent.click(screen.getByRole('button', { name: 'Save' }));
@@ -87,7 +87,7 @@ describe('JobInfoForm', () => {
 
 	it('a save error shows error feedback and keeps the dirty Save bar', async () => {
 		mockResolve.mockRejectedValueOnce(new Error('boom'));
-		renderComponent(JobInfoForm, { props: { job: job() } });
+		renderComponent(JobInfoForm, { props: { isTv: true, job: job() } });
 		await fireEvent.input(screen.getByLabelText('Year'), { target: { value: '1990' } });
 		await fireEvent.click(screen.getByRole('button', { name: 'Save' }));
 		await waitFor(() => expect(screen.getByText('boom')).toBeInTheDocument());
@@ -96,27 +96,27 @@ describe('JobInfoForm', () => {
 	});
 
 	it('blank Title disables Save', async () => {
-		renderComponent(JobInfoForm, { props: { job: job() } });
+		renderComponent(JobInfoForm, { props: { isTv: true, job: job() } });
 		await fireEvent.input(screen.getByLabelText('Title'), { target: { value: '' } });
 		// dirty now true (title touched) so Save bar shows; the button is disabled
 		expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled();
 	});
 
 	it('a non-resolvable job renders fields read-only with the lock note', () => {
-		renderComponent(JobInfoForm, { props: { job: job({ status: 'ripping' }) } });
+		renderComponent(JobInfoForm, { props: { isTv: true, job: job({ status: 'ripping' }) } });
 		expect(screen.getByText(/Identity is locked/i)).toBeInTheDocument();
 		expect(screen.getByLabelText('Title')).toBeDisabled();
 	});
 
 	it('does not overwrite a touched field when the job prop changes', async () => {
-		const { rerender } = renderComponent(JobInfoForm, { props: { job: job() } });
+		const { rerender } = renderComponent(JobInfoForm, { props: { isTv: true, job: job() } });
 		await fireEvent.input(screen.getByLabelText('Title'), { target: { value: 'My Edit' } });
 		await rerender({ job: job({ title: 'Polled Title' }) });
 		expect((screen.getByLabelText('Title') as HTMLInputElement).value).toBe('My Edit');
 	});
 
 	it('has no Start button — the form only saves metadata (Start lives in the action row)', async () => {
-		renderComponent(JobInfoForm, { props: { job: job() } });
+		renderComponent(JobInfoForm, { props: { isTv: true, job: job() } });
 		expect(screen.queryByRole('button', { name: /start rip/i })).not.toBeInTheDocument();
 		// editing reveals only Save + Reset
 		await fireEvent.input(screen.getByLabelText('Year'), { target: { value: '1986' } });
@@ -137,13 +137,13 @@ describe('JobInfoForm', () => {
 				__setRole: (r: string | null) => void;
 			};
 			auth.__setRole('guest');
-			renderComponent(JobInfoForm, { props: { job: job() } });
+			renderComponent(JobInfoForm, { props: { isTv: true, job: job() } });
 			await fireEvent.input(screen.getByLabelText('Year'), { target: { value: '1986' } });
 			expect(screen.queryByRole('button', { name: 'Save' })).not.toBeInTheDocument();
 		});
 
 		it('shows the Save button for admins', async () => {
-			renderComponent(JobInfoForm, { props: { job: job() } });
+			renderComponent(JobInfoForm, { props: { isTv: true, job: job() } });
 			await fireEvent.input(screen.getByLabelText('Year'), { target: { value: '1986' } });
 			expect(screen.getByRole('button', { name: 'Save' })).toBeInTheDocument();
 		});
@@ -152,7 +152,7 @@ describe('JobInfoForm', () => {
 	it('shows the season empty when unknown and saves a typed season', async () => {
 		mockResolve.mockResolvedValue({ job: job({ season: 7 }), fan_out: [] } as any);
 		const onsaved = vi.fn();
-		renderComponent(JobInfoForm, { props: { job: job({ season: null }), onsaved } });
+		renderComponent(JobInfoForm, { props: { isTv: true, job: job({ season: null }), onsaved } });
 		const season = screen.getByLabelText('Season') as HTMLInputElement;
 		expect(season.value).toBe('');
 		await fireEvent.input(season, { target: { value: '7' } });
@@ -162,14 +162,14 @@ describe('JobInfoForm', () => {
 	});
 
 	it('clears a season by sending null', async () => {
-		renderComponent(JobInfoForm, { props: { job: job({ season: 7 }) } });
+		renderComponent(JobInfoForm, { props: { isTv: true, job: job({ season: 7 }) } });
 		await fireEvent.input(screen.getByLabelText('Season'), { target: { value: '' } });
 		await fireEvent.click(screen.getByText('Save'));
 		await waitFor(() => expect(mockResolve).toHaveBeenCalledWith('job_1', expect.objectContaining({ season: null })));
 	});
 
 	it('does not send season when untouched', async () => {
-		renderComponent(JobInfoForm, { props: { job: job({ season: 7 }) } });
+		renderComponent(JobInfoForm, { props: { isTv: true, job: job({ season: 7 }) } });
 		await fireEvent.input(screen.getByLabelText('Title'), { target: { value: 'Other' } });
 		await fireEvent.click(screen.getByText('Save'));
 		await waitFor(() => expect(mockResolve).toHaveBeenCalled());
@@ -179,7 +179,7 @@ describe('JobInfoForm', () => {
 	it('reports a disc change', async () => {
 		mockResolve.mockResolvedValue({ job: job({ disc_number: 2 }), fan_out: [] } as any);
 		const onsaved = vi.fn();
-		renderComponent(JobInfoForm, { props: { job: job(), onsaved } });
+		renderComponent(JobInfoForm, { props: { isTv: true, job: job(), onsaved } });
 		await fireEvent.input(screen.getByLabelText('Disc number'), { target: { value: '2' } });
 		await fireEvent.click(screen.getByText('Save'));
 		await waitFor(() => expect(onsaved).toHaveBeenCalledWith({ season: false, disc: true }));
@@ -190,7 +190,7 @@ describe('JobInfoForm', () => {
 		mockResolve.mockResolvedValue({ job: job({ season: 2 }), fan_out: [] } as any);
 		const onsaved = vi.fn();
 		renderComponent(JobInfoForm, {
-			props: { job: job({ season: 2, identity_provenance: { season: 'label' } }), onsaved }
+			props: { isTv: true, job: job({ season: 2, identity_provenance: { season: 'label' } }), onsaved }
 		});
 		await fireEvent.input(screen.getByLabelText('Season'), { target: { value: '' } });
 		await fireEvent.click(screen.getByText('Save'));
@@ -201,7 +201,7 @@ describe('JobInfoForm', () => {
 	it('a disc-total-only edit changes neither season nor disc', async () => {
 		mockResolve.mockResolvedValue({ job: job({ disc_total: 3 }), fan_out: [] } as any);
 		const onsaved = vi.fn();
-		renderComponent(JobInfoForm, { props: { job: job(), onsaved } });
+		renderComponent(JobInfoForm, { props: { isTv: true, job: job(), onsaved } });
 		await fireEvent.input(screen.getByLabelText('Disc total'), { target: { value: '3' } });
 		await fireEvent.click(screen.getByText('Save'));
 		await waitFor(() => expect(onsaved).toHaveBeenCalledWith({ season: false, disc: false }));
@@ -209,8 +209,36 @@ describe('JobInfoForm', () => {
 
 	it('shows the provenance line for a set season', () => {
 		renderComponent(JobInfoForm, {
-			props: { job: job({ season: 2, identity_provenance: { season: 'label' } }) }
+			props: { isTv: true, job: job({ season: 2, identity_provenance: { season: 'label' } }) }
 		});
 		expect(screen.getByText('Season from the disc label')).toBeInTheDocument();
+	});
+});
+
+describe('JobInfoForm on a movie', () => {
+	it('hides the season input and its provenance line, keeps the disc fields', () => {
+		renderComponent(JobInfoForm, {
+			props: { isTv: false, job: job({ season: 2, identity_provenance: { season: 'label' } }) }
+		});
+		expect(screen.queryByLabelText('Season')).not.toBeInTheDocument();
+		expect(screen.queryByText('Season from the disc label')).not.toBeInTheDocument();
+		expect(screen.getByLabelText('Disc number')).toBeInTheDocument();
+		expect(screen.getByLabelText('Disc total')).toBeInTheDocument();
+		expect(screen.getByText(/multi-disc releases, the disc.s position/i)).toBeInTheDocument();
+		expect(screen.queryByText(/TV box sets/i)).not.toBeInTheDocument();
+	});
+
+	it('never sends a season when saving a movie', async () => {
+		renderComponent(JobInfoForm, { props: { isTv: false, job: job({ season: 2 }) } });
+		await fireEvent.input(screen.getByLabelText('Title'), { target: { value: 'Other' } });
+		await fireEvent.click(screen.getByText('Save'));
+		await waitFor(() => expect(mockResolve).toHaveBeenCalled());
+		expect(mockResolve.mock.calls[0][1]).not.toHaveProperty('season');
+	});
+
+	it('keeps the TV wording and season input on a TV job', () => {
+		renderComponent(JobInfoForm, { props: { isTv: true, job: job() } });
+		expect(screen.getByLabelText('Season')).toBeInTheDocument();
+		expect(screen.getByText(/TV box sets/i)).toBeInTheDocument();
 	});
 });
