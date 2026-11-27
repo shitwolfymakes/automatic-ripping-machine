@@ -245,28 +245,6 @@ async def _call_run_encoder(tmp_path, *, tool, preset, state=None, cancel_event=
 
 
 @pytest.mark.asyncio
-async def test_run_encoder_none_copies_without_consulting_encoder(monkeypatch, tmp_path) -> None:
-    import arm_transcode.main as m
-
-    calls: list[tuple] = []
-
-    def fake_transcode_none(*args, **kwargs):
-        calls.append((args, kwargs))
-        return 1234
-
-    def must_not_call():
-        raise AssertionError("selected_encoder must not be consulted for tool=NONE")
-
-    monkeypatch.setattr(m, "transcode_none", fake_transcode_none)
-    monkeypatch.setattr(m, "selected_encoder", must_not_call)
-    state = ProgressState()
-    size = await _call_run_encoder(tmp_path, tool=TranscodeTool.NONE, preset=None, state=state)
-    assert size == 1234
-    assert calls == [((tmp_path / "in.mkv", tmp_path / "out.mkv"), {})]
-    assert state.pct == 100
-
-
-@pytest.mark.asyncio
 async def test_run_encoder_handbrake_with_handbrake_engine_spec(monkeypatch, tmp_path) -> None:
     import arm_transcode.main as m
 

@@ -7,7 +7,8 @@ Run order:
 4. Pick the encoder by `transcode_preset.tool`:
    - HANDBRAKE → `handbrake.transcode_handbrake`
    - ABCDE → `ffmpeg_audio.transcode_audio`
-   - NONE → `arm_common.fileops.transcode_none` (no atomic-rename needed)
+   - NONE (or no preset) is passthrough, which the Backend runs in-process; a
+     task that reaches the container with one fails.
 5. Wrap the output write in `arm_common.fileops.atomic_output` so partial
    files land as `*.arm-inprogress` and only get renamed on success.
 6. PATCH /complete with size + duration metadata.
@@ -37,7 +38,7 @@ from arm_common.schemas import (
     WSEnvelope,
 )
 from arm_common.enums import GpuVendor, TranscodeTool
-from arm_common.fileops import atomic_output, transcode_none
+from arm_common.fileops import atomic_output
 
 from arm_transcode.api_client import BackendClient
 from arm_transcode.config import TranscoderConfig
@@ -60,6 +61,7 @@ logger = logging.getLogger("arm_transcode.main")
 # shouldn't bloat the row / WS frame. Generous enough to hold handbrake.py's
 # 1000-line stderr tail (~80 KB) intact; see `_clip_error`.
 _MAX_ERROR_CHARS = 100_000
+_PASSTHROUGH_IN_BACKEND = "passthrough runs in the backend"
 
 
 def _clip_error(msg: str) -> str:
@@ -256,9 +258,6 @@ async def _encode(
     progress_callback: ProgressCallback,
 ) -> int:
     """Run the engine `tool` selects and return the size it wrote."""
-    if tool == TranscodeTool.NONE:
-        return transcode_none(raw_input, final_output)
-
     spec = selected_encoder()
     if tool == TranscodeTool.HANDBRAKE and spec is not None and spec.engine == "ffmpeg_vaapi":
         # `tool` only equals HANDBRAKE when `preset` produced it (see `run()`
@@ -367,7 +366,10 @@ async def _encode_and_report(
     raw_input = Path(registered.raw_input_path)
     final_output = Path(registered.media_root) / (registered.task.output_path or "")
     preset = registered.transcode_preset
-    tool = preset.tool if preset is not None else TranscodeTool.NONE
+    if preset is None or preset.tool == TranscodeTool.NONE:
+        await api.fail(task_id, last_error=_PASSTHROUGH_IN_BACKEND)
+        return 1
+    tool = preset.tool
     duration = registered.source_track.duration_seconds
 
     state = ProgressState()
