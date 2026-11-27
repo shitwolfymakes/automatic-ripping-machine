@@ -1,0 +1,8 @@
+MSG:1005,0,1,"MakeMKV v1.18.3 linux(x64-release) started","%1 started","MakeMKV v1.18.3 linux(x64-release)"
+PRGT:3338,0,"Opening files"
+PRGC:3339,0,"Scanning contents of media"
+PRGV:0,0,65536
+MSG:3303,0,1,"Volume key for this disc is unknown","Volume key for this disc is unknown"
+PRGV:1024,0,65536
+MSG:5010,0,0,"Failed to open disc","Failed to open disc"
+TCOUNT:0

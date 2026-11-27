@@ -59,6 +59,14 @@ def test_ignores_unknown_message_types():
     assert disc_type is None
 
 
+def test_ignores_progress_lines():
+    lines = ['PRGT:3338,0,"Opening files"', 'PRGC:3339,0,"Scanning"', "PRGV:100,0,65536", 'CINFO:2,0,"LABEL"']
+    volume_label, titles, disc_type = parse_makemkvcon_info(lines)
+    assert volume_label == "LABEL"
+    assert titles == []
+    assert disc_type is None
+
+
 def test_classifies_blu_ray_from_cinfo():
     # CINFO:1,N,"Blu-ray disc" is the upstream value for BD-Video discs.
     lines = ['CINFO:1,6210,"Blu-ray disc"', 'CINFO:2,0,"GUARDIANS_OF_THE_GALAXY"']
