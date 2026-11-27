@@ -406,8 +406,7 @@ export type CatalogService = {
  * CdIdentityGaps
  *
  * What a CD not yet identified still lacks before it counts as
- * identified: a blank album or artist, and the 1-based numbers of the
- * scanned tracks with no title.
+ * identified: a blank album or artist. Track titles are not required.
  */
 export type CdIdentityGaps = {
     /**
@@ -418,10 +417,6 @@ export type CdIdentityGaps = {
      * Artist
      */
     artist: boolean;
-    /**
-     * Untitled Tracks
-     */
-    untitled_tracks: Array<number>;
 };
 
 /**

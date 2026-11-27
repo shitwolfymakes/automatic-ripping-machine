@@ -1079,17 +1079,14 @@ describe('Job detail page: CD identity', () => {
 	});
 
 	it.each([
-		[
-			{ album: false, artist: true, untitled_tracks: [2, 3] },
-			'Still missing: the artist and titles for tracks 2 and 3.'
-		],
-		[{ album: true, artist: false, untitled_tracks: [2] }, 'Still missing: the album and the title of track 2.']
+		[{ album: false, artist: true }, 'Still missing: the artist.'],
+		[{ album: true, artist: true }, 'Still missing: the album and the artist.']
 	])('says what a CD not yet identified still lacks (%j)', async (gaps, text) => {
 		await renderCd({ status: 'awaiting_user_id', ...unidentified(), cd_identity_gaps: gaps }, { role: 'guest' });
 		const note = screen.getByTestId('cd-identity-missing');
 		expect(note).toHaveClass('alert', 'alert-info');
 		expect(note).toHaveTextContent(
-			'ARM counts this CD as identified once it has the album, the artist and a title for every track.'
+			'ARM counts this CD as identified once it has an album and an artist; track titles are optional.'
 		);
 		expect(note).toHaveTextContent(text);
 	});

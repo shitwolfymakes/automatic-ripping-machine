@@ -269,8 +269,8 @@ def _apply_resolve(job: Job, req: ResolveRequest, *, gate_incomplete_cd: bool) -
     """Write the resolve onto the job (not yet committed). Returns whether the
     job is now identified and whether its rip had waited for that identity.
 
-    A CD not yet identified stays unidentified until its identity is complete
-    (album, artist, a title per scanned track; see pending_cd_identity): such
+    A CD not yet identified stays unidentified until it has an album and an
+    artist (track titles may stay blank; see pending_cd_identity): such
     a resolve stores what was sent but keeps the status and the miss markers,
     so the operator can enter the identity a field at a time."""
     new_metadata, show_changed = _merge_identity_metadata(job, req)

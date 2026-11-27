@@ -219,28 +219,20 @@ def job_actions_for(status: JobStatus) -> JobActions:
 
 class CdIdentityGaps(BaseModel):
     """What a CD not yet identified still lacks before it counts as
-    identified: a blank album or artist, and the 1-based numbers of the
-    scanned tracks with no title."""
+    identified: a blank album or artist. Track titles are not required."""
 
     album: bool
     artist: bool
-    untitled_tracks: list[int]
 
 
 def _cd_identity_gaps(metadata: JobMetadata) -> CdIdentityGaps | None:
-    """The CD identity's gaps, or None when complete. Every scanned track
-    needs a title (every stored track when there is no scan); stored tracks
-    past the scan are extra and not required."""
+    """The CD identity's gaps, or None when it has an album and an artist."""
     music = metadata.music or MusicMeta()
-    scan = metadata.scan_result
-    count = len(scan.titles) if scan is not None else len(music.tracks)
-    titles = [t.title for t in music.tracks]
-    untitled = [n for n in range(1, count + 1) if n > len(titles) or not titles[n - 1].strip()]
     album = not (music.album or "").strip()
     artist = not (music.artist or "").strip()
-    if not (album or artist or untitled):
+    if not (album or artist):
         return None
-    return CdIdentityGaps(album=album, artist=artist, untitled_tracks=untitled)
+    return CdIdentityGaps(album=album, artist=artist)
 
 
 def pending_cd_identity(disc_type: DiscType, status: JobStatus, metadata: JobMetadata) -> CdIdentityGaps | None:

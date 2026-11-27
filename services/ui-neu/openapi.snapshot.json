@@ -8513,23 +8513,15 @@
           "artist": {
             "type": "boolean",
             "title": "Artist"
-          },
-          "untitled_tracks": {
-            "items": {
-              "type": "integer"
-            },
-            "type": "array",
-            "title": "Untitled Tracks"
           }
         },
         "type": "object",
         "required": [
           "album",
-          "artist",
-          "untitled_tracks"
+          "artist"
         ],
         "title": "CdIdentityGaps",
-        "description": "What a CD not yet identified still lacks before it counts as\nidentified: a blank album or artist, and the 1-based numbers of the\nscanned tracks with no title."
+        "description": "What a CD not yet identified still lacks before it counts as\nidentified: a blank album or artist. Track titles are not required."
       },
       "ChannelTemplate": {
         "properties": {

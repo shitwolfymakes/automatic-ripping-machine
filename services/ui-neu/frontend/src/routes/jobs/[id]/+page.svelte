@@ -205,7 +205,7 @@
 						<div class="alert alert-info" data-testid="cd-identity-missing">
 							<p class="alert-title flex items-center gap-2"><Glyph name="info" />CD not identified yet</p>
 							<p class="alert-body">
-								ARM counts this CD as identified once it has the album, the artist and a title for every track. Still
+								ARM counts this CD as identified once it has an album and an artist; track titles are optional. Still
 								missing: {cdIdentityMissing(job.cd_identity_gaps)}.
 							</p>
 						</div>

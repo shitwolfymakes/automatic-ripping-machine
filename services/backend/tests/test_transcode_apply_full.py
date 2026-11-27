@@ -101,15 +101,23 @@ def test_build_track_ctx_no_preset_blank_slug() -> None:
     ctx = _build_track_ctx(_job(), _track(), None)
     assert ctx["transcode_slug"] == ""
     assert ctx["ext"] == ""
-    assert ctx["track_title"] == ""  # no metadata tracks list
+    assert ctx["track_title"] == "Track 01"  # no metadata tracks list
 
 
-def test_build_track_ctx_tracks_meta_edge_shapes() -> None:
-    # index out of range (72->77), entry not a dict, raw_title not a str
-    # (74->77) — each leaves track_title blank without raising.
-    assert _build_track_ctx(_job({"tracks": []}), _track(index=1), None)["track_title"] == ""
-    assert _build_track_ctx(_job({"tracks": ["nope"]}), _track(index=1), None)["track_title"] == ""
-    assert _build_track_ctx(_job({"tracks": [{"title": 123}]}), _track(index=1), None)["track_title"] == ""
+@pytest.mark.parametrize(
+    "tracks",
+    [[], ["nope"], [{"title": 123}], [{"title": ""}], [{"title": "   "}]],
+    ids=["out-of-range", "not-a-dict", "not-a-str", "blank", "whitespace"],
+)
+def test_build_track_ctx_untitled_audio_track_falls_back_to_its_number(tracks: list[object]) -> None:
+    # A CD may be identified with tracks left untitled: the title is then
+    # "Track NN", padded like {track}, so a required {track_title} still renders.
+    assert _build_track_ctx(_job({"tracks": tracks}), _track(index=1), None)["track_title"] == "Track 01"
+    assert _build_track_ctx(_job({"tracks": tracks}), _track(index=12), None)["track_title"] == "Track 12"
+
+
+def test_build_track_ctx_untitled_video_track_stays_blank() -> None:
+    assert _build_track_ctx(_job({"tracks": []}), _track(kind=TrackKind.VIDEO_TITLE), None)["track_title"] == ""
 
 
 def test_compute_outputs_no_relevant_tracks() -> None:
@@ -126,9 +134,22 @@ def test_compute_outputs_resolves_path() -> None:
 
 
 def test_compute_outputs_empty_token_raises() -> None:
-    job = _job({"tracks": [{"title": ""}]})  # track_title resolves empty
+    job = _job({"tracks": [{"title": "Song One"}]})  # no artist: {artist} resolves empty
     with pytest.raises(TemplateValidationError, match="resolved empty"):
-        compute_outputs(job, [_track(index=1)], _session(), _tp())
+        compute_outputs(job, [_track(index=1)], _session("{artist}.{ext}"), _tp())
+
+
+def test_compute_outputs_cd_with_untitled_tracks_applies_with_track_numbers() -> None:
+    from arm_backend.seeders import SESSIONS
+
+    template = next(s["output_path_template"] for s in SESSIONS if s["id"] == "ses_builtin_music_flac")
+    job = _job({"music": {"artist": "Band", "album": "LP", "tracks": [{"title": "Song One"}, {"title": ""}]}})
+    out = compute_outputs(job, [_track(index=1), _track(index=2), _track(index=3)], _session(template), _tp())
+    assert [o.output_path for o in out] == [
+        "Band/LP/01 - Song One - plex-1080p.flac",
+        "Band/LP/02 - Track 02 - plex-1080p.flac",
+        "Band/LP/03 - Track 03 - plex-1080p.flac",
+    ]
 
 
 async def test_find_collisions_empty_paths() -> None:
