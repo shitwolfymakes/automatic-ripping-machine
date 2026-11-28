@@ -1011,18 +1011,19 @@ async def test_resolve_on_a_parked_miss_keeps_every_track_and_its_title() -> Non
 @pytest.mark.parametrize(
     ("block_on_miss", "hold_for_review", "outcome"),
     [
-        (True, False, "it waits for review"),
-        (False, True, "it rips when the review countdown ends"),
-        (False, False, "it rips now"),
+        (True, False, "waiting for review"),
+        (False, True, "ripping when the review countdown ends"),
+        (False, False, "ripping as unidentified"),
     ],
 )
 def test_identify_video_miss_logs_what_happens_next(
-    caplog: pytest.LogCaptureFixture, block_on_miss: bool, hold_for_review: bool, outcome: str
+    job_log: LineCapture, block_on_miss: bool, hold_for_review: bool, outcome: str
 ) -> None:
     db = _miss_db(block_on_miss=block_on_miss, hold_for_review=hold_for_review)
-    with caplog.at_level(logging.INFO, logger="arm_backend.identify_flow"):
-        out = _identify(_make_app(db, dispatcher=_Dispatcher(None)), _four_title_scan())
-    assert f"identify job_id={out['id']}: no match for 'MY DISC'; {outcome}" in caplog.messages
+    out = _identify(_make_app(db, dispatcher=_Dispatcher(None)), _four_title_scan())
+    [missed] = job_log.lines(event="identify.missed")
+    assert missed["job_id"] == out["id"]
+    assert missed["msg"].endswith(f"; {outcome}")
 
 
 def test_identify_repost_on_held_disc_leaves_tracks_and_claims_alone(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -4447,7 +4448,7 @@ def test_identify_miss_emits_missed_with_the_attempt_reason(job_log: LineCapture
     ]
     with TestClient(_make_app(db, dispatcher=_Dispatcher(None, attempts=attempts))) as c:
         r = c.post(
-            "/api/ripper/identify", json={"drive_id": "drv_x", "scan_result": _scan_dict()}, headers=_SERVICE_AUTH
+            "/api/ripper/identify", json={"drive_id": "drv_x", "scan_result": _scan_dict("cd")}, headers=_SERVICE_AUTH
         )
     assert r.json()["status"] == "awaiting_user_id"
     [missed] = job_log.lines(event="identify.missed")
@@ -4545,8 +4546,9 @@ def test_identify_flow_warnings_carry_the_new_jobs_context(job_log: LineCapture)
     body = {"drive_id": "drv_x", "scan_result": _scan_dict(), "pending_session_id": "ses_gone"}
     with TestClient(_make_app(db, dispatcher=_Dispatcher(None))) as client:
         r = client.post("/api/ripper/identify", json=body, headers=_SERVICE_AUTH)
-    [warning] = job_log.lines(logger_prefix="arm_backend.identify_flow", level="warning")
-    assert warning["job_id"] == r.json()["id"]
+    warnings = job_log.lines(logger_prefix="arm_backend.identify_flow", level="warning")
+    [warning] = [w for w in warnings if "pending session" in w["msg"]]
+    assert {w["job_id"] for w in warnings} == {r.json()["id"]}
 
 
 def test_identify_music_hit_names_the_artist(job_log: LineCapture) -> None:

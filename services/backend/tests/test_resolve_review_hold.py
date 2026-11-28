@@ -42,7 +42,9 @@ def _db(**config: bool) -> FakeSession:
 def _identify_miss(client: TestClient, db: FakeSession, scan: dict[str, Any]) -> str:
     r = client.post("/api/ripper/identify", json={"drive_id": "drv_x", "scan_result": scan}, headers=_SERVICE_AUTH)
     assert r.status_code == 200, r.text
-    assert r.json()["status"] == "awaiting_user_id"
+    # A missed video disc parks on its card, blocked until it is identified.
+    assert r.json()["status"] == "awaiting_review"
+    assert r.json()["metadata_json"]["flags"]["blocked_miss"] is True
     # The column's server default, which the fake session does not apply.
     db.rows["jobs"][0].resumed_from_crash = False
     return str(r.json()["id"])
@@ -57,7 +59,6 @@ def test_a_searched_match_with_the_review_gate_on_parks_for_review_with_its_titl
     app, auth = _make_app(db, dispatcher=_Dispatcher(None), hub=_Hub())
     with TestClient(app) as client:
         job_id = _identify_miss(client, db, _scan_dict())
-        assert _tracks(db, job_id) == {}
         r = client.post(f"/api/jobs/{job_id}/resolve", json=_RESOLVE, headers=auth)
     assert r.status_code == 200, r.text
     job = db.rows["jobs"][0]
@@ -78,15 +79,17 @@ def test_a_searched_match_while_paused_parks_for_review_with_no_countdown() -> N
     assert db.rows["jobs"][0].wait_start_time is None
 
 
-def test_a_searched_match_with_the_review_gate_off_is_released_to_rip() -> None:
+def test_a_searched_match_with_the_review_gate_off_stays_on_its_card_for_start() -> None:
+    """A missed video disc already shows its card (#645): identified there, it waits for Start with no countdown."""
     db = _db(hold_for_review=False)
     app, auth = _make_app(db, dispatcher=_Dispatcher(None), hub=_Hub())
     with TestClient(app) as client:
         job_id = _identify_miss(client, db, _scan_dict())
         r = client.post(f"/api/jobs/{job_id}/resolve", json=_RESOLVE, headers=auth)
     assert r.status_code == 200, r.text
-    assert r.json()["job"]["status"] == "identified"
-    assert _tracks(db, job_id) == {}
+    assert r.json()["job"]["status"] == "awaiting_review"
+    assert r.json()["job"]["metadata_json"]["flags"]["blocked_miss"] is False
+    assert db.rows["jobs"][0].wait_start_time is None
 
 
 @pytest.mark.parametrize("ripping_paused", [False, True])

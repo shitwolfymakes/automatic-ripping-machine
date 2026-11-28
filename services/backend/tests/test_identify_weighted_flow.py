@@ -7,12 +7,13 @@ from typing import Any
 import httpx
 from arm_common import DriveKind
 from arm_common.schemas import BdDiscMeta, IdentifyMatch, MatchEvidence, MatchParts, MatchThresholds
-from arm_common.schemas.job_metadata import MatchCandidate
+from arm_common.schemas.job_metadata import MatchCandidate, MatchQuery
 from fastapi.testclient import TestClient
 
 from arm_backend.metadata.base import MetadataResult
 from arm_backend.metadata.dispatcher import Identification, MetadataDispatcher
 from tests._fakes import FakeSession
+from tests._logs import LineCapture
 from tests.bd_structure_scans import br3d_structure_scan
 from tests.test_dispatcher_weighted import br2049_provider_responses
 from tests.test_ripper_router import (
@@ -200,16 +201,34 @@ def test_a_shortlist_does_not_block_an_unattended_install() -> None:
     assert out["metadata_json"]["identify_match"]["decision"] == "shortlist"
 
 
-def test_no_match_is_a_miss_with_the_closest_candidate_stored() -> None:
-    match = _match("no_match", _candidate("Blade Runner 2099", 2026, -2.0, flags=["numbers_differ"]))
+def test_no_match_is_a_miss_with_the_closest_candidate_stored(job_log: LineCapture) -> None:
+    match = _match(
+        "no_match",
+        _candidate("Blade Runner 2099", 2026, -2.0, flags=["numbers_differ"]),
+        queries=[MatchQuery(text="Blade Runner", kinds=["movie"])],
+    )
     out = _post(_db(), _Weighted(None, match)).json()
-    assert out["status"] == "awaiting_user_id"
+    # A missed video disc parks for review with its titles listed (#645).
+    assert out["status"] == "awaiting_review"
     assert out["metadata_json"]["identify_match"]["candidates"][0]["flags"] == ["numbers_differ"]
+    [missed] = job_log.lines(event="identify.missed")
+    assert missed["fields"] == {
+        "provider": "tmdb",
+        "reason": 'no close match for "Blade Runner"; closest: Blade Runner 2099 (2026), score -2',
+    }
+    assert missed["msg"].endswith("; waiting for review")
+
+
+def test_a_shortlist_miss_line_names_the_count(job_log: LineCapture) -> None:
+    _post(_db(block_on_miss=False), _Weighted(None, _total_recall()))
+    [missed] = job_log.lines(event="identify.missed")
+    assert missed["fields"]["reason"].endswith("close candidates shortlisted")
+    assert missed["msg"].endswith("; ripping as unidentified")
 
 
 def test_a_dispatch_timeout_stores_no_breakdown() -> None:
     out = _post(_db(), _Weighted(None, None, raise_timeout=True)).json()
-    assert out["status"] == "awaiting_user_id"
+    assert out["status"] == "awaiting_review"
     assert "identify_match" not in out["metadata_json"]
 
 

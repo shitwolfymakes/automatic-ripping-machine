@@ -187,6 +187,14 @@ async def _promote(session: AsyncSession, job: Job) -> bool:
     return job.status == JobStatus.AWAITING_REVIEW
 
 
+async def _keep_on_card(session: AsyncSession, job: Job) -> None:
+    """A missed video disc parked on its card until identified: identified now, it stays on the card for Start, with
+    the review gate's countdown when the gate is on (none while ripping is paused; un-pause stamps one)."""
+    cfg = (await session.execute(select(Config).where(col(Config.id) == CONFIG_SINGLETON_ID))).scalar_one_or_none()
+    counts_down = cfg is not None and cfg.hold_for_review and not cfg.ripping_paused
+    job.wait_start_time = datetime.now(UTC) if counts_down else None
+
+
 async def _persist_card_tracks(session: AsyncSession, job: Job) -> None:
     """The review card's tracks for a disc held after the operator identified it (identify persisted none on a
     miss)."""
@@ -371,9 +379,13 @@ async def _resolve_identity(
     # collapse to req.media_type is None.
     if "media_type" in req.model_fields_set:
         job.media_type = req.media_type
-    # Read before the flag is cleared just below.
+    # Read before the flags are cleared just below.
     rip_waited_for_identity = _rip_waited_for_identity(job)
+    blocked_miss = job.status == JobStatus.AWAITING_REVIEW and flag_is_set(job.metadata_json, "blocked_miss")
     new_metadata = _clear_spent_markers(new_metadata, keep_match=keep_match)
+    if blocked_miss:
+        new_metadata = without_flags(new_metadata, "blocked_miss")
+        await _keep_on_card(session, job)
     held_for_review = job.status in RESOLVABLE_PROMOTE_JOB_STATUSES and await _promote(session, job)
     job.metadata_json = new_metadata
     if show_changed:

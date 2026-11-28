@@ -311,6 +311,5 @@ async def test_run_seeders_adds_the_bd_backup_builtins(tmp_path: Path, monkeypat
 def test_builtin_archive_templates_carry_the_duration() -> None:
     archive = next(r for r in seeders.SESSIONS if r["id"] == "ses_builtin_movie_archive")
     assert archive["output_path_template"] == (
-        "{title} ({year?}) [{edition?}]/{title} ({year?}) [{edition?}] ({track_label?})"
-        " ({duration_human}) - {transcode_slug}.{ext}"
+        "{title} ({year?})/{title} ({year?}) {plex_edition?} - Track {track} ({duration_human}) - {transcode_slug}.{ext}"
     )

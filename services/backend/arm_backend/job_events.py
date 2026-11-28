@@ -11,6 +11,7 @@ from arm_backend.track_labels import TrackLabel, track_label, track_position
 from arm_common import Job, JobStatus, Track
 from arm_common.log_format import elapsed, human_duration, human_size
 from arm_common.logging import log_event, with_log_context
+from arm_common.schemas import IdentifyMatch
 
 logger = logging.getLogger("arm_backend.job_events")
 
@@ -46,10 +47,16 @@ def identified_message(
     return f"identified: {shown}, {_provider_name(provider)} {_METHOD_NAMES.get(method, method)}"
 
 
-def not_identified_message(provider: str | None, reason: str, *, waiting: bool = True) -> str:
-    """`not identified: <Provider>: <reason>; <what happens next>`: the job waits, or rips as unidentified."""
+# What happens next to a disc that missed identification, as the not-identified line states it.
+MISS_WAITS_FOR_IDENTIFICATION = "waiting for identification"
+MISS_RIPS_UNIDENTIFIED = "ripping as unidentified"
+MISS_WAITS_FOR_REVIEW = "waiting for review"
+MISS_RIPS_AFTER_COUNTDOWN = "ripping when the review countdown ends"
+
+
+def not_identified_message(provider: str | None, reason: str, outcome: str = MISS_WAITS_FOR_IDENTIFICATION) -> str:
+    """`not identified: <Provider>: <reason>; <what happens next>`, the outcome being one of the `MISS_*` phrases."""
     cause = f"{_provider_name(provider)}: {reason}" if provider else reason
-    outcome = "waiting for identification" if waiting else "ripping as unidentified"
     return f"not identified: {cause}; {outcome}"
 
 
@@ -83,6 +90,21 @@ def miss_cause(attempt: dict[str, Any] | None) -> tuple[str | None, str]:
     if attempt["outcome"] == "miss" and attempt["step"] in _KEYED_STEPS:
         detail = f"no match for {detail}"
     return attempt["source"], detail
+
+
+def weighted_miss_cause(match: IdentifyMatch) -> tuple[str | None, str]:
+    """The provider and reason of a miss the weighted title search decided: no candidate scored high enough, or
+    several close ones need the operator to pick. The reason names the searched title and the closest candidate, as
+    the review card does."""
+    top = match.candidates[0] if match.candidates else None
+    if match.decision == "shortlist" and match.shortlist > 0:
+        return (top.provider if top is not None else None), f"{match.shortlist} close candidates shortlisted"
+    searched = match.queries[0].text if match.queries else None
+    reason = f'no close match for "{searched}"' if searched else "no close match"
+    if top is not None:
+        year = f" ({top.year})" if top.year is not None else ""
+        reason = f"{reason}; closest: {top.title}{year}, score {top.score:.0f}"
+    return (top.provider if top is not None else None), reason
 
 
 def held_hit_reason(kind: str, title: str, ambiguous_toc: bool) -> str:
@@ -147,12 +169,14 @@ def log_identified(job: Job, provider: str, method: str, artist: str | None = No
         )
 
 
-def log_not_identified(job: Job, provider: str | None, reason: str, *, waiting: bool = True) -> None:
+def log_not_identified(
+    job: Job, provider: str | None, reason: str, outcome: str = MISS_WAITS_FOR_IDENTIFICATION
+) -> None:
     with with_log_context(job_id=job.id):
         log_event(
             logger,
             "identify.missed",
-            not_identified_message(provider, reason, waiting=waiting),
+            not_identified_message(provider, reason, outcome),
             provider=provider,
             reason=reason,
         )
