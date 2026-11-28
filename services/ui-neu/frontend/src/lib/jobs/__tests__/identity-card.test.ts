@@ -24,13 +24,24 @@ describe('isEmptyList', () => {
 
 describe('withHintIgnored', () => {
 	it('ignoring label keeps bd_title; un-ignoring restores the default order', () => {
-		const ignored = withHintIgnored({ disc_hint_sources: ['bd_title', 'label'] }, 'label', true);
-		expect(ignored).toEqual(['bd_title']);
-		expect(withHintIgnored({ disc_hint_sources: ignored }, 'label', false)).toEqual(['bd_title', 'label']);
+		const ignored = withHintIgnored({ disc_hint_sources: ['bd_title', 'iso_name', 'label'] }, 'label', true);
+		expect(ignored).toEqual(['bd_title', 'iso_name']);
+		expect(withHintIgnored({ disc_hint_sources: ignored }, 'label', false)).toEqual(['bd_title', 'iso_name', 'label']);
+	});
+
+	it('ignoring the ISO file name keeps the others; un-ignoring puts it between them', () => {
+		const ignored = withHintIgnored({ disc_hint_sources: ['bd_title', 'iso_name', 'label'] }, 'iso_name', true);
+		expect(ignored).toEqual(['bd_title', 'label']);
+		expect(withHintIgnored({ disc_hint_sources: ignored }, 'iso_name', false)).toEqual([
+			'bd_title',
+			'iso_name',
+			'label'
+		]);
 	});
 
 	it('un-ignoring bd_title on [label] puts it first, never after label', () => {
 		expect(withHintIgnored({ disc_hint_sources: ['label'] }, 'bd_title', false)).toEqual(['bd_title', 'label']);
+		expect(withHintIgnored({ disc_hint_sources: ['label'] }, 'iso_name', false)).toEqual(['iso_name', 'label']);
 	});
 
 	it('ignoring on an empty list stays empty', () => {
@@ -39,8 +50,8 @@ describe('withHintIgnored', () => {
 	});
 
 	it('treats a non-array value as the default', () => {
-		expect(withHintIgnored({ disc_hint_sources: null }, 'bd_title', true)).toEqual(['label']);
-		expect(withHintIgnored({}, 'label', false)).toEqual(['bd_title', 'label']);
+		expect(withHintIgnored({ disc_hint_sources: null }, 'bd_title', true)).toEqual(['iso_name', 'label']);
+		expect(withHintIgnored({}, 'label', false)).toEqual(['bd_title', 'iso_name', 'label']);
 	});
 });
 

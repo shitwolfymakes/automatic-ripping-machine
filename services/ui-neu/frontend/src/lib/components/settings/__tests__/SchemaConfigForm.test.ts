@@ -480,7 +480,7 @@ describe('SchemaConfigForm Identity section', () => {
 		await fireEvent.click(screen.getByRole('checkbox', { name: 'Ignore the disc title metadata' }));
 		await fireEvent.click(screen.getByRole('button', { name: 'Save' }));
 		await waitFor(() => expect(saveArmConfig).toHaveBeenCalled());
-		expect(saveArmConfig.mock.calls[0][0]).toEqual({ disc_hint_sources: ['label'] });
+		expect(saveArmConfig.mock.calls[0][0]).toEqual({ disc_hint_sources: ['iso_name', 'label'] });
 	});
 
 	it('a guest sees the card with every control disabled and no Save', () => {

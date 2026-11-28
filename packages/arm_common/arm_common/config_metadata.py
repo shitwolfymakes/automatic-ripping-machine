@@ -120,8 +120,8 @@ CONFIG_FIELD_META: list[ConfigFieldMeta] = [
         help="Read from the disc in this order, before ARM identifies it.",
         type="ranked",
         editable=True,
-        enum_values=["bd_title", "label"],
-        enum_labels={"bd_title": "Blu-ray disc title", "label": "Disc volume label"},
+        enum_values=["bd_title", "iso_name", "label"],
+        enum_labels={"bd_title": "Blu-ray disc title", "iso_name": "ISO file name", "label": "Disc volume label"},
     ),
     ConfigFieldMeta(
         key="episode_match_tolerance_seconds",

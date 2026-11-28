@@ -89,8 +89,12 @@ def test_identity_settings_meta() -> None:
     assert eps.enum_labels == {"tmdb": "TMDb", "tvmaze": "TVmaze", "tvdb": "TVDB"}
     assert eps.enum_requires == {"tmdb": "tmdb_api_key", "tvdb": "tvdb_api_key"}
     hints = by_key["disc_hint_sources"]
-    assert (hints.type, hints.enum_values) == ("ranked", ["bd_title", "label"])
-    assert hints.enum_labels == {"bd_title": "Blu-ray disc title", "label": "Disc volume label"}
+    assert (hints.type, hints.enum_values) == ("ranked", ["bd_title", "iso_name", "label"])
+    assert hints.enum_labels == {
+        "bd_title": "Blu-ray disc title",
+        "iso_name": "ISO file name",
+        "label": "Disc volume label",
+    }
     assert hints.enum_requires is None
     assert by_key["episode_match_tolerance_seconds"].type == "int"
     assert by_key["episode_auto_apply"].type == "bool"
@@ -144,7 +148,7 @@ def test_identity_settings_meta() -> None:
 def test_config_model_defaults_for_identity_settings() -> None:
     cfg = Config()
     assert cfg.episode_sources == ["tmdb", "tvmaze", "tvdb"]
-    assert cfg.disc_hint_sources == ["bd_title", "label"]
+    assert cfg.disc_hint_sources == ["bd_title", "iso_name", "label"]
     assert cfg.episode_match_tolerance_seconds == 300
     assert cfg.episode_auto_apply is True
     assert cfg.movie_sources == ["tmdb", "omdb"]

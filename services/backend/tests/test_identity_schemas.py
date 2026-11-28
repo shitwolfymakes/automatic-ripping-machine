@@ -9,6 +9,7 @@ from arm_common.schemas.identity import (
     JOB_CLAIM_FIELDS,
     TRACK_CLAIM_FIELDS,
     IdentityClaims,
+    JobClaim,
     SourceClaims,
     TrackClaim,
 )
@@ -47,6 +48,14 @@ def test_field_maps_cover_resolver_managed_fields() -> None:
         "excluded",
     }
     assert set(JOB_CLAIM_FIELDS.values()) == {"season", "disc_number", "disc_total"}
+
+
+def test_job_claim_year_is_a_hint_not_a_resolvable_field() -> None:
+    """`year` (like `title`) rides on JobClaim for the evidence reader but is
+    not in JOB_CLAIM_FIELDS, so the resolver can never write job.year from it."""
+    assert "year" in JobClaim.model_fields
+    assert "year" not in JOB_CLAIM_FIELDS
+    assert "year" not in JOB_CLAIM_FIELDS.values()
 
 
 def test_job_metadata_has_no_thediscdb_section() -> None:

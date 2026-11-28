@@ -2732,6 +2732,10 @@ export type JobClaim = {
      * Title
      */
     title?: string | null;
+    /**
+     * Year
+     */
+    year?: number | null;
 };
 
 /**

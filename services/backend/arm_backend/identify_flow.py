@@ -25,7 +25,7 @@ from arm_common.disc_titles import scan_candidates
 from arm_backend.identity.apply import apply_identity_result, suggest_identity
 from arm_backend.identity.episode_stage import is_tv_candidate
 from arm_backend.identity.hints import hint_is_tv, hint_title
-from arm_backend.identity.pipeline import resolve_job, run_disc_hints
+from arm_backend.identity.pipeline import resolve_job, run_disc_hints, source_name_of
 from arm_backend.identity.proposals import preferred_titles, put_source, record_preset
 from arm_backend.identity.sources.base import Source
 from arm_backend.identity.sources.registry import auto_apply_for, enabled_hint_sources
@@ -605,10 +605,12 @@ class IdentifyFlow:
 
         self.hints = enabled_hint_sources(cfg)
         if not self.already_identified:
-            # Offline disc hints (volume label, Blu-ray BDMT title): season / disc /
+            # Offline disc hints (volume label, Blu-ray BDMT title, ISO file name): season / disc /
             # total proposals plus a cleaner search title for the dispatcher, in
             # the operator's configured source order.
-            run_disc_hints(job, scan, now=datetime.now(timezone.utc), sources=self.hints)
+            run_disc_hints(
+                job, scan, now=datetime.now(timezone.utc), sources=self.hints, source_name=source_name_of(drive)
+            )
 
         self.thediscdb_match = None
         if not self.already_identified and cfg.thediscdb_enabled:

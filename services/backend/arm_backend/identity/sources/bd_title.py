@@ -10,6 +10,7 @@ from arm_common.schemas.identity import JobClaim, SourceClaims
 
 from arm_backend.identity.sources.base import Capability, JobContext
 from arm_backend.identity.sources.label_parser import parse_label
+from arm_backend.identity.sources.year_hint import bracketed_year
 
 
 class BdTitleSource:
@@ -42,6 +43,8 @@ class BdTitleSource:
             fields["disc_total"] = total
         if hints.title and not hints.part_marker_only:
             fields["title"] = hints.title
+        if (year := bracketed_year(meta.name, max_year=ctx.now.year + 1)) is not None:
+            fields["year"] = year
         return SourceClaims(run_at=ctx.now, status="ok", inputs=self.inputs(ctx), job=JobClaim(**fields))
 
 
