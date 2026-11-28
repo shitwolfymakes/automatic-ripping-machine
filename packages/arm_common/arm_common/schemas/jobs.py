@@ -9,6 +9,7 @@ from arm_common.enums import (
     APPLY_PARK_JOB_STATUSES,
     NON_TERMINAL_JOB_STATUSES,
     RESOLVABLE_JOB_STATUSES,
+    RESOLVABLE_PROMOTE_JOB_STATUSES,
     TERMINAL_JOB_STATUSES,
     DiscType,
     JobStatus,
@@ -253,6 +254,36 @@ def _current_rip_invocation() -> RipInvocation:
     return _rip_invocation_source()
 
 
+class CdIdentityGaps(BaseModel):
+    """What a CD not yet identified still lacks before it counts as
+    identified: a blank album or artist. Track titles are not required."""
+
+    album: bool
+    artist: bool
+
+
+def _cd_identity_gaps(metadata: JobMetadata) -> CdIdentityGaps | None:
+    """The CD identity's gaps, or None when it has an album and an artist."""
+    music = metadata.music or MusicMeta()
+    album = not (music.album or "").strip()
+    artist = not (music.artist or "").strip()
+    if not (album or artist):
+        return None
+    return CdIdentityGaps(album=album, artist=artist)
+
+
+def pending_cd_identity(disc_type: DiscType, status: JobStatus, metadata: JobMetadata) -> CdIdentityGaps | None:
+    """What a CD not yet identified (an identify-gate status, or flagged
+    unidentified) still lacks, or None: not a CD, already identified, or
+    complete. A resolve leaves such a CD unidentified until this is None, so
+    the operator can enter its identity a field at a time."""
+    if disc_type != DiscType.CD:
+        return None
+    if status not in RESOLVABLE_PROMOTE_JOB_STATUSES and not metadata.flags.unidentified:
+        return None
+    return _cd_identity_gaps(metadata)
+
+
 class JobView(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -333,6 +364,13 @@ class JobView(BaseModel):
         if isinstance(claims, IdentityClaims):
             return any(src.inputs.get("show_id") for src in claims.sources.values())
         return False
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def cd_identity_gaps(self) -> CdIdentityGaps | None:
+        """What a CD not yet identified still lacks (see pending_cd_identity):
+        the job page lists it, since the rip waits until it is complete."""
+        return pending_cd_identity(self.disc_type, self.status, self.metadata_json)
 
     @computed_field  # type: ignore[prop-decorator]
     @property

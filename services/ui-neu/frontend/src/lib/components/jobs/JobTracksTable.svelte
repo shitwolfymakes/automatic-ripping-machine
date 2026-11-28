@@ -3,6 +3,7 @@
 	import JobTrackRow from '$lib/components/jobs/JobTrackRow.svelte';
 	import { refIndexOf, titleClassLabel } from '$lib/jobs/title-class';
 	import type { JobView, NamingPreviewItem, TrackView } from '$lib/types/api.gen';
+	import type { MusicTrackRow } from '$lib/music/tracks';
 
 	interface Props {
 		job: JobView;
@@ -14,6 +15,9 @@
 		excludeError?: { trackId: string; message: string } | null;
 		ontitleapplied: () => void;
 		onstageretried: () => void;
+		musicTracks?: MusicTrackRow[];
+		canEditSongs?: boolean;
+		onsongsave?: (index: number, raw: string) => Promise<void>;
 	}
 
 	let {
@@ -24,7 +28,10 @@
 		onexcludedchange,
 		excludeError = null,
 		ontitleapplied,
-		onstageretried
+		onstageretried,
+		musicTracks = [],
+		canEditSongs = false,
+		onsongsave
 	}: Props = $props();
 
 	let refIndex = $derived(refIndexOf(tracks));
@@ -83,6 +90,9 @@
 						excludeError={excludeError?.trackId === track.id ? excludeError.message : null}
 						ontitleapplied={handleTrackTitleApply}
 						{onstageretried}
+						{musicTracks}
+						{canEditSongs}
+						{onsongsave}
 					/>
 				{/each}
 			</tbody>

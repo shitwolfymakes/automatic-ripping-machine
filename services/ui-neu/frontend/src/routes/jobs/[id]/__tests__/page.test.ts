@@ -1,3 +1,6 @@
+// Open arms the coverage tool reports that are Svelte's, not the page's: the
+// page title's `{detail?.job.title || 'Job Detail'}` compiles to
+// `(...) ?? ''`, and an `||` with a string fallback is never nullish.
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { renderComponent, screen, cleanup, waitFor, fireEvent } from '$lib/testing/render';
 import Page from '../+page.svelte';
@@ -207,38 +210,19 @@ describe('Job detail page (v3)', () => {
 		});
 	});
 
-	// A disc still waiting for an identity: the dialog is the way to give it one.
+	// A disc still waiting for an identity: it is identified in place, not in a dialog.
 	const awaitingIdentity = () => ({
 		...createJobDetail({ tracks: [] }),
 		job: createJob({ id: 'job_42', status: 'awaiting_user_id', title: null })
 	});
 
-	it('shows the Identify button only while the disc is waiting for an identity', async () => {
-		renderComponent(Page);
-		await screen.findByRole('heading', { name: 'Test Movie' });
-		expect(screen.queryByTestId('identify-open')).not.toBeInTheDocument();
-		cleanup();
-		const jobImpl = mockFetchJob.getMockImplementation();
-		try {
-			mockFetchJob.mockResolvedValue(awaitingIdentity());
-			renderComponent(Page);
-			await waitFor(() => {
-				expect(screen.getByTestId('identify-open')).toHaveTextContent('Identify disc');
-			});
-		} finally {
-			mockFetchJob.mockImplementation(jobImpl!);
-		}
-	});
-
-	it('opens the IdentifyDialog when the Identify button is clicked', async () => {
+	it('has no Identify button on a disc waiting for an identity: its title and year are fields', async () => {
 		mockFetchJob.mockResolvedValueOnce(awaitingIdentity());
 		renderComponent(Page);
-		const btn = await screen.findByTestId('identify-open');
-		await fireEvent.click(btn);
-		await waitFor(() => {
-			expect(screen.getByRole('dialog')).toBeInTheDocument();
-			expect(screen.getByTestId('identify-submit')).toBeInTheDocument();
-		});
+		expect(await screen.findByRole('button', { name: 'Edit Title' })).toBeInTheDocument();
+		expect(screen.getByRole('button', { name: 'Edit Year' })).toBeInTheDocument();
+		expect(screen.queryByTestId('identify-open')).not.toBeInTheDocument();
+		expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
 	});
 
 	it('shows the Apply session button and opens the ApplySessionDialog', async () => {
@@ -708,18 +692,6 @@ describe('Job detail page (v3)', () => {
 			}
 		});
 
-		it('Search instead opens the identify dialog', async () => {
-			const original = mockFetchJob.getMockImplementation();
-			mockFetchJob.mockImplementation(() => Promise.resolve(held()));
-			try {
-				renderComponent(Page);
-				await fireEvent.click(await screen.findByRole('button', { name: 'Search instead' }));
-				await waitFor(() => expect(screen.getByRole('dialog')).toBeInTheDocument());
-			} finally {
-				mockFetchJob.mockImplementation(original!);
-			}
-		});
-
 		it('a guest sees the banner without its buttons', async () => {
 			const original = mockFetchJob.getMockImplementation();
 			mockFetchJob.mockImplementation(() => Promise.resolve(held()));
@@ -760,16 +732,16 @@ describe('Job detail page (v3)', () => {
 			expect(await screen.findByRole('button', { name: 'Match Episodes' })).toBeInTheDocument();
 		});
 
-		it('puts the Movie | TV switch, as one control, right before Identify disc', async () => {
+		it('puts the Movie | TV switch, as one control, right before Apply session', async () => {
 			mockFetchJob.mockResolvedValue(tvJob({ status: 'awaiting_user_id' }));
 			renderComponent(Page);
-			const editIdentity = await screen.findByTestId('identify-open');
+			const apply = await screen.findByTestId('apply-open');
 			const group = screen.getByRole('radiogroup', { name: 'Media type' });
 			expect(group).toContainElement(screen.getByRole('radio', { name: 'Movie' }));
 			expect(group).toContainElement(screen.getByRole('radio', { name: 'TV' }));
 			const switchRoot = group.parentElement!;
-			expect(switchRoot.parentElement).toBe(editIdentity.parentElement);
-			expect(switchRoot.nextElementSibling).toBe(editIdentity);
+			expect(switchRoot.parentElement).toBe(apply.parentElement);
+			expect(switchRoot.nextElementSibling).toBe(apply);
 		});
 
 		it('starts with the Match Episodes panel closed', async () => {
@@ -951,5 +923,209 @@ describe('Job detail page (v3)', () => {
 			expect(screen.getByTestId('media-type-text')).toHaveTextContent('TV');
 			expect(screen.getByTestId('media-type-text')).toHaveClass('badge');
 		});
+	});
+});
+
+describe('Job detail page: no show id note', () => {
+	const auth = authStore as unknown as { __setRole: (r: string | null) => void };
+
+	async function renderJob(job: Partial<Parameters<typeof createJob>[0]>, role = 'admin') {
+		auth.__setRole(role);
+		mockFetchJob.mockResolvedValue({
+			...createJobDetail({ tracks: [] }),
+			job: createJob({ id: 'job_42', status: 'ripped', title: 'Test Show', ...job })
+		});
+		renderComponent(Page);
+		await screen.findByRole('heading', { name: 'Test Show' });
+	}
+
+	afterEach(() => {
+		cleanup();
+		auth.__setRole('admin');
+		mockFetchJob.mockReset();
+	});
+
+	it('shows the note in an info alert on a TV disc with no show id', async () => {
+		await renderJob({ disc_type: 'dvd', media_type: 'tv', has_series: false });
+		const note = screen.getByTestId('no-show-id-note');
+		expect(note).toHaveClass('alert', 'alert-info');
+		expect(note).toHaveTextContent("Without a search result ARM has no show id, so episodes can't be matched");
+	});
+
+	it('shows the note on a movie job that looks episodic', async () => {
+		await renderJob({ disc_type: 'bluray', media_type: 'movie', looks_episodic: true, has_series: false });
+		expect(screen.getByTestId('no-show-id-note')).toBeInTheDocument();
+	});
+
+	it.each([
+		['a TV disc with a show id', { disc_type: 'dvd', media_type: 'tv', has_series: true }],
+		['a movie job', { disc_type: 'bluray', media_type: 'movie', looks_episodic: false }],
+		['a CD', { disc_type: 'cd', media_type: 'tv', has_series: false }]
+	] as const)('shows no note on %s', async (_label, job) => {
+		await renderJob(job);
+		expect(screen.queryByTestId('no-show-id-note')).not.toBeInTheDocument();
+	});
+
+	it('shows no note to a guest', async () => {
+		await renderJob({ disc_type: 'dvd', media_type: 'tv', has_series: false }, 'guest');
+		expect(screen.queryByTestId('no-show-id-note')).not.toBeInTheDocument();
+	});
+});
+
+describe('Job detail page: CD identity', () => {
+	const auth = authStore as unknown as { __setRole: (r: string | null) => void };
+	const cdMeta = {
+		music: { artist: 'Lali', album: 'Two Windows', tracks: [{ title: 'A' }, { title: 'B' }] },
+		scan_result: { titles: [{}, {}] }
+	} as unknown as JobView['metadata_json'];
+	const music = (change: object) => ({
+		artist: 'Lali',
+		album: 'Two Windows',
+		tracks: [{ title: 'A' }, { title: 'B' }],
+		...change
+	});
+
+	async function renderCd(job: Partial<JobView>, { tracks = [] as TrackView[], role = 'admin' } = {}) {
+		auth.__setRole(role);
+		mockFetchJob.mockResolvedValue({
+			...createJobDetail({ tracks }),
+			job: createJob({
+				id: 'job_42',
+				disc_type: 'cd',
+				status: 'ripped',
+				title: 'Two Windows',
+				year: 2020,
+				metadata_json: cdMeta,
+				...job
+			})
+		});
+		renderComponent(Page);
+		await screen.findByTestId('fact-album');
+	}
+
+	async function editAndSave(label: string, value: string) {
+		await fireEvent.click(screen.getByRole('button', { name: `Edit ${label}` }));
+		const input = screen.getByLabelText(label);
+		await fireEvent.input(input, { target: { value } });
+		await fireEvent.keyDown(input, { key: 'Enter' });
+	}
+
+	const songRow = () => createTrack({ id: 'trk_2', index: 2, kind: 'audio_track', status: 'done' });
+
+	afterEach(() => {
+		cleanup();
+		auth.__setRole('admin');
+		vi.clearAllMocks();
+	});
+
+	it('saves an album set in place on an identified CD', async () => {
+		await renderCd({});
+		await editAndSave('Album', 'Three Doors');
+		await waitFor(() =>
+			expect(resolveJob).toHaveBeenCalledWith('job_42', {
+				title: 'Three Doors',
+				year: 2020,
+				music: music({ album: 'Three Doors' })
+			})
+		);
+	});
+
+	it('saves an artist set in place on an identified CD', async () => {
+		await renderCd({});
+		await editAndSave('Artist', 'Lali Puna');
+		await waitFor(() =>
+			expect(resolveJob).toHaveBeenCalledWith('job_42', {
+				title: 'Two Windows',
+				year: 2020,
+				music: music({ artist: 'Lali Puna' })
+			})
+		);
+	});
+
+	it("saves a song title set in place on a track row, for that row's track", async () => {
+		await renderCd({}, { tracks: [songRow()] });
+		await editAndSave('Track 2 title', 'Bee');
+		await waitFor(() =>
+			expect(resolveJob).toHaveBeenCalledWith('job_42', {
+				title: 'Two Windows',
+				year: 2020,
+				music: music({ tracks: [{ title: 'A' }, { title: 'Bee' }] })
+			})
+		);
+	});
+
+	it('saves a song title set in place on the fallback tracklist', async () => {
+		await renderCd({});
+		await editAndSave('Track 2 title', 'Bee');
+		await waitFor(() =>
+			expect(resolveJob).toHaveBeenCalledWith('job_42', {
+				title: 'Two Windows',
+				year: 2020,
+				music: music({ tracks: [{ title: 'A' }, { title: 'Bee' }] })
+			})
+		);
+	});
+
+	it.each([
+		['track rows', [songRow()]],
+		['the fallback tracklist', []]
+	] as const)('gives a guest no song editors on %s', async (_label, tracks) => {
+		await renderCd({}, { tracks: [...tracks], role: 'guest' });
+		expect(screen.getByText('B')).toBeInTheDocument();
+		expect(screen.queryByRole('button', { name: /^Edit Track \d title$/ })).not.toBeInTheDocument();
+		expect(screen.queryByRole('button', { name: 'Edit Album' })).not.toBeInTheDocument();
+	});
+
+	// A CD not yet identified takes its identity a field at a time; the
+	// Backend counts it as identified once nothing is missing.
+	const unidentified = (flags = {}) => ({
+		title: 'AUDIO_CD',
+		year: null,
+		metadata_json: { scan_result: cdMeta.scan_result, flags } as JobView['metadata_json']
+	});
+
+	it("saves an artist first on a CD not yet identified, keeping the disc's title until an album is set", async () => {
+		await renderCd({ status: 'awaiting_user_id', ...unidentified() });
+		await editAndSave('Artist', 'Lali');
+		await waitFor(() =>
+			expect(resolveJob).toHaveBeenCalledWith('job_42', {
+				title: 'AUDIO_CD',
+				year: null,
+				music: { artist: 'Lali', album: '', tracks: [{ title: '' }, { title: '' }] }
+			})
+		);
+	});
+
+	it('saves a song title on a ripped CD still waiting for its identity', async () => {
+		await renderCd(
+			{ status: 'ripped_awaiting_identify', ...unidentified({ unidentified: true }) },
+			{ tracks: [songRow()] }
+		);
+		await editAndSave('Track 2 title', 'Bee');
+		await waitFor(() =>
+			expect(resolveJob).toHaveBeenCalledWith('job_42', {
+				title: 'AUDIO_CD',
+				year: null,
+				music: { artist: '', album: '', tracks: [{ title: '' }, { title: 'Bee' }] }
+			})
+		);
+	});
+
+	it.each([
+		[{ album: false, artist: true }, 'Still missing: the artist.'],
+		[{ album: true, artist: true }, 'Still missing: the album and the artist.']
+	])('says what a CD not yet identified still lacks (%j)', async (gaps, text) => {
+		await renderCd({ status: 'awaiting_user_id', ...unidentified(), cd_identity_gaps: gaps }, { role: 'guest' });
+		const note = screen.getByTestId('cd-identity-missing');
+		expect(note).toHaveClass('alert', 'alert-info');
+		expect(note).toHaveTextContent(
+			'ARM counts this CD as identified once it has an album and an artist; track titles are optional.'
+		);
+		expect(note).toHaveTextContent(text);
+	});
+
+	it('shows no missing-identity note once nothing is missing', async () => {
+		await renderCd({});
+		expect(screen.queryByTestId('cd-identity-missing')).not.toBeInTheDocument();
 	});
 });

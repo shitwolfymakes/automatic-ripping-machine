@@ -1,6 +1,7 @@
 <script lang="ts">
 	import PosterImage from '$lib/components/shared/PosterImage.svelte';
 	import StatusBadge from '$lib/components/shared/StatusBadge.svelte';
+	import InlineField from '$lib/components/shared/InlineField.svelte';
 	import TrackTitleSearch from '$lib/components/match/TrackTitleSearch.svelte';
 	import EditionField from '$lib/components/jobs/EditionField.svelte';
 	import TrackStageRow from '$lib/components/jobs/TrackStageRow.svelte';
@@ -13,6 +14,7 @@
 	import type { Snippet } from 'svelte';
 	import type { JobView, NamingPreviewItem, TrackView } from '$lib/types/api.gen';
 	import type { TitleClassLabel } from '$lib/jobs/title-class';
+	import type { MusicTrackRow } from '$lib/music/tracks';
 
 	interface Props {
 		job: JobView;
@@ -35,6 +37,10 @@
 		ontitleapplied: () => void;
 		/** A failed staging copy was re-queued. */
 		onstageretried: () => void;
+		/** A CD's stored song titles, one row per track number. */
+		musicTracks?: MusicTrackRow[];
+		canEditSongs?: boolean;
+		onsongsave?: (index: number, raw: string) => Promise<void>;
 	}
 
 	let {
@@ -51,10 +57,17 @@
 		onexcludedchange,
 		excludeError = null,
 		ontitleapplied,
-		onstageretried
+		onstageretried,
+		musicTracks = [],
+		canEditSongs = false,
+		onsongsave
 	}: Props = $props();
 
 	let meaning = $derived(tickMeaning(track, job));
+
+	// A CD's audio row is titled by its song (the title {track_title} naming
+	// uses), edited in place; every other row keeps the title search.
+	let isSongRow = $derived(job.disc_type === 'cd' && track.kind === 'audio_track');
 
 	// `checked={!track.excluded}` writes the input only when the value changes,
 	// and a failed save reloads the same value, so the box would keep the
@@ -95,41 +108,58 @@
 <tr class="table-row" data-disabled={track.excluded}>
 	<td class="table-cell" data-label="#">{track.index}</td>
 	<td class="table-cell job-detail-track-kind" data-label="Kind">{trackKindLabel(track.kind)}</td>
-	<td class="table-cell {$isAdmin ? 'job-detail-track-title-cell' : ''}" data-label="Title">
-		{#if track.title}
-			<div class="flex items-center gap-1.5">
-				{#if track.poster_url}
-					<PosterImage url={track.poster_url} class="job-detail-track-poster" />
-				{/if}
-				<div>
-					{@render editTrigger(titleText)}
-					<div class="mt-0.5 flex flex-wrap items-center gap-1">
-						{#if track.imdb_id}
-							<a
-								href="https://www.imdb.com/title/{track.imdb_id}"
-								target="_blank"
-								rel="noopener noreferrer"
-								class="badge badge-imdb job-detail-track-imdb-badge">IMDb</a
-							>
-						{/if}
-						{#if classLabel}
-							<span class="job-detail-track-meta-pill" data-testid="track-class-label">{classLabel.text}</span>
-						{/if}
-						{#if track.role}
-							<span class="job-detail-track-meta-pill">{track.role}</span>
-						{/if}
+	{#if isSongRow}
+		<td class="table-cell" data-label="Title">
+			<InlineField
+				label="Track {track.index} title"
+				value={musicTracks[track.index - 1]?.rawTitle ?? ''}
+				canEdit={canEditSongs}
+				onsave={(raw) => onsongsave?.(track.index, raw)}
+			/>
+		</td>
+	{:else}
+		<td class="table-cell {$isAdmin ? 'job-detail-track-title-cell' : ''}" data-label="Title">
+			{#if track.title}
+				<div class="flex items-center gap-1.5">
+					{#if track.poster_url}
+						<PosterImage url={track.poster_url} class="job-detail-track-poster" />
+					{/if}
+					<div>
+						{@render editTrigger(titleText)}
+						<div class="mt-0.5 flex flex-wrap items-center gap-1">
+							{#if track.imdb_id}
+								<a
+									href="https://www.imdb.com/title/{track.imdb_id}"
+									target="_blank"
+									rel="noopener noreferrer"
+									class="badge badge-imdb job-detail-track-imdb-badge">IMDb</a
+								>
+							{/if}
+							{#if classLabel}
+								<span class="job-detail-track-meta-pill" data-testid="track-class-label">{classLabel.text}</span>
+							{/if}
+							{#if track.role}
+								<span class="job-detail-track-meta-pill">{track.role}</span>
+							{/if}
+						</div>
 					</div>
 				</div>
-			</div>
-		{:else}
-			{@render editTrigger(untitledText)}
-		{/if}
-		{#if track.edition || (nameable && $isAdmin)}
-			<div class="job-detail-track-edition" data-testid="track-edition">
-				<EditionField jobId={job.id} trackId={track.id} edition={track.edition} canEdit={$isAdmin} onsaved={onedited} />
-			</div>
-		{/if}
-	</td>
+			{:else}
+				{@render editTrigger(untitledText)}
+			{/if}
+			{#if track.edition || (nameable && $isAdmin)}
+				<div class="job-detail-track-edition" data-testid="track-edition">
+					<EditionField
+						jobId={job.id}
+						trackId={track.id}
+						edition={track.edition}
+						canEdit={$isAdmin}
+						onsaved={onedited}
+					/>
+				</div>
+			{/if}
+		</td>
+	{/if}
 	{#if tracksAreSeries}
 		<td class="table-cell" data-label="Episode">
 			{#if preview?.output_name}
@@ -222,7 +252,7 @@
 {#if track.stage && showsStageLine(track.stage)}
 	<TrackStageRow jobId={job.id} trackId={track.id} stage={track.stage} onretried={onstageretried} />
 {/if}
-{#if editing}
+{#if editing && !isSongRow}
 	<tr>
 		<td colspan="99" class="table-cell" data-label="">
 			<TrackTitleSearch

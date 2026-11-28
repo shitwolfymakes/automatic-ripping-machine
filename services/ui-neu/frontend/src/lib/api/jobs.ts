@@ -185,7 +185,7 @@ const OPTIONAL_RESOLVE_KEYS = [
 // season/disc_number/disc_total are a classification like media_type on the
 // Backend, not part of the identity statement: omitted keeps whatever value
 // is already stored (a disc-hint source may have filled it before the
-// operator ever opened the identify dialog -- Review Focus 5), while an
+// operator ever edits the identity -- Review Focus 5), while an
 // explicit `null` is the operator clearing it. `!== undefined` is the only
 // way to tell "the caller didn't pass this" from "the caller passed null".
 function buildResolvePayload(body: ResolveJobBody): Record<string, unknown> {

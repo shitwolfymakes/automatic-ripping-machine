@@ -21,18 +21,36 @@ describe('extractMusicTracks', () => {
 			}
 		});
 		expect(out).toEqual([
-			{ number: 1, title: 'Intro', durationLabel: '1:05' },
-			{ number: 2, title: 'Outro', durationLabel: '-' }
+			{ number: 1, title: 'Intro', rawTitle: 'Intro', durationLabel: '1:05' },
+			{ number: 2, title: 'Outro', rawTitle: 'Outro', durationLabel: '-' }
 		]);
 	});
 
 	it('falls back to a placeholder title when missing', () => {
 		const out = extractMusicTracks({ music: { tracks: [{ length_ms: 1000 }] } });
-		expect(out).toEqual([{ number: 1, title: 'Track 1', durationLabel: '0:01' }]);
+		expect(out).toEqual([{ number: 1, title: 'Track 1', rawTitle: '', durationLabel: '0:01' }]);
 	});
 
 	it('renders sub-second durations as a dash, not 0:00', () => {
 		const out = extractMusicTracks({ music: { tracks: [{ title: 'Blip', length_ms: 0.4 }] } });
 		expect(out[0].durationLabel).toBe('-');
+	});
+
+	it('keeps the stored title as rawTitle, blank when missing', () => {
+		const out = extractMusicTracks({ music: { tracks: [{ title: 'A' }, {}] } });
+		expect(out.map((r) => r.rawTitle)).toEqual(['A', '']);
+		expect(out[1].title).toBe('Track 2');
+	});
+
+	it('reads a null track entry as an untitled track', () => {
+		const out = extractMusicTracks({ music: { tracks: [null] } });
+		expect(out).toEqual([{ number: 1, title: 'Track 1', rawTitle: '', durationLabel: '-' }]);
+	});
+
+	it('pads with blank rows up to the minimum count', () => {
+		const out = extractMusicTracks({ music: { tracks: [{ title: 'A' }] } }, 3);
+		expect(out).toHaveLength(3);
+		expect(out[2]).toEqual({ number: 3, title: 'Track 3', rawTitle: '', durationLabel: '-' });
+		expect(extractMusicTracks(null, 2)).toHaveLength(2);
 	});
 });

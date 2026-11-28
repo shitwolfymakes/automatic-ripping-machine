@@ -184,6 +184,10 @@ def _build_track_ctx(
     music_meta = _music_meta(metadata)
 
     track_title = _music_track_title(music_meta, metadata, track.index)
+    if track.kind == TrackKind.AUDIO_TRACK and not track_title.strip():
+        # A CD may be identified with tracks left untitled: name them by
+        # number, padded like {track}, so a required {track_title} renders.
+        track_title = f"Track {track_number:02d}"
 
     eff_title, eff_year, eff_season = _effective_identity(job, track)
     episode = _episode_label(track)

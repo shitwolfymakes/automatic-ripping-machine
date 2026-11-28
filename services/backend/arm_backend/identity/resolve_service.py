@@ -27,6 +27,7 @@ from arm_common import Config, Job, JobStatus, MediaType, with_log_context
 from arm_common.enums import POST_RIP_JOB_STATUSES, RESOLVABLE_PROMOTE_JOB_STATUSES
 from arm_common.schemas import JobView, ResolveFanOutOutcomeView, ResolveMatch, ResolveRequest, ResolveResponse
 from arm_common.schemas.job_metadata import ExternalIds, JobIdentity, JobMetadata, flag_is_set, without_flags
+from arm_common.schemas.jobs import pending_cd_identity
 
 logger = logging.getLogger(__name__)
 
@@ -322,50 +323,16 @@ def _resolve_response(job: Job, fan_out_outcomes: list[ResolveFanOutOutcome]) ->
     )
 
 
-async def resolve_identity(
-    session: AsyncSession,
-    job: Job,
-    req: ResolveRequest,
-    *,
-    hub: WSHub,
-    stage_runner: EpisodeStageRunner | None,
-    before_identity: tuple[int | None, int | None, MediaType | None, str | None, dict[str, Any]] | None = None,
-    keep_match: bool = False,
-) -> ResolveResponse:
-    """The resolve route's body, shared with the suggestion accept route.
+async def _apply_resolve(
+    session: AsyncSession, job: Job, req: ResolveRequest, *, gate_incomplete_cd: bool, keep_match: bool
+) -> tuple[bool, bool]:
+    """Write the resolve onto the job (not yet committed). Returns whether the
+    job is now identified and whether its rip had waited for that identity.
 
-    A resolve drops `identify_match`: it explains the automatic search, and the identity is now the operator's.
-    The accept route keeps it (`keep_match`) because the title it applies is one the search itself scored.
-
-    `before_identity` lets a caller that already changed the job's identity
-    (accept) still get the episode stage scheduled: the snapshot is taken
-    here only when the caller passes none. Everything it logs carries the job's id."""
-    with with_log_context(job_id=job.id):
-        return await _resolve_identity(
-            session,
-            job,
-            req,
-            hub=hub,
-            stage_runner=stage_runner,
-            before_identity=before_identity,
-            keep_match=keep_match,
-        )
-
-
-async def _resolve_identity(
-    session: AsyncSession,
-    job: Job,
-    req: ResolveRequest,
-    *,
-    hub: WSHub,
-    stage_runner: EpisodeStageRunner | None,
-    before_identity: tuple[int | None, int | None, MediaType | None, str | None, dict[str, Any]] | None,
-    keep_match: bool,
-) -> ResolveResponse:
-    """Apply the resolve to the job, commit, run the post-resolve pass and build the response."""
-    if before_identity is None:
-        before_identity = identity_snapshot(job)
-
+    A CD not yet identified stays unidentified until it has an album and an
+    artist (track titles may stay blank; see pending_cd_identity): such
+    a resolve stores what was sent but keeps the status and the miss markers,
+    so the operator can enter the identity a field at a time."""
     new_metadata, show_changed = _merge_identity_metadata(job, req)
 
     job.title = req.title
@@ -379,14 +346,19 @@ async def _resolve_identity(
     # collapse to req.media_type is None.
     if "media_type" in req.model_fields_set:
         job.media_type = req.media_type
+    identified = not (
+        gate_incomplete_cd and pending_cd_identity(job.disc_type, job.status, JobMetadata.model_validate(new_metadata))
+    )
     # Read before the flags are cleared just below.
     rip_waited_for_identity = _rip_waited_for_identity(job)
-    blocked_miss = job.status == JobStatus.AWAITING_REVIEW and flag_is_set(job.metadata_json, "blocked_miss")
-    new_metadata = _clear_spent_markers(new_metadata, keep_match=keep_match)
-    if blocked_miss:
-        new_metadata = without_flags(new_metadata, "blocked_miss")
-        await _keep_on_card(session, job)
-    held_for_review = job.status in RESOLVABLE_PROMOTE_JOB_STATUSES and await _promote(session, job)
+    held_for_review = False
+    if identified:
+        blocked_miss = job.status == JobStatus.AWAITING_REVIEW and flag_is_set(job.metadata_json, "blocked_miss")
+        new_metadata = _clear_spent_markers(new_metadata, keep_match=keep_match)
+        if blocked_miss:
+            new_metadata = without_flags(new_metadata, "blocked_miss")
+            await _keep_on_card(session, job)
+        held_for_review = job.status in RESOLVABLE_PROMOTE_JOB_STATUSES and await _promote(session, job)
     job.metadata_json = new_metadata
     if show_changed:
         # The stored episode entries were matched against the previous
@@ -396,22 +368,14 @@ async def _resolve_identity(
     if held_for_review:
         # After the metadata assignment above: the preset claim lands in metadata_json.
         await _persist_card_tracks(session, job)
-    await resolve_job(session, job)
-    session.add(job)
+    return identified, rip_waited_for_identity
 
-    # Commit the resolve's job mutations (title/year/status/etc.)
-    # BEFORE running after_rip / fan_out_waiting_identify_applications.
-    # after_rip's drain half (drain_parked_applications_after_rip) rolls back
-    # the session on any exception -- committing after would let that rollback
-    # silently discard the operator's just-applied resolve, yet the
-    # endpoint would still return 200 built from the (rolled-back, but
-    # still-mutated-in-Python) job object. Committing first mirrors
-    # rip-complete, which also commits its status change before invoking
-    # after_rip; a subsequent after_rip failure can then only affect fan-out,
-    # never the resolve itself.
-    await session.commit()
-    await session.refresh(job)
 
+async def _run_identified_pass(
+    session: AsyncSession, job: Job, hub: WSHub, rip_waited_for_identity: bool
+) -> list[ResolveFanOutOutcome]:
+    """The pass a just-identified job gets: after-rip or the parked-application
+    fan-out, the identify.resolved events, their commit and the session.applied lines."""
     if rip_waited_for_identity:
         # Rip done + identity just landed: run the after-rip pass — drain
         # parked applications (fan-out uses the just-resolved title) and then
@@ -436,12 +400,90 @@ async def _resolve_identity(
     # Second commit lands the fan-out's task rows (when after_rip/fan-out did
     # not already commit or roll back on its own) plus the
     # identify.resolved + rip.identify_resolved events. The resolve itself is
-    # already durable from the commit above.
+    # already durable from the commit before this pass.
     await session.commit()
     await session.refresh(job)
     for outcome in fan_out_outcomes:
         await session.refresh(outcome.application)
     log_safely_sync("session.applied", log_queued_applications, job, unlogged_outcomes)
+    return fan_out_outcomes
+
+
+async def resolve_identity(
+    session: AsyncSession,
+    job: Job,
+    req: ResolveRequest,
+    *,
+    hub: WSHub,
+    stage_runner: EpisodeStageRunner | None,
+    before_identity: tuple[int | None, int | None, MediaType | None, str | None, dict[str, Any]] | None = None,
+    keep_match: bool = False,
+    gate_incomplete_cd: bool = True,
+) -> ResolveResponse:
+    """The resolve route's body, shared with the suggestion accept route.
+
+    A resolve drops `identify_match`: it explains the automatic search, and the identity is now the operator's.
+    The accept route keeps it (`keep_match`) because the title it applies is one the search itself scored.
+
+    `before_identity` lets a caller that already changed the job's identity
+    (accept) still get the episode stage scheduled: the snapshot is taken
+    here only when the caller passes none. `gate_incomplete_cd=False` (accept)
+    identifies a CD whatever its identity lacks, as identify itself would.
+    Everything it logs carries the job's id."""
+    with with_log_context(job_id=job.id):
+        return await _resolve_identity(
+            session,
+            job,
+            req,
+            hub=hub,
+            stage_runner=stage_runner,
+            before_identity=before_identity,
+            keep_match=keep_match,
+            gate_incomplete_cd=gate_incomplete_cd,
+        )
+
+
+async def _resolve_identity(
+    session: AsyncSession,
+    job: Job,
+    req: ResolveRequest,
+    *,
+    hub: WSHub,
+    stage_runner: EpisodeStageRunner | None,
+    before_identity: tuple[int | None, int | None, MediaType | None, str | None, dict[str, Any]] | None,
+    keep_match: bool,
+    gate_incomplete_cd: bool,
+) -> ResolveResponse:
+    """Apply the resolve to the job, commit, run the post-resolve pass and build the response."""
+    if before_identity is None:
+        before_identity = identity_snapshot(job)
+
+    identified, rip_waited_for_identity = await _apply_resolve(
+        session, job, req, gate_incomplete_cd=gate_incomplete_cd, keep_match=keep_match
+    )
+    await resolve_job(session, job)
+    session.add(job)
+
+    # Commit the resolve's job mutations (title/year/status/etc.)
+    # BEFORE running after_rip / fan_out_waiting_identify_applications.
+    # after_rip's drain half (drain_parked_applications_after_rip) rolls back
+    # the session on any exception -- committing after would let that rollback
+    # silently discard the operator's just-applied resolve, yet the
+    # endpoint would still return 200 built from the (rolled-back, but
+    # still-mutated-in-Python) job object. Committing first mirrors
+    # rip-complete, which also commits its status change before invoking
+    # after_rip; a subsequent after_rip failure can then only affect fan-out,
+    # never the resolve itself.
+    await session.commit()
+    await session.refresh(job)
+
+    fan_out_outcomes: list[ResolveFanOutOutcome] = []
+    if identified:
+        fan_out_outcomes = await _run_identified_pass(session, job, hub, rip_waited_for_identity)
+    else:
+        # Not identified yet: nothing fans out and the ripper's identify wait
+        # is not woken (it proceeds only on IDENTIFIED anyway).
+        logger.info("resolve: CD identity incomplete, stays %s", job.status.value)
 
     if stage_runner is not None and identity_snapshot(job) != before_identity:
         stage_runner.schedule(job.id)

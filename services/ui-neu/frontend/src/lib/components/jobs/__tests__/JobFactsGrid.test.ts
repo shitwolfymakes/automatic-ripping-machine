@@ -1,3 +1,8 @@
+// Open arms the coverage tool reports that are Svelte's, not the component's:
+// each attribute `{...}` below compiles to `(...) ?? ''`, and none can be
+// nullish. The edited field in each editor cell's test id: `fact-{edit}` for a
+// number fact and `fact-{textEdit}` for a CD text fact, each inside an #if on
+// the same value.
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import { renderComponent, screen, fireEvent, waitFor, within, cleanup } from '$lib/testing/render';
 import JobFactsGrid from '../JobFactsGrid.svelte';
@@ -5,8 +10,13 @@ import type { MetadataField } from '$lib/jobs/fields';
 
 afterEach(cleanup);
 
-function render(fields: MetadataField[], canEdit = true, onsave = vi.fn().mockResolvedValue(undefined)) {
-	renderComponent(JobFactsGrid, { fields, canEdit, onsave });
+function render(
+	fields: MetadataField[],
+	canEdit = true,
+	onsave = vi.fn().mockResolvedValue(undefined),
+	ontextsave = vi.fn().mockResolvedValue(undefined)
+) {
+	renderComponent(JobFactsGrid, { fields, canEdit, onsave, ontextsave });
 	return onsave;
 }
 
@@ -56,6 +66,23 @@ describe('JobFactsGrid', () => {
 		const cell = screen.getByTestId('fact-year');
 		await fireEvent.click(within(cell).getByRole('button'));
 		expect(within(cell).getByRole('spinbutton')).toHaveValue(null);
+	});
+
+	it('edits a text field and reports it to ontextsave', async () => {
+		const ontextsave = vi.fn().mockResolvedValue(undefined);
+		render([{ label: 'Artist', value: '-', textEdit: 'artist', raw: '' }], true, vi.fn(), ontextsave);
+		const cell = screen.getByTestId('fact-artist');
+		await fireEvent.click(within(cell).getByRole('button', { name: 'Edit Artist' }));
+		const input = within(cell).getByRole('textbox');
+		await fireEvent.input(input, { target: { value: 'Lali Puna' } });
+		await fireEvent.keyDown(input, { key: 'Enter' });
+		await waitFor(() => expect(ontextsave).toHaveBeenCalledWith('artist', 'Lali Puna'));
+	});
+
+	it('shows a text field without an editor when canEdit is off', () => {
+		render([{ label: 'Album', value: 'Two Windows', textEdit: 'album', raw: 'Two Windows' }], false);
+		expect(screen.queryByRole('button', { name: 'Edit Album' })).not.toBeInTheDocument();
+		expect(within(screen.getByTestId('fact-album')).getByText('Two Windows')).toBeInTheDocument();
 	});
 
 	it('offers no editor button when canEdit is off', () => {
