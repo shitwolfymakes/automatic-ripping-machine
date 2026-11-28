@@ -240,3 +240,43 @@ def test_fingerprints_only_thediscdb() -> None:
     probe = DiscProbe(crc64=None, thediscdb="tdb", matrix256="")
 
     assert _fingerprints(probe) == [DiscFingerprintInput(algo="thediscdb", value="tdb")]
+
+
+async def test_failure_carries_cinfo_disc_type_without_sniffing(monkeypatch: pytest.MonkeyPatch) -> None:
+    def _boom(_path: str) -> DiscType | None:
+        raise AssertionError("CINFO:1 already says what the disc is")
+
+    monkeypatch.setattr(makemkv_mod, "sniff_video_image", _boom)
+    _spawn(monkeypatch, _Proc(_Stream(b'CINFO:1,6209,"Blu-ray disc"\nMSG:3303,0,1,"key unknown"\nTCOUNT:0\n')))
+
+    with pytest.raises(MakemkvScanFailed) as excinfo:
+        await scan_disc("/dev/sr0")
+
+    assert excinfo.value.disc_type is DiscType.BLURAY
+
+
+async def test_failure_without_cinfo_sniffs_the_device_layout(monkeypatch: pytest.MonkeyPatch) -> None:
+    seen: list[str] = []
+
+    def _sniff(path: str) -> DiscType | None:
+        seen.append(path)
+        return DiscType.BLURAY
+
+    monkeypatch.setattr(makemkv_mod, "sniff_video_image", _sniff)
+    _spawn(monkeypatch, _Proc(_Stream(b'MSG:3303,0,1,"key unknown"\nTCOUNT:0\n')))
+
+    with pytest.raises(MakemkvScanFailed) as excinfo:
+        await scan_disc("/dev/sr0")
+
+    assert excinfo.value.disc_type is DiscType.BLURAY
+    assert seen == ["/dev/sr0"]
+
+
+async def test_failure_with_no_cinfo_and_no_layout_has_no_disc_type(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(makemkv_mod, "sniff_video_image", lambda _p: None)
+    _spawn(monkeypatch, _Proc(_Stream(b""), returncode=1))
+
+    with pytest.raises(MakemkvScanFailed) as excinfo:
+        await scan_disc("/dev/sr0")
+
+    assert excinfo.value.disc_type is None

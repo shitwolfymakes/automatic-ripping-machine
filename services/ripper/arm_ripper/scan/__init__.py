@@ -1,3 +1,3 @@
-from arm_ripper.scan.dispatcher import ScanError, scan
+from arm_ripper.scan.dispatcher import MakemkvScanFailed, ScanError, scan
 
-__all__ = ["ScanError", "scan"]
+__all__ = ["MakemkvScanFailed", "ScanError", "scan"]
