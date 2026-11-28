@@ -519,6 +519,10 @@
       "type": "external",
       "url": "https://appriseit.com/services/discord/#parameter-breakdown"
     },
+    "notify.discord.batch": {
+      "type": "external",
+      "url": "https://appriseit.com/services/discord/#parameter-breakdown"
+    },
     "notify.discord.fields": {
       "type": "external",
       "url": "https://appriseit.com/services/discord/#parameter-breakdown"
@@ -547,7 +551,23 @@
       "type": "external",
       "url": "https://appriseit.com/services/discord/#parameter-breakdown"
     },
+    "notify.discord.optional": {
+      "type": "external",
+      "url": "https://appriseit.com/services/discord/#parameter-breakdown"
+    },
     "notify.discord.ping": {
+      "type": "external",
+      "url": "https://appriseit.com/services/discord/#parameter-breakdown"
+    },
+    "notify.discord.redirect": {
+      "type": "external",
+      "url": "https://appriseit.com/services/discord/#parameter-breakdown"
+    },
+    "notify.discord.retry": {
+      "type": "external",
+      "url": "https://appriseit.com/services/discord/#parameter-breakdown"
+    },
+    "notify.discord.template": {
       "type": "external",
       "url": "https://appriseit.com/services/discord/#parameter-breakdown"
     },
@@ -556,6 +576,10 @@
       "url": "https://appriseit.com/services/discord/#parameter-breakdown"
     },
     "notify.discord.tts": {
+      "type": "external",
+      "url": "https://appriseit.com/services/discord/#parameter-breakdown"
+    },
+    "notify.discord.wait": {
       "type": "external",
       "url": "https://appriseit.com/services/discord/#parameter-breakdown"
     },
@@ -575,11 +599,27 @@
       "type": "external",
       "url": "https://appriseit.com/services/gotify/#parameter-breakdown"
     },
+    "notify.gotifys.optional": {
+      "type": "external",
+      "url": "https://appriseit.com/services/gotify/#parameter-breakdown"
+    },
     "notify.gotifys.priority": {
       "type": "external",
       "url": "https://appriseit.com/services/gotify/#parameter-breakdown"
     },
+    "notify.gotifys.redirect": {
+      "type": "external",
+      "url": "https://appriseit.com/services/gotify/#parameter-breakdown"
+    },
+    "notify.gotifys.retry": {
+      "type": "external",
+      "url": "https://appriseit.com/services/gotify/#parameter-breakdown"
+    },
     "notify.gotifys.token": {
+      "type": "external",
+      "url": "https://appriseit.com/services/gotify/#parameter-breakdown"
+    },
+    "notify.gotifys.wait": {
       "type": "external",
       "url": "https://appriseit.com/services/gotify/#parameter-breakdown"
     },
@@ -588,6 +628,22 @@
       "url": "https://appriseit.com/services/ifttt/#parameter-breakdown"
     },
     "notify.ifttt.format": {
+      "type": "external",
+      "url": "https://appriseit.com/services/ifttt/#parameter-breakdown"
+    },
+    "notify.ifttt.optional": {
+      "type": "external",
+      "url": "https://appriseit.com/services/ifttt/#parameter-breakdown"
+    },
+    "notify.ifttt.redirect": {
+      "type": "external",
+      "url": "https://appriseit.com/services/ifttt/#parameter-breakdown"
+    },
+    "notify.ifttt.retry": {
+      "type": "external",
+      "url": "https://appriseit.com/services/ifttt/#parameter-breakdown"
+    },
+    "notify.ifttt.wait": {
       "type": "external",
       "url": "https://appriseit.com/services/ifttt/#parameter-breakdown"
     },
@@ -615,6 +671,10 @@
       "type": "external",
       "url": "https://appriseit.com/services/email/#parameter-breakdown"
     },
+    "notify.mailtos.inline": {
+      "type": "external",
+      "url": "https://appriseit.com/services/email/#parameter-breakdown"
+    },
     "notify.mailtos.mode": {
       "type": "external",
       "url": "https://appriseit.com/services/email/#parameter-breakdown"
@@ -623,15 +683,31 @@
       "type": "external",
       "url": "https://appriseit.com/services/email/#parameter-breakdown"
     },
+    "notify.mailtos.optional": {
+      "type": "external",
+      "url": "https://appriseit.com/services/email/#parameter-breakdown"
+    },
     "notify.mailtos.pgp": {
       "type": "external",
       "url": "https://appriseit.com/services/email/#parameter-breakdown"
     },
-    "notify.mailtos.pgpkey": {
+    "notify.mailtos.pgpprv": {
+      "type": "external",
+      "url": "https://appriseit.com/services/email/#parameter-breakdown"
+    },
+    "notify.mailtos.pgppub": {
+      "type": "external",
+      "url": "https://appriseit.com/services/email/#parameter-breakdown"
+    },
+    "notify.mailtos.redirect": {
       "type": "external",
       "url": "https://appriseit.com/services/email/#parameter-breakdown"
     },
     "notify.mailtos.reply": {
+      "type": "external",
+      "url": "https://appriseit.com/services/email/#parameter-breakdown"
+    },
+    "notify.mailtos.retry": {
       "type": "external",
       "url": "https://appriseit.com/services/email/#parameter-breakdown"
     },
@@ -642,6 +718,18 @@
     "notify.mailtos.to": {
       "type": "external",
       "url": "https://appriseit.com/services/email/#parameter-breakdown"
+    },
+    "notify.mailtos.wait": {
+      "type": "external",
+      "url": "https://appriseit.com/services/email/#parameter-breakdown"
+    },
+    "notify.mailtos.wkd": {
+      "type": "external",
+      "url": "https://appriseit.com/services/email/#parameter-breakdown"
+    },
+    "notify.matrixs.autoverify": {
+      "type": "external",
+      "url": "https://appriseit.com/services/matrix/#parameter-breakdown"
     },
     "notify.matrixs.discovery": {
       "type": "external",
@@ -675,7 +763,19 @@
       "type": "external",
       "url": "https://appriseit.com/services/matrix/#parameter-breakdown"
     },
+    "notify.matrixs.optional": {
+      "type": "external",
+      "url": "https://appriseit.com/services/matrix/#parameter-breakdown"
+    },
     "notify.matrixs.path": {
+      "type": "external",
+      "url": "https://appriseit.com/services/matrix/#parameter-breakdown"
+    },
+    "notify.matrixs.redirect": {
+      "type": "external",
+      "url": "https://appriseit.com/services/matrix/#parameter-breakdown"
+    },
+    "notify.matrixs.retry": {
       "type": "external",
       "url": "https://appriseit.com/services/matrix/#parameter-breakdown"
     },
@@ -684,6 +784,10 @@
       "url": "https://appriseit.com/services/matrix/#parameter-breakdown"
     },
     "notify.matrixs.version": {
+      "type": "external",
+      "url": "https://appriseit.com/services/matrix/#parameter-breakdown"
+    },
+    "notify.matrixs.wait": {
       "type": "external",
       "url": "https://appriseit.com/services/matrix/#parameter-breakdown"
     },
@@ -731,7 +835,27 @@
       "type": "external",
       "url": "https://appriseit.com/services/ntfy/#parameter-breakdown"
     },
+    "notify.ntfys.optional": {
+      "type": "external",
+      "url": "https://appriseit.com/services/ntfy/#parameter-breakdown"
+    },
     "notify.ntfys.priority": {
+      "type": "external",
+      "url": "https://appriseit.com/services/ntfy/#parameter-breakdown"
+    },
+    "notify.ntfys.redirect": {
+      "type": "external",
+      "url": "https://appriseit.com/services/ntfy/#parameter-breakdown"
+    },
+    "notify.ntfys.retry": {
+      "type": "external",
+      "url": "https://appriseit.com/services/ntfy/#parameter-breakdown"
+    },
+    "notify.ntfys.targets": {
+      "type": "external",
+      "url": "https://appriseit.com/services/ntfy/#parameter-breakdown"
+    },
+    "notify.ntfys.wait": {
       "type": "external",
       "url": "https://appriseit.com/services/ntfy/#parameter-breakdown"
     },
@@ -747,6 +871,26 @@
       "type": "external",
       "url": "https://appriseit.com/services/pushbullet/#parameter-breakdown"
     },
+    "notify.pbul.optional": {
+      "type": "external",
+      "url": "https://appriseit.com/services/pushbullet/#parameter-breakdown"
+    },
+    "notify.pbul.redirect": {
+      "type": "external",
+      "url": "https://appriseit.com/services/pushbullet/#parameter-breakdown"
+    },
+    "notify.pbul.retry": {
+      "type": "external",
+      "url": "https://appriseit.com/services/pushbullet/#parameter-breakdown"
+    },
+    "notify.pbul.wait": {
+      "type": "external",
+      "url": "https://appriseit.com/services/pushbullet/#parameter-breakdown"
+    },
+    "notify.pover.e2ee": {
+      "type": "external",
+      "url": "https://appriseit.com/services/pushover/#parameter-breakdown"
+    },
     "notify.pover.expire": {
       "type": "external",
       "url": "https://appriseit.com/services/pushover/#parameter-breakdown"
@@ -755,7 +899,23 @@
       "type": "external",
       "url": "https://appriseit.com/services/pushover/#parameter-breakdown"
     },
+    "notify.pover.interval": {
+      "type": "external",
+      "url": "https://appriseit.com/services/pushover/#parameter-breakdown"
+    },
+    "notify.pover.key": {
+      "type": "external",
+      "url": "https://appriseit.com/services/pushover/#parameter-breakdown"
+    },
+    "notify.pover.optional": {
+      "type": "external",
+      "url": "https://appriseit.com/services/pushover/#parameter-breakdown"
+    },
     "notify.pover.priority": {
+      "type": "external",
+      "url": "https://appriseit.com/services/pushover/#parameter-breakdown"
+    },
+    "notify.pover.redirect": {
       "type": "external",
       "url": "https://appriseit.com/services/pushover/#parameter-breakdown"
     },
@@ -783,6 +943,10 @@
       "type": "external",
       "url": "https://appriseit.com/services/pushover/#parameter-breakdown"
     },
+    "notify.pover.wait": {
+      "type": "external",
+      "url": "https://appriseit.com/services/pushover/#parameter-breakdown"
+    },
     "notify.slack.access_token": {
       "type": "external",
       "url": "https://appriseit.com/services/slack/#parameter-breakdown"
@@ -807,6 +971,22 @@
       "type": "external",
       "url": "https://appriseit.com/services/slack/#parameter-breakdown"
     },
+    "notify.slack.optional": {
+      "type": "external",
+      "url": "https://appriseit.com/services/slack/#parameter-breakdown"
+    },
+    "notify.slack.redirect": {
+      "type": "external",
+      "url": "https://appriseit.com/services/slack/#parameter-breakdown"
+    },
+    "notify.slack.retry": {
+      "type": "external",
+      "url": "https://appriseit.com/services/slack/#parameter-breakdown"
+    },
+    "notify.slack.template": {
+      "type": "external",
+      "url": "https://appriseit.com/services/slack/#parameter-breakdown"
+    },
     "notify.slack.timestamp": {
       "type": "external",
       "url": "https://appriseit.com/services/slack/#parameter-breakdown"
@@ -822,6 +1002,14 @@
     "notify.slack.token_c": {
       "type": "external",
       "url": "https://appriseit.com/services/slack/#parameter-breakdown"
+    },
+    "notify.slack.wait": {
+      "type": "external",
+      "url": "https://appriseit.com/services/slack/#parameter-breakdown"
+    },
+    "notify.tgram.album": {
+      "type": "external",
+      "url": "https://appriseit.com/services/telegram/#parameter-breakdown"
     },
     "notify.tgram.bot_token": {
       "type": "external",
@@ -847,7 +1035,19 @@
       "type": "external",
       "url": "https://appriseit.com/services/telegram/#parameter-breakdown"
     },
+    "notify.tgram.optional": {
+      "type": "external",
+      "url": "https://appriseit.com/services/telegram/#parameter-breakdown"
+    },
     "notify.tgram.preview": {
+      "type": "external",
+      "url": "https://appriseit.com/services/telegram/#parameter-breakdown"
+    },
+    "notify.tgram.redirect": {
+      "type": "external",
+      "url": "https://appriseit.com/services/telegram/#parameter-breakdown"
+    },
+    "notify.tgram.retry": {
       "type": "external",
       "url": "https://appriseit.com/services/telegram/#parameter-breakdown"
     },
@@ -855,7 +1055,15 @@
       "type": "external",
       "url": "https://appriseit.com/services/telegram/#parameter-breakdown"
     },
+    "notify.tgram.template": {
+      "type": "external",
+      "url": "https://appriseit.com/services/telegram/#parameter-breakdown"
+    },
     "notify.tgram.topic": {
+      "type": "external",
+      "url": "https://appriseit.com/services/telegram/#parameter-breakdown"
+    },
+    "notify.tgram.wait": {
       "type": "external",
       "url": "https://appriseit.com/services/telegram/#parameter-breakdown"
     }
