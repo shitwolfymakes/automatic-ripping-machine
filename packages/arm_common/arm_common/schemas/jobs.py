@@ -493,6 +493,10 @@ class RipStartResponse(BaseModel):
     # Structure-keyed tracks (`00334.mpls:2`) get theirs from the job's title map; every other track's ref is
     # its title number already.
     title_numbers: dict[str, int] = Field(default_factory=dict)
+    # The `source_ref`s of the ticked 3D titles whose MVC dependent view this rip must keep (D60: the job does not
+    # transcode). MakeMKV's default selection drops that view, so the ripper adds it for these titles; every other
+    # title rips under MakeMKV's own default.
+    keep_3d_refs: list[str] = Field(default_factory=list)
 
 
 # The one definition of apply/fan-out skip reasons — the backend engine

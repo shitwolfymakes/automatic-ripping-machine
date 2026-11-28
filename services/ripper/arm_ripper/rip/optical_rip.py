@@ -106,6 +106,17 @@ def _finished_file(output_dir: Path, title_idx: int, position: int) -> tuple[Pat
     return file_path, size
 
 
+def expected_output_size(track: TrackView, keep_3d: bool) -> int | None:
+    """The size a finished output of `track` should reach, or None when the scan's figure does not apply.
+
+    The scan's size for a 3D title counts its MVC dependent-view clips. A run that keeps MVC writes them, so the figure
+    stands (and a 3D rip that lost the view lands under it). A run that drops MVC writes the base view only, and the
+    scan holds no base-only figure, so a 3D title ripped as 2D has no expected size to compare against."""
+    if track.stereo_3d and not keep_3d:
+        return None
+    return track.expected_size_bytes
+
+
 class _OpticalRip:
     """One single-invocation DVD/BD rip: the per-title callbacks makemkvcon's stream fires, and the attribution after it
     exits."""
@@ -126,8 +137,10 @@ class _OpticalRip:
         drive_lost: Callable[[], bool] | None,
         title: int | None = None,
         end_on_completion: bool = False,
+        keep_3d: bool = False,
     ) -> None:
         self._device_path = device_path
+        self._keep_3d = keep_3d
         self._title = title
         self._end_on_completion = end_on_completion
         self._output_dir = output_dir
@@ -158,7 +171,7 @@ class _OpticalRip:
 
     def _audit(self, title_idx: int, track: TrackView, path: Path, size: int) -> None:
         """Log a finished output that looks short or unfinalised. Only logs: a failed check never fails the title."""
-        problems = suspect_output(path, size, track.expected_size_bytes)
+        problems = suspect_output(path, size, expected_output_size(track, self._keep_3d))
         if problems:
             logger.warning("title %d output %s looks suspect: %s", title_idx, path.name, "; ".join(problems))
 
@@ -268,6 +281,7 @@ class _OpticalRip:
             stop=self._stop,
             title=self._title,
             end_on_completion=self._end_on_completion,
+            keep_3d=self._keep_3d,
         )
         _delete_skipped_outputs(self._output_dir, self._eligible, self._skipped)
         if disc_result.overall_error is None and self._drive_dropped():
@@ -343,6 +357,13 @@ class _OpticalRip:
             await self._on_track_done(track, RipResult(ok=False, error=error))
 
 
+def _keep_3d_titles(track_by_index: dict[int, TrackView], keep_3d_refs: Collection[str]) -> set[int]:
+    """The ticked titles whose MVC dependent view the rip keeps."""
+    return {
+        idx for idx, t in track_by_index.items() if t.source_ref in keep_3d_refs and t.status is not TrackStatus.SKIPPED
+    }
+
+
 async def rip_optical(
     *,
     device_path: str,
@@ -361,7 +382,9 @@ async def rip_optical(
     """Single-invocation DVD/BD rip with per-title attribution.
 
     `options.per_title` (`ARM_RIP_INVOCATION=per_title`) instead runs one `mkv … <title>` per ticked (not SKIPPED),
-    unsettled eligible title, each into its own folder. `options.end_on_completion` ends each makemkvcon run once it
+    unsettled eligible title, each into its own folder. `options.keep_3d_refs` names the 3D titles that keep their MVC
+    view: per title, each one's run selects MVC video; in one `mkv all` run, any of them does so for the whole run.
+    `options.end_on_completion` ends each makemkvcon run once it
     is complete and its files are closed, instead of at its exit.
 
     The makemkvcon invocation rips every title ≥ minlength to
@@ -402,6 +425,7 @@ async def rip_optical(
     # drive dropped off the bus): makemkvcon rips them again, as `mkv all`
     # does, but they get no callbacks and their new files are deleted.
     skipped = {idx for idx, t in track_by_index.items() if t.id in skip_track_ids}
+    keep_3d_titles = _keep_3d_titles(track_by_index, options.keep_3d_refs)
     if options.per_title:
         await _rip_each_title(
             device_path=device_path,
@@ -416,6 +440,7 @@ async def rip_optical(
             stop=stop,
             drive_lost=drive_lost,
             end_on_completion=options.end_on_completion,
+            keep_3d_titles=keep_3d_titles,
         )
         return
     await _OpticalRip(
@@ -431,6 +456,7 @@ async def rip_optical(
         stop=stop,
         drive_lost=drive_lost,
         end_on_completion=options.end_on_completion,
+        keep_3d=bool(keep_3d_titles),
     ).run()
 
 
@@ -459,6 +485,7 @@ class _TitleRun:
     stop: asyncio.Event | None
     drive_lost: Callable[[], bool] | None
     end_on_completion: bool
+    keep_3d: bool
 
     async def attempt(self, on_done: OnTrackDone) -> None:
         """Run makemkvcon once for the title, reporting its result through `on_done`."""
@@ -476,6 +503,7 @@ class _TitleRun:
             drive_lost=self.drive_lost,
             title=self.title,
             end_on_completion=self.end_on_completion,
+            keep_3d=self.keep_3d,
         ).run()
 
 
@@ -546,6 +574,7 @@ async def _rip_each_title(
     stop: asyncio.Event | None,
     drive_lost: Callable[[], bool] | None,
     end_on_completion: bool,
+    keep_3d_titles: Collection[int],
 ) -> None:
     """One `mkv … <title>` per selected, unsettled eligible title, each into `output_dir/title-NN`, in source order.
 
@@ -553,6 +582,7 @@ async def _rip_each_title(
     fails because the drive was not ready is tried once more. Progress is reported disc-wide. Once `stop` is set (the
     drive dropped), the titles not yet reached are reported stopped so the caller leaves them for its next resume.
     Selected titles MakeMKV would not rip (below the minimum length) fail with the same reason a full pass gives them.
+    A title in `keep_3d_titles` is ripped with MVC video selected; the others under MakeMKV's default.
     """
     pending = [idx for idx in eligible if idx not in skipped]
     # Unticked (SKIPPED) titles are no rip work; the ones an earlier pass settled stay in as done work.
@@ -580,6 +610,7 @@ async def _rip_each_title(
             stop=stop,
             drive_lost=drive_lost,
             end_on_completion=end_on_completion,
+            keep_3d=idx in keep_3d_titles,
         )
         await rip_title_with_retry(
             track=track_by_index[idx],

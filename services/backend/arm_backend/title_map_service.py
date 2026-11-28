@@ -94,6 +94,15 @@ def stereo_3d_refs(scan: ScanResult) -> frozenset[str]:
     return frozenset(title_ref(t.source_file or "", t.angle) for t in scan_candidates(scan) if t.stereo_3d)
 
 
+def keep_3d_refs(scan: ScanResult | None, tracks: Sequence[Track], prefers_3d: bool) -> list[str]:
+    """The `source_ref`s of the rip's tracks whose MVC dependent view the ripper must keep: 3D titles of a job that
+    keeps 3D (D60: no transcode), in track order. MakeMKV leaves the dependent view out unless told otherwise."""
+    if scan is None or not prefers_3d:
+        return []
+    stereo = stereo_3d_refs(scan)
+    return [t.source_ref for t in tracks if t.source_ref in stereo]
+
+
 def title_numbers(scan: ScanResult | None, tracks: Sequence[Track]) -> dict[str, int]:
     """`source_ref` -> MakeMKV title number for the rip-start response: the title map's for a structure scan, else
     each numeric ref as itself."""

@@ -4801,6 +4801,10 @@ export type RipStartResponse = {
     title_numbers?: {
         [key: string]: number;
     };
+    /**
+     * Keep 3D Refs
+     */
+    keep_3d_refs?: Array<string>;
 };
 
 /**
