@@ -5,7 +5,7 @@
 # multi-disc) carrying a MusicBrainz-shaped tracklist in metadata_json, plus a
 # per-job aggregated log file for each job (so the Logs screen has data).
 #
-# Project-blackbird fixture (migrations 0051-0056):
+# Project-blackbird fixture (migrations 0051-0057):
 #   - Blu-ray title classes on tracks (source_file, playlist_name, title_class,
 #     title_class_ref = the source_ref of the kept title a copy points at), one
 #     track per TitleClass value, ticked state as the classifier defaults it
@@ -16,6 +16,11 @@
 #                              duplicate, 10 decoy playlists, an extra
 #       The Glass Orchard      ripped per title: two editions, SKIPPED duplicate +
 #                              decoy, extras; one track_stages row per StageStatus
+#     Neon Skyline 3D is a structure-scan job: its tracks are keyed by title ref
+#     (`00800.mpls:2` = angle 2 of playlist 00800). The other two keep MakeMKV's
+#     title numbers, as a Blu-ray read through the MakeMKV fallback does.
+#   - jobs.tick_one_version (0057): true on the video jobs before Start (as the
+#     migration backfills them), false ("every version") on The Final Expedition
 #   - failed jobs carrying jobs.failure_reason (six operator texts; Scratched Disc
 #     keeps it NULL like a job that failed before 0054)
 #   - drives.scanning (drive 2) and the per-drive rip_end_on_completion_message
@@ -412,14 +417,15 @@ INSERT INTO jobs (id, drive_id, disc_type, title, year, status, metadata_json, r
  ('${J[17]}', '${DRV}', 'unknown', 'Empty Image',          NULL, 'failed',          '{"seed":true}'::jsonb, false, NULL, NULL, now()-interval '7 day', now()-interval '7 day', '${FR[5]}');
 
 -- Neon Skyline 3D (J9, awaiting_review): every kept/alternate class around one 3D feature.
--- title_class_ref '1' = source_ref of the kept 3D feature (t01). Primaries ticked, alternates unticked.
+-- Tracks keyed by title ref; title_class_ref '00800.mpls:1' = source_ref of the kept 3D feature (angle 1).
+-- Primaries ticked, alternates unticked.
 INSERT INTO tracks (id, job_id, kind, index, source_ref, label, status, attempts, expected_duration_seconds, expected_size_bytes, excluded, source_file, playlist_name, title_class, title_class_ref) VALUES
- ('${T[26]}', '${J[9]}', 'video_title', 0, '0', 'Making Of',                'queued', 0, 2700, 6500000000,  false, '00010.mpls', 'FPL_MakingOf',     'primary', NULL),
- ('${T[27]}', '${J[9]}', 'video_title', 1, '1', 'Main Feature (3D)',       'queued', 0, 9000, 46000000000, false, '00800.mpls', 'FPL_MainFeature3D', 'primary', NULL),
- ('${T[28]}', '${J[9]}', 'video_title', 2, '2', 'Main Feature (3D, angle 2)', 'queued', 0, 9000, 46000000000, true, '00800.mpls', 'FPL_MainFeature3D', 'angle',   '1'),
- ('${T[29]}', '${J[9]}', 'video_title', 3, '3', 'Main Feature (no chapters)', 'queued', 0, 8940, 45500000000, true, '00801.mpls', 'FPL_NoChapters',    'subset',  '1'),
- ('${T[30]}', '${J[9]}', 'video_title', 4, '4', 'Main Feature (2D)',       'queued', 0, 9000, 31000000000, true,  '00802.mpls', 'FPL_MainFeature2D', 'view',    '1'),
- ('${T[31]}', '${J[9]}', 'video_title', 5, '5', 'Main Feature (with intro)', 'queued', 0, 9030, 46100000000, true, '00803.mpls', 'FPL_WithIntro',     'variant', '1');
+ ('${T[26]}', '${J[9]}', 'video_title', 0, '00010.mpls',   'Making Of',                  'queued', 0, 2700, 6500000000,  false, '00010.mpls', 'FPL_MakingOf',      'primary', NULL),
+ ('${T[27]}', '${J[9]}', 'video_title', 1, '00800.mpls:1', 'Main Feature (3D)',          'queued', 0, 9000, 46000000000, false, '00800.mpls', 'FPL_MainFeature3D', 'primary', NULL),
+ ('${T[28]}', '${J[9]}', 'video_title', 2, '00800.mpls:2', 'Main Feature (3D, angle 2)', 'queued', 0, 9000, 46000000000, true,  '00800.mpls', 'FPL_MainFeature3D', 'angle',   '00800.mpls:1'),
+ ('${T[29]}', '${J[9]}', 'video_title', 3, '00801.mpls',   'Main Feature (no chapters)', 'queued', 0, 8940, 45500000000, true,  '00801.mpls', 'FPL_NoChapters',    'subset',  '00800.mpls:1'),
+ ('${T[30]}', '${J[9]}', 'video_title', 4, '00802.mpls',   'Main Feature (2D)',          'queued', 0, 9000, 31000000000, true,  '00802.mpls', 'FPL_MainFeature2D', 'view',    '00800.mpls:1'),
+ ('${T[31]}', '${J[9]}', 'video_title', 5, '00803.mpls',   'Main Feature (with intro)',  'queued', 0, 9030, 46100000000, true,  '00803.mpls', 'FPL_WithIntro',     'variant', '00800.mpls:1');
 
 -- The Final Expedition (J10, awaiting_review): two primaries each with a raw .m2ts duplicate
 -- (no playlist name), ten same-length decoy playlists of t00, and one extra.
@@ -458,6 +464,12 @@ INSERT INTO disc_fingerprints (id, job_id, algo, value, created_at) VALUES
  ('${F[3]}', '${J[8]}', 'crc64',       'D00BLEFEATURE1234',                     now()-interval '4 hour'),
  ('${F[4]}', '${J[9]}', 'aacs',        'aacs-3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d', now()-interval '2 min'),
  ('${F[5]}', '${J[10]}', 'aacs',       'aacs-decoy0decoy0decoy0decoy0decoy0de', now()-interval '3 min');
+
+-- The version policy (0057): what identify snapshots for a video disc before Start.
+UPDATE jobs SET tick_one_version = true
+ WHERE metadata_json->>'seed' = 'true' AND disc_type IN ('dvd', 'bluray')
+   AND status IN ('created', 'awaiting_user_id', 'identified', 'awaiting_review');
+UPDATE jobs SET tick_one_version = false WHERE id = '${J[10]}';
 
 COMMIT;
 EOF
