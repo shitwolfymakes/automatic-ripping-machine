@@ -25,7 +25,6 @@ RUN apt-get update \
         qtbase5-dev \
         wget \
         zlib1g-dev \
-        openjdk-17-jre-headless \
         libtesseract-dev \
         libleptonica-dev \
     && rm -rf /var/lib/apt/lists/*
@@ -74,9 +73,9 @@ ENV DEBIAN_FRONTEND=noninteractive \
 # Runtime deps: MakeMKV handles its own DVD CSS, so we deliberately skip
 # libdvd-pkg / libdvdcss here. Keeps the image to main-repo packages only and
 # avoids enabling contrib / non-free.
-# openjdk-17-jre-headless: makemkvcon runs the BD-J (Java) menu code to pick the
-# real playlist on Java-menu Blu-rays and finds java on PATH. Without it those
-# discs scan with the wrong or no titles. Costs about 200 MB (image ~600 -> ~800 MB).
+# The JRE lets makemkvcon run a Blu-ray's BD-J program, which it uses to find
+# the real title on discs with obfuscated playlists.
+# Costs about 200 MB (image ~600 -> ~800 MB).
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         tini \
