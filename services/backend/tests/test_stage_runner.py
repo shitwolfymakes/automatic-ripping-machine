@@ -10,7 +10,7 @@ from typing import Any
 import httpx
 import pytest
 
-from arm_common import Config, DiscType, Job, JobStatus, Track, TrackKind
+from arm_common import Config, DiscType, Job, JobStatus, Track, TrackKind, TrackRole
 from arm_common.enums import MediaType
 from arm_common.schemas import ExternalIds
 
@@ -764,6 +764,21 @@ async def test_run_non_tv_candidate_is_a_silent_noop() -> None:
     db = _db(job, tracks=[_track(job.id, 0, 5400)])
     hub = _Hub()
     provider = FakeProvider()
+    runner = _runner(db, hub, [provider])
+
+    runner.schedule(job.id)
+    await runner.drain()
+
+    assert hub.events == []
+    assert provider.calls == []
+
+
+async def test_run_ignores_an_excluded_episode_track_on_a_movie_job() -> None:
+    """Only kept tracks make a job a TV candidate, as at rip-start."""
+    job = _job(media_type=MediaType.MOVIE)
+    db = _db(job, tracks=[_track(job.id, 0, 1500, role=TrackRole.EPISODE, excluded=True)])
+    hub = _Hub()
+    provider = FakeProvider(seasons={1: _season(1, DISTINCT)})
     runner = _runner(db, hub, [provider])
 
     runner.schedule(job.id)

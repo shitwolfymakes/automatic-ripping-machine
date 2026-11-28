@@ -40,6 +40,10 @@ from arm_common.schemas.job_metadata import previously_ripped_job_id
 def _summarize_rip_progress(tracks: list[Track]) -> RipProgressSummary:
     """Aggregate `tracks` (one job's worth) into a `RipProgressSummary`.
 
+    Progress covers every title the drive reads, excluded ones included:
+    MakeMKV rips them too, so the counts and the current track follow the
+    drive. The rip's outcome (`rip_outcome_counts`) counts kept tracks only.
+
     `current_track_index` is the 1-based ordinal among tracks sorted by
     `Track.index` of the row in `IN_PROGRESS`. The dispatcher transitions
     one track at a time, so at most one is `IN_PROGRESS` per job; if more

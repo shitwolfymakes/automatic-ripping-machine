@@ -170,6 +170,10 @@ class ScanResult(BaseModel):
     playlists: list[BdPlaylist] = Field(default_factory=list)
     # Per-clip length, size and 3D marker from BDMV/CLIPINF and BDMV/STREAM.
     clips: list[BdClip] = Field(default_factory=list)
+    # The minimum title length (seconds) MakeMKV listed titles with; the rip
+    # never goes below it. None for a scan that did not use MakeMKV, or from
+    # a ripper that predates the setting.
+    min_title_length_seconds: int | None = None
 
     # Set when MakeMKV could not scan the disc; the backend then fails the job with this as its reason.
     failure: ScanFailure | None = None
@@ -241,3 +245,6 @@ class RipperConfigView(BaseModel):
     # Defaulted so older backends omitting them still validate (no hold, 60s).
     ripping_paused: bool = False
     manual_wait_seconds: int = 60
+    # Shortest title the scan lists and the rip writes. Defaulted so older
+    # backends omitting it still validate (MakeMKV's own 120 s default).
+    min_title_length_seconds: int = 120

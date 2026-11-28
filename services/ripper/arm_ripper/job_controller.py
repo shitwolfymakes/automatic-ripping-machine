@@ -17,9 +17,10 @@ from arm_ripper.disc_rip import DiscRip
 from arm_ripper.drive_handle import DriveHandle
 from arm_ripper.eject import Ejector
 from arm_ripper.makemkv_prep import MakeMKVPrep
+from arm_ripper.makemkv_minlength import DEFAULT_MIN_TITLE_LENGTH_SECONDS
 from arm_ripper.ripper_config import ripper_config_or_none
 from arm_ripper.resolution_wait import IDENTIFY_WAIT, RESOLUTION_TIMEOUT_UNSET, REVIEW_WAIT, ResolutionWaiter, WaitSpec
-from arm_ripper.rip.dispatcher import DEFAULT_MIN_LENGTH_SECONDS, NO_RIP_TOOL, rip_tool
+from arm_ripper.rip.dispatcher import NO_RIP_TOOL, rip_tool
 from arm_ripper.rip_events import disc_type_label, rip_started_message
 from arm_ripper.disc_scan import scan_or_none
 from arm_ripper.drive_poll import DriveState, read_drive_status
@@ -81,7 +82,7 @@ class JobController:
         *,
         ws: WSClient | None = None,
         device_path: str | DriveHandle | None = None,
-        default_min_length_seconds: int = DEFAULT_MIN_LENGTH_SECONDS,
+        default_min_length_seconds: int = DEFAULT_MIN_TITLE_LENGTH_SECONDS,
         resolution_timeout: float | None = RESOLUTION_TIMEOUT_UNSET,  # type: ignore[assignment]
     ) -> None:
         self._client = client
@@ -108,12 +109,10 @@ class JobController:
             self._device = DriveHandle.fixed(device_path)
         # Umount/eject is its own job; it reads the same shared handle.
         self._ejector = Ejector(self._device)
-        # Host-side baseline `--minlength` for `makemkvcon mkv all`. The
-        # backend can override per-rip via `RipStartResponse.min_length_seconds`
-        # (resolved from the Session's `overrides_json["min_length_seconds"]`);
-        # when no override is sent we fall back to this value. Injected by
-        # `main.py` from `ARM_MIN_LENGTH_SECONDS`; tests get the dispatcher
-        # default (600).
+        # Host minimum title length, injected by `main.py` from
+        # `ARM_MIN_LENGTH_SECONDS`: it stands in for the backend's minimum
+        # title length setting when the config can't be read before a scan,
+        # or rip-start comes from a backend that sends none.
         self._default_min_length_seconds = default_min_length_seconds
         # Parks a held job until it leaves its gate. `resolution_timeout` is the ceiling on an
         # AWAITING_USER_ID / AWAITING_REVIEW park, in seconds; None means wait indefinitely — source
@@ -193,18 +192,25 @@ class JobController:
         async with self._claim(job.id):
             with with_log_context(job_id=job.id):
                 logger.info("pickup: re-acquiring job %s status=%s", job.id, job.status.value)
-                self._readopt_titles_read(job, device_path)
+                await self._readopt_titles_read(job, device_path)
                 try:
                     await self._run_rip(job, device_path)
                 finally:
                     await self._titles.cancel(job.id)
 
-    def _readopt_titles_read(self, job: JobView, device_path: str) -> None:
+    async def _readopt_titles_read(self, job: JobView, device_path: str) -> None:
         """A re-adopted job whose MakeMKV title read died with the previous process (a structure scan with no titles
-        reported and no failure recorded) gets the read again, so Start is not left waiting for a map."""
+        reported and no failure recorded) gets the read again, so Start is not left waiting for a map. It reads down
+        to the minimum the scan recorded."""
         if awaits_makemkv_titles(job.metadata_json):
             logger.info("re-adopted job_id=%s has no MakeMKV titles yet; reading them again", job.id)
-            self._titles.start(job.id, device_path)
+            self._titles.start(job.id, device_path, await self._scan_minimum(job.metadata_json.scan_result))
+
+    async def _scan_minimum(self, scan: ScanResult | None) -> int:
+        """The minimum title length a scan listed titles with, or the configured one for a scan that recorded none."""
+        if scan is not None and scan.min_title_length_seconds is not None:
+            return scan.min_title_length_seconds
+        return await self._min_title_length()
 
     async def on_ws_command(self, envelope: WSEnvelope) -> None:
         """Handler registered for `ripper.commands.{drive_id}` topic: runs the handler for the command's event
@@ -353,6 +359,13 @@ class JobController:
         cfg = await ripper_config_or_none(self._client, "auto-rip config lookup", "proceeding fail-open")
         return cfg is None or cfg.auto_rip_on_insert
 
+    async def _min_title_length(self) -> int:
+        """The configured minimum title length the scan lists titles down to, or the host minimum when the config
+        can't be read."""
+        fallback = self._default_min_length_seconds
+        cfg = await ripper_config_or_none(self._client, "minimum title length lookup", f"using {fallback}s")
+        return fallback if cfg is None else cfg.min_title_length_seconds
+
     async def _run_pipeline(self, device_path: str, *, pending_session_id: str | None) -> None:
         async with self._claim(None):
             # Refresh the MakeMKV key before makemkvcon first touches
@@ -360,7 +373,7 @@ class JobController:
             # container up across a beta-key rotation doesn't scan/rip
             # protected discs with a stale key.
             await self._makemkv.prepare()
-            scan_result = await scan_or_none(device_path)
+            scan_result = await scan_or_none(device_path, await self._min_title_length())
             if scan_result is None:
                 return
 
@@ -373,7 +386,7 @@ class JobController:
             self._active_job_id = job.id
             if is_structure_scan(scan_result):
                 # The card is up from the playlists; MakeMKV names its title numbers while the operator reviews.
-                self._titles.start(job.id, device_path)
+                self._titles.start(job.id, device_path, await self._scan_minimum(scan_result))
             try:
                 await self._after_identify(job, device_path)
             finally:
@@ -500,7 +513,7 @@ class JobController:
         async with self._claim(job.id):
             with with_log_context(job_id=job.id):
                 logger.info("reboot recovery: re-parking held job %s", job.id)
-                self._readopt_titles_read(job, device_path)
+                await self._readopt_titles_read(job, device_path)
                 try:
                     resolved = await self._waiter.await_resolution(job.id, REVIEW_WAIT)
                     if resolved is None:

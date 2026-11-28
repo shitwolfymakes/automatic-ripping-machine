@@ -73,8 +73,16 @@ class MakemkvScanFailed(ScanError):
         self.disc_type = disc_type
 
 
-def _info_command(device_path: str) -> list[str]:
-    return ["makemkvcon", "-r", "--cache=1", "--progress=-stdout", "info", makemkv_source_url(device_path)]
+def _info_command(device_path: str, min_title_length_seconds: int) -> list[str]:
+    return [
+        "makemkvcon",
+        "-r",
+        "--cache=1",
+        "--progress=-stdout",
+        f"--minlength={min_title_length_seconds}",
+        "info",
+        makemkv_source_url(device_path),
+    ]
 
 
 def _classify_from_titles(titles: list[ScanTitle]) -> DiscType:
@@ -274,8 +282,11 @@ async def _reap(proc: asyncio.subprocess.Process, pumps: list["asyncio.Task[None
     await asyncio.gather(*pumps, return_exceptions=True)
 
 
-async def _run_info(device_path: str, clock: Callable[[], float] = time.monotonic) -> _InfoRun:
-    """Run `makemkvcon info` on the device, watching its output instead of a flat timeout.
+async def _run_info(
+    device_path: str, min_title_length_seconds: int, clock: Callable[[], float] = time.monotonic
+) -> _InfoRun:
+    """Run `makemkvcon info` on the device, listing titles down to `min_title_length_seconds`, watching its output
+    instead of a flat timeout.
 
     Raises ScanError when makemkvcon is not on PATH. Whatever the exit path
     (done, timed out, terminal line, cancelled) the process is killed and reaped.
@@ -283,7 +294,7 @@ async def _run_info(device_path: str, clock: Callable[[], float] = time.monotoni
     logger.info("makemkvcon info device=%s", device_path)
     try:
         proc = await asyncio.create_subprocess_exec(
-            *_info_command(device_path),
+            *_info_command(device_path, min_title_length_seconds),
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )
@@ -348,10 +359,11 @@ async def _failed_disc_type(device_path: str, stdout: list[str]) -> DiscType | N
     return await asyncio.to_thread(sniff_video_image, device_path)
 
 
-async def scan_titles(device_path: str) -> list[ScanTitle]:
-    """The titles `makemkvcon info` lists on the disc. Raises ScanError (MakemkvScanFailed when makemkvcon ran and
-    its scan failed); used on its own for a disc whose structure was read separately."""
-    run = await _run_info(device_path)
+async def scan_titles(device_path: str, min_title_length_seconds: int) -> list[ScanTitle]:
+    """The titles `makemkvcon info` lists on the disc, down to `min_title_length_seconds`. Raises ScanError
+    (MakemkvScanFailed when makemkvcon ran and its scan failed); used on its own for a disc whose structure was read
+    separately."""
+    run = await _run_info(device_path, min_title_length_seconds)
     failure = _failure_of(run)
     if failure is not None:
         raise failure
@@ -359,8 +371,9 @@ async def scan_titles(device_path: str) -> list[ScanTitle]:
     return titles
 
 
-async def scan_disc(device_path: str) -> ScanResult:
-    run = await _run_info(device_path)
+async def scan_disc(device_path: str, min_title_length_seconds: int) -> ScanResult:
+    """Scan the disc with `makemkvcon info`, listing titles down to `min_title_length_seconds`."""
+    run = await _run_info(device_path, min_title_length_seconds)
 
     failure = _failure_of(run)
     if failure is not None:
@@ -386,4 +399,5 @@ async def scan_disc(device_path: str) -> ScanResult:
         titles=titles,
         fingerprints=disc_fingerprints(probe),
         bd_meta=probe.bd_meta,
+        min_title_length_seconds=min_title_length_seconds,
     )

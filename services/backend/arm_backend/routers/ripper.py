@@ -33,6 +33,8 @@ from arm_backend.identity.pipeline import resolve_job
 from arm_backend.identity.proposals import preferred_titles, record_preset
 from arm_backend.identity.stage_runner import EpisodeStageRunner
 from arm_backend.routers._deps import get_hub, get_stage_runner
+from arm_backend.min_title_length import env_min_title_length_seconds, min_title_length_seconds
+from arm_backend.rip_outcome import kept_tracks, rip_outcome_counts
 from arm_backend.rip_settings import resolve_end_on_completion
 from arm_backend.rip_snapshot import skip_unticked
 from arm_backend.title_map_service import (
@@ -45,7 +47,7 @@ from arm_backend.title_map_service import (
     stored_scan,
     title_numbers,
 )
-from arm_backend.track_selection import DiscBackupNeedsBluray, select_tracks
+from arm_backend.track_selection import DiscBackupNeedsBluray, select_rip_tracks
 from arm_backend.version_policy import parked_session, prefers_stereo_3d, selection_policy
 from arm_backend.ws import WSHub
 from arm_common import (
@@ -148,6 +150,7 @@ async def get_ripper_config(
         makemkv_sdf_enabled=bool(cfg.makemkv_sdf_enabled),
         ripping_paused=bool(cfg.ripping_paused),
         manual_wait_seconds=int(cfg.manual_wait_seconds) if cfg.manual_wait_seconds is not None else 60,
+        min_title_length_seconds=min_title_length_seconds(cfg),
     )
 
 
@@ -433,6 +436,16 @@ async def _job_tracks(session: AsyncSession, job_id: str) -> Sequence[Track]:
     )
 
 
+async def _title_length_floor(session: AsyncSession, job: Job) -> int:
+    """The minimum title length the job's scan listed titles with, or the configured one for a scan that did not
+    record it."""
+    recorded = ((job.metadata_json or {}).get("scan_result") or {}).get("min_title_length_seconds")
+    if recorded is not None:
+        return int(recorded)
+    cfg = (await session.execute(select(Config).where(col(Config.id) == CONFIG_SINGLETON_ID))).scalar_one_or_none()
+    return env_min_title_length_seconds() if cfg is None else min_title_length_seconds(cfg)
+
+
 async def _end_on_completion(session: AsyncSession, job: Job) -> bool:
     """The job's end-on-completion setting: its drive's override, else the global. Resolved on every rip-start and
     resume, so turning it off reaches the next resume of a job that misbehaves."""
@@ -460,6 +473,7 @@ async def _rip_start_response(
         end_on_completion_message=await _end_on_completion(session, job),
         title_numbers=title_numbers(scan, tracks),
         keep_3d_refs=keep_3d_refs(scan, tracks, prefers_3d),
+        min_title_length_seconds=await _title_length_floor(session, job),
     )
 
 
@@ -522,7 +536,7 @@ async def _select_or_fail(
     # whatever the scan found, so it never lands in the no-titles handling
     # below; a FOLDER preset on anything but a Blu-ray is refused here.
     try:
-        new_tracks = select_tracks(
+        new_tracks = select_rip_tracks(
             job.id,
             scan,
             preset,
@@ -545,7 +559,7 @@ async def _select_or_fail(
         reason = FOLDER_NO_TITLES if virtual.source_kind == DriveSourceKind.FOLDER else ISO_NO_TITLES
         await fail_job(session, hub, job, reason)
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=reason)
-    if not new_tracks:
+    if not kept_tracks(new_tracks):
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="track selection produced zero tracks",
@@ -616,7 +630,7 @@ async def rip_start(
             await _ensure_ripping(session, job)
             await session.commit()
             if begins_rip:
-                await _announce_rip(session, hub, stage_runner, job, preset_id, existing)
+                await _announce_rip(session, hub, stage_runner, job, preset_id, kept_tracks(existing))
             return await _rip_start_response(session, job, preset_id, existing, min_length_seconds, prefers_3d)
 
         _require_startable(job)
@@ -624,17 +638,22 @@ async def rip_start(
         preset = await _load_rip_preset(session, preset_id)
         new_tracks = await _select_or_fail(session, hub, job, scan, preset)
         await _begin_rip(session, job, new_tracks)
+        # Every DVD/Blu-ray title is stored, the preset's rejects excluded: in a per-title rip they are SKIPPED now,
+        # as Start skips the unticked titles of a held disc.
+        await skip_unticked(session, job, settings.ARM_RIP_INVOCATION)
+        await session.commit()
 
         refreshed = await _job_tracks(session, job.id)
+        kept = kept_tracks(refreshed)
         logger.debug(
             "rip-start preset=%s tracks=%d",
             preset_id,
-            len(refreshed),
+            len(kept),
         )
 
         # Without the review hold, identify creates no Track rows, so the stage
         # it scheduled saw nothing to match. The tracks appear here.
-        await _announce_rip(session, hub, stage_runner, job, preset_id, refreshed)
+        await _announce_rip(session, hub, stage_runner, job, preset_id, kept)
 
         return await _rip_start_response(session, job, preset_id, refreshed, min_length_seconds, prefers_3d)
 
@@ -1007,10 +1026,7 @@ async def rip_complete(
             )
 
         tracks = (await session.execute(select(Track).where(col(Track.job_id) == job.id))).scalars().all()
-
-        done = sum(1 for t in tracks if t.status == TrackStatus.DONE)
-        failed = sum(1 for t in tracks if t.status == TrackStatus.FAILED)
-        total = len(tracks)
+        done, failed, total = rip_outcome_counts(tracks)
 
         job.status = _finished_status(job, done=done, failed=failed, total=total)
         if job.status == JobStatus.FAILED:

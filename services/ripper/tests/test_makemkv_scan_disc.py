@@ -103,7 +103,7 @@ async def test_binary_missing_raises_scan_error_chained(monkeypatch: pytest.Monk
     monkeypatch.setattr(makemkv_mod.asyncio, "create_subprocess_exec", _boom)
 
     with pytest.raises(ScanError) as excinfo:
-        await scan_disc("/dev/sr0")
+        await scan_disc("/dev/sr0", 120)
 
     assert str(excinfo.value) == "makemkvcon binary not found on PATH"
     assert excinfo.value.__cause__ is original
@@ -115,7 +115,7 @@ async def test_idle_timeout_kills_reaps_and_reports_timed_out(monkeypatch: pytes
     monkeypatch.setattr(makemkv_mod, "SCAN_IDLE_TIMEOUT_SECONDS", 0.05)
 
     with pytest.raises(MakemkvScanFailed) as excinfo:
-        await scan_disc("/dev/sr0")
+        await scan_disc("/dev/sr0", 120)
 
     assert excinfo.value.reason is ScanFailureReason.TIMED_OUT
     assert proc.killed is True
@@ -126,7 +126,7 @@ async def test_nonzero_exit_reports_last_output_line_and_tail(monkeypatch: pytes
     _spawn(monkeypatch, _Proc(_Stream(b"stdout text\n"), stderr=b"  disc read failed \n", returncode=3))
 
     with pytest.raises(MakemkvScanFailed) as excinfo:
-        await scan_disc("/dev/sr0")
+        await scan_disc("/dev/sr0", 120)
 
     assert excinfo.value.reason is ScanFailureReason.MAKEMKV_ERROR
     assert excinfo.value.detail == "makemkvcon exited 3:   disc read failed "
@@ -137,7 +137,7 @@ async def test_nonzero_exit_without_output_has_empty_detail_tail(monkeypatch: py
     _spawn(monkeypatch, _Proc(_Stream(b""), stderr=b"", returncode=1))
 
     with pytest.raises(MakemkvScanFailed) as excinfo:
-        await scan_disc("/dev/sr0")
+        await scan_disc("/dev/sr0", 120)
 
     assert str(excinfo.value) == "makemkvcon exited 1: "
     assert excinfo.value.tail == ()
@@ -153,7 +153,7 @@ async def test_scan_command_asks_for_progress_on_stdout(monkeypatch: pytest.Monk
     monkeypatch.setattr(makemkv_mod.asyncio, "create_subprocess_exec", _factory)
     monkeypatch.setattr(makemkv_mod, "probe_disc", _noop_probe)
 
-    await scan_disc("/dev/sr0")
+    await scan_disc("/dev/sr0", 120)
 
     assert "--progress=-stdout" in seen[0]
 
@@ -166,7 +166,7 @@ async def test_all_three_fingerprints_in_fixed_order(monkeypatch: pytest.MonkeyP
     probe = DiscProbe(crc64="c64", thediscdb="tdb", matrix256="m256")
     _run_ok(monkeypatch, b'CINFO:1,6206,"DVD disc"\n', probe)
 
-    result = await scan_disc("/dev/sr0")
+    result = await scan_disc("/dev/sr0", 120)
 
     assert result.fingerprints == [
         DiscFingerprintInput(algo="crc64", value="c64"),
@@ -178,7 +178,7 @@ async def test_all_three_fingerprints_in_fixed_order(monkeypatch: pytest.MonkeyP
 async def test_empty_fingerprints_yield_empty_list(monkeypatch: pytest.MonkeyPatch) -> None:
     _run_ok(monkeypatch, b'CINFO:1,6206,"DVD disc"\n', DiscProbe(crc64="", thediscdb="", matrix256=""))
 
-    result = await scan_disc("/dev/sr0")
+    result = await scan_disc("/dev/sr0", 120)
 
     assert result.fingerprints == []
 
@@ -186,7 +186,7 @@ async def test_empty_fingerprints_yield_empty_list(monkeypatch: pytest.MonkeyPat
 async def test_only_matrix256_fingerprint(monkeypatch: pytest.MonkeyPatch) -> None:
     _run_ok(monkeypatch, b'CINFO:1,6206,"DVD disc"\n', DiscProbe(crc64=None, matrix256="m256"))
 
-    result = await scan_disc("/dev/sr0")
+    result = await scan_disc("/dev/sr0", 120)
 
     assert result.fingerprints == [DiscFingerprintInput(algo="matrix256", value="m256")]
 
@@ -196,7 +196,7 @@ async def test_cinfo_type_wins_over_title_heuristic(monkeypatch: pytest.MonkeyPa
     stdout = b'CINFO:1,6206,"DVD disc"\nTINFO:0,9,0,"2:00:00"\nTINFO:0,11,0,"5000000000"\n'
     flags = _run_ok(monkeypatch, stdout, DiscProbe(crc64=None))
 
-    result = await scan_disc("/dev/sr0")
+    result = await scan_disc("/dev/sr0", 120)
 
     assert result.disc_type == DiscType.DVD
     assert flags == [False]
@@ -206,7 +206,7 @@ async def test_missing_cinfo_falls_back_to_title_heuristic(monkeypatch: pytest.M
     stdout = b'TINFO:0,9,0,"2:00:00"\nTINFO:0,11,0,"5000000000"\n'
     flags = _run_ok(monkeypatch, stdout, DiscProbe(crc64=None))
 
-    result = await scan_disc("/dev/sr0")
+    result = await scan_disc("/dev/sr0", 120)
 
     assert result.disc_type == DiscType.BLURAY
     assert flags == [True]
@@ -215,7 +215,7 @@ async def test_missing_cinfo_falls_back_to_title_heuristic(monkeypatch: pytest.M
 async def test_missing_cinfo_and_no_titles_is_unknown_and_not_bluray(monkeypatch: pytest.MonkeyPatch) -> None:
     flags = _run_ok(monkeypatch, b"", DiscProbe(crc64=None))
 
-    result = await scan_disc("/dev/sr0")
+    result = await scan_disc("/dev/sr0", 120)
 
     assert result.disc_type == DiscType.UNKNOWN
     assert flags == [False]
@@ -225,7 +225,7 @@ async def test_scan_disc_does_not_read_the_playlists(monkeypatch: pytest.MonkeyP
     """The structure read happens once, in the dispatcher; the MakeMKV scan only adds MakeMKV's own facts."""
     _run_ok(monkeypatch, b'CINFO:1,6206,"Blu-ray disc"\n', DiscProbe(crc64=None))
 
-    result = await scan_disc("/dev/sr0")
+    result = await scan_disc("/dev/sr0", 120)
 
     assert result.playlists == [] and result.clips == []
     assert not hasattr(makemkv_mod, "scan_playlists")
@@ -235,7 +235,7 @@ async def test_scan_titles_returns_the_titles_makemkv_lists(monkeypatch: pytest.
     stdout = b'CINFO:1,6206,"Blu-ray disc"\nTINFO:0,9,0,"2:00:00"\nTINFO:0,16,0,"00001.mpls"\nTINFO:1,9,0,"0:05:00"\n'
     _spawn(monkeypatch, _Proc(_Stream(stdout)))
 
-    titles = await scan_titles("/dev/sr0")
+    titles = await scan_titles("/dev/sr0", 120)
 
     assert [(t.index, t.duration_seconds, t.source_file) for t in titles] == [
         (0, 7200, "00001.mpls"),
@@ -247,14 +247,14 @@ async def test_scan_titles_raises_what_a_failed_run_raises(monkeypatch: pytest.M
     _spawn(monkeypatch, _Proc(_Stream(b""), stderr=b"no key", returncode=5))
 
     with pytest.raises(ScanError, match="makemkvcon exited 5: no key"):
-        await scan_titles("/dev/sr0")
+        await scan_titles("/dev/sr0", 120)
 
 
 async def test_a_cancelled_run_kills_and_reaps_makemkvcon(monkeypatch: pytest.MonkeyPatch) -> None:
     proc = _Proc(_HangingStream())
     _spawn(monkeypatch, proc)
 
-    task = asyncio.create_task(scan_titles("/dev/sr0"))
+    task = asyncio.create_task(scan_titles("/dev/sr0", 120))
     await asyncio.sleep(0.01)
     task.cancel()
     with pytest.raises(asyncio.CancelledError):
@@ -293,7 +293,7 @@ async def test_failure_carries_cinfo_disc_type_without_sniffing(monkeypatch: pyt
     _spawn(monkeypatch, _Proc(_Stream(b'CINFO:1,6209,"Blu-ray disc"\nMSG:3303,0,1,"key unknown"\nTCOUNT:0\n')))
 
     with pytest.raises(MakemkvScanFailed) as excinfo:
-        await scan_disc("/dev/sr0")
+        await scan_disc("/dev/sr0", 120)
 
     assert excinfo.value.disc_type is DiscType.BLURAY
 
@@ -309,7 +309,7 @@ async def test_failure_without_cinfo_sniffs_the_device_layout(monkeypatch: pytes
     _spawn(monkeypatch, _Proc(_Stream(b'MSG:3303,0,1,"key unknown"\nTCOUNT:0\n')))
 
     with pytest.raises(MakemkvScanFailed) as excinfo:
-        await scan_disc("/dev/sr0")
+        await scan_disc("/dev/sr0", 120)
 
     assert excinfo.value.disc_type is DiscType.BLURAY
     assert seen == ["/dev/sr0"]
@@ -320,6 +320,41 @@ async def test_failure_with_no_cinfo_and_no_layout_has_no_disc_type(monkeypatch:
     _spawn(monkeypatch, _Proc(_Stream(b""), returncode=1))
 
     with pytest.raises(MakemkvScanFailed) as excinfo:
-        await scan_disc("/dev/sr0")
+        await scan_disc("/dev/sr0", 120)
 
     assert excinfo.value.disc_type is None
+
+
+async def test_info_run_lists_titles_down_to_the_scan_minimum(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The scan passes MakeMKV's 120 s minimum explicitly, the same floor the rip uses."""
+    captured: list[tuple[Any, ...]] = []
+
+    async def _factory(*args: Any, **_kw: Any) -> _Proc:
+        captured.append(args)
+        return _Proc(_Stream(b""))
+
+    monkeypatch.setattr(makemkv_mod.asyncio, "create_subprocess_exec", _factory)
+
+    await makemkv_mod._run_info("/dev/sr0", 120)
+
+    assert "--minlength=120" in captured[0]
+
+
+async def test_info_run_lists_titles_down_to_the_configured_minimum(monkeypatch: pytest.MonkeyPatch) -> None:
+    captured: list[tuple[Any, ...]] = []
+
+    async def _factory(*args: Any, **_kw: Any) -> _Proc:
+        captured.append(args)
+        return _Proc(_Stream(b""))
+
+    monkeypatch.setattr(makemkv_mod.asyncio, "create_subprocess_exec", _factory)
+
+    await makemkv_mod._run_info("/dev/sr0", 60)
+
+    assert "--minlength=60" in captured[0]
+
+
+async def test_scan_records_the_minimum_it_listed_titles_with(monkeypatch: pytest.MonkeyPatch) -> None:
+    _run_ok(monkeypatch, b'CINFO:1,6206,"DVD disc"\n', DiscProbe(crc64=None))
+    result = await scan_disc("/dev/sr0", 45)
+    assert result.min_title_length_seconds == 45

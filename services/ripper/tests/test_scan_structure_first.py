@@ -26,7 +26,7 @@ class _Calls:
 def calls(monkeypatch: pytest.MonkeyPatch) -> _Calls:
     calls = _Calls()
 
-    async def _makemkv(device: str) -> ScanResult:
+    async def _makemkv(device: str, _min_title_length_seconds: int) -> ScanResult:
         calls.makemkv.append(device)
         return ScanResult(
             disc_type=DiscType.DVD, volume_label="MKV_LABEL", titles=[ScanTitle(index=0, duration_seconds=3600)]
@@ -63,7 +63,7 @@ async def test_a_blu_ray_with_a_structure_is_scanned_without_makemkv(
 ) -> None:
     seen = _structure(monkeypatch, BdStructure([PLAYLIST], [CLIP]))
 
-    result = await dispatcher_mod.scan("/dev/sr0")
+    result = await dispatcher_mod.scan("/dev/sr0", 120)
 
     assert seen == ["/dev/sr0"]
     assert calls.makemkv == []
@@ -81,7 +81,7 @@ async def test_a_disc_without_a_structure_is_scanned_by_makemkv_as_before(
 ) -> None:
     _structure(monkeypatch, BdStructure())
 
-    result = await dispatcher_mod.scan("/dev/sr0")
+    result = await dispatcher_mod.scan("/dev/sr0", 120)
 
     assert calls.makemkv == ["/dev/sr0"]
     assert result.disc_type == DiscType.DVD and result.volume_label == "MKV_LABEL"
@@ -93,12 +93,12 @@ async def test_a_blu_ray_whose_structure_read_failed_falls_back_and_says_so(
 ) -> None:
     _structure(monkeypatch, BdStructure())
 
-    async def _bd(device: str) -> ScanResult:
+    async def _bd(device: str, _min_title_length_seconds: int) -> ScanResult:
         return ScanResult(disc_type=DiscType.BLURAY, titles=[ScanTitle(index=0, duration_seconds=7200)])
 
     monkeypatch.setattr(dispatcher_mod, "scan_makemkv", _bd)
     with caplog.at_level(logging.INFO, logger="arm_ripper.scan"):
-        result = await dispatcher_mod.scan("/dev/sr0")
+        result = await dispatcher_mod.scan("/dev/sr0", 120)
 
     assert result.titles and result.playlists == []
     assert "structure_source=makemkv" in caplog.text

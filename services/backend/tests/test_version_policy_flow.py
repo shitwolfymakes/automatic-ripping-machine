@@ -397,7 +397,7 @@ def test_rip_start_without_review_tracks_selects_by_the_jobs_policy(
 ) -> None:
     from arm_backend.routers import ripper as ripper_router
 
-    real_select = ripper_router.select_tracks
+    real_select = ripper_router.select_rip_tracks
 
     def _select(*args: Any, **kwargs: Any) -> list[Track]:
         tracks = real_select(*args, **kwargs)
@@ -405,7 +405,7 @@ def test_rip_start_without_review_tracks_selects_by_the_jobs_policy(
             track.id, track.status, track.attempts = f"trk_{n}", TrackStatus.QUEUED, 0
         return tracks
 
-    monkeypatch.setattr(ripper_router, "select_tracks", _select)
+    monkeypatch.setattr(ripper_router, "select_rip_tracks", _select)
     db = FakeSession()
     job = _structure_job(br3d_structure_scan(), status=JobStatus.IDENTIFIED, with_tracks=False, db=db)
     job.tick_one_version = one

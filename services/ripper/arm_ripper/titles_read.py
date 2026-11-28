@@ -28,12 +28,13 @@ class TitlesRead:
         self._backend = backend
         self._tasks: dict[str, asyncio.Task[bool]] = {}
 
-    def start(self, job_id: str, device_path: str) -> None:
-        """Begin reading MakeMKV's titles for the job; a read still running for it is replaced."""
+    def start(self, job_id: str, device_path: str, min_title_length_seconds: int) -> None:
+        """Begin reading MakeMKV's titles for the job, down to the minimum its scan recorded; a read still running
+        for it is replaced."""
         previous = self._tasks.get(job_id)
         if previous is not None:
             previous.cancel()
-        self._tasks[job_id] = asyncio.create_task(self._read(job_id, device_path))
+        self._tasks[job_id] = asyncio.create_task(self._read(job_id, device_path, min_title_length_seconds))
 
     async def wait(self, job_id: str) -> bool:
         """True when MakeMKV's titles are posted or no read is in flight for the job; False when the read failed (its
@@ -50,8 +51,8 @@ class TitlesRead:
         with contextlib.suppress(asyncio.CancelledError):
             await task
 
-    async def _read(self, job_id: str, device_path: str) -> bool:
-        report = await self._report(device_path)
+    async def _read(self, job_id: str, device_path: str, min_title_length_seconds: int) -> bool:
+        report = await self._report(device_path, min_title_length_seconds)
         try:
             await self._backend.post_titles(job_id, report)
         except httpx.HTTPStatusError as e:
@@ -60,9 +61,9 @@ class TitlesRead:
         return report.failure is None
 
     @staticmethod
-    async def _report(device_path: str) -> TitlesReport:
+    async def _report(device_path: str, min_title_length_seconds: int) -> TitlesReport:
         try:
-            titles = await scan_titles(device_path)
+            titles = await scan_titles(device_path, min_title_length_seconds)
         except MakemkvScanFailed as e:
             logger.warning("makemkv title read failed device=%s reason=%s err=%s", device_path, e.reason.value, e)
             return TitlesReport(failure=ScanFailure(reason=e.reason, detail=e.detail, output_tail=list(e.tail)))

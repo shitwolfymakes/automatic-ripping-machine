@@ -275,7 +275,14 @@ def test_scan_failed_is_a_scan_error_with_its_fields() -> None:
 
 
 def test_info_command_requests_progress_on_stdout() -> None:
-    assert _info_command("/dev/sr0")[:5] == ["makemkvcon", "-r", "--cache=1", "--progress=-stdout", "info"]
+    assert _info_command("/dev/sr0", 120)[:6] == [
+        "makemkvcon",
+        "-r",
+        "--cache=1",
+        "--progress=-stdout",
+        "--minlength=120",
+        "info",
+    ]
 
 
 # ---- _pump / _next_chunk / _feed / _watch ---------------------------------------------------
@@ -530,7 +537,7 @@ async def test_run_info_completes_without_killing_a_process_that_exits_on_its_ow
     proc = _Proc(_Lines([b'CINFO:1,0,"DVD"\n']), _Lines([b"warn\n"]), returncode=0)
     _spawn(monkeypatch, proc)
 
-    run = await _run_info("/dev/sr0")
+    run = await _run_info("/dev/sr0", 120)
 
     assert (run.returncode, proc.kills) == (0, 0)
     assert run.watch.stdout == ['CINFO:1,0,"DVD"']
@@ -544,7 +551,7 @@ async def test_run_info_binary_missing(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(mk.asyncio, "create_subprocess_exec", _boom)
 
     with pytest.raises(mk.ScanError, match="not found"):
-        await _run_info("/dev/sr0")
+        await _run_info("/dev/sr0", 120)
 
 
 async def test_run_info_kills_on_idle_timeout_using_the_injected_clock(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -553,7 +560,7 @@ async def test_run_info_kills_on_idle_timeout_using_the_injected_clock(monkeypat
     clock = _FakeClock()
     calls = iter([0.0, 0.0, 10_000.0])  # started_at, last_line_at, then far past the idle window
 
-    run = await _run_info("/dev/sr0", lambda: next(calls, clock()))
+    run = await _run_info("/dev/sr0", 120, lambda: next(calls, clock()))
 
     assert run.watch.timed_out is True
     assert (proc.killed, run.returncode) == (True, -9)
@@ -563,7 +570,7 @@ async def test_run_info_kills_on_cancellation(monkeypatch: pytest.MonkeyPatch) -
     proc = _Proc(_Hang(), _Hang())
     _spawn(monkeypatch, proc)
 
-    task = asyncio.create_task(_run_info("/dev/sr0"))
+    task = asyncio.create_task(_run_info("/dev/sr0", 120))
     await asyncio.sleep(0.01)
     task.cancel()
 
@@ -578,7 +585,7 @@ async def test_run_info_terminal_tcount_zero_kills_after_the_grace(monkeypatch: 
     proc = _Proc(_Lines([b"TCOUNT:0\n", b'CINFO:1,6206,"Blu-ray disc"\n']), _Hang())
     _spawn(monkeypatch, proc)
 
-    run = await _run_info("/dev/sr0")
+    run = await _run_info("/dev/sr0", 120)
 
     assert proc.killed is True
     assert run.watch.stdout == ["TCOUNT:0", 'CINFO:1,6206,"Blu-ray disc"']
@@ -590,7 +597,7 @@ async def test_run_info_complete_output_kills_a_process_that_never_exits(monkeyp
     proc = _Proc(_Lines(_fixture_lines("makemkvcon_uhd_slow_exit.txt")), _Hang())
     _spawn(monkeypatch, proc)
 
-    run = await _run_info("/dev/sr0")
+    run = await _run_info("/dev/sr0", 120)
 
     assert proc.killed is True
     assert (run.watch.scan_complete, run.watch.timed_out) == (True, False)
@@ -605,7 +612,7 @@ async def test_run_info_ignores_a_process_that_is_already_gone_when_killed(monke
     proc = _Gone(_Lines([b"MSG:5021,1\n"]), _Hang())
     _spawn(monkeypatch, proc)
 
-    run = await _run_info("/dev/sr0")
+    run = await _run_info("/dev/sr0", 120)
 
     assert run.watch.expired is True
 
@@ -629,7 +636,7 @@ async def test_scan_disc_key_unknown_raises_with_reason_and_tail(
     _spawn(monkeypatch, _Proc(_Lines(_fixture_lines("makemkvcon_uhd_key_unknown.txt")), returncode=returncode))
 
     with pytest.raises(MakemkvScanFailed) as excinfo:
-        await scan_disc("/dev/sr0")
+        await scan_disc("/dev/sr0", 120)
 
     assert excinfo.value.reason is ScanFailureReason.VOLUME_KEY_UNKNOWN
     assert excinfo.value.tail[-1] == "TCOUNT:0"
@@ -641,7 +648,7 @@ async def test_scan_disc_tcount_zero_without_a_reason_is_the_empty_result(monkey
     monkeypatch.setattr(mk, "probe_disc", _no_probe)
     _spawn(monkeypatch, _Proc(_Lines([b"TCOUNT:0\n", b'CINFO:1,6206,"DVD disc"\n'])))
 
-    result = await scan_disc("/dev/sr0")
+    result = await scan_disc("/dev/sr0", 120)
 
     assert result.titles == []
 
@@ -651,7 +658,7 @@ async def test_scan_disc_ignores_progress_lines_in_a_good_scan(monkeypatch: pyte
     lines = [b"PRGV:1,2,3\n", b'CINFO:2,0,"LBL"\n', b"PRGV:2,2,3\n", b'TINFO:0,9,0,"1:00:00"\n']
     _spawn(monkeypatch, _Proc(_Lines(lines)))
 
-    result = await scan_disc("/dev/sr0")
+    result = await scan_disc("/dev/sr0", 120)
 
     assert (result.volume_label, len(result.titles)) == ("LBL", 1)
 
@@ -664,7 +671,7 @@ async def test_scan_disc_complete_output_with_a_process_that_never_exits_is_a_su
     proc = _Proc(_Lines(_fixture_lines("makemkvcon_uhd_slow_exit.txt")), _Hang())
     _spawn(monkeypatch, proc)
 
-    result = await scan_disc("/dev/sr0")
+    result = await scan_disc("/dev/sr0", 120)
 
     assert proc.killed is True
     assert len(result.titles) == 4
@@ -680,6 +687,6 @@ async def test_scan_disc_operation_completed_without_a_title_count_waits_for_the
     _spawn(monkeypatch, _Proc(_Lines([b"MSG:5011,0,0,ok\n"]), _Hang()))
 
     with pytest.raises(MakemkvScanFailed) as excinfo:
-        await scan_disc("/dev/sr0")
+        await scan_disc("/dev/sr0", 120)
 
     assert excinfo.value.reason is ScanFailureReason.TIMED_OUT

@@ -30,7 +30,7 @@ class _Backend:
 def _scan_titles(monkeypatch: pytest.MonkeyPatch, result: list[ScanTitle] | Exception) -> list[str]:
     devices: list[str] = []
 
-    async def _fake(device_path: str) -> list[ScanTitle]:
+    async def _fake(device_path: str, _min_title_length_seconds: int) -> list[ScanTitle]:
         devices.append(device_path)
         if isinstance(result, Exception):
             raise result
@@ -45,7 +45,7 @@ async def test_the_titles_makemkv_lists_are_posted(monkeypatch: pytest.MonkeyPat
     devices = _scan_titles(monkeypatch, titles)
     backend = _Backend()
     read = TitlesRead(backend)  # type: ignore[arg-type]
-    read.start(JOB, "/dev/sr0")
+    read.start(JOB, "/dev/sr0", 120)
     assert await read.wait(JOB) is True
     assert devices == ["/dev/sr0"]
     assert backend.reports == [(JOB, TitlesReport(titles=titles))]
@@ -56,7 +56,7 @@ async def test_a_failed_read_posts_the_reason(monkeypatch: pytest.MonkeyPatch, e
     _scan_titles(monkeypatch, error)
     backend = _Backend()
     read = TitlesRead(backend)  # type: ignore[arg-type]
-    read.start(JOB, "/dev/sr0")
+    read.start(JOB, "/dev/sr0", 120)
     assert await read.wait(JOB) is False
     failure = ScanFailure(reason=ScanFailureReason.MAKEMKV_ERROR, detail=str(error))
     assert backend.reports == [(JOB, TitlesReport(failure=failure))]
@@ -66,7 +66,7 @@ async def test_a_makemkv_scan_failure_posts_its_typed_reason_and_output(monkeypa
     _scan_titles(monkeypatch, MakemkvScanFailed(ScanFailureReason.VOLUME_KEY_UNKNOWN, "no key", ('MSG:3303,0,1,"x"',)))
     backend = _Backend()
     read = TitlesRead(backend)  # type: ignore[arg-type]
-    read.start(JOB, "/dev/sr0")
+    read.start(JOB, "/dev/sr0", 120)
     assert await read.wait(JOB) is False
     failure = ScanFailure(
         reason=ScanFailureReason.VOLUME_KEY_UNKNOWN, detail="no key", output_tail=['MSG:3303,0,1,"x"']
@@ -78,7 +78,7 @@ async def test_a_disc_makemkv_lists_nothing_on_is_a_failure(monkeypatch: pytest.
     _scan_titles(monkeypatch, [])
     backend = _Backend()
     read = TitlesRead(backend)  # type: ignore[arg-type]
-    read.start(JOB, "/dev/sr0")
+    read.start(JOB, "/dev/sr0", 120)
     assert await read.wait(JOB) is False
     failure = ScanFailure(reason=ScanFailureReason.MAKEMKV_ERROR, detail=NO_TITLES_FAILURE)
     assert backend.reports == [(JOB, TitlesReport(failure=failure))]
@@ -92,7 +92,7 @@ async def test_a_post_the_backend_rejects_is_a_failed_read(
     rejected = httpx.HTTPStatusError("409", request=request, response=httpx.Response(409, request=request))
     read = TitlesRead(_Backend(rejected))  # type: ignore[arg-type]
     with caplog.at_level(logging.WARNING):
-        read.start(JOB, "/dev/sr0")
+        read.start(JOB, "/dev/sr0", 120)
         assert await read.wait(JOB) is False
     assert "titles post for job_test rejected" in caplog.text
 
@@ -104,7 +104,7 @@ async def test_waiting_with_no_read_in_flight_is_a_no_op() -> None:
 async def test_the_answer_is_kept_for_a_second_wait(monkeypatch: pytest.MonkeyPatch) -> None:
     _scan_titles(monkeypatch, ScanError("no key"))
     read = TitlesRead(_Backend())  # type: ignore[arg-type]
-    read.start(JOB, "/dev/sr0")
+    read.start(JOB, "/dev/sr0", 120)
     assert await read.wait(JOB) is False
     assert await read.wait(JOB) is False
 
@@ -113,7 +113,7 @@ async def test_start_replaces_a_read_still_running(monkeypatch: pytest.MonkeyPat
     release = asyncio.Event()
     calls: list[int] = []
 
-    async def _slow(_device: str) -> list[ScanTitle]:
+    async def _slow(_device: str, _min_title_length_seconds: int) -> list[ScanTitle]:
         calls.append(len(calls))
         await release.wait()
         return [ScanTitle(index=0, duration_seconds=7200)]
@@ -121,10 +121,10 @@ async def test_start_replaces_a_read_still_running(monkeypatch: pytest.MonkeyPat
     monkeypatch.setattr(titles_read_module, "scan_titles", _slow)
     backend = _Backend()
     read = TitlesRead(backend)  # type: ignore[arg-type]
-    read.start(JOB, "/dev/sr0")
+    read.start(JOB, "/dev/sr0", 120)
     await asyncio.sleep(0)
     first = read._tasks[JOB]
-    read.start(JOB, "/dev/sr0")
+    read.start(JOB, "/dev/sr0", 120)
     await asyncio.sleep(0)
     assert first.cancelled() or first.cancelling()
     release.set()
@@ -136,7 +136,7 @@ async def test_cancel_stops_a_running_read(monkeypatch: pytest.MonkeyPatch) -> N
     started = asyncio.Event()
     cancelled: list[bool] = []
 
-    async def _hang(_device: str) -> list[ScanTitle]:
+    async def _hang(_device: str, _min_title_length_seconds: int) -> list[ScanTitle]:
         started.set()
         try:
             await asyncio.Event().wait()
@@ -147,7 +147,7 @@ async def test_cancel_stops_a_running_read(monkeypatch: pytest.MonkeyPatch) -> N
 
     monkeypatch.setattr(titles_read_module, "scan_titles", _hang)
     read = TitlesRead(_Backend())  # type: ignore[arg-type]
-    read.start(JOB, "/dev/sr0")
+    read.start(JOB, "/dev/sr0", 120)
     await started.wait()
     await read.cancel(JOB)
     assert cancelled == [True]
@@ -161,13 +161,13 @@ async def test_cancel_with_nothing_running_is_a_no_op() -> None:
 async def test_wait_raises_when_the_waiting_task_is_cancelled(monkeypatch: pytest.MonkeyPatch) -> None:
     release = asyncio.Event()
 
-    async def _hang(_device: str) -> list[ScanTitle]:
+    async def _hang(_device: str, _min_title_length_seconds: int) -> list[ScanTitle]:
         await release.wait()
         return [ScanTitle(index=0, duration_seconds=7200)]
 
     monkeypatch.setattr(titles_read_module, "scan_titles", _hang)
     read = TitlesRead(_Backend())  # type: ignore[arg-type]
-    read.start(JOB, "/dev/sr0")
+    read.start(JOB, "/dev/sr0", 120)
     waiter: asyncio.Task[Any] = asyncio.create_task(read.wait(JOB))
     await asyncio.sleep(0)
     waiter.cancel()

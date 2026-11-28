@@ -497,10 +497,8 @@ class RipStartResponse(BaseModel):
     rip_preset_id: str
     tracks: list[TrackView]
     # Per-rip `--minlength` override resolved from the Session's
-    # `overrides_json["min_length_seconds"]`. None means "use the
-    # ripper's host-side baseline" (`ARM_MIN_LENGTH_SECONDS`, default
-    # 600). Surfaced here so the ripper doesn't have to read Session
-    # state itself.
+    # `overrides_json["min_length_seconds"]`. None means no override.
+    # Surfaced here so the ripper doesn't have to read Session state itself.
     min_length_seconds: int | None = None
     # How this rip reads the disc, on a fresh rip and on every resume (after a
     # restart, or when the drive drops off the bus and comes back). From backend settings.
@@ -516,6 +514,10 @@ class RipStartResponse(BaseModel):
     # transcode). MakeMKV's default selection drops that view, so the ripper adds it for these titles; every other
     # title rips under MakeMKV's own default.
     keep_3d_refs: list[str] = Field(default_factory=list)
+    # The minimum title length the disc's scan listed titles with (the
+    # configured setting for an older scan). The rip never goes below it, so
+    # it writes no title the scan did not list. None from an older backend.
+    min_title_length_seconds: int | None = None
 
 
 # The one definition of apply/fan-out skip reasons — the backend engine

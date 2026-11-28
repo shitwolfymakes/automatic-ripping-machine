@@ -315,7 +315,7 @@ def test_resume_answers_the_same_title_numbers() -> None:
 def test_rip_start_without_review_tracks_selects_from_the_structure_and_skips_unrippable_refs(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    real_select = ripper_router.select_tracks
+    real_select = ripper_router.select_rip_tracks
 
     def _select_with_db_defaults(*args: Any, **kwargs: Any) -> list[Track]:
         tracks = real_select(*args, **kwargs)
@@ -323,7 +323,7 @@ def test_rip_start_without_review_tracks_selects_from_the_structure_and_skips_un
             track.id, track.status, track.attempts = f"trk_{n}", TrackStatus.QUEUED, 0
         return tracks
 
-    monkeypatch.setattr(ripper_router, "select_tracks", _select_with_db_defaults)
+    monkeypatch.setattr(ripper_router, "select_rip_tracks", _select_with_db_defaults)
     db = FakeSession()
     _structure_job(br3d_structure_scan(), status=JobStatus.IDENTIFIED, with_tracks=False, db=db)
     with TestClient(_make_app(db)) as client:

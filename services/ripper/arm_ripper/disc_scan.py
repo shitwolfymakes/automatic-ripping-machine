@@ -24,12 +24,12 @@ SCAN_NOT_READY_MAX_ATTEMPTS = 5
 SCAN_NOT_READY_BACKOFFS = (2.0, 4.0, 8.0, 12.0)  # between attempts 1→2, 2→3, 3→4, 4→5
 
 
-async def scan_or_none(device_path: str) -> ScanResult | None:
-    """Scan the disc. A MakeMKV scan failure comes back as a result carrying `failure`, so the pipeline can fail a
-    job with the reason; None after a log line when the scan fails otherwise or the drive goes absent mid-scan
-    (which ends the pipeline). Any other OSError propagates."""
+async def scan_or_none(device_path: str, min_title_length_seconds: int) -> ScanResult | None:
+    """Scan the disc, listing titles down to `min_title_length_seconds`. A MakeMKV scan failure comes back as a
+    result carrying `failure`, so the pipeline can fail a job with the reason; None after a log line when the scan
+    fails otherwise or the drive goes absent mid-scan (which ends the pipeline). Any other OSError propagates."""
     try:
-        return await _scan_with_ready_retry(device_path)
+        return await _scan_with_ready_retry(device_path, min_title_length_seconds)
     except MakemkvScanFailed as e:
         return _failed_scan_result(e)
     except ScanError as e:
@@ -64,7 +64,7 @@ def _worth_rescanning(result: ScanResult) -> bool:
     return result.disc_type in _RESCANNABLE_DISC_TYPES
 
 
-async def _scan_with_ready_retry(device_path: str) -> ScanResult:
+async def _scan_with_ready_retry(device_path: str, min_title_length_seconds: int) -> ScanResult:
     """Scan the disc, retrying when a DISC_OK drive yields zero titles on a video disc.
 
     A `DISC_OK` drive that scans to zero titles is almost certainly not
@@ -80,7 +80,7 @@ async def _scan_with_ready_retry(device_path: str) -> ScanResult:
     """
     last: ScanResult | None = None
     for attempt in range(1, SCAN_NOT_READY_MAX_ATTEMPTS + 1):
-        result = await scan_disc(device_path)
+        result = await scan_disc(device_path, min_title_length_seconds)
         last = result
         if not _worth_rescanning(result):
             return result

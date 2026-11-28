@@ -37,7 +37,7 @@ class _Calls:
         self.cd_calls = 0
         self.data_calls = 0
 
-        async def _makemkv(_p: str) -> ScanResult:
+        async def _makemkv(_p: str, _min_title_length_seconds: int) -> ScanResult:
             if isinstance(makemkv, Exception):
                 raise makemkv
             return makemkv
@@ -61,7 +61,7 @@ async def test_undecryptable_disc_is_not_a_data_disc(monkeypatch: pytest.MonkeyP
     calls = _Calls(monkeypatch, makemkv=_KEY_UNKNOWN, data=ScanResult(disc_type=DiscType.DATA, volume_label="UDF"))
 
     with pytest.raises(MakemkvScanFailed) as excinfo:
-        await dispatcher.scan("/dev/sr0")
+        await dispatcher.scan("/dev/sr0", 120)
 
     assert excinfo.value is _KEY_UNKNOWN
     assert calls.cd_calls == 1
@@ -72,7 +72,7 @@ async def test_makemkv_failure_still_tries_cd_and_returns_it(monkeypatch: pytest
     cd = ScanResult(disc_type=DiscType.CD, musicbrainz_disc_id="abc")
     calls = _Calls(monkeypatch, makemkv=_KEY_UNKNOWN, cd=cd)
 
-    result = await dispatcher.scan("/dev/sr0")
+    result = await dispatcher.scan("/dev/sr0", 120)
 
     assert result is cd
     assert calls.data_calls == 0
@@ -82,7 +82,7 @@ async def test_titles_return_without_fallbacks(monkeypatch: pytest.MonkeyPatch) 
     found = ScanResult(disc_type=DiscType.DVD, volume_label="MOVIE", titles=_TITLES)
     calls = _Calls(monkeypatch, makemkv=found)
 
-    assert await dispatcher.scan("/dev/sr0") is found
+    assert await dispatcher.scan("/dev/sr0", 120) is found
     assert (calls.cd_calls, calls.data_calls) == (0, 0)
 
 
@@ -90,7 +90,7 @@ async def test_makemkv_ran_with_no_titles_and_a_label_is_data(monkeypatch: pytes
     data = ScanResult(disc_type=DiscType.DATA, volume_label="BACKUP")
     _Calls(monkeypatch, makemkv=ScanResult(disc_type=DiscType.UNKNOWN), data=data)
 
-    assert await dispatcher.scan("/dev/sr0") is data
+    assert await dispatcher.scan("/dev/sr0", 120) is data
 
 
 async def test_makemkv_ran_with_no_titles_and_no_label_is_unknown(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -100,7 +100,7 @@ async def test_makemkv_ran_with_no_titles_and_no_label_is_unknown(monkeypatch: p
         data=ScanResult(disc_type=DiscType.UNKNOWN),
     )
 
-    result = await dispatcher.scan("/dev/sr0")
+    result = await dispatcher.scan("/dev/sr0", 120)
 
     assert result.disc_type is DiscType.UNKNOWN
     assert result.volume_label == "MKV_LABEL"
@@ -110,4 +110,4 @@ async def test_makemkv_that_cannot_run_still_falls_back_to_data(monkeypatch: pyt
     data = ScanResult(disc_type=DiscType.DATA, volume_label="BACKUP")
     _Calls(monkeypatch, makemkv=ScanError("makemkvcon binary not found on PATH"), data=data)
 
-    assert await dispatcher.scan("/dev/sr0") is data
+    assert await dispatcher.scan("/dev/sr0", 120) is data

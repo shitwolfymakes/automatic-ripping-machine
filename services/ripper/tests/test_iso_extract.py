@@ -141,7 +141,7 @@ def _patch_scan(
     is extracted, so the source URL is `file:`) answers `rescan`."""
     seen: dict[str, list[str]] = {"urls": [], "discarded": [], "discard_threads": []}
 
-    async def _makemkv(device_path: str) -> ScanResult:
+    async def _makemkv(device_path: str, _min_title_length_seconds: int) -> ScanResult:
         url = makemkv_source_url(device_path)
         seen["urls"].append(url)
         if url.startswith("iso:") or rescan is None:
@@ -184,7 +184,7 @@ async def test_scan_rescues_an_unreadable_image_through_the_extracted_folder(
     rescan = ScanResult(disc_type=DiscType.BLURAY, volume_label="m", titles=[_TITLE])
     seen = _patch_scan(monkeypatch, rescan=rescan, extracted=folder)
 
-    result = await scan_dispatcher.scan(str(iso))
+    result = await scan_dispatcher.scan(str(iso), 120)
 
     assert len(result.titles) == 1
     assert result.disc_type == DiscType.BLURAY
@@ -201,7 +201,7 @@ async def test_scan_discards_an_extraction_that_still_has_no_titles(
     iso.write_bytes(b"\0")
     seen = _patch_scan(monkeypatch, rescan=ScanResult(disc_type=DiscType.BLURAY, titles=[]), extracted=tmp_path / "m")
 
-    result = await scan_dispatcher.scan(str(iso))
+    result = await scan_dispatcher.scan(str(iso), 120)
 
     assert result.titles == []
     assert result.disc_type == DiscType.BLURAY  # falls through to scan_data, as before
@@ -219,7 +219,7 @@ async def test_scan_never_extracts_a_device_node(monkeypatch: pytest.MonkeyPatch
 
     monkeypatch.setattr(scan_dispatcher.iso_extract, "extract", _boom)
 
-    await scan_dispatcher.scan("/dev/sr0")
+    await scan_dispatcher.scan("/dev/sr0", 120)
 
     assert seen["urls"] == ["dev:/dev/sr0"]
 

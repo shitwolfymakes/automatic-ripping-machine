@@ -375,6 +375,7 @@ def select_tracks_for_review(
     rip_preset: RipPreset,
     *,
     preferred: frozenset[str] = frozenset(),
+    rippable: frozenset[str] | None = None,
     tick_one_version: bool = True,
     prefer_stereo_3d: bool | None = None,
 ) -> list[Track]:
@@ -394,12 +395,47 @@ def select_tracks_for_review(
         return whole
 
     kept_refs = preset_ticks(
-        scan, rip_preset, preferred=preferred, tick_one_version=tick_one_version, prefer_stereo_3d=prefer_stereo_3d
+        scan,
+        rip_preset,
+        preferred=preferred,
+        rippable=rippable,
+        tick_one_version=tick_one_version,
+        prefer_stereo_3d=prefer_stereo_3d,
     )
     rows = _title_tracks(job_id, scan, preferred, prefer_stereo_3d)
     for track in rows:
         track.excluded = track.source_ref not in (kept_refs or frozenset())
     return rows
+
+
+def select_rip_tracks(
+    job_id: str,
+    scan: ScanResult,
+    rip_preset: RipPreset,
+    *,
+    preferred: frozenset[str] = frozenset(),
+    rippable: frozenset[str] | None = None,
+    tick_one_version: bool = True,
+    prefer_stereo_3d: bool | None = None,
+) -> list[Track]:
+    """The tracks rip-start stores for a disc no review has persisted yet.
+
+    A DVD or Blu-ray stores every scanned title, the preset's rejects marked
+    `excluded`: the ripper's one `makemkvcon mkv … all` writes a file for each
+    title over the minimum length and pairs those files with the tracks by
+    position, so it needs every title to credit each file correctly. A CD
+    stores only the selection, because abcde rips exactly the tracks it is given.
+    """
+    select = select_tracks_for_review if scan.disc_type in (DiscType.DVD, DiscType.BLURAY) else select_tracks
+    return select(
+        job_id,
+        scan,
+        rip_preset,
+        preferred=preferred,
+        rippable=rippable,
+        tick_one_version=tick_one_version,
+        prefer_stereo_3d=prefer_stereo_3d,
+    )
 
 
 def _title_tracks(
