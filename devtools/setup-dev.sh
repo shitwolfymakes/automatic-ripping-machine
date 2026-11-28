@@ -125,10 +125,22 @@ ARM_HINT_IMAGES_READY="Images are built"
 ARM_HINT_LOGS_CMD="docker compose logs"
 ARM_HINT_RIPPER_ONLY="--ripper-only"
 ARM_UDEV_MANAGED_BY="devtools/setup-dev.sh"
-for lib in common detect certs udev lifecycle; do
+for lib in common detect certs udev lifecycle selinux; do
     # shellcheck source=/dev/null
     source "${ROOT_DIR}/deploy/lib/${lib}.sh"
 done
+
+# SELinux overlay (deploy/lib/selinux.sh): generated per host and gitignored,
+# like docker-compose.yml. It joins COMPOSE_FILE in .env only on a host whose
+# Docker labels containers. Once .env names it, it must exist for any compose
+# command to run, `down` included.
+ENV_FILE="${ROOT_DIR}/.env"
+SELINUX_OVERLAY_NAME="docker-compose.selinux.yml"
+SELINUX_OVERLAY="${ROOT_DIR}/${SELINUX_OVERLAY_NAME}"
+
+# When .env already names the overlay, it must exist before any compose command
+# runs (`down` included), and the list follows docker-compose.override.yml.
+selinux_dev_prepare "${ROOT_DIR}" "${SELINUX_OVERLAY_NAME}"
 
 if [[ "${ACTION}" == "down" ]]; then
     require docker "Install docker first."
@@ -238,7 +250,6 @@ generate_compose() {
 
 generate_compose
 
-ENV_FILE="${ROOT_DIR}/.env"
 if [[ -f "${ENV_FILE}" ]]; then
     echo "==> ${ENV_FILE} exists — preserving secrets, refreshing ARM_GPUS"
 else
@@ -307,6 +318,18 @@ elif grep -q '^#ARM_TRANSCODE_CAPABLE=' "${ENV_FILE}"; then
 else
     printf 'ARM_TRANSCODE_CAPABLE=%s\n' "${ARM_TRANSCODE_CAPABLE_VALUE}" >> "${ENV_FILE}"
 fi
+
+# SELinux: on a host whose Docker labels containers, label the bind mounts
+# under ./arm and run the backend (it mounts the Docker socket) unlabelled.
+# Compose reads COMPOSE_FILE from .env on every call, so the overlay is added to
+# that list and applies to manual `docker compose` commands too. With no
+# COMPOSE_FILE yet, the list starts from what compose loads by default; the
+# override stays in step with the list on every run (selinux_sync_compose_files).
+apply_selinux_labels() {
+    selinux_apply "${SELINUX_OVERLAY}" "devtools/setup-dev.sh" \
+        selinux_sync_compose_files add "${ROOT_DIR}" "${SELINUX_OVERLAY_NAME}"
+}
+apply_selinux_labels
 
 # The transcode images are built by `up`'s `compose build` like every other
 # service (the arm-transcode* services have deploy.replicas:0: built, never
