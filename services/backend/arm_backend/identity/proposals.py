@@ -247,11 +247,26 @@ def record_preset(job: Job, tracks: Iterable[Track], *, now: datetime) -> None:
     _store(job, claims)
 
 
+def _without_selected(source: SourceClaims, refs: set[str]) -> SourceClaims:
+    """`source` with the `selected` proposal removed from the claims it makes for `refs`."""
+    tracks = dict(source.tracks)
+    for ref in refs.intersection(tracks):
+        kept = tracks[ref].model_dump(exclude_unset=True)
+        kept.pop("selected", None)
+        tracks[ref] = TrackClaim(**kept)
+    source.tracks = tracks
+    return source
+
+
 def record_preset_drop(job: Job, refs: Iterable[str], *, now: datetime) -> None:
-    """Drop `refs` through the preset's lowest-tier `excluded` proposal: titles MakeMKV cannot rip."""
+    """Drop `refs` (titles MakeMKV cannot rip) through the preset's `excluded` proposal. No other source may keep
+    them ticked, so the `selected` proposals of every source but the operator's are withdrawn for these refs; the
+    caller reverts the operator's own ticks."""
+    dropped = set(refs)
     claims = claims_of(job)
-    preset = claims.sources.get(PRESET) or SourceClaims()
-    preset.tracks = {**preset.tracks, **{ref: TrackClaim(selected=False) for ref in refs}}
+    sources = {sid: src if sid == MANUAL else _without_selected(src, dropped) for sid, src in claims.sources.items()}
+    preset = sources.get(PRESET) or SourceClaims()
+    preset.tracks = {**preset.tracks, **{ref: TrackClaim(selected=False) for ref in dropped}}
     preset.run_at = now
-    claims.sources = {**claims.sources, PRESET: preset}
+    claims.sources = {**sources, PRESET: preset}
     _store(job, claims)

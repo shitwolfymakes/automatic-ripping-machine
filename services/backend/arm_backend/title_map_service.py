@@ -21,15 +21,12 @@ from arm_backend.identity.pipeline import ResolveOutcome, resolve_job
 from arm_backend.identity.proposals import record_preset_drop, revert_manual_track
 from arm_backend.ws import WSHub
 from arm_common import Job
-from arm_common.disc_titles import is_structure_scan, scan_candidates
+from arm_common.disc_titles import MAKEMKV_FAILURE_KEY, is_structure_scan, scan_candidates
 from arm_common.models import Track
 from arm_common.schemas import ScanResult, ScanTitle, TitlesReport
 from arm_common.title_map import TitleMap, map_titles
 
 logger = logging.getLogger("arm_backend.title_map_service")
-
-# `Job.metadata_json` key: why MakeMKV could not read a disc whose card is already up. Present means Start is off.
-MAKEMKV_FAILURE_KEY = "makemkv_failure"
 
 TITLES_PENDING = "titles_pending: MakeMKV has not finished reading the disc"
 
