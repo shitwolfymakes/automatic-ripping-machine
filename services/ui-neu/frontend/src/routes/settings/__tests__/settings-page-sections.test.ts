@@ -89,15 +89,25 @@ const mockSchema = {
 			fields: [field('auto_rip_on_insert', 'Ripping', { label: 'Auto-rip on insert', type: 'bool' })]
 		},
 		{
-			name: 'Transcoding',
+			name: 'Defaults',
 			fields: [
-				field('transcode_enabled', 'Transcoding', { label: 'Enable transcoding', type: 'bool' }),
-				field('auto_transcode_on_idle', 'Transcoding', { label: 'Auto-transcode on idle', type: 'bool' })
+				field('auto_transcode_on_idle', 'Defaults', {
+					label: 'Apply these defaults automatically after each rip',
+					type: 'bool'
+				})
 			]
 		},
 		{
+			name: 'Transcoding',
+			fields: [field('transcode_enabled', 'Transcoding', { label: 'Enable transcoding', type: 'bool' })]
+		},
+		{
 			name: 'Notifications',
-			fields: [field('notifications_enabled', 'Notifications', { label: 'Enable notifications', type: 'bool' })]
+			fields: [
+				field('notifications_enabled', 'Notifications', { label: 'Enable notifications', type: 'bool' }),
+				// A schema field the Notifications tab has no control for.
+				field('notifications_unrendered', 'Notifications', { label: 'Unrendered', type: 'bool' })
+			]
 		},
 		{
 			name: 'System',
@@ -524,6 +534,14 @@ describe('Settings page sections', () => {
 			expect(el).not.toHaveClass('settings-field-highlight');
 		});
 
+		it('opens the Sessions tab on its Defaults view for the auto-apply field, even from an old Transcoding link', async () => {
+			window.location.hash = '#transcoding/auto_transcode_on_idle';
+			renderComponent(SettingsPage);
+			await waitFor(() => expect(screen.getByRole('switch', { name: /apply these defaults/i })).toHaveFocus());
+			expect(screen.getByRole('tab', { name: 'Defaults' })).toHaveAttribute('aria-selected', 'true');
+			expect(screen.getByTestId('setting-auto_transcode_on_idle')).toHaveClass('settings-field-highlight');
+		});
+
 		it('decodes a URL-encoded field key', async () => {
 			window.location.hash = '#Keys/tmdb%5Fapi%5Fkey';
 			renderComponent(SettingsPage);
@@ -550,8 +568,14 @@ describe('Settings page sections', () => {
 			expect(Element.prototype.scrollIntoView).not.toHaveBeenCalled();
 		});
 
+		it('focuses the notifications switch for a link to it', async () => {
+			window.location.hash = '#notifications/notifications_enabled';
+			renderComponent(SettingsPage);
+			await waitFor(() => expect(screen.getByRole('switch', { name: 'Enable notifications' })).toHaveFocus());
+		});
+
 		it('a field that never renders lands on its tab once and is not pulled back by a later tab click', async () => {
-			window.location.hash = '#Keys/notifications_enabled';
+			window.location.hash = '#Keys/notifications_unrendered';
 			await renderReady();
 			await waitFor(() => expect(tab('Notifications')).toHaveAttribute('aria-selected', 'true'));
 			expect(Element.prototype.scrollIntoView).not.toHaveBeenCalled();

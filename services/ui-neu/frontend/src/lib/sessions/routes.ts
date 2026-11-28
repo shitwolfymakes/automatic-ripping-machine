@@ -1,4 +1,4 @@
-// Settings > Session Routing's grid: its media and disc rows, and the rules
+// Settings > Sessions > Defaults' grid: its media and disc rows, and the rules
 // that pick a row's route and the sessions it may offer.
 import type { DiscType, MediaType, SessionRouteView, SessionView } from '$lib/types/api.gen';
 import { humanizeMediaType } from '$lib/sessions/preset-labels';
