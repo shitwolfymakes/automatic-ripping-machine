@@ -20,6 +20,7 @@ import arm_ripper.resolution_wait as resolution_wait_module
 import arm_ripper.makemkv_prep as makemkv_prep_module
 import arm_ripper.titles_read as titles_read_module
 from arm_common import MediaType, DiscType, Job, JobStatus
+from arm_common.schemas.job_metadata import JobMetadata
 from arm_common.schemas import (
     BdPlaylist,
     JobView,
@@ -2046,3 +2047,54 @@ async def test_a_pipeline_that_ends_without_ripping_stops_the_title_read(stub_st
 
     assert controller._titles._tasks == {}
     assert client.titles_reports == []
+
+
+# --- a re-adopted structure-scan job whose title read was lost with the old process ---
+
+
+def _readopted(status: JobStatus, scan: ScanResult | None, **extra: object) -> JobView:
+    meta: dict = dict(extra)
+    if scan is not None:
+        meta["scan_result"] = scan.model_dump(mode="json")
+    return _view(status).model_copy(update={"metadata_json": JobMetadata.model_validate(meta)})
+
+
+def _spy_titles_start(controller: JobController) -> list[tuple[str, str]]:
+    started: list[tuple[str, str]] = []
+    controller._titles.start = lambda job_id, device: started.append((job_id, device))  # type: ignore[method-assign]
+    return started
+
+
+_WITH_TITLES = _structure_scan().model_copy(update={"titles": [ScanTitle(index=0, duration_seconds=7200)]})
+_READOPT_CASES = [
+    pytest.param(_structure_scan(), {}, True, id="structure-scan-without-titles"),
+    pytest.param(_WITH_TITLES, {}, False, id="titles-already-reported"),
+    pytest.param(_structure_scan(), {"makemkv_failure": "no key"}, False, id="makemkv-failed"),
+    pytest.param(ScanResult(disc_type=DiscType.DVD), {}, False, id="dvd"),
+    pytest.param(None, {}, False, id="no-stored-scan"),
+]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(("scan", "extra", "restarts"), _READOPT_CASES)
+async def test_recover_held_job_restarts_a_lost_title_read(scan, extra, restarts):
+    controller = JobController(FakeClient(), "drv_test")
+    _spy_run_rip(controller)
+    _fake_resolution(controller, _view(JobStatus.IDENTIFIED))
+    started = _spy_titles_start(controller)
+
+    await controller.recover_held_job(_readopted(JobStatus.AWAITING_REVIEW, scan, **extra), "/dev/sr0")
+
+    assert started == ([("job_test", "/dev/sr0")] if restarts else [])
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(("scan", "extra", "restarts"), _READOPT_CASES)
+async def test_pickup_restarts_a_lost_title_read(scan, extra, restarts):
+    controller = JobController(FakeClient(), "drv_test")
+    _spy_run_rip(controller)
+    started = _spy_titles_start(controller)
+
+    await controller.pickup(_readopted(JobStatus.AWAITING_REVIEW, scan, **extra), "/dev/sr0")
+
+    assert started == ([("job_test", "/dev/sr0")] if restarts else [])

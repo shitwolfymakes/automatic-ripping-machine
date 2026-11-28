@@ -7,7 +7,7 @@ from typing import Any
 import httpx
 
 from arm_common import DiscType, Job, JobStatus, with_log_context
-from arm_common.disc_titles import is_structure_scan
+from arm_common.disc_titles import awaits_makemkv_titles, is_structure_scan
 from arm_common.schemas import JobView, RipStartResponse, ScanResult, WSEnvelope
 from arm_ripper import raw_dir
 from arm_ripper.backend_client import BackendClient
@@ -156,7 +156,18 @@ class JobController:
         async with self._claim(job.id):
             with with_log_context(job_id=job.id):
                 logger.info("pickup: re-acquiring job %s status=%s", job.id, job.status.value)
-                await self._run_rip(job, device_path)
+                self._readopt_titles_read(job, device_path)
+                try:
+                    await self._run_rip(job, device_path)
+                finally:
+                    await self._titles.cancel(job.id)
+
+    def _readopt_titles_read(self, job: JobView, device_path: str) -> None:
+        """A re-adopted job whose MakeMKV title read died with the previous process (a structure scan with no titles
+        reported and no failure recorded) gets the read again, so Start is not left waiting for a map."""
+        if awaits_makemkv_titles(job.metadata_json):
+            logger.info("re-adopted job_id=%s has no MakeMKV titles yet; reading them again", job.id)
+            self._titles.start(job.id, device_path)
 
     async def on_ws_command(self, envelope: WSEnvelope) -> None:
         """Handler registered for `ripper.commands.{drive_id}` topic: runs the handler for the command's event
@@ -432,14 +443,18 @@ class JobController:
         async with self._claim(job.id):
             with with_log_context(job_id=job.id):
                 logger.info("reboot recovery: re-parking held job %s", job.id)
-                resolved = await self._waiter.await_resolution(job.id, REVIEW_WAIT)
-                if resolved is None:
-                    return
-                job = resolved
-                if job.status not in (JobStatus.IDENTIFIED, JobStatus.RIPPING):
-                    logger.info("recovered job %s in status %s; not ripping", job.id, job.status.value)
-                    return
-                await self._run_rip(job, device_path)
+                self._readopt_titles_read(job, device_path)
+                try:
+                    resolved = await self._waiter.await_resolution(job.id, REVIEW_WAIT)
+                    if resolved is None:
+                        return
+                    job = resolved
+                    if job.status not in (JobStatus.IDENTIFIED, JobStatus.RIPPING):
+                        logger.info("recovered job %s in status %s; not ripping", job.id, job.status.value)
+                        return
+                    await self._run_rip(job, device_path)
+                finally:
+                    await self._titles.cancel(job.id)
 
     async def resume_inflight_job(self, job: JobView, device_path: str) -> None:
         """Drive a crash-recovered rip from the boot probe.

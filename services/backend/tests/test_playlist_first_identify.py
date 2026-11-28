@@ -202,6 +202,21 @@ def test_a_playlist_makemkv_does_not_list_is_unticked_through_the_preset_claim()
     assert claims_of(job).sources["preset"].tracks[EXTRA].selected is False
 
 
+def test_a_thediscdb_tick_on_an_unrippable_ref_does_not_outrank_the_drop() -> None:
+    from arm_backend.identity.proposals import put_source
+    from arm_common.schemas.identity import SourceClaims, TrackClaim
+
+    db = FakeSession()
+    job = _structure_job(br3d_structure_scan(), db=db)
+    put_source(job, "thediscdb", SourceClaims(tracks={EXTRA: TrackClaim(selected=True)}, status="ok"))
+    with TestClient(_make_app(db)) as client:
+        _post_titles(client, {"titles": _mkv_titles(drop="00102.mpls")})
+    assert _by_ref(db)[EXTRA].excluded is True
+    with TestClient(_make_app(db)) as client:  # a later resolve keeps it dropped
+        _post_titles(client, {"titles": _mkv_titles(drop="00102.mpls")})
+    assert _by_ref(db)[EXTRA].excluded is True
+
+
 def test_an_operator_tick_made_before_the_map_is_dropped_for_an_unrippable_ref() -> None:
     db = FakeSession()
     job = _structure_job(br3d_structure_scan(), db=db)

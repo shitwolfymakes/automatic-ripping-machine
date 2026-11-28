@@ -20,11 +20,15 @@ from collections.abc import Sequence
 
 from arm_common.enums import DiscType
 from arm_common.schemas import BdClip, BdPlaylist, ScanResult, ScanTitle
+from arm_common.schemas.job_metadata import JobMetadata
 
 _ANGLE_SEPARATOR = ":"
 
 # MakeMKV lists no title shorter than this (its own default minimum), so the structure's candidates stop here too.
 MAKEMKV_MIN_TITLE_SECONDS = 120
+
+# `Job.metadata_json` key: why MakeMKV could not read a disc whose card is already up. Present means Start is off.
+MAKEMKV_FAILURE_KEY = "makemkv_failure"
 
 
 def title_ref(source_file: str, angle: int | None) -> str:
@@ -163,3 +167,11 @@ def track_ref(scan: ScanResult, title: ScanTitle) -> str:
     if is_structure_scan(scan):
         return title_ref(title.source_file or "", title.angle)
     return str(title.index)
+
+
+def awaits_makemkv_titles(metadata: JobMetadata) -> bool:
+    """Whether a job's metadata is a structure scan still waiting for MakeMKV's titles: no titles reported and no
+    failure recorded."""
+    scan = metadata.scan_result
+    failure = (metadata.model_extra or {}).get(MAKEMKV_FAILURE_KEY)
+    return scan is not None and failure is None and is_structure_scan(scan) and not scan.titles
