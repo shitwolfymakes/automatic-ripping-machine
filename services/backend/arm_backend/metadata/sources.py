@@ -48,7 +48,9 @@ class OnlineSource(Protocol):
     # Capabilities are optional methods; `capability()` finds them. Each takes
     # `cfg` first. Names and signatures:
     #   search_title(cfg, kind, title, year) -> MetadataResult | None
-    #   search_candidates(cfg, kind, title, limit=10) -> list[MetadataResult]
+    #   search_candidates(cfg, kind, title, limit=10, *, enrich=True) -> list[MetadataResult]
+    #     `enrich=False` skips any per-row detail call the search box wants (TMDb's); automatic
+    #     identify scores the bare list and asks for details only for the rows that need them.
     #   lookup_imdb(cfg, imdb_id) -> MetadataResult | None
     #   details(cfg, kind, provider_id) -> MetadataResult
     #   lookup_disc_id(cfg, disc_id, toc=None) -> MetadataResult | None
@@ -100,11 +102,14 @@ class TmdbSource(_Adapter):
         client = self._client(cfg)
         return await (client.search_tv(title) if kind == "tv" else client.search_movie(title, year))
 
-    async def search_candidates(self, cfg: Config, kind: Kind, title: str, limit: int = 10) -> list[MetadataResult]:
+    async def search_candidates(
+        self, cfg: Config, kind: Kind, title: str, limit: int = 10, *, enrich: bool = True, year: int | None = None
+    ) -> list[MetadataResult]:
+        """`year` narrows a movie search (TMDb's `year=` filter); a TV search ignores it."""
         client = self._client(cfg)
         if kind == "tv":
-            return await client.search_tv_candidates(title, limit=limit)
-        return await client.search_movie_candidates(title, limit=limit)
+            return await client.search_tv_candidates(title, limit=limit, enrich=enrich)
+        return await client.search_movie_candidates(title, year, limit=limit, enrich=enrich)
 
     async def lookup_imdb(self, cfg: Config, imdb_id: str) -> MetadataResult | None:
         return await self._client(cfg).find_by_imdb_id(imdb_id)
@@ -124,7 +129,9 @@ class OmdbSource(_Adapter):
     async def search_title(self, cfg: Config, kind: Kind, title: str, year: int | None) -> MetadataResult | None:
         return await self._client(cfg).lookup_by_title(title, year, kind=kind)
 
-    async def search_candidates(self, cfg: Config, kind: Kind, title: str, limit: int = 10) -> list[MetadataResult]:
+    async def search_candidates(
+        self, cfg: Config, kind: Kind, title: str, limit: int = 10, *, enrich: bool = True
+    ) -> list[MetadataResult]:
         return await self._client(cfg).search_candidates(title, kind=kind, limit=limit)
 
     async def lookup_imdb(self, cfg: Config, imdb_id: str) -> MetadataResult | None:
@@ -146,7 +153,7 @@ class TvmazeSource(_Adapter):
         return await TVMazeClient(self._http).search_show(title)
 
     async def search_candidates(
-        self, cfg: Config | None, kind: Kind, title: str, limit: int = 10
+        self, cfg: Config | None, kind: Kind, title: str, limit: int = 10, *, enrich: bool = True
     ) -> list[MetadataResult]:
         if kind != "tv":
             return []
@@ -189,7 +196,7 @@ class TvdbSource(_Adapter):
         return await self._client(cfg).search_series(title)
 
     async def search_candidates(
-        self, cfg: Config | None, kind: Kind, title: str, limit: int = 10
+        self, cfg: Config | None, kind: Kind, title: str, limit: int = 10, *, enrich: bool = True
     ) -> list[MetadataResult]:
         if kind != "tv":
             return []

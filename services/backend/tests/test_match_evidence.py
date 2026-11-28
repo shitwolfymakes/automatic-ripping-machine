@@ -194,6 +194,27 @@ def test_structure_scan_keeps_every_edition_runtime() -> None:
     assert ev.runtime.source == "structure"
 
 
+def test_a_long_extra_does_not_widen_the_feature_runtimes() -> None:
+    # A 100-minute documentary extra is kept next to a 163-minute feature, but it is under 70% of the longest.
+    titles = [
+        ScanTitle(index=0, duration_seconds=163 * 60, segment_map=[1, 2], source_file="00800.mpls"),
+        ScanTitle(index=1, duration_seconds=100 * 60, segment_map=[7], source_file="00801.mpls"),
+    ]
+    ev = _build(label="MOVIE", titles=titles, structured=True)
+    assert ev.runtime is not None
+    assert ev.runtime.feature_minutes == (163.0,)
+
+
+def test_an_edition_within_seventy_percent_of_the_longest_is_still_kept() -> None:
+    titles = [
+        ScanTitle(index=0, duration_seconds=163 * 60, segment_map=[1, 2], source_file="00800.mpls"),
+        ScanTitle(index=1, duration_seconds=120 * 60, segment_map=[1, 3], source_file="00801.mpls"),
+    ]
+    ev = _build(label="MOVIE", titles=titles, structured=True)
+    assert ev.runtime is not None
+    assert ev.runtime.feature_minutes == (120.0, 163.0)
+
+
 def test_evidence_from_a_dvd_scan() -> None:
     scan = ScanResult(disc_type=DiscType.DVD, volume_label="THE_MATRIX_NTSC", titles=[_title(0, 136), _title(1, 5)])
     ev = evidence_from_scan(scan, iso_name=None, now=NOW)

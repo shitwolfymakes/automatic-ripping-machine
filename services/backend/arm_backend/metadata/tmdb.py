@@ -88,15 +88,15 @@ class TMDBClient:
         return await self._search("tv", {"query": title}, kind="tv")
 
     async def search_movie_candidates(
-        self, title: str, year: int | None = None, limit: int = 10
+        self, title: str, year: int | None = None, limit: int = 10, *, enrich: bool = True
     ) -> list[MetadataResult]:
         params: dict[str, Any] = {"query": title}
         if year is not None:
             params["year"] = year
-        return await self._search_candidates("movie", params, kind="movie", limit=limit)
+        return await self._search_candidates("movie", params, kind="movie", limit=limit, enrich=enrich)
 
-    async def search_tv_candidates(self, title: str, limit: int = 10) -> list[MetadataResult]:
-        return await self._search_candidates("tv", {"query": title}, kind="tv", limit=limit)
+    async def search_tv_candidates(self, title: str, limit: int = 10, *, enrich: bool = True) -> list[MetadataResult]:
+        return await self._search_candidates("tv", {"query": title}, kind="tv", limit=limit, enrich=enrich)
 
     async def _search_candidates(
         self,
@@ -105,6 +105,7 @@ class TMDBClient:
         *,
         kind: Literal["movie", "tv"],
         limit: int,
+        enrich: bool = True,
     ) -> list[MetadataResult]:
         results = await self._get_results(endpoint, params)
         out: list[MetadataResult] = []
@@ -112,6 +113,8 @@ class TMDBClient:
             parsed = self._parse_one(top, kind)
             if parsed is not None:
                 out.append(parsed)
+        if not enrich:
+            return out
         # One detail call per candidate (external ids + credits appended); the call
         # carries the facts the match picker shows. A TV row takes the latest
         # season's `credits`, not `aggregate_credits`: a long-running show's

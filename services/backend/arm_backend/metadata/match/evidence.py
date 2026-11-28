@@ -43,6 +43,9 @@ P_TV_FEATURE = 0.15
 P_TV_DISC_MARKER = 0.60
 P_TV_NONE = 0.40
 
+# A kept title counts as a version of the feature only from this share of the longest kept title's length.
+FEATURE_VERSION_SHARE = 0.7
+
 _ISO_EXTENSION = ".iso"
 
 RuntimeSource = Literal["structure", "titles", "episodes"]
@@ -139,7 +142,9 @@ def _feature_seconds(titles: Sequence[ScanTitle], structured: bool) -> list[int]
     if structured:
         verdicts = classify_titles(titles)
         kept = [t for t in titles if verdicts[t.index].title_class in KEPT_CLASSES]
-        return [t.duration_seconds for t in kept if t.duration_seconds >= MAIN_FEATURE_MIN_SECONDS]
+        seconds = [t.duration_seconds for t in kept if t.duration_seconds >= MAIN_FEATURE_MIN_SECONDS]
+        # A long extra (a documentary) is kept next to the film but is not a version of it.
+        return [d for d in seconds if d >= FEATURE_VERSION_SHARE * max(seconds)]
     longest = max((t.duration_seconds for t in titles), default=0)
     return [longest] if longest >= MAIN_FEATURE_MIN_SECONDS else []
 

@@ -85,11 +85,11 @@ async def test_tmdb_adapter_delegates_by_kind(monkeypatch):
             calls.append(("tv", title))
             return MetadataResult(title="T", year=None, kind="tv")
 
-        async def search_movie_candidates(self, title, year=None, limit=10):
+        async def search_movie_candidates(self, title, year=None, limit=10, *, enrich=True):
             calls.append(("movie_cands", title, limit))
             return []
 
-        async def search_tv_candidates(self, title, limit=10):
+        async def search_tv_candidates(self, title, limit=10, *, enrich=True):
             calls.append(("tv_cands", title, limit))
             return []
 
