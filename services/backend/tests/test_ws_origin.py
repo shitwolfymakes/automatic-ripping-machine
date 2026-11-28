@@ -1,41 +1,40 @@
 """Origin allowlist gate. Doesn't exercise the full WS handshake — just
-the predicate. Service-token clients (rippers, transcoders) skip via the
-SERVICE_TOKEN_SUBPROTOCOL marker; browser clients must be on the
-configured allowlist.
+the predicate. Service-token clients (rippers, transcoders) send no Origin
+and pass on that; browser clients must be same-origin or on the configured
+allowlist.
 """
 
 from arm_backend.config import settings
-from arm_backend.ws.router import (
-    SERVICE_TOKEN_SUBPROTOCOL,
-    _origin_allowed,
-)
+from arm_backend.ws.router import _origin_allowed
 
 
-def test_service_subprotocol_skips_origin_check() -> None:
+def test_foreign_origin_rejected_whatever_subprotocol_it_asks_for() -> None:
+    """The predicate no longer sees the subprotocol: requesting
+    `arm-service-token` waives nothing."""
     settings.ARM_ALLOWED_ORIGINS = []
-    assert _origin_allowed("https://malicious.example.com", [SERVICE_TOKEN_SUBPROTOCOL]) is True
+    assert _origin_allowed("https://malicious.example.com") is False
 
 
 def test_no_origin_header_allowed() -> None:
     """Sibling-container connections from compose network have no Origin."""
     settings.ARM_ALLOWED_ORIGINS = []
-    assert _origin_allowed(None, []) is True
+    assert _origin_allowed(None) is True
 
 
 def test_browser_origin_not_in_allowlist_rejected() -> None:
     settings.ARM_ALLOWED_ORIGINS = ["https://arm.local:8081"]
-    assert _origin_allowed("https://malicious.example.com", []) is False
+    assert _origin_allowed("https://malicious.example.com") is False
 
 
 def test_browser_origin_in_allowlist_accepted() -> None:
     settings.ARM_ALLOWED_ORIGINS = ["https://arm.local:8081", "https://arm.local"]
-    assert _origin_allowed("https://arm.local:8081", []) is True
+    assert _origin_allowed("https://arm.local:8081") is True
 
 
 def test_browser_origin_with_empty_allowlist_rejected() -> None:
     """An empty allowlist with no request host rejects a browser origin: same-origin needs a host to compare."""
     settings.ARM_ALLOWED_ORIGINS = []
-    assert _origin_allowed("https://arm.local:8081", []) is False
+    assert _origin_allowed("https://arm.local:8081") is False
 
 
 # --- same-origin default ----------------------------------------------
@@ -43,7 +42,7 @@ def test_browser_origin_with_empty_allowlist_rejected() -> None:
 
 def test_same_origin_via_request_host_accepted() -> None:
     settings.ARM_ALLOWED_ORIGINS = []
-    assert _origin_allowed("https://192.168.1.85:8082", [], request_host="192.168.1.85:8082") is True
+    assert _origin_allowed("https://192.168.1.85:8082", request_host="192.168.1.85:8082") is True
 
 
 def test_same_origin_via_forwarded_host_accepted() -> None:
@@ -52,7 +51,6 @@ def test_same_origin_via_forwarded_host_accepted() -> None:
     assert (
         _origin_allowed(
             "https://nas.lan:8082",
-            [],
             request_host="arm-backend",
             forwarded_host="nas.lan:8082",
             forwarded_proto="https",
@@ -66,7 +64,6 @@ def test_forwarded_host_wins_over_request_host() -> None:
     assert (
         _origin_allowed(
             "https://arm-backend",
-            [],
             request_host="arm-backend",
             forwarded_host="nas.lan:8082",
         )
@@ -76,7 +73,7 @@ def test_forwarded_host_wins_over_request_host() -> None:
 
 def test_same_origin_scheme_mismatch_rejected() -> None:
     settings.ARM_ALLOWED_ORIGINS = []
-    assert _origin_allowed("http://nas.lan:8082", [], request_host="nas.lan:8082", request_scheme="https") is False
+    assert _origin_allowed("http://nas.lan:8082", request_host="nas.lan:8082", request_scheme="https") is False
 
 
 def test_same_origin_forwarded_proto_http_accepted() -> None:
@@ -85,7 +82,6 @@ def test_same_origin_forwarded_proto_http_accepted() -> None:
     assert (
         _origin_allowed(
             "http://localhost:5173",
-            [],
             request_host="localhost:8443",
             forwarded_host="localhost:5173",
             forwarded_proto="http",
@@ -96,12 +92,12 @@ def test_same_origin_forwarded_proto_http_accepted() -> None:
 
 def test_same_origin_port_mismatch_rejected() -> None:
     settings.ARM_ALLOWED_ORIGINS = []
-    assert _origin_allowed("https://nas.lan:9999", [], request_host="nas.lan:8082") is False
+    assert _origin_allowed("https://nas.lan:9999", request_host="nas.lan:8082") is False
 
 
 def test_same_origin_case_insensitive() -> None:
     settings.ARM_ALLOWED_ORIGINS = []
-    assert _origin_allowed("https://NAS.lan:8082", [], request_host="nas.LAN:8082") is True
+    assert _origin_allowed("https://NAS.lan:8082", request_host="nas.LAN:8082") is True
 
 
 def test_forwarded_host_chain_uses_first_element() -> None:
@@ -109,7 +105,6 @@ def test_forwarded_host_chain_uses_first_element() -> None:
     assert (
         _origin_allowed(
             "https://nas.lan:8082",
-            [],
             forwarded_host="nas.lan:8082, arm-backend",
             forwarded_proto="https, https",
         )
@@ -119,4 +114,4 @@ def test_forwarded_host_chain_uses_first_element() -> None:
 
 def test_allowlist_still_covers_split_origin() -> None:
     settings.ARM_ALLOWED_ORIGINS = ["https://arm.example.com"]
-    assert _origin_allowed("https://arm.example.com", [], request_host="backend.internal:8443") is True
+    assert _origin_allowed("https://arm.example.com", request_host="backend.internal:8443") is True
