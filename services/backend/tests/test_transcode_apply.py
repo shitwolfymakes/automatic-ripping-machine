@@ -678,3 +678,41 @@ def test_compute_outputs_files_a_disc_backup_as_the_title_folder() -> None:
 def test_compute_outputs_disc_backup_without_a_year_drops_the_parentheses() -> None:
     resolved = compute_outputs(_job(title="IRON_MAN", year=None), [_backup_track()], _backup_session(), None)
     assert [r.output_path for r in resolved] == ["IRON_MAN"]
+
+
+def _version_track(idx: int, source_ref: str) -> Track:
+    return Track(
+        id=f"trk_{idx}",
+        job_id="job_01JZXR7K3M5Q8N4VWA00000001",
+        kind=TrackKind.VIDEO_TITLE,
+        index=idx,
+        source_ref=source_ref,
+        expected_duration_seconds=9800,
+    )
+
+
+def test_every_built_in_movie_template_gives_a_disc_of_versions_distinct_paths() -> None:
+    """A main feature, its other angle, a shorter copy and an extra, all ticked: no two share a path,
+    because every built-in movie template carries {track} (the title's own index)."""
+    from arm_backend.seeders import SESSIONS
+
+    tracks = [
+        _version_track(2, "00102.mpls"),
+        _version_track(3, "00334.mpls:1"),
+        _version_track(4, "00334.mpls:2"),
+        _version_track(5, "00342.mpls"),
+    ]
+    templates = [s["output_path_template"] for s in SESSIONS if s["media_type"] == MediaType.MOVIE]
+    assert templates
+    for template in templates:
+        paths = [r.output_path for r in compute_outputs(_job(), tracks, _movie_session(template), _movie_preset())]
+        assert len(paths) == 4 and len(set(paths)) == 4, template
+
+
+def test_a_custom_movie_template_without_track_resolves_ticked_titles_to_one_path() -> None:
+    """Not told apart here on purpose: apply refuses the job as `duplicate_in_request` so the operator fixes
+    the template (test_apply_duplicate_in_request_collision_for_multi_track_no_track_token)."""
+    sess = _movie_session("{title} ({year?})/{title} ({year?}).{ext}")
+    tracks = [_version_track(3, "00334.mpls:1"), _version_track(4, "00334.mpls:2")]
+    paths = [r.output_path for r in compute_outputs(_job(), tracks, sess, _movie_preset())]
+    assert paths[0] == paths[1]

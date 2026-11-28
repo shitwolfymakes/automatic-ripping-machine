@@ -8,6 +8,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import col, select
 
 from arm_backend.config import settings
+from arm_backend.job_failure import scan_failure_text
+from arm_backend.title_map_service import stereo_3d_refs, stored_scan, titles_read_view, unrippable_refs
 from arm_common import (
     DiscFingerprint,
     Job,
@@ -27,6 +29,7 @@ from arm_common.schemas import (
     JobView,
     PreviousRipView,
     RipProgressSummary,
+    TitlesReadView,
     TrackStageView,
     TrackView,
     TranscodeProgressSummary,
@@ -261,9 +264,18 @@ async def _stages_by_track(session: AsyncSession, job_id: str) -> dict[str, Trac
     return {row.track_id: row for row in rows}
 
 
-def _track_view(track: Track, latest_task: dict[str, TranscodeTask], stages: dict[str, TrackStage]) -> TrackView:
-    """The TrackView of a track, with its staging copy and the status and frame rate of its latest transcode task."""
+def _track_view(
+    track: Track,
+    latest_task: dict[str, TranscodeTask],
+    stages: dict[str, TrackStage],
+    stereo_3d: frozenset[str] = frozenset(),
+    unrippable: frozenset[str] = frozenset(),
+) -> TrackView:
+    """The TrackView of a track, with its staging copy, the status and frame rate of its latest transcode
+    task and the review facts of a structure scan (3D, unrippable)."""
     tv = TrackView.model_validate(track)
+    tv.stereo_3d = track.source_ref in stereo_3d
+    tv.unrippable = track.source_ref in unrippable
     stage = stages.get(track.id)
     if stage is not None:
         tv.stage = TrackStageView.model_validate(stage)
@@ -273,6 +285,14 @@ def _track_view(track: Track, latest_task: dict[str, TranscodeTask], stages: dic
         tv.transcode_fps = task.fps
         tv.transcode_avg_fps = task.avg_fps
     return tv
+
+
+def _titles_read(job: Job) -> TitlesReadView:
+    """The job's title read state, with the sentence that explains a MakeMKV failure."""
+    read = titles_read_view(job)
+    if read.failure is not None:
+        read.message = scan_failure_text(read.failure)
+    return read
 
 
 async def job_detail_view(session: AsyncSession, job: Job) -> JobDetailView:
@@ -301,9 +321,13 @@ async def job_detail_view(session: AsyncSession, job: Job) -> JobDetailView:
     job_view.parked_session_ids = _parked_session_ids(sas)
     latest_task = _latest_task_by_track(job_tasks)
     stages = await _stages_by_track(session, job.id)
+    scan = stored_scan(job)
+    stereo_3d = frozenset() if scan is None else stereo_3d_refs(scan)
+    unrippable = frozenset() if scan is None else unrippable_refs(scan)
     return JobDetailView(
         job=job_view,
-        tracks=[_track_view(t, latest_task, stages) for t in tracks],
+        tracks=[_track_view(t, latest_task, stages, stereo_3d, unrippable) for t in tracks],
+        titles_read=_titles_read(job),
         fingerprints=[DiscFingerprintView.model_validate(fp) for fp in fingerprints],
         previous_rip=await _previous_rip_view(session, job),
     )
