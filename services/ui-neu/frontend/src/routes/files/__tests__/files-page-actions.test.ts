@@ -725,12 +725,12 @@ describe('new folder', () => {
 });
 
 describe('bulk move picker', () => {
-	const pickerPath = () => document.querySelector('.files-page-picker-path')?.textContent;
+	const pickerPath = () => document.querySelector('.file-move-path')?.textContent;
 	const moveButton = () => screen.getByRole('button', { name: 'Move here' });
-	const pickerPanel = () => document.querySelector('.modal .files-page-orphan-panel') as HTMLElement;
+	const pickerPanel = () => document.querySelector('[role="dialog"][aria-label^="Move"]') as HTMLElement;
 	const pickerFolder = (name: string) =>
 		waitFor(() => {
-			const el = Array.from(pickerPanel().querySelectorAll('.files-page-picker-row-folder')).find(
+			const el = Array.from(pickerPanel().querySelectorAll('.file-move-row-folder')).find(
 				(b) => b.textContent?.trim() === name
 			);
 			expect(el).toBeTruthy();
@@ -762,9 +762,7 @@ describe('bulk move picker', () => {
 		expect(screen.getByText('current')).toBeInTheDocument();
 		expect(moveButton()).toBeDisabled();
 		expect(moveButton()).toHaveAttribute('title', 'Navigate to a different folder first');
-		const names = Array.from(document.querySelectorAll('.files-page-picker-row-folder')).map((b) =>
-			b.textContent?.trim()
-		);
+		const names = Array.from(document.querySelectorAll('.file-move-row-folder')).map((b) => b.textContent?.trim());
 		expect(names).toEqual(['subfolder', 'other']);
 		expect(screen.queryByText('No subfolders')).not.toBeInTheDocument();
 	});
@@ -774,9 +772,7 @@ describe('bulk move picker', () => {
 		await selectRow('subfolder');
 		await fireEvent.click(screen.getByRole('button', { name: /^Move \d+$/ }));
 		await screen.findByText('Browse to the destination folder');
-		const names = Array.from(document.querySelectorAll('.files-page-picker-row-folder')).map((b) =>
-			b.textContent?.trim()
-		);
+		const names = Array.from(document.querySelectorAll('.file-move-row-folder')).map((b) => b.textContent?.trim());
 		expect(names).toEqual(['other']);
 	});
 
@@ -891,10 +887,10 @@ describe('bulk move picker', () => {
 		mockFetchDirectory.mockReturnValueOnce(pending.promise);
 		await fireEvent.click(screen.getByRole('button', { name: /^Move 1$/ }));
 		await screen.findByText('Browse to the destination folder');
-		expect(document.querySelector('.modal .spin')).toBeInTheDocument();
+		expect(document.querySelector('[role="dialog"] .spin')).toBeInTheDocument();
 		expect(screen.queryByText('No subfolders')).not.toBeInTheDocument();
 		pending.resolve(dirs['raw::']);
-		await waitFor(() => expect(document.querySelector('.modal .spin')).not.toBeInTheDocument());
+		await waitFor(() => expect(document.querySelector('[role="dialog"] .spin')).not.toBeInTheDocument());
 	});
 
 	it('labels an unknown root by its key', async () => {
@@ -951,7 +947,7 @@ describe('bulk move picker', () => {
 
 	it('closes by clicking the backdrop', async () => {
 		await openPicker('movie.mkv');
-		await fireEvent.click(screen.getByRole('button', { name: 'Close dialog' }));
+		await fireEvent.click(document.querySelector('.slide-over-scrim') as HTMLElement);
 		expect(screen.queryByText('Browse to the destination folder')).not.toBeInTheDocument();
 	});
 });
@@ -1030,7 +1026,7 @@ describe('orphan folders modal', () => {
 		await fireEvent.click(screen.getByTitle('Orphan folders'));
 		await screen.findByText('Orphan Folders');
 	}
-	const modal = () => document.querySelector('.files-page-orphan-panel') as HTMLElement;
+	const modal = () => document.querySelector('.files-page-dialog-panel') as HTMLElement;
 	const modalCheckboxes = () => within(modal()).queryAllByRole('checkbox');
 
 	it('shows a loading message while the folders load', async () => {
