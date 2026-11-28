@@ -20,6 +20,8 @@
 		isPostRip: boolean;
 		/** Whether the rip can be started from the card. */
 		canStart: boolean;
+		/** Why Start is off for now (MakeMKV has not read the titles); null when it is on. */
+		startBlocked?: string | null;
 		/** The episode matching state, or null when the card has no episodes. */
 		episodeRow: EpisodeStatus | null;
 		/** Whether this disc matched an earlier rip. */
@@ -42,6 +44,7 @@
 		isMusic,
 		isPostRip,
 		canStart,
+		startBlocked = null,
 		episodeRow,
 		previouslyRipped,
 		fromIso,
@@ -118,9 +121,10 @@
 		<button
 			type="button"
 			onclick={onstartrip}
-			disabled={actions.starting}
+			disabled={actions.starting || !!startBlocked}
 			class="btn disc-review-widget-success-btn"
-			title={previouslyRipped ? 'Rip this disc again' : 'Save the metadata and start ripping this disc'}
+			title={startBlocked ??
+				(previouslyRipped ? 'Rip this disc again' : 'Save the metadata and start ripping this disc')}
 		>
 			{actions.starting ? 'Starting...' : previouslyRipped ? 'Rip again' : 'Start rip'}
 		</button>

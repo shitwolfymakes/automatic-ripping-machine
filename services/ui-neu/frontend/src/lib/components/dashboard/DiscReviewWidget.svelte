@@ -9,7 +9,7 @@
 	import { episodeStatus } from '$lib/episodes/status';
 	import { handSetTrackCount } from '$lib/jobs/track-fields';
 	import { identitySuggestionOf, previouslyRippedJobId, reviewPhaseBadge } from '$lib/jobs/review';
-	import { appliedSessionName, reviewSourceRow, reviewStatusLabel } from '$lib/jobs/review-card';
+	import { appliedSessionName, reviewSourceRow, reviewStatusLabel, startBlockedReason } from '$lib/jobs/review-card';
 	import DiscReviewActions from './disc-review/DiscReviewActions.svelte';
 	import DiscReviewFacts from './disc-review/DiscReviewFacts.svelte';
 	import DiscReviewStatusBar from './disc-review/DiscReviewStatusBar.svelte';
@@ -91,6 +91,9 @@
 	// refresh. Falls back to the prop before the first detail load. Only read
 	// inside the `{#if !job}{:else}` branch, where `job` is guaranteed defined.
 	let displayJob = $derived((reviewData.detail?.job ?? job) as JobView);
+	// MakeMKV's title read: Start waits for it, and a failed read keeps the card with the reason.
+	let titlesRead = $derived(reviewData.detail?.titles_read);
+	let startBlocked = $derived(startBlockedReason(titlesRead?.state));
 	// Episode matching is for TV video discs only, as on the job page.
 	let isTv = $derived(isVideo && displayJob.media_type === 'tv');
 	// The ripper holds the countdown while the episode placement is a guess; the card only says so.
@@ -113,7 +116,8 @@
 			previouslyRipped: !!previousId,
 			suggestion: !!suggestion,
 			reviewGate: isReviewGate,
-			postRip: isPostRip
+			postRip: isPostRip,
+			titles: titlesRead?.state
 		})
 	);
 	// Null off a TV video disc and after the rip; the Episodes button follows it.
@@ -243,6 +247,11 @@
 					{appliedSession}
 					onopenseason={sections.openSeason}
 					onopenepisodes={() => sections.open('episodes')}
+					canEditVersions={$isAdmin && canStart}
+					onsetversions={async (one) => {
+						await actions.setVersions(displayJob, one);
+						reviewData.loadDetail();
+					}}
 				/>
 			</div>
 		</div>
@@ -267,6 +276,12 @@
 			</div>
 		{/if}
 
+		{#if titlesRead?.state === 'failed'}
+			<p class="alert alert-danger disc-review-widget-error" data-testid="makemkv-failure">
+				{titlesRead.message ?? 'MakeMKV could not read this disc.'} Cancel discards this job.
+			</p>
+		{/if}
+
 		<!-- Error banner -->
 		{#if actions.errorMessage}
 			<div class="alert alert-danger disc-review-widget-error">
@@ -288,6 +303,7 @@
 			{isMusic}
 			{isPostRip}
 			{canStart}
+			{startBlocked}
 			{episodeRow}
 			previouslyRipped={!!previousId}
 			{fromIso}

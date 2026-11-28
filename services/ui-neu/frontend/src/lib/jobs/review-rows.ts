@@ -1,7 +1,8 @@
 import type { TrackView, ScanTitle, TrackRole, TitleClass } from '$lib/types/api.gen';
 import { trackSizeLabel } from '$lib/jobs/track-fields';
 import { formatBytes } from '$lib/utils/format';
-import { sourceName, titleClassLabel, type RefIndex, type TitleClassLabel } from './title-class';
+import { featureLabel, sourceName, titleClassLabel, type RefIndex, type TitleClassLabel } from './title-class';
+import { parseTitleRef } from './version-sets';
 
 // One row shape covering both review-card lifecycle stages. A row is editable iff
 // it has a real materialized-track id; scanned-title rows (trackId === null) are
@@ -27,6 +28,14 @@ export type ReviewRow = {
 	/** What the title is once a source or the operator has said: an extra is placed without an episode. */
 	role: TrackRole | null;
 	excluded: boolean;
+	/** The angle the ref names (`00334.mpls:2`), null for a title without angles. */
+	angle: number | null;
+	/** The title plays a 3D view. */
+	stereo3d: boolean;
+	/** MakeMKV's list does not hold the title: it cannot be ripped. */
+	unrippable: boolean;
+	/** "Main feature" or "Extra" for a title that stands on its own, else null. */
+	featureLabel: string | null;
 };
 
 export function trackToRow(t: TrackView, refIndex: RefIndex): ReviewRow {
@@ -46,7 +55,11 @@ export function trackToRow(t: TrackView, refIndex: RefIndex): ReviewRow {
 		episodeNumber: t.episode_number ?? null,
 		episodeName: t.episode_name ?? null,
 		role: t.role ?? null,
-		excluded: t.excluded ?? false
+		excluded: t.excluded ?? false,
+		angle: parseTitleRef(t.source_ref)?.angle ?? null,
+		stereo3d: t.stereo_3d ?? false,
+		unrippable: t.unrippable ?? false,
+		featureLabel: featureLabel(t)
 	};
 }
 
@@ -71,7 +84,11 @@ export function scanTitleToRow(s: ScanTitle): ReviewRow {
 		episodeNumber: null,
 		episodeName: null,
 		role: null,
-		excluded: false
+		excluded: false,
+		angle: s.angle ?? null,
+		stereo3d: s.stereo_3d ?? false,
+		unrippable: false,
+		featureLabel: null
 	};
 }
 

@@ -2,7 +2,7 @@
 // the countdown, with each one's busy flag, the delete confirmation and
 // the error banner's message.
 import type { JobView } from '$lib/types/api.gen';
-import { abandonJob, deleteJob, startWaitingJob, pauseWaitingJob, resolveJob } from '$lib/api/jobs';
+import { abandonJob, deleteJob, patchJob, startWaitingJob, pauseWaitingJob, resolveJob } from '$lib/api/jobs';
 import { cancelIsoRip } from '$lib/api/iso';
 import { errorMessage } from '$lib/utils/errors';
 
@@ -114,6 +114,18 @@ export class DiscReviewJobActions {
 			this.errorMessage = errorMessage(e, 'Failed to update pause');
 		} finally {
 			this.pauseBusy = false;
+		}
+	};
+
+	// One version per film or every version: the job's own policy, which re-ticks the set members.
+	setVersions = async (job: JobView | undefined, one: boolean): Promise<void> => {
+		if (!job) return;
+		this.errorMessage = null;
+		try {
+			await patchJob(job.id, { tick_one_version: one });
+			this.#done.refresh();
+		} catch (e) {
+			this.errorMessage = errorMessage(e, 'Failed to change the versions to rip');
 		}
 	};
 

@@ -2,13 +2,15 @@ import { describe, it, expect } from 'vitest';
 import {
 	DECOY_GROUP_MIN,
 	decoyGroupText,
+	featureLabel,
 	groupDecoys,
 	isDecoyGroup,
 	isRawStream,
 	refIndexOf,
 	refText,
 	sourceName,
-	titleClassLabel
+	titleClassLabel,
+	UNRIPPABLE_LABEL
 } from '../title-class';
 import type { TitleClass } from '$lib/types/api.gen';
 
@@ -76,7 +78,62 @@ describe('titleClassLabel', () => {
 	});
 });
 
+describe('titleClassLabel for the version classes', () => {
+	const label = (o: object) => titleClassLabel(o as never, idx);
+	it('names the angle number and the title it is an angle of', () => {
+		expect(label({ title_class: 'angle', title_class_ref: '0', source_ref: '00334.mpls:2' })).toEqual({
+			text: 'Angle 2 of #0',
+			tone: 'muted'
+		});
+	});
+	it('names an angle with no number in its ref by the title alone', () => {
+		expect(label({ title_class: 'angle', title_class_ref: '0', source_ref: '00334.mpls' })?.text).toBe(
+			'Other angle of #0'
+		);
+	});
+	it('names a shorter cut', () => {
+		expect(label({ title_class: 'subset', title_class_ref: '0' })).toEqual({
+			text: 'Shorter cut of #0',
+			tone: 'muted'
+		});
+	});
+	it('names the dimension of a 2D/3D twin', () => {
+		expect(label({ title_class: 'view', title_class_ref: '0', stereo_3d: true })?.text).toBe('3D version of #0');
+		expect(label({ title_class: 'view', title_class_ref: '0', stereo_3d: false })?.text).toBe('2D version of #0');
+		expect(label({ title_class: 'view', title_class_ref: '0' })?.text).toBe('2D version of #0');
+	});
+});
+
+describe('featureLabel', () => {
+	const f = (o: object) => featureLabel(o as never);
+	it('calls a long primary or edition title the main feature, a short one an extra', () => {
+		expect(f({ title_class: 'primary', expected_duration_seconds: 9807 })).toBe('Main feature');
+		expect(f({ title_class: 'edition', duration_seconds: 2700 })).toBe('Main feature');
+		expect(f({ title_class: 'primary', expected_duration_seconds: 287 })).toBe('Extra');
+		expect(f({ title_class: null, duration_seconds: 2699 })).toBe('Extra');
+	});
+	it('says nothing for a title with no class, no length, or a class of its own', () => {
+		expect(f({ title_class: 'primary' })).toBeNull();
+		expect(f({ title_class: 'angle', expected_duration_seconds: 9807 })).toBeNull();
+		expect(f({ title_class: 'duplicate', expected_duration_seconds: 9807 })).toBeNull();
+		expect(f({ title_class: 'decoy', expected_duration_seconds: 9807 })).toBeNull();
+	});
+});
+
+describe('UNRIPPABLE_LABEL', () => {
+	it('says MakeMKV cannot rip it', () => {
+		expect(UNRIPPABLE_LABEL).toBe("MakeMKV can't rip this");
+	});
+});
+
 describe('sourceName', () => {
+	it('shows the whole ref of an angle, so two angles of one playlist differ', () => {
+		const t = { output_path: null, playlist_name: null, source_file: '00334.mpls', source_ref: '00334.mpls:2' };
+		expect(sourceName(t)).toBe('00334.mpls:2');
+		expect(sourceName({ ...t, playlist_name: 'FPL_MainFeature' })).toBe('00334.mpls:2');
+		expect(sourceName({ ...t, output_path: 'o.mkv' })).toBe('o.mkv');
+	});
+
 	it('prefers the ripped file, then the playlist, the stream file, the ref', () => {
 		const all = { output_path: 'o.mkv', playlist_name: 'p.mpls', source_file: 's.m2ts', source_ref: '3' };
 		expect(sourceName(all)).toBe('o.mkv');

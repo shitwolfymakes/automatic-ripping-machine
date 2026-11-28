@@ -9,13 +9,16 @@
 		groupDecoys,
 		isDecoyGroup,
 		refIndexOf,
-		refText
+		refText,
+		UNRIPPABLE_LABEL
 	} from '$lib/jobs/title-class';
+	import { groupVersions, isVersionSet, versionSummary } from '$lib/jobs/version-sets';
 	import { formatTrackDuration } from '$lib/utils/format';
 	import { parseEpisodeNumber } from '$lib/jobs/track-edit';
 	import { ripPlanLine, ripPlanSummary, tickMeaning, tickTitle } from '$lib/jobs/rip-plan';
 	import Glyph from '$lib/components/shared/Glyph.svelte';
 	import TrackTitleSearch from '../match/TrackTitleSearch.svelte';
+	import VersionSetChoice from './VersionSetChoice.svelte';
 	import { isAdmin } from '$lib/stores/auth';
 	interface Props {
 		job: JobView;
@@ -33,10 +36,12 @@
 	// Materialized tracks always win; scanned titles are the pre-rip fallback.
 	let refIndex = $derived(refIndexOf(tracks));
 	let rows = $derived(tracks.length ? tracks.map((t) => trackToRow(t, refIndex)) : scanTitles.map(scanTitleToRow));
-	let items = $derived(groupDecoys(rows, DECOY_GROUP_MIN));
+	let items = $derived(groupVersions(groupDecoys(rows, DECOY_GROUP_MIN)));
 
 	// Which decoy groups are expanded, by the ref they copy.
 	let openDecoyGroups = $state<Set<string>>(new Set());
+	// Which version sets are expanded, by the ref of their pick.
+	let openVersionSets = $state<Set<string>>(new Set());
 
 	let plan = $derived(ripPlanSummary(tracks, job));
 
@@ -77,6 +82,14 @@
 		openDecoyGroups = next;
 	}
 
+	function toggleVersionSet(ref: string) {
+		// eslint-disable-next-line svelte/prefer-svelte-reactivity -- copy-on-write; reassigning the $state variable triggers updates
+		const next = new Set(openVersionSets);
+		if (next.has(ref)) next.delete(ref);
+		else next.add(ref);
+		openVersionSets = next;
+	}
+
 	function handleTrackTitleApply(trackId: string) {
 		openSearchTrackIds = new Set([...openSearchTrackIds].filter((id) => id !== trackId));
 		onrefresh?.();
@@ -108,6 +121,22 @@
 				>
 			{:else}
 				<span class="review-tracks-table-faint">-</span>
+			{/if}
+			{#if trackId}
+				<div class="flex flex-wrap items-center gap-1 mt-0.5">
+					{#if !isTv && row.featureLabel}
+						<span class="chip chip-sm" data-testid="track-feature-label">{row.featureLabel}</span>
+					{/if}
+					{#if row.angle && !row.classLabel}
+						<span class="chip chip-sm chip-info" data-testid="track-angle">Angle {row.angle}</span>
+					{/if}
+					{#if row.stereo3d}
+						<span class="chip chip-sm chip-info" data-testid="track-3d">3D</span>
+					{/if}
+					{#if row.unrippable}
+						<span class="chip chip-sm chip-warning" data-testid="track-unrippable">{UNRIPPABLE_LABEL}</span>
+					{/if}
+				</div>
 			{/if}
 		</td>
 		{#if isTv}
@@ -148,8 +177,8 @@
 					aria-label="Include track {row.index}"
 					checked={!row.excluded}
 					onchange={(e) => handleTrackFieldUpdate(track.id, 'excluded', !e.currentTarget.checked)}
-					title={tickTitle(meaning)}
-					disabled={meaning === 'not-ripped'}
+					title={row.unrippable ? UNRIPPABLE_LABEL : tickTitle(meaning)}
+					disabled={meaning === 'not-ripped' || row.unrippable}
 				/>
 			{:else if trackId}
 				<span class="review-tracks-table-faint">{row.excluded ? 'Excluded' : 'Included'}</span>
@@ -225,8 +254,31 @@
 						</tr>
 					</thead>
 					<tbody>
-						{#each items as item (isDecoyGroup(item) ? `decoys-${item.ref}` : (item.trackId ?? `scan-${item.index}`))}
-							{#if isDecoyGroup(item)}
+						{#each items as item (isDecoyGroup(item) ? `decoys-${item.ref}` : isVersionSet(item) ? `versions-${item.pickRef}` : (item.trackId ?? `scan-${item.index}`))}
+							{#if isVersionSet(item)}
+								{@const summary = versionSummary(item)}
+								<tr class="table-row">
+									<td colspan="99" class="table-cell">
+										<button
+											type="button"
+											class="btn btn-ghost btn-sm"
+											aria-expanded={openVersionSets.has(item.pickRef)}
+											aria-label={summary}
+											onclick={() => toggleVersionSet(item.pickRef)}
+										>
+											<Glyph name="chevron-right" class="chevron" />
+											{summary}
+										</button>
+									</td>
+								</tr>
+								{#if openVersionSets.has(item.pickRef)}
+									<tr>
+										<td colspan="99" class="table-cell">
+											<VersionSetChoice {job} set={item} {tracks} canEdit={$isAdmin} {onrefresh} />
+										</td>
+									</tr>
+								{/if}
+							{:else if isDecoyGroup(item)}
 								{@const key = String(item.ref)}
 								{@const text = decoyGroupText(
 									item.members.length,

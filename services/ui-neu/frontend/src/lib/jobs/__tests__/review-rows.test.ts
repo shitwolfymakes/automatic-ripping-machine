@@ -34,7 +34,34 @@ describe('review-rows mappers', () => {
 			episodeNumber: 4,
 			episodeName: null,
 			role: null,
-			excluded: false
+			excluded: false,
+			angle: null,
+			stereo3d: false,
+			unrippable: false,
+			featureLabel: 'Extra'
+		});
+	});
+
+	it('trackToRow reads the angle from the ref and carries 3D, unrippable and the feature label', () => {
+		const r = trackToRow(
+			{
+				id: 't',
+				index: 4,
+				source_ref: '00334.mpls:2',
+				source_file: '00334.mpls',
+				stereo_3d: true,
+				unrippable: true,
+				title_class: 'primary',
+				expected_duration_seconds: 9807
+			} as any,
+			none
+		);
+		expect(r).toMatchObject({
+			angle: 2,
+			stereo3d: true,
+			unrippable: true,
+			featureLabel: 'Main feature',
+			sourceName: '00334.mpls:2'
 		});
 	});
 
@@ -118,8 +145,16 @@ describe('review-rows mappers', () => {
 			episodeNumber: null,
 			episodeName: null,
 			role: null,
-			excluded: false
+			excluded: false,
+			angle: null,
+			stereo3d: false,
+			unrippable: false,
+			featureLabel: null
 		});
+	});
+	it('a scanned title carries its angle and 3D flag', () => {
+		const r = scanTitleToRow({ index: 2, duration_seconds: 100, angle: 2, stereo_3d: true } as any);
+		expect(r).toMatchObject({ angle: 2, stereo3d: true });
 	});
 	it('sizes a track by its actual size, else the scan estimate', () => {
 		const base = { id: 't', index: 0, source_ref: 's' };

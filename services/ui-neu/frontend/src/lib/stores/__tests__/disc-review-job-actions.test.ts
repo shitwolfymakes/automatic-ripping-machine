@@ -5,13 +5,15 @@ const deleteJobMock = vi.fn();
 const startWaitingJobMock = vi.fn();
 const pauseWaitingJobMock = vi.fn();
 const resolveJobMock = vi.fn();
+const patchJobMock = vi.fn();
 const cancelIsoRipMock = vi.fn();
 vi.mock('$lib/api/jobs', () => ({
 	abandonJob: (...a: unknown[]) => abandonJobMock(...a),
 	deleteJob: (...a: unknown[]) => deleteJobMock(...a),
 	startWaitingJob: (...a: unknown[]) => startWaitingJobMock(...a),
 	pauseWaitingJob: (...a: unknown[]) => pauseWaitingJobMock(...a),
-	resolveJob: (...a: unknown[]) => resolveJobMock(...a)
+	resolveJob: (...a: unknown[]) => resolveJobMock(...a),
+	patchJob: (...a: unknown[]) => patchJobMock(...a)
 }));
 vi.mock('$lib/api/iso', () => ({
 	cancelIsoRip: (...a: unknown[]) => cancelIsoRipMock(...a)
@@ -41,6 +43,7 @@ beforeEach(() => {
 		startWaitingJobMock,
 		pauseWaitingJobMock,
 		resolveJobMock,
+		patchJobMock,
 		cancelIsoRipMock,
 		dismiss,
 		refresh
@@ -329,5 +332,30 @@ describe('DiscReviewJobActions', () => {
 			expect(a.pauseBusy).toBe(false);
 			expect(calls).toEqual([]);
 		});
+	});
+});
+
+describe('DiscReviewJobActions setVersions', () => {
+	it('does nothing without a job', async () => {
+		const a = make();
+		await a.setVersions(undefined, true);
+		expect(patchJobMock).not.toHaveBeenCalled();
+	});
+
+	it('patches the job field and refreshes', async () => {
+		patchJobMock.mockResolvedValue(undefined);
+		const a = make();
+		await a.setVersions(createJob({ id: 'j1' }), false);
+		expect(patchJobMock).toHaveBeenCalledWith('j1', { tick_one_version: false });
+		expect(calls).toEqual(['refresh']);
+		expect(a.errorMessage).toBeNull();
+	});
+
+	it('shows a failed change in the error banner', async () => {
+		patchJobMock.mockRejectedValue(new Error('nope'));
+		const a = make();
+		await a.setVersions(createJob({ id: 'j1' }), true);
+		expect(a.errorMessage).toContain('nope');
+		expect(refresh).not.toHaveBeenCalled();
 	});
 });
