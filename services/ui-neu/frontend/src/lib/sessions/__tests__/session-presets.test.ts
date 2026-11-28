@@ -46,6 +46,24 @@ describe('copyName', () => {
 	it('appends (copy) to the name', () => {
 		expect(copyName('Alpha')).toBe('Alpha (copy)');
 	});
+
+	it('numbers the copy when (copy) is taken, using the next free number', () => {
+		expect(copyName('Alpha', ['Alpha', 'Alpha (copy)'])).toBe('Alpha (copy 2)');
+		expect(copyName('Alpha', ['Alpha (copy)', 'Alpha (copy 2)', 'Alpha (copy 4)'])).toBe('Alpha (copy 3)');
+	});
+
+	it('numbers from the original when cloning a copy', () => {
+		expect(copyName('Alpha (copy)', ['Alpha', 'Alpha (copy)'])).toBe('Alpha (copy 2)');
+		expect(copyName('Alpha (copy 2)', ['Alpha (copy)', 'Alpha (copy 2)'])).toBe('Alpha (copy 3)');
+	});
+
+	it('treats names that differ only in case or surrounding spaces as taken', () => {
+		expect(copyName('Alpha', [' alpha (COPY) '])).toBe('Alpha (copy 2)');
+	});
+
+	it('keeps a name that only looks like a copy in the middle', () => {
+		expect(copyName('Alpha (copy) Beta')).toBe('Alpha (copy) Beta (copy)');
+	});
 });
 
 describe('ripPresetCopy', () => {
@@ -60,6 +78,10 @@ describe('ripPresetCopy', () => {
 			output_mode: 'tracks',
 			track_filters_json: filters
 		});
+	});
+
+	it('names the copy clear of the taken names', () => {
+		expect(ripPresetCopy(makeRip() as RipPresetView, ['rip r1 (copy)']).name).toBe('rip r1 (copy 2)');
 	});
 
 	it('copies null track filters as null', () => {
@@ -86,6 +108,10 @@ describe('transcodePresetCopy', () => {
 			encoder: 'any_h265',
 			extra_args: '--foo'
 		});
+	});
+
+	it('names the copy clear of the taken names', () => {
+		expect(transcodePresetCopy(makeTranscode() as TranscodePresetView, ['tc t1 (copy)']).name).toBe('tc t1 (copy 2)');
 	});
 
 	it('turns missing preset_ref and extra_args into null', () => {
