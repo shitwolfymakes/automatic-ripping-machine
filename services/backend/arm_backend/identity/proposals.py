@@ -4,7 +4,7 @@ sources that live inside the backend (manual edits, rip-preset selection)."""
 from __future__ import annotations
 
 import logging
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from datetime import datetime
 from typing import Any
 
@@ -236,15 +236,21 @@ def clear_pin(job: Job, capability: str) -> None:
     _store(job, claims)
 
 
-def record_preset(job: Job, tracks: Iterable[Track], *, now: datetime) -> None:
-    """The rip preset's keep/drop decision is the lowest-tier proposal for
-    `excluded`, so a disc map (or the operator) can override it by rule."""
+def record_preset_selection(job: Job, selected: Mapping[str, bool], *, now: datetime) -> None:
+    """The rip preset's keep/drop decision (`source_ref` -> ticked) is the
+    lowest-tier proposal for `excluded`, so a disc map (or the operator) can
+    override it by rule."""
     claims = claims_of(job)
     preset = claims.sources.get(PRESET) or SourceClaims()
-    preset.tracks = {**preset.tracks, **{t.source_ref: TrackClaim(selected=not t.excluded) for t in tracks}}
+    preset.tracks = {**preset.tracks, **{ref: TrackClaim(selected=ticked) for ref, ticked in selected.items()}}
     preset.run_at = now
     claims.sources = {**claims.sources, PRESET: preset}
     _store(job, claims)
+
+
+def record_preset(job: Job, tracks: Iterable[Track], *, now: datetime) -> None:
+    """Record the tracks' current ticks as the preset's decision."""
+    record_preset_selection(job, {t.source_ref: not t.excluded for t in tracks}, now=now)
 
 
 def _without_selected(source: SourceClaims, refs: set[str]) -> SourceClaims:

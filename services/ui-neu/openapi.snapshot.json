@@ -9258,6 +9258,17 @@
             ],
             "title": "Manual Wait Seconds"
           },
+          "tick_one_version": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tick One Version"
+          },
           "on_previously_ripped": {
             "anyOf": [
               {
@@ -9520,6 +9531,10 @@
             "type": "integer",
             "title": "Manual Wait Seconds"
           },
+          "tick_one_version": {
+            "type": "boolean",
+            "title": "Tick One Version"
+          },
           "on_previously_ripped": {
             "$ref": "#/components/schemas/PreviouslyRippedAction"
           },
@@ -9671,6 +9686,7 @@
           "ripping_paused",
           "hold_for_review",
           "manual_wait_seconds",
+          "tick_one_version",
           "on_previously_ripped",
           "default_retention_policy",
           "notification_apprise_urls",
@@ -12692,6 +12708,17 @@
             ],
             "title": "Pending Session Id"
           },
+          "tick_one_version": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tick One Version"
+          },
           "disc_number": {
             "anyOf": [
               {
@@ -13296,6 +13323,17 @@
               }
             ]
           },
+          "tick_one_version": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tick One Version"
+          },
           "tracks": {
             "anyOf": [
               {
@@ -13403,6 +13441,17 @@
               }
             ],
             "title": "Pending Session Id"
+          },
+          "tick_one_version": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tick One Version"
           },
           "parked_session_ids": {
             "items": {

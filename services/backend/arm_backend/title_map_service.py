@@ -19,6 +19,7 @@ from sqlmodel import col, select
 from arm_backend.identity.events import emit_identity_resolved
 from arm_backend.identity.pipeline import ResolveOutcome, resolve_job
 from arm_backend.identity.proposals import record_preset_drop, revert_manual_track
+from arm_backend.version_policy import recompute_ticks
 from arm_backend.ws import WSHub
 from arm_common import Job
 from arm_common.disc_titles import MAKEMKV_FAILURE_KEY, is_structure_scan, scan_candidates
@@ -139,6 +140,7 @@ async def apply_titles_report(db: AsyncSession, hub: WSHub, job: Job, report: Ti
         tracks = list((await db.execute(select(Track).where(col(Track.job_id) == job.id))).scalars().all())
         refreshed = _refresh_from_makemkv(tracks, title_map, report.titles)
         _drop_unrippable(job, tracks, title_map)
+        refreshed |= await recompute_ticks(db, job, tracks, scan, rippable=frozenset(title_map.numbers))
         logger.info(
             "titles job_id=%s mapped=%d unexposed=%d makemkv_only=%d",
             job.id,

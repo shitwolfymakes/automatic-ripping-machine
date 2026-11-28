@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, computed_field
+from pydantic import BaseModel, ConfigDict, Field, computed_field, field_validator
 
 from arm_common.enums import (
     APPLY_OK_JOB_STATUSES,
@@ -235,6 +235,9 @@ class JobView(BaseModel):
     media_type: MediaType | None = None
     season: int | None = None
     pending_session_id: str | None = None
+    # One version of the film per set (True) or every version (False); None for a job that is not
+    # a video disc. Snapshotted from the global default at creation.
+    tick_one_version: bool | None = None
     # Sessions applied to this job that are parked (waiting_identify): pre-rip
     # they fan out at rip-complete; post-rip something else holds them (e.g.
     # transcoding disabled). Filled by GET /api/jobs and GET /api/jobs/{id}
@@ -355,7 +358,16 @@ class JobUpdateRequest(BaseModel):
     # The header Movie | TV switch: the type alone, ids untouched. The episode
     # stage re-runs on the change (routers/jobs.py identity snapshot).
     media_type: MediaType | None = None
+    # The card's "one version / every version" switch; only a video job that has not started takes it.
+    tick_one_version: bool | None = None
     tracks: list[TrackEditRequest] | None = None
+
+    @field_validator("tick_one_version")
+    @classmethod
+    def _tick_one_version_is_set(cls, value: bool | None) -> bool | None:
+        if value is None:
+            raise ValueError("tick_one_version cannot be cleared")
+        return value
 
 
 class TrackView(BaseModel):

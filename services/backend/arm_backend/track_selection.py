@@ -1,7 +1,14 @@
 from arm_common import TrackStatus, DiscType, OutputMode, RipPreset, Track, TrackKind, TrackSelection
 from arm_common.disc_titles import scan_candidates, track_ref
 from arm_common.schemas import ScanResult, ScanTitle, TrackFilters
-from arm_common.title_classes import KEPT_CLASSES, MAIN_FEATURE_MIN_SECONDS, TitleClass, TitleVerdict, classify_titles
+from arm_common.title_classes import (
+    ALTERNATE_CLASSES,
+    KEPT_CLASSES,
+    MAIN_FEATURE_MIN_SECONDS,
+    TitleClass,
+    TitleVerdict,
+    classify_titles,
+)
 
 ALL_TRACKS_MIN_SECONDS = 60
 
@@ -10,14 +17,18 @@ class TrackSelectionError(ValueError):
     pass
 
 
-def _verdict_fields(verdict: TitleVerdict | None, refs: dict[int, str]) -> dict[str, TitleClass | str | None]:
-    """The track columns a classifier verdict fills; all NULL without one (a
-    DVD, or a title the classifier never saw). `title_class_ref` is the
-    `source_ref` of the kept title a copy points at."""
+def _verdict_columns(verdict: TitleVerdict | None, refs: dict[int, str]) -> tuple[TitleClass | None, str | None]:
+    """The track columns (`title_class`, `title_class_ref`) a classifier verdict fills; both NULL
+    without one (a DVD, or a title the classifier never saw). `title_class_ref` is the `source_ref`
+    of the kept title a copy points at."""
     if verdict is None:
-        return {"title_class": None, "title_class_ref": None}
-    ref = None if verdict.of_index is None else refs[verdict.of_index]
-    return {"title_class": verdict.title_class, "title_class_ref": ref}
+        return None, None
+    return verdict.title_class, None if verdict.of_index is None else refs[verdict.of_index]
+
+
+def _verdict_fields(verdict: TitleVerdict | None, refs: dict[int, str]) -> dict[str, TitleClass | str | None]:
+    title_class, title_class_ref = _verdict_columns(verdict, refs)
+    return {"title_class": title_class, "title_class_ref": title_class_ref}
 
 
 def _video_track(job_id: str, title: ScanTitle, verdicts: dict[int, TitleVerdict], refs: dict[int, str]) -> Track:
@@ -92,21 +103,74 @@ def _clip_seconds(scan: ScanResult) -> dict[int, float]:
 
 
 def _classify(
-    scan: ScanResult, titles: list[ScanTitle], refs: dict[int, str], preferred: frozenset[str]
+    scan: ScanResult,
+    titles: list[ScanTitle],
+    refs: dict[int, str],
+    preferred: frozenset[str],
+    prefer_stereo_3d: bool | None,
 ) -> dict[int, TitleVerdict]:
     """Verdicts for every title of a Blu-ray scan; `{}` for any other disc, which
-    leaves every title a candidate. `preferred` are title refs."""
+    leaves every title a candidate. `preferred` are title refs; `prefer_stereo_3d`
+    is the dimension of a 2D/3D twin pair that stays kept (None: the classifier's
+    pick order decides)."""
     if scan.disc_type != DiscType.BLURAY:
         return {}
     preferred_indexes = frozenset(i for i, ref in refs.items() if ref in preferred)
-    return classify_titles(titles, preferred=preferred_indexes, clip_seconds=_clip_seconds(scan))
+    return classify_titles(
+        titles, preferred=preferred_indexes, clip_seconds=_clip_seconds(scan), prefer_stereo_3d=prefer_stereo_3d
+    )
 
 
-def _kept_titles(titles: list[ScanTitle], verdicts: dict[int, TitleVerdict]) -> list[ScanTitle]:
-    """The titles the classifier keeps; all of them when there are no verdicts."""
-    if not verdicts:
-        return titles
-    return [t for t in titles if verdicts[t.index].title_class in KEPT_CLASSES]
+def _stand_ins(
+    titles: list[ScanTitle],
+    verdicts: dict[int, TitleVerdict],
+    refs: dict[int, str],
+    rippable: frozenset[str],
+) -> list[ScanTitle]:
+    """For each kept title MakeMKV cannot rip, its first rippable alternate: the
+    pick moves only when the pick itself is out."""
+    stand_ins: list[ScanTitle] = []
+    for kept in (t for t in titles if verdicts[t.index].title_class in KEPT_CLASSES and refs[t.index] not in rippable):
+        alternates = [
+            t
+            for t in titles
+            if verdicts[t.index].title_class in ALTERNATE_CLASSES
+            and verdicts[t.index].of_index == kept.index
+            and refs[t.index] in rippable
+        ]
+        stand_ins.extend(alternates[:1])
+    return stand_ins
+
+
+def _kept_titles(
+    titles: list[ScanTitle],
+    verdicts: dict[int, TitleVerdict],
+    refs: dict[int, str],
+    rippable: frozenset[str] | None,
+) -> list[ScanTitle]:
+    """The titles the classifier keeps, that MakeMKV can rip; every title when there
+    are no verdicts. An unrippable kept title gives way to its first rippable alternate."""
+    kept = titles if not verdicts else [t for t in titles if verdicts[t.index].title_class in KEPT_CLASSES]
+    if rippable is None:
+        return kept
+    stand_ins = _stand_ins(titles, verdicts, refs, rippable) if verdicts else []
+    return _by_index([t for t in kept if refs[t.index] in rippable], stand_ins)
+
+
+def _alternate_titles(
+    titles: list[ScanTitle],
+    verdicts: dict[int, TitleVerdict],
+    refs: dict[int, str],
+    rippable: frozenset[str] | None,
+) -> list[ScanTitle]:
+    """The rippable titles that are another version of a kept title."""
+    return [
+        t
+        for t in titles
+        if verdicts.get(t.index) is not None
+        and verdicts[t.index].title_class in ALTERNATE_CLASSES
+        and (rippable is None or refs[t.index] in rippable)
+    ]
 
 
 def _main_feature(candidates: list[ScanTitle], verdicts: dict[int, TitleVerdict]) -> list[ScanTitle]:
@@ -114,10 +178,31 @@ def _main_feature(candidates: list[ScanTitle], verdicts: dict[int, TitleVerdict]
     least MAIN_FEATURE_MIN_SECONDS, or the longest of all when none is that long."""
     edition_indices = {i for i, v in verdicts.items() if v.title_class == TitleClass.EDITION}
     editions = [t for t in candidates if t.index in edition_indices]
-    if editions:
+    if editions or not candidates:
         return editions
     eligible = [t for t in candidates if t.duration_seconds >= MAIN_FEATURE_MIN_SECONDS]
     return [max(eligible or candidates, key=lambda t: t.duration_seconds)]
+
+
+def _family(title: ScanTitle, verdicts: dict[int, TitleVerdict]) -> int:
+    """The index of the kept title a version set is built around: the title itself, or what it is an alternate of."""
+    verdict = verdicts.get(title.index)
+    if verdict is None or verdict.of_index is None or verdict.title_class not in ALTERNATE_CLASSES:
+        return title.index
+    return verdict.of_index
+
+
+def _by_index(*groups: list[ScanTitle]) -> list[ScanTitle]:
+    """The titles of every group once each, in index order."""
+    return sorted({t.index: t for group in groups for t in group}.values(), key=lambda t: t.index)
+
+
+def _with_versions(
+    picked: list[ScanTitle], alternates: list[ScanTitle], verdicts: dict[int, TitleVerdict]
+) -> list[ScanTitle]:
+    """`picked` plus every alternate that is another version of the same kept title."""
+    families = {_family(t, verdicts) for t in picked}
+    return _by_index(picked, [t for t in alternates if verdicts[t.index].of_index in families])
 
 
 def _custom_pool(titles: list[ScanTitle], candidates: list[ScanTitle], filters: TrackFilters) -> list[ScanTitle]:
@@ -126,24 +211,40 @@ def _custom_pool(titles: list[ScanTitle], candidates: list[ScanTitle], filters: 
     return titles if filters.title_indices is not None else candidates
 
 
+def _video_candidates(
+    titles: list[ScanTitle],
+    verdicts: dict[int, TitleVerdict],
+    refs: dict[int, str],
+    rippable: frozenset[str] | None,
+    tick_one_version: bool,
+) -> tuple[list[ScanTitle], list[ScanTitle]]:
+    """(the titles a selection rule may take, the alternates of kept titles it may add
+    when every version is ticked). A job with one version per film adds none."""
+    kept = _kept_titles(titles, verdicts, refs, rippable)
+    alternates = [] if tick_one_version else _alternate_titles(titles, verdicts, refs, rippable)
+    return kept, alternates
+
+
 def _select_video(
     scan: ScanResult,
     rip_preset: RipPreset,
     job_id: str,
     preferred: frozenset[str],
     rippable: frozenset[str] | None,
+    tick_one_version: bool,
+    prefer_stereo_3d: bool | None,
 ) -> list[Track]:
     titles = scan_candidates(scan)
     if not titles:
         return []
     refs = {t.index: track_ref(scan, t) for t in titles}
-    verdicts = _classify(scan, titles, refs, preferred)
-    candidates = _kept_titles(titles, verdicts)
-    if rippable is not None:
-        candidates = [t for t in candidates if refs[t.index] in rippable]
+    verdicts = _classify(scan, titles, refs, preferred, prefer_stereo_3d)
+    kept, alternates = _video_candidates(titles, verdicts, refs, rippable, tick_one_version)
+    candidates = _by_index(kept, alternates)
     rule = rip_preset.track_selection
     if rule == TrackSelection.MAIN_FEATURE:
-        return [_video_track(job_id, t, verdicts, refs) for t in _main_feature(candidates, verdicts)]
+        picked = _with_versions(_main_feature(kept, verdicts), alternates, verdicts)
+        return [_video_track(job_id, t, verdicts, refs) for t in picked]
     if rule == TrackSelection.ALL_TRACKS:
         return [
             _video_track(job_id, t, verdicts, refs) for t in candidates if t.duration_seconds >= ALL_TRACKS_MIN_SECONDS
@@ -211,23 +312,71 @@ def select_tracks(
     *,
     preferred: frozenset[str] = frozenset(),
     rippable: frozenset[str] | None = None,
+    tick_one_version: bool = True,
+    prefer_stereo_3d: bool | None = None,
 ) -> list[Track]:
     """Apply rip-preset track-selection rules to a scan. `preferred` are the
     title refs a metadata source calls the main feature; the classifier uses
     them to break ties between look-alike titles. `rippable`, when given, are
-    the only refs a video selection may take (the ones MakeMKV can rip)."""
+    the only refs a video selection may take (the ones MakeMKV can rip).
+    `tick_one_version` takes one title per version set (plus every edition);
+    False also takes the alternates (angles, copies, the other dimension),
+    never duplicates or decoys. `prefer_stereo_3d` is the dimension of a 2D/3D
+    twin pair that counts as the pick (None: the classifier's order decides)."""
     whole = _whole_disc_tracks(job_id, scan, rip_preset)
     if whole is not None:
         return whole
     if scan.disc_type in (DiscType.DVD, DiscType.BLURAY):
-        return _select_video(scan, rip_preset, job_id, preferred, rippable)
+        return _select_video(scan, rip_preset, job_id, preferred, rippable, tick_one_version, prefer_stereo_3d)
     if scan.disc_type == DiscType.CD:
         return _select_audio(scan, rip_preset, job_id)
     raise TrackSelectionError(f"cannot select tracks for disc_type={scan.disc_type}")
 
 
+def title_classes(
+    scan: ScanResult, *, preferred: frozenset[str] = frozenset(), prefer_stereo_3d: bool | None = None
+) -> dict[str, tuple[TitleClass | None, str | None]]:
+    """`source_ref` -> the track columns (`title_class`, `title_class_ref`) the classifier gives
+    each scanned title; both None for a disc with no classifier verdicts."""
+    titles = scan_candidates(scan)
+    refs = {t.index: track_ref(scan, t) for t in titles}
+    verdicts = _classify(scan, titles, refs, preferred, prefer_stereo_3d)
+    return {refs[t.index]: _verdict_columns(verdicts.get(t.index), refs) for t in titles}
+
+
+def preset_ticks(
+    scan: ScanResult,
+    rip_preset: RipPreset,
+    *,
+    preferred: frozenset[str] = frozenset(),
+    rippable: frozenset[str] | None = None,
+    tick_one_version: bool = True,
+    prefer_stereo_3d: bool | None = None,
+) -> frozenset[str] | None:
+    """The `source_ref`s the preset ticks for this scan and policy; None when the
+    preset takes the disc whole and there is no per-title tick to compute."""
+    if _whole_disc_tracks("", scan, rip_preset) is not None:
+        return None
+    tracks = select_tracks(
+        "",
+        scan,
+        rip_preset,
+        preferred=preferred,
+        rippable=rippable,
+        tick_one_version=tick_one_version,
+        prefer_stereo_3d=prefer_stereo_3d,
+    )
+    return frozenset(t.source_ref for t in tracks)
+
+
 def select_tracks_for_review(
-    job_id: str, scan: ScanResult, rip_preset: RipPreset, *, preferred: frozenset[str] = frozenset()
+    job_id: str,
+    scan: ScanResult,
+    rip_preset: RipPreset,
+    *,
+    preferred: frozenset[str] = frozenset(),
+    tick_one_version: bool = True,
+    prefer_stereo_3d: bool | None = None,
 ) -> list[Track]:
     """Persist EVERY scanned title as a Track for the timed review gate, marking
     preset-rejected titles `excluded=True` (the default keep/drop set) so the
@@ -244,14 +393,16 @@ def select_tracks_for_review(
     if whole is not None:
         return whole
 
-    kept_refs = {t.source_ref for t in select_tracks(job_id, scan, rip_preset, preferred=preferred)}
+    kept_refs = preset_ticks(
+        scan, rip_preset, preferred=preferred, tick_one_version=tick_one_version, prefer_stereo_3d=prefer_stereo_3d
+    )
     titles = scan_candidates(scan)
     refs = {t.index: track_ref(scan, t) for t in titles}
     is_cd = scan.disc_type == DiscType.CD
-    verdicts = _classify(scan, titles, refs, preferred)
+    verdicts = _classify(scan, titles, refs, preferred, prefer_stereo_3d)
     rows: list[Track] = []
     for title in titles:
         track = _audio_track(job_id, title) if is_cd else _video_track(job_id, title, verdicts, refs)
-        track.excluded = refs[title.index] not in kept_refs
+        track.excluded = refs[title.index] not in (kept_refs or frozenset())
         rows.append(track)
     return rows

@@ -38,6 +38,7 @@ from arm_backend.title_map_service import (
     title_numbers,
 )
 from arm_backend.track_selection import DiscBackupNeedsBluray, select_tracks
+from arm_backend.version_policy import selection_policy
 from arm_backend.ws import WSHub
 from arm_common import (
     Config,
@@ -517,7 +518,14 @@ async def _select_or_fail(
     # whatever the scan found, so it never lands in the no-titles handling
     # below; a FOLDER preset on anything but a Blu-ray is refused here.
     try:
-        new_tracks = select_tracks(job.id, scan, preset, preferred=preferred_titles(job), rippable=rippable_refs(scan))
+        new_tracks = select_tracks(
+            job.id,
+            scan,
+            preset,
+            preferred=preferred_titles(job),
+            rippable=rippable_refs(scan),
+            **await selection_policy(session, job),
+        )
     except DiscBackupNeedsBluray as exc:
         # Fail the job with the reason on its event: the ripper gives up on a
         # 4xx, and the job would otherwise sit IDENTIFIED with nothing to say why.
