@@ -1,4 +1,5 @@
 import type {
+	AcceptIdentityRequest,
 	ExternalIds,
 	JobView,
 	JobDetailView,
@@ -338,9 +339,14 @@ export function ripAgain(id: string): Promise<RipAgainResponse> {
 }
 
 // Apply the identity suggestion identify held for review (the media type's
-// auto-apply switch is off). Answers like resolve; 409 when none is held.
-export function acceptIdentitySuggestion(jobId: string): Promise<ResolveResponse> {
-	return post<ResolveResponse>(`/api/jobs/${jobId}/identity/accept`);
+// auto-apply switch is off), or one row of a shortlist (`alternative`, its
+// index). Answers like resolve; 409 when none is held, 422 when a shortlist
+// gets no valid row, 502 when the provider cannot return the row again.
+export function acceptIdentitySuggestion(jobId: string, alternative?: number): Promise<ResolveResponse> {
+	return post<ResolveResponse>(
+		`/api/jobs/${jobId}/identity/accept`,
+		alternative === undefined ? undefined : ({ alternative } satisfies AcceptIdentityRequest)
+	);
 }
 
 // Timed review gate: operator Start for a disc held in awaiting_review.

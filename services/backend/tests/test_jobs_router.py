@@ -44,7 +44,9 @@ from arm_common import (
     User,
 )
 from arm_common.enums import ScanFailureReason, TrackKind, TrackRole
+from arm_backend.metadata.base import MetadataResult
 from arm_common.schemas import ScanFailure
+from arm_common.schemas.job_metadata import SuggestionCandidate
 from arm_common.models import Track
 from arm_common import StageStatus, TrackStage
 from arm_common.models.user import GUEST_ROLE
@@ -86,9 +88,24 @@ class _StageRunner:
         self.scheduled.append(job_id)
 
 
-def _make_app(signing_key: bytes, db: FakeSession, hub: _Hub | None = None) -> tuple[FastAPI, str]:
+class _Refetch:
+    """The dispatcher's `refetch`: answers with `found`, and keeps the rows it was asked for."""
+
+    def __init__(self, found: MetadataResult | None = None) -> None:
+        self.found = found
+        self.asked: list[SuggestionCandidate] = []
+
+    async def refetch(self, candidate: SuggestionCandidate, _cfg: Any) -> MetadataResult | None:
+        self.asked.append(candidate)
+        return self.found
+
+
+def _make_app(
+    signing_key: bytes, db: FakeSession, hub: _Hub | None = None, dispatcher: _Refetch | None = None
+) -> tuple[FastAPI, str]:
     app = FastAPI()
     app.state.signing_key = signing_key
+    app.state.dispatcher = dispatcher or _Refetch()
     app.state.ws_hub = hub or _Hub()
     app.include_router(jobs_router.router)
 
@@ -2210,6 +2227,141 @@ def _suggested_job(status: JobStatus = JobStatus.AWAITING_REVIEW) -> Job:
     job.wait_start_time = None
     job.metadata_json = {"identity_suggestion": dict(_SUGGESTION), "flags": {"unidentified": True}}
     return job
+
+
+_TOTAL_RECALL_1990 = {"title": "Total Recall", "year": 1990, "kind": "movie", "runtime": 113, "provider": "tmdb"}
+_TOTAL_RECALL_2012 = {"title": "Total Recall", "year": 2012, "kind": "movie", "runtime": 118, "provider": "tmdb"}
+
+
+def _shortlisted_job(status: JobStatus = JobStatus.AWAITING_REVIEW) -> Job:
+    """A Total-Recall-shaped shortlist: two close titles, nothing applied, the breakdown kept."""
+    job = _suggested_job(status)
+    rows = [
+        {
+            **_TOTAL_RECALL_1990,
+            "providers": ["tmdb", "omdb"],
+            "ids": {"tmdb": "861", "imdb": "tt0100802"},
+            "score": 71.0,
+        },
+        {**_TOTAL_RECALL_2012, "providers": ["tmdb"], "ids": {"tmdb": "64635"}, "score": 66.5},
+    ]
+    job.metadata_json["identity_suggestion"] = {
+        "reason": "close",
+        "score": 71.0,
+        "provider": "tmdb",
+        "title": "Total Recall",
+        "year": 1990,
+        "kind": "movie",
+        "alternatives": rows,
+        "suggested_at": "2026-10-15T10:00:00Z",
+    }
+    job.metadata_json["identify_match"] = {
+        "decision": "shortlist",
+        "shortlist": 2,
+        "evidence": {"p_tv": 0.1},
+        "candidates": [
+            {**r, "parts": {"title": 40, "year": 0, "runtime": 20, "kind": 7, "agreement": 4}, "flags": []}
+            for r in rows
+        ],
+        "thresholds": {"accept": 65, "margin": 10, "floor": 40, "title_min": 0.7},
+    }
+    return job
+
+
+def _recall_2012() -> MetadataResult:
+    return MetadataResult(
+        title="Total Recall",
+        year=2012,
+        kind="movie",
+        payload={"id": 64635, "imdb_id": "tt1386703", "poster_path": "/r.jpg"},
+        provider="tmdb",
+    )
+
+
+def _accept_pick(signing_key: bytes, job: Job, cfg: Config, body: dict | None, dispatcher: _Refetch) -> Any:
+    db = FakeSession()
+    db.rows["jobs"] = [job]
+    db.rows["config"] = [cfg]
+    app, token = _make_app(signing_key, db, dispatcher=dispatcher)
+    with TestClient(app) as client:
+        return client.post(f"/api/jobs/{job.id}/identity/accept", json=body, headers=_auth(token))
+
+
+def test_accepting_a_shortlist_row_applies_the_refetched_title_and_keeps_the_breakdown(signing_key: bytes) -> None:
+    dispatcher = _Refetch(_recall_2012())
+    job = _shortlisted_job()
+    r = _accept_pick(
+        signing_key, job, Config(id=1, hold_for_review=False, ripping_paused=False), {"alternative": 1}, dispatcher
+    )
+    assert r.status_code == 200, r.text
+    assert [(c.title, c.year, c.ids) for c in dispatcher.asked] == [("Total Recall", 2012, {"tmdb": "64635"})]
+    body = r.json()["job"]
+    assert (body["status"], body["title"], body["year"]) == ("identified", "Total Recall", 2012)
+    assert body["metadata_json"]["identity"]["external_ids"]["tmdb"] == "64635"
+    assert body["metadata_json"].get("identity_suggestion") is None
+    assert body["metadata_json"]["flags"].get("unidentified", False) is False
+    # The picked row is the one that explains the applied title.
+    assert body["metadata_json"]["identify_match"]["picked"] == 1
+
+
+def test_a_shortlist_pick_follows_the_review_hold(signing_key: bytes) -> None:
+    r = _accept_pick(
+        signing_key,
+        _shortlisted_job(),
+        Config(id=1, hold_for_review=True, ripping_paused=False),
+        {"alternative": 0},
+        _Refetch(_recall_2012()),
+    )
+    body = r.json()["job"]
+    assert body["status"] == "awaiting_review" and body["wait_start_time"] is not None
+
+
+def test_a_shortlist_pick_after_an_unattended_rip_promotes_the_placeholder(signing_key: bytes) -> None:
+    job = _shortlisted_job(JobStatus.RIPPED_AWAITING_IDENTIFY)
+    r = _accept_pick(signing_key, job, Config(id=1), {"alternative": 0}, _Refetch(_recall_2012()))
+    assert r.status_code == 200, r.text
+    assert r.json()["job"]["status"] == "ripped"
+
+
+@pytest.mark.parametrize("body", [None, {}, {"alternative": 2}])
+def test_a_shortlist_accept_without_a_valid_row_is_refused(signing_key: bytes, body: dict | None) -> None:
+    dispatcher = _Refetch(_recall_2012())
+    job = _shortlisted_job()
+    r = _accept_pick(signing_key, job, Config(id=1), body, dispatcher)
+    assert r.status_code == 422
+    assert dispatcher.asked == [] and job.title == "MY_DISC"
+
+
+def test_a_shortlist_row_the_provider_cannot_return_leaves_the_job_held(signing_key: bytes) -> None:
+    job = _shortlisted_job()
+    r = _accept_pick(signing_key, job, Config(id=1), {"alternative": 0}, _Refetch(None))
+    assert r.status_code == 502
+    assert (job.title, job.status) == ("MY_DISC", JobStatus.AWAITING_REVIEW)
+    assert "identity_suggestion" in job.metadata_json
+
+
+def test_an_alternative_on_a_single_held_match_is_refused(signing_key: bytes) -> None:
+    r = _accept_pick(signing_key, _suggested_job(), Config(id=1), {"alternative": 0}, _Refetch())
+    assert r.status_code == 422
+
+
+def test_accepting_a_held_hit_keeps_its_breakdown_and_a_manual_resolve_drops_it(signing_key: bytes) -> None:
+    match = _shortlisted_job().metadata_json["identify_match"] | {"decision": "accept", "shortlist": 0}
+    held = _suggested_job()
+    held.metadata_json["identify_match"] = match
+    accepted = _accept_pick(signing_key, held, Config(id=1), None, _Refetch()).json()["job"]
+    assert accepted["metadata_json"]["identify_match"]["decision"] == "accept"
+    assert accepted["metadata_json"]["identify_match"].get("picked") is None
+
+    db = FakeSession()
+    stale = _shortlisted_job()
+    db.rows["jobs"] = [stale]
+    db.rows["config"] = [Config(id=1)]
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as client:
+        r = client.post(f"/api/jobs/{stale.id}/resolve", json={"title": "Something Else"}, headers=_auth(token))
+    assert r.status_code == 200, r.text
+    assert r.json()["job"]["metadata_json"].get("identify_match") is None
 
 
 def test_accept_applies_the_suggestion_and_releases_the_rip_when_the_gate_is_off(signing_key: bytes) -> None:

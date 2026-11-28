@@ -20,6 +20,19 @@ export type AbandonJobRequest = {
 };
 
 /**
+ * AcceptIdentityRequest
+ *
+ * POST /api/jobs/{id}/identity/accept body. `alternative` is the shortlist row to apply (an index into the
+ * suggestion's `alternatives`); a shortlist needs it, a single held match takes none.
+ */
+export type AcceptIdentityRequest = {
+    /**
+     * Alternative
+     */
+    alternative?: number | null;
+};
+
+/**
  * ApplySessionRequest
  */
 export type ApplySessionRequest = {
@@ -2192,6 +2205,10 @@ export type IdentifyMatch = {
      */
     shortlist?: number;
     /**
+     * Picked
+     */
+    picked?: number | null;
+    /**
      * Runner Up
      */
     runner_up?: number | null;
@@ -2289,13 +2306,26 @@ export type IdentityFacts = {
 /**
  * IdentitySuggestion
  *
- * A confident online match identify did not apply because the media
- * type's "Apply confident matches" switch is off. The job keeps its miss title and the `unidentified` flag and
- * waits in AWAITING_REVIEW with no countdown until the operator accepts
- * it (POST /api/jobs/{id}/identity/accept) or identifies the disc another
- * way (any resolve clears this section).
+ * A match identify did not apply: a confident one the media type's "Apply confident matches" switch held
+ * (`auto_apply_off`, `ambiguous_toc`), or a shortlist of close ones (`close`; `alternatives` are its rows, best
+ * first, and the top-level fields repeat the first). The job keeps its miss title and the `unidentified` flag and
+ * waits until the operator accepts it (POST /api/jobs/{id}/identity/accept, with `alternative` for a shortlist) or
+ * identifies the disc another way (any resolve clears this section). A held job waits in AWAITING_REVIEW with no
+ * countdown; a shortlist with `block_on_miss` off lets the disc rip unidentified and keeps the section.
  */
 export type IdentitySuggestion = {
+    /**
+     * Reason
+     */
+    reason?: 'auto_apply_off' | 'close' | 'ambiguous_toc';
+    /**
+     * Score
+     */
+    score?: number | null;
+    /**
+     * Alternatives
+     */
+    alternatives?: Array<SuggestionCandidate>;
     /**
      * Provider
      */
@@ -5698,6 +5728,49 @@ export type StorageRoot = {
 };
 
 /**
+ * SuggestionCandidate
+ *
+ * One row of a shortlist. It carries no provider record: accepting it asks the provider for the title again by
+ * `ids`, so the job's metadata does not grow by five payloads.
+ */
+export type SuggestionCandidate = {
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Year
+     */
+    year?: number | null;
+    /**
+     * Kind
+     */
+    kind: 'movie' | 'tv';
+    /**
+     * Runtime
+     */
+    runtime?: number | null;
+    /**
+     * Providers
+     */
+    providers?: Array<string>;
+    /**
+     * Provider
+     */
+    provider?: string | null;
+    /**
+     * Ids
+     */
+    ids?: {
+        [key: string]: string;
+    };
+    /**
+     * Score
+     */
+    score: number;
+};
+
+/**
  * SystemDiagnosticCheck
  */
 export type SystemDiagnosticCheck = {
@@ -7857,7 +7930,10 @@ export type ResolveApiJobsJobIdResolvePostResponses = {
 export type ResolveApiJobsJobIdResolvePostResponse = ResolveApiJobsJobIdResolvePostResponses[keyof ResolveApiJobsJobIdResolvePostResponses];
 
 export type AcceptIdentitySuggestionApiJobsJobIdIdentityAcceptPostData = {
-    body?: never;
+    /**
+     * Req
+     */
+    body?: AcceptIdentityRequest | null;
     path: {
         /**
          * Job Id

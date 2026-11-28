@@ -1,10 +1,18 @@
 from datetime import datetime, timezone
 
-from arm_backend.identity.apply import apply_identity_result, suggest_identity, suggestion_to_result
+from arm_backend.identity.apply import apply_identity_result, suggest_identity, suggest_shortlist, suggestion_to_result
 from arm_backend.metadata.base import MetadataResult
 from arm_common import Job
 from arm_common.enums import DiscType, JobStatus, MediaType
-from arm_common.schemas.job_metadata import flag_is_set, identity_suggestion_of
+from arm_common.schemas.job_metadata import (
+    IdentifyMatch,
+    MatchCandidate,
+    MatchEvidence,
+    MatchParts,
+    MatchThresholds,
+    flag_is_set,
+    identity_suggestion_of,
+)
 
 _NOW = datetime(2026, 10, 15, 10, tzinfo=timezone.utc)
 
@@ -50,10 +58,11 @@ def test_apply_identity_result_music_disc_number() -> None:
 
 
 def test_suggest_identity_stores_the_hit_and_flags_unidentified() -> None:
-    md = suggest_identity({"scan_result": {"x": 1}}, _iron_man(), now=_NOW)
+    md = suggest_identity({"scan_result": {"x": 1}}, _iron_man(), now=_NOW, reason="auto_apply_off", score=91.5)
     s = identity_suggestion_of(md)
     assert s is not None
     assert (s.provider, s.title, s.year, s.kind) == ("tmdb", "Iron Man", 2008, "movie")
+    assert (s.reason, s.score, s.alternatives) == ("auto_apply_off", 91.5, [])
     assert s.poster_url == "https://image.tmdb.org/t/p/w500/abc.jpg"
     assert s.external_ids.tmdb == "1726" and s.external_ids.tmdb_kind == "movie"
     assert s.overview == "Tony." and s.payload["id"] == 1726 and s.suggested_at == _NOW
@@ -64,8 +73,52 @@ def test_suggest_identity_stores_the_hit_and_flags_unidentified() -> None:
 
 def test_suggestion_round_trips_to_a_result() -> None:
     result = MetadataResult(title="Lost", year=2004, kind="tv", payload={"id": 123, "name": "Lost"}, provider="tvmaze")
-    s = identity_suggestion_of(suggest_identity(None, result, now=_NOW))
+    s = identity_suggestion_of(suggest_identity(None, result, now=_NOW, reason="ambiguous_toc"))
     assert s is not None
     back = suggestion_to_result(s)
     assert (back.title, back.year, back.kind, back.provider) == ("Lost", 2004, "tv", "tvmaze")
     assert back.payload == {"id": 123, "name": "Lost"}
+
+
+def _candidate(title: str, year: int, score: float, tmdb: str) -> MatchCandidate:
+    return MatchCandidate(
+        title=title,
+        year=year,
+        kind="movie",
+        runtime=113.0,
+        providers=["tmdb", "omdb"],
+        provider="tmdb",
+        ids={"tmdb": tmdb},
+        score=score,
+        parts=MatchParts(title=40, year=0, runtime=20, kind=7, agreement=4),
+    )
+
+
+def test_suggest_shortlist_stores_the_rows_without_a_provider_record() -> None:
+    match = IdentifyMatch(
+        decision="shortlist",
+        evidence=MatchEvidence(p_tv=0.1),
+        candidates=[
+            _candidate("Total Recall", 1990, 71.0, "861"),
+            _candidate("Total Recall", 2012, 66.5, "64635"),
+            _candidate("Total Recall 2070", 1999, 41.0, "9"),
+        ],
+        shortlist=2,
+        thresholds=MatchThresholds(accept=65, margin=10, floor=40, title_min=0.7),
+    )
+    md = suggest_shortlist({"scan_result": {"x": 1}}, match, now=_NOW)
+    s = identity_suggestion_of(md)
+    assert s is not None
+    assert (s.reason, s.score, s.title, s.year, s.provider, s.payload) == (
+        "close",
+        71.0,
+        "Total Recall",
+        1990,
+        "tmdb",
+        {},
+    )
+    assert [(a.year, a.ids, a.providers, a.runtime) for a in s.alternatives] == [
+        (1990, {"tmdb": "861"}, ["tmdb", "omdb"], 113.0),
+        (2012, {"tmdb": "64635"}, ["tmdb", "omdb"], 113.0),
+    ]
+    assert flag_is_set(md, "unidentified") and md["scan_result"] == {"x": 1} and "identity" not in md

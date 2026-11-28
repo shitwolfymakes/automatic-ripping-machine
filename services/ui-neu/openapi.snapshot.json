@@ -1916,7 +1916,7 @@
           "jobs"
         ],
         "summary": "Accept Identity Suggestion",
-        "description": "Confirm the confident match identify held because the media type's\nauto-apply switch was off.\n\nApplies the stored hit exactly as identify would have, then hands the\njob to the resolve path (provenance, fan-out, `identify.resolved`, the\nepisode stage). The status is settled first: a held disc is released to\nrip when the review gate is off, or gets the gate's countdown when it is\non; a pause keeps it held with no countdown until un-pause stamps one;\na ripped placeholder follows resolve's promote rule. A job also held as\npreviously ripped keeps that hold untouched (status, no countdown).",
+        "description": "Confirm the match identify did not apply: the confident one a switched-off auto-apply held, or one row of a\nshortlist of close ones (`alternative`, an index into the suggestion's `alternatives`; D64: the operator's pick\nis a confirmation, applied exactly like a held hit).\n\nApplies the hit, then hands the job to the resolve path (provenance, fan-out, `identify.resolved`, the\nepisode stage). The status is settled first: a held disc is released to\nrip when the review gate is off, or gets the gate's countdown when it is\non; a pause keeps it held with no countdown until un-pause stamps one;\na ripped placeholder follows resolve's promote rule. A job also held as\npreviously ripped keeps that hold untouched (status, no countdown).",
         "operationId": "accept_identity_suggestion_api_jobs__job_id__identity_accept_post",
         "security": [
           {
@@ -1935,6 +1935,23 @@
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/AcceptIdentityRequest"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Req"
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -8065,6 +8082,26 @@
         "title": "AbandonJobRequest",
         "description": "POST /api/jobs/{id}/abandon body. `delete_raw=true` also wipes\n`/raw/{job_id}/` so the drive can be reused without leftover partial\nrips on disk. The DB row stays (status=abandoned) for audit."
       },
+      "AcceptIdentityRequest": {
+        "properties": {
+          "alternative": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Alternative"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "AcceptIdentityRequest",
+        "description": "POST /api/jobs/{id}/identity/accept body. `alternative` is the shortlist row to apply (an index into the\nsuggestion's `alternatives`); a shortlist needs it, a single held match takes none."
+      },
       "ApplySessionRequest": {
         "properties": {
           "session_id": {
@@ -12120,6 +12157,17 @@
             "title": "Shortlist",
             "default": 0
           },
+          "picked": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Picked"
+          },
           "runner_up": {
             "anyOf": [
               {
@@ -12305,6 +12353,34 @@
       },
       "IdentitySuggestion": {
         "properties": {
+          "reason": {
+            "type": "string",
+            "enum": [
+              "auto_apply_off",
+              "close",
+              "ambiguous_toc"
+            ],
+            "title": "Reason",
+            "default": "auto_apply_off"
+          },
+          "score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Score"
+          },
+          "alternatives": {
+            "items": {
+              "$ref": "#/components/schemas/SuggestionCandidate"
+            },
+            "type": "array",
+            "title": "Alternatives"
+          },
           "provider": {
             "type": "string",
             "title": "Provider"
@@ -12378,7 +12454,7 @@
           "suggested_at"
         ],
         "title": "IdentitySuggestion",
-        "description": "A confident online match identify did not apply because the media\ntype's \"Apply confident matches\" switch is off. The job keeps its miss title and the `unidentified` flag and\nwaits in AWAITING_REVIEW with no countdown until the operator accepts\nit (POST /api/jobs/{id}/identity/accept) or identifies the disc another\nway (any resolve clears this section)."
+        "description": "A match identify did not apply: a confident one the media type's \"Apply confident matches\" switch held\n(`auto_apply_off`, `ambiguous_toc`), or a shortlist of close ones (`close`; `alternatives` are its rows, best\nfirst, and the top-level fields repeat the first). The job keeps its miss title and the `unidentified` flag and\nwaits until the operator accepts it (POST /api/jobs/{id}/identity/accept, with `alternative` for a shortlist) or\nidentifies the disc another way (any resolve clears this section). A held job waits in AWAITING_REVIEW with no\ncountdown; a shortlist with `block_on_miss` off lets the disc rip unidentified and keeps the section."
       },
       "IdentityView": {
         "properties": {
@@ -18461,6 +18537,81 @@
           "percent"
         ],
         "title": "StorageRoot"
+      },
+      "SuggestionCandidate": {
+        "properties": {
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "year": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Year"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "movie",
+              "tv"
+            ],
+            "title": "Kind"
+          },
+          "runtime": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Runtime"
+          },
+          "providers": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Providers"
+          },
+          "provider": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider"
+          },
+          "ids": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Ids"
+          },
+          "score": {
+            "type": "number",
+            "title": "Score"
+          }
+        },
+        "type": "object",
+        "required": [
+          "title",
+          "kind",
+          "score"
+        ],
+        "title": "SuggestionCandidate",
+        "description": "One row of a shortlist. It carries no provider record: accepting it asks the provider for the title again by\n`ids`, so the job's metadata does not grow by five payloads."
       },
       "SystemDiagnosticCheck": {
         "properties": {

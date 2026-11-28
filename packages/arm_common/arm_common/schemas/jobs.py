@@ -43,6 +43,15 @@ class ResolveMatch(BaseModel):
     facts: IdentityFacts | None = None
 
 
+class AcceptIdentityRequest(BaseModel):
+    """POST /api/jobs/{id}/identity/accept body. `alternative` is the shortlist row to apply (an index into the
+    suggestion's `alternatives`); a shortlist needs it, a single held match takes none."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    alternative: int | None = Field(default=None, ge=0)
+
+
 class ResolveRequest(BaseModel):
     """POST /api/jobs/{id}/resolve body.
 

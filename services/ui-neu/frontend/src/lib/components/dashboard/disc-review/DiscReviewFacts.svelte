@@ -4,6 +4,8 @@
 	import type { EpisodeStatus } from '$lib/episodes/status';
 	import { ripPlanLine, ripPlanSummary, ripPlanWarning } from '$lib/jobs/rip-plan';
 	import { isIdentifyMiss, missReason } from '$lib/jobs/review';
+	import { identifyMatchOf } from '$lib/jobs/match-explain';
+	import MatchWhy from '$lib/components/jobs/MatchWhy.svelte';
 	import { hasVersionSets } from '$lib/jobs/version-sets';
 	import {
 		discFactsLine,
@@ -67,6 +69,8 @@
 	let missLine = $derived(missReason(job));
 	// A missed identify's title is the disc's own, so it is not a match yet.
 	let isMiss = $derived(isIdentifyMiss(job));
+	// Why the applied title was chosen; a miss has no match to explain (its closest candidate is in the miss line).
+	let whyMatch = $derived(isMiss ? null : identifyMatchOf(job));
 	let matchDetail = $derived(matchDetailLine(job, isTv, jobMeta.video_type));
 	let showProvider = $derived(matchProviderLabel(job));
 	let discLine = $derived(discFactsLine(job, jobMeta.titleCount));
@@ -106,6 +110,7 @@
 						>, {missLine ?? `pick a ${isTv ? 'show' : 'title'} with Search`}</span
 					>
 				{/if}
+				<MatchWhy match={whyMatch} />
 			</dd>
 		</div>
 	{/if}

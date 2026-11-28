@@ -430,7 +430,7 @@ describe('DiscReviewWidget', () => {
 			});
 			try {
 				expect(await screen.findByTestId('identify-miss-reason')).toHaveTextContent(
-					'No source found a close match for "MY DISC". Try another source in the search below.'
+					'No close match for "MY DISC". Try another source in the search below.'
 				);
 			} finally {
 				restore();

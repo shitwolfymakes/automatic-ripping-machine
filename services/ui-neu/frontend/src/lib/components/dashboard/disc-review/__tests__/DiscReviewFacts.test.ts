@@ -17,6 +17,7 @@ import type { EpisodeStatus } from '$lib/episodes/status';
 import type { SourceRow } from '$lib/jobs/review-card';
 import { createJob, createTrack } from '../../../../__fixtures__/job';
 import { bladeRunnerTracks } from '../../../../__fixtures__/version-sets';
+import { BLADE_RUNNER_ACCEPTED, BLADE_RUNNER_NO_MATCH } from '../../../../__fixtures__/identify-match';
 import DiscReviewFacts from '../DiscReviewFacts.svelte';
 
 const SOURCE: SourceRow = { label: 'Drive', value: 'Drive A' };
@@ -434,5 +435,37 @@ describe('DiscReviewFacts: Versions row', () => {
 		expect(onsetversions).toHaveBeenCalledWith(false);
 		await fireEvent.change(select, { target: { value: 'one' } });
 		expect(onsetversions).toHaveBeenLastCalledWith(true);
+	});
+
+	describe('the weighted match', () => {
+		it('Why this match breaks an accepted match into its parts and evidence', () => {
+			renderFacts(
+				createJob({
+					title: 'Blade Runner 2049',
+					metadata_json: { identity: { provider: 'tmdb' }, identify_match: BLADE_RUNNER_ACCEPTED } as never
+				})
+			);
+			const why = screen.getByTestId('match-why');
+			expect(within(why).getByText('Why this match')).toBeInTheDocument();
+			expect(why).toHaveTextContent('Runtime 20.0, runtime 164 vs disc 163 min');
+			expect(why).toHaveTextContent('Year 2017 from the file name');
+		});
+
+		it('a miss names the closest rejected candidate and offers no breakdown', () => {
+			renderFacts(
+				createJob({
+					status: 'awaiting_user_id',
+					title: 'BLADE_RUNNER_2049',
+					metadata_json: {
+						identify_match: BLADE_RUNNER_NO_MATCH,
+						identify_attempts: [{ source: 'tmdb', step: 'title', outcome: 'miss', detail: 'x' }]
+					} as never
+				})
+			);
+			expect(screen.getByTestId('identify-miss-reason')).toHaveTextContent(
+				'No close match for "Blade Runner 2049". Closest: Blade Runner 2099 (2026, TV), numbers differ.'
+			);
+			expect(screen.queryByTestId('match-why')).toBeNull();
+		});
 	});
 });

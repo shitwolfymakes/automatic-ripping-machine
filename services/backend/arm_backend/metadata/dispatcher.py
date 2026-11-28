@@ -17,7 +17,7 @@ from arm_backend.metadata.source_selection import fingerprint_sources, online_so
 from arm_backend.metadata.sources import Kind, OnlineSource, build_online_sources, capability
 from arm_backend.metadata.tmdb import TMDBClient
 from arm_common import Config, DiscType
-from arm_common.schemas import IdentifyMatch, ScanResult
+from arm_common.schemas import IdentifyMatch, ScanResult, SuggestionCandidate
 
 logger = logging.getLogger("arm_backend.metadata.dispatcher")
 
@@ -28,6 +28,9 @@ DISPATCH_TIMEOUT_SECONDS = 25.0
 AttemptStep = Literal["fingerprint", "disc_id", "title", "imdb"]
 AttemptKind = Literal["movie", "tv", "music"]
 AttemptOutcome = Literal["hit", "miss", "timeout", "error", "not_configured", "no_sources"]
+
+# Which id of a candidate each source's `details` takes (OMDb takes the IMDb id).
+_DETAIL_ID_KEYS = {"tmdb": "tmdb", "omdb": "imdb", "tvdb": "tvdb", "tvmaze": "tvmaze"}
 
 
 @dataclass
@@ -154,6 +157,24 @@ class MetadataDispatcher:
             hit = await self._call(source.id, lookup(cfg, "crc64", crc64), step="fingerprint", kind=None, detail=crc64)
             if hit is not None:
                 return hit
+        return None
+
+    async def refetch(self, candidate: SuggestionCandidate, cfg: Config) -> MetadataResult | None:
+        """A shortlist row's own provider record, asked again by id: the best-ranked provider first, then the others
+        that returned it. None when no provider that knows it can be reached; an accept then reports it."""
+        asked: set[str] = set()
+        for source_id in [candidate.provider, *candidate.providers]:
+            key = _DETAIL_ID_KEYS.get(source_id or "")
+            source = self._sources.get(source_id or "")
+            if source_id in asked or key is None or key not in candidate.ids or source is None:
+                continue
+            asked.add(source_id or "")
+            details = capability(source, "details")
+            if details is None or source.configured(cfg) is not None:
+                continue
+            hit = await self._call(source_id or "", details(cfg, candidate.kind, candidate.ids[key]))
+            if hit is not None:
+                return await self.fill_external_ids(hit, cfg)
         return None
 
     def has_imdb_lookup(self, cfg: Config, kind: Kind) -> bool:

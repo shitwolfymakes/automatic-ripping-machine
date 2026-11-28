@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { BLADE_RUNNER_NO_MATCH } from '$lib/__fixtures__/identify-match';
 import { identitySuggestionOf, isIdentifyMiss, missReason, reviewPhaseBadge } from '$lib/jobs/review';
 
 type TP = { state: string; tasks_total: number; tasks_done: number; percent: number } | null;
@@ -156,7 +157,19 @@ describe('missReason', () => {
 	it('otherwise names the last searched title', () => {
 		expect(
 			missReason(missed([a('miss', { detail: 'MY DISC' }), a('miss', { detail: 'MY DISC 2' }), a('timeout')]))
-		).toBe('No source found a close match for "MY DISC 2". Try another source in the search below.');
+		).toBe('No close match for "MY DISC 2". Try another source in the search below.');
+	});
+	it('names the closest rejected candidate and why, from the weighted search', () => {
+		const job = missed([a('miss', { detail: 'blade runner 2049 3d' })]);
+		job.metadata_json.identify_match = BLADE_RUNNER_NO_MATCH;
+		expect(missReason(job)).toBe(
+			'No close match for "Blade Runner 2049". Closest: Blade Runner 2099 (2026, TV), numbers differ. Try another source in the search below.'
+		);
+	});
+	it('a weighted miss with no rejected candidate names only the searched title', () => {
+		const job = missed([a('miss')]);
+		job.metadata_json.identify_match = { ...BLADE_RUNNER_NO_MATCH, candidates: [] };
+		expect(missReason(job)).toBe('No close match for "Blade Runner 2049". Try another source in the search below.');
 	});
 	it('a CD miss has no source-switch hint', () => {
 		expect(missReason(missed([a('miss', { detail: 'ALBUM' })], { disc_type: 'cd' }))).toBe(
@@ -165,7 +178,7 @@ describe('missReason', () => {
 	});
 	it('falls back to the job title when no title attempt carries one', () => {
 		expect(missReason(missed([a('miss', { step: 'imdb', detail: 'tt1' })]))).toBe(
-			'No source found a close match for "MY_DISC". Try another source in the search below.'
+			'No close match for "MY_DISC". Try another source in the search below.'
 		);
 	});
 	it('the whole-dispatch timeout entry is not a searched title', () => {
@@ -173,9 +186,7 @@ describe('missReason', () => {
 			a('miss', { detail: 'HEAT' }),
 			{ source: null, step: 'title', kind: null, outcome: 'timeout', detail: 'lookup took longer than 25 s' }
 		];
-		expect(missReason(missed(attempts))).toBe(
-			'No source found a close match for "HEAT". Try another source in the search below.'
-		);
+		expect(missReason(missed(attempts))).toBe('No close match for "HEAT". Try another source in the search below.');
 	});
 });
 
@@ -183,9 +194,7 @@ describe('missing or unknown values', () => {
 	it('missReason names this disc when there is no searched title and no job title', () => {
 		const attempts = [{ source: 'tmdb', step: 'title', outcome: 'miss', detail: null }];
 		const noTitle = { status: 'awaiting_user_id', title: null, metadata_json: { identify_attempts: attempts } } as any;
-		expect(missReason(noTitle)).toBe(
-			'No source found a close match for "this disc". Try another source in the search below.'
-		);
+		expect(missReason(noTitle)).toBe('No close match for "this disc". Try another source in the search below.');
 	});
 	it('reviewPhaseBadge of a job without a status has an empty label', () => {
 		expect(reviewPhaseBadge({ status: undefined, title: null, transcode_progress: null } as any)).toEqual({

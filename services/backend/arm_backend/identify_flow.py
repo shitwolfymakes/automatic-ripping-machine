@@ -17,7 +17,7 @@ from arm_backend.metadata.base import MetadataResult
 from arm_backend.metadata.dispatcher import DISPATCH_TIMEOUT_SECONDS, Identification
 from arm_backend.metadata.match.explain import log_line
 from arm_backend.constants import CONFIG_SINGLETON_ID
-from arm_backend.identity.apply import apply_identity_result, suggest_identity
+from arm_backend.identity.apply import apply_identity_result, suggest_identity, suggest_shortlist
 from arm_backend.identity.episode_stage import is_tv_candidate
 from arm_backend.identity.pipeline import resolve_job, run_disc_hints, source_name_of
 from arm_backend.identity.proposals import put_source
@@ -385,13 +385,16 @@ class IdentifyFlow:
         metadata = {
             k: v for k, v in (job.metadata_json or {}).items() if k not in ("identify_attempts", "identify_match")
         }
-        if self.result is None:
+        if self.result is None and not self._is_shortlist():
             # The most recent ones; a whole-dispatch timeout entry is last.
             metadata["identify_attempts"] = self.attempts[-MAX_IDENTIFY_ATTEMPTS:]
         if self.match is not None:
             metadata["identify_match"] = self.match.model_dump(mode="json", exclude_none=True)
             logger.info(log_line(job.id, self.match))
         job.metadata_json = metadata
+
+    def _is_shortlist(self) -> bool:
+        return self.match is not None and self.match.decision == "shortlist" and self.match.shortlist > 0
 
     async def _save(self, job: Job, scan: ScanResult) -> None:
         job.metadata_json = {
@@ -476,7 +479,14 @@ class IdentifyFlow:
         # countdown") and stays unidentified until they accept or
         # resolve it. The review gate's own countdown never starts here.
         job.title = miss_title
-        job.metadata_json = suggest_identity(job.metadata_json, result, now=datetime.now(timezone.utc))
+        top = self.match.candidates[0] if self.match is not None and self.match.candidates else None
+        job.metadata_json = suggest_identity(
+            job.metadata_json,
+            result,
+            now=datetime.now(timezone.utc),
+            reason="ambiguous_toc" if ambiguous_toc else "auto_apply_off",
+            score=top.score if top is not None else None,
+        )
         job.status = JobStatus.AWAITING_REVIEW
         job.wait_start_time = None
         # The kind is the ROUTING input, not an identity claim: it is what
@@ -495,6 +505,29 @@ class IdentifyFlow:
             result.kind,
             result.title,
             "several releases fit the track layout" if ambiguous_toc else "auto-apply off",
+        )
+
+    async def _hold_shortlist(
+        self, job: Job, cfg: Config, scan: ScanResult, match: IdentifyMatch, miss_title: str | None
+    ) -> None:
+        """Several close titles fit: the operator picks one (D67). With `block_on_miss` the disc waits with no
+        countdown, as a held hit does; without it the disc rips unidentified and the shortlist stays on the job for
+        the card after the rip. Either way nothing from a candidate reaches the job's identity."""
+        job.title = miss_title
+        job.metadata_json = suggest_shortlist(job.metadata_json, match, now=datetime.now(timezone.utc))
+        if cfg.block_on_miss:
+            job.status = JobStatus.AWAITING_REVIEW
+            job.wait_start_time = None
+            # The top row's kind is the routing input, as for a held hit.
+            job.media_type = MediaType(match.candidates[0].kind)
+            await persist_review_tracks(self.session, job, scan)
+        else:
+            job.status = JobStatus.IDENTIFIED
+        logger.info(
+            "identify job_id=%s: %d close candidates shortlisted (%s)",
+            job.id,
+            match.shortlist,
+            "waiting for the operator" if cfg.block_on_miss else "ripping unidentified",
         )
 
     def _apply_miss(self, job: Job, cfg: Config, miss_title: str | None) -> None:
@@ -536,6 +569,8 @@ class IdentifyFlow:
             await self._apply_hit(job, cfg, scan, result)
         elif result is not None:
             await self._hold_hit(job, scan, result, miss_title, ambiguous_toc)
+        elif self.match is not None and self._is_shortlist():
+            await self._hold_shortlist(job, cfg, scan, self.match, miss_title)
         else:
             self._apply_miss(job, cfg, miss_title)
 
