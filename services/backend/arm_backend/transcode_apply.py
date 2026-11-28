@@ -13,7 +13,7 @@ each candidate path under `MEDIA_ROOT` to surface filesystem-only hits
 """
 
 import re
-from collections.abc import Sequence
+from collections.abc import Collection, Sequence
 from datetime import UTC, datetime
 from pathlib import Path, PurePosixPath
 from typing import TYPE_CHECKING, Any, Literal, NamedTuple
@@ -32,6 +32,7 @@ from arm_backend.path_template import (
     required_tokens,
 )
 from arm_backend.slugify import slugify
+from arm_backend.version_naming import plex_edition, version_names
 from arm_common import (
     Config,
     Gpu,
@@ -108,6 +109,7 @@ def _build_track_ctx(
     job: Job,
     track: Track,
     transcode_preset: TranscodePreset | None,
+    edition: str = "",
 ) -> dict[str, str]:
     """Build the per-track template context using real (not synthetic) job/track data."""
     metadata: dict[str, object] = job.metadata_json or {}
@@ -131,6 +133,8 @@ def _build_track_ctx(
     ctx: dict[str, str] = {
         "title": sanitize_path_component(eff_title),
         "year": str(eff_year) if eff_year is not None else "",
+        "edition": edition,
+        "plex_edition": plex_edition(edition),
         "show": sanitize_path_component(job.title or ""),
         # Per-track season (set by a disc map or episode match) wins over the
         # job-level season; the metadata.get() fallback remains for rows without a per-track season.
@@ -268,8 +272,10 @@ def compute_outputs(
     tracks: list[Track],
     session: Session,
     transcode_preset: TranscodePreset | None,
+    stereo_3d: Collection[str] = (),
 ) -> list[ResolvedTask]:
-    """Resolve every track's output path. Empty token → `TemplateValidationError`."""
+    """Resolve every track's output path. Empty token → `TemplateValidationError`. `stereo_3d` holds the
+    `source_ref`s of the titles that play a 3D view, which name the 3D and 2D versions of a film."""
     relevant_kinds = _track_kinds_for_media(session.media_type)
     candidates = [t for t in tracks if t.kind in relevant_kinds and not t.excluded]
     if not candidates:
@@ -278,9 +284,10 @@ def compute_outputs(
     template = session.output_path_template
     referenced = referenced_tokens(template)
     required = required_tokens(template)
+    editions = version_names(tracks, stereo_3d)
     resolved: list[ResolvedTask] = []
     for track in candidates:
-        ctx = _build_track_ctx(job, track, transcode_preset)
+        ctx = _build_track_ctx(job, track, transcode_preset, editions.get(track.id, ""))
         if _check_required_tokens(job, track, session, ctx, required):
             path = _render_with_empty_episode_path(template, ctx, referenced, track.index)
         else:

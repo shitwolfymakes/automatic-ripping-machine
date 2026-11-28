@@ -41,7 +41,7 @@ from arm_backend.session_routing import (
 )
 from arm_backend.stager import wake_active_stager
 from arm_backend.staging import ensure_stage_rows
-from arm_backend.title_map_service import rippable_refs, stored_scan
+from arm_backend.title_map_service import job_stereo_3d_refs, rippable_refs, stored_scan
 from arm_backend.transcode_apply import (
     ResolvedTask,
     compute_outputs,
@@ -812,7 +812,7 @@ async def fan_out_tasks_for_application(
     # track excluded, or none match the session's media_type/track-kind
     # routing); parking as "no_tracks" there would promise a rip-complete
     # fan-out that will never come, because the rip is already done.
-    resolved = compute_outputs(job, tracks, sess, transcode_preset)
+    resolved = compute_outputs(job, tracks, sess, transcode_preset, job_stereo_3d_refs(job))
 
     if not resolved:
         return await _park_no_outputs(db, application, sess, job, overwrite, created_by_user_id)

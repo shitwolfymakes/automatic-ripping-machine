@@ -20,11 +20,12 @@ from arm_backend.identity.proposals import preferred_titles, record_preset_selec
 from arm_backend.rip_preset_resolution import RipPresetUnavailable, load_routed_session, resolve_rip_preset_for_job
 from arm_backend.track_selection import preset_ticks, title_classes
 from arm_backend.transcode_apply import is_passthrough_preset
+from arm_backend.version_naming import track_version_sets
 from arm_common import DiscType, Job, Session, TranscodePreset
 from arm_common.enums import PRE_RIP_JOB_STATUSES, VIDEO_DISC_TYPES
 from arm_common.models import Track
 from arm_common.schemas import ScanResult
-from arm_common.title_classes import TitleClass, TitleVerdict, version_sets
+from arm_common.title_classes import TitleClass
 
 
 def ticks_one_version(job: Job) -> bool:
@@ -69,18 +70,7 @@ async def selection_policy(db: AsyncSession, job: Job, sess: Session | None = No
 def version_set_refs(tracks: Sequence[Track]) -> frozenset[str]:
     """The `source_ref`s of every member of every version set of the job's tracks (the pick, its
     alternates; all editions and their alternates are one set), derived from the classifier columns."""
-    by_ref = {t.source_ref: t for t in tracks if t.title_class is not None}
-    verdicts = [
-        TitleVerdict(
-            t.index,
-            t.title_class,
-            by_ref[t.title_class_ref].index if t.title_class_ref in by_ref else None,
-        )
-        for t in by_ref.values()
-        if t.title_class is not None
-    ]
-    by_index = {t.index: t.source_ref for t in by_ref.values()}
-    return frozenset(by_index[i] for members in version_sets(verdicts) for i in members)
+    return frozenset(t.source_ref for members in track_version_sets(tracks) for t in members)
 
 
 def withdraw_manual_ticks(job: Job, tracks: Sequence[Track]) -> None:

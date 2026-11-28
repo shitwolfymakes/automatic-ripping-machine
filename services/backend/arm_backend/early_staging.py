@@ -16,6 +16,7 @@ from arm_backend.path_template import TemplateValidationError
 from arm_backend.session_routing import auto_apply_allowed, resolve_routed_session_id
 from arm_backend.stager import wake_active_stager
 from arm_backend.staging import ensure_stage_rows
+from arm_backend.title_map_service import job_stereo_3d_refs
 from arm_backend.transcode_apply import compute_outputs, is_passthrough_preset
 from arm_backend.ws import WSHub
 from arm_common import Job, JobStatus, Session, Track
@@ -44,7 +45,7 @@ async def _encodes_track(db: AsyncSession, job: Job, sess: Session, track: Track
     if is_passthrough_preset(preset):
         return False
     try:
-        resolved = compute_outputs(job, await job_tracks(db, job), sess, preset)
+        resolved = compute_outputs(job, await job_tracks(db, job), sess, preset, job_stereo_3d_refs(job))
     except TemplateValidationError:
         return False
     return any(r.track_id == track.id for r in resolved)
