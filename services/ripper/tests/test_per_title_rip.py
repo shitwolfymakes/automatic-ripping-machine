@@ -140,6 +140,14 @@ async def test_each_selected_title_is_ripped_alone_with_the_minlength_after_its_
     assert sorted(rig.done) == [("trk_1", True, None), ("trk_3", True, None)]
 
 
+async def test_each_title_run_passes_the_scans_minimum_not_the_sessions(monkeypatch, tmp_path) -> None:
+    """D36: listed at a 45 s scan minimum and ripped at a 60 s session minimum, each `mkv … <title>` passes
+    `--minlength=45`, so MakeMKV numbers the titles as the scan did; the 60 s minimum still picks the titles."""
+    rig = _Rig(monkeypatch)
+    await rig.rip(tmp_path, [_track(1), _track(3)], options=RipOptions(per_title=True, scan_min_length_seconds=45))
+    assert [(c["title"], c["minlength_seconds"]) for c in rig.calls] == [(1, 45), (3, 45)]
+
+
 async def test_a_title_that_was_not_selected_is_never_read(monkeypatch, tmp_path) -> None:
     # The disc has titles 0..3; only 1 and 3 are selected, so only they arrive.
     rig = _Rig(monkeypatch)

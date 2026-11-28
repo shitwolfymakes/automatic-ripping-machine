@@ -143,6 +143,7 @@ class DiscRip:
             per_title=rip_start.rip_invocation is RipInvocation.PER_TITLE,
             end_on_completion=rip_start.end_on_completion_message,
             keep_3d_refs=frozenset(rip_start.keep_3d_refs),
+            scan_min_length_seconds=floor,
         )
         self._resumes = 0
 

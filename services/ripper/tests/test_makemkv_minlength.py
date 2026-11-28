@@ -43,8 +43,8 @@ def test_a_session_minimum_that_is_kept_is_not_logged(
     assert caplog.records == []
 
 
-def _disc_rip_minimum(session: int | None, floor: int | None, default: int = 120) -> int:
-    rip = disc_rip_module.DiscRip(
+def _disc_rip(session: int | None, floor: int | None, default: int = 120) -> disc_rip_module.DiscRip:
+    return disc_rip_module.DiscRip(
         backend=None,  # type: ignore[arg-type]
         ws=None,
         ejector=None,  # type: ignore[arg-type]
@@ -63,7 +63,10 @@ def _disc_rip_minimum(session: int | None, floor: int | None, default: int = 120
             min_title_length_seconds=floor,
         ),
     )
-    return rip._min_length_seconds
+
+
+def _disc_rip_minimum(session: int | None, floor: int | None, default: int = 120) -> int:
+    return _disc_rip(session, floor, default)._min_length_seconds
 
 
 @pytest.mark.parametrize(
@@ -79,3 +82,9 @@ def test_disc_rip_uses_the_session_minimum_never_below_the_scans(
 def test_disc_rip_falls_back_to_the_host_minimum_from_an_older_backend() -> None:
     assert _disc_rip_minimum(None, None, default=90) == 90
     assert _disc_rip_minimum(60, None, default=90) == 90
+
+
+def test_disc_rip_hands_the_scans_minimum_to_a_per_title_run() -> None:
+    """D36: the per-title command passes the scan's minimum, not the session's, so the title numbers match the scan."""
+    assert _disc_rip(300, 60)._options.scan_min_length_seconds == 60
+    assert _disc_rip(None, None, default=90)._options.scan_min_length_seconds == 90

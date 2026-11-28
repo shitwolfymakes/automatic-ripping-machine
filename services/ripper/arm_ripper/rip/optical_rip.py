@@ -436,6 +436,9 @@ async def rip_optical(
             on_track_done=on_track_done,
             on_track_progress=on_track_progress,
             min_length_seconds=min_length_seconds,
+            title_min_length_seconds=(
+                options.scan_min_length_seconds if options.scan_min_length_seconds is not None else min_length_seconds
+            ),
             stop=stop,
             drive_lost=drive_lost,
             end_on_completion=options.end_on_completion,
@@ -570,6 +573,7 @@ async def _rip_each_title(
     on_track_done: OnTrackDone,
     on_track_progress: OnTrackProgress | None,
     min_length_seconds: int,
+    title_min_length_seconds: int,
     stop: asyncio.Event | None,
     drive_lost: Callable[[], bool] | None,
     end_on_completion: bool,
@@ -581,7 +585,9 @@ async def _rip_each_title(
     fails because the drive was not ready is tried once more. Progress is reported disc-wide. Once `stop` is set (the
     drive dropped), the titles not yet reached are reported stopped so the caller leaves them for its next resume.
     Selected titles MakeMKV would not rip (below the minimum length) fail with the same reason a full pass gives them.
-    A title in `keep_3d_titles` is ripped with MVC video selected; the others under MakeMKV's default.
+    A title in `keep_3d_titles` is ripped with MVC video selected; the others under MakeMKV's default. Each run
+    passes `title_min_length_seconds` (the scan's minimum) as `--minlength`, so the title numbers mean what the scan
+    numbered; `min_length_seconds` (never below it) picks which titles are ripped.
     """
     pending = [idx for idx in eligible if idx not in skipped]
     # Unticked (SKIPPED) titles are no rip work; the ones an earlier pass settled stay in as done work.
@@ -605,7 +611,7 @@ async def _rip_each_title(
             title=idx,
             on_track_start=on_track_start,
             on_track_progress=_disc_wide(on_track_progress, disc, idx),
-            min_length_seconds=min_length_seconds,
+            min_length_seconds=title_min_length_seconds,
             stop=stop,
             drive_lost=drive_lost,
             end_on_completion=end_on_completion,

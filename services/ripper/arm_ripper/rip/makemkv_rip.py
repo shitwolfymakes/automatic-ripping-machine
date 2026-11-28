@@ -106,18 +106,19 @@ def _mkv_all_command(device_path: str, output_dir: Path, minlength_seconds: int)
     ]
 
 
-def _mkv_title_command(device_path: str, output_dir: Path, title: int) -> list[str]:
+def _mkv_title_command(device_path: str, output_dir: Path, title: int, minlength_seconds: int) -> list[str]:
     """The `makemkvcon mkv … <title>` argv for one source title.
 
-    No `--minlength`: MakeMKV numbers titles after its minimum-length filter, and the scan's `info` runs without
-    one, under MakeMKV's own setting. Passing a different minimum here would number the titles differently from the
-    scan, and `title` would name another title. The caller has already picked `title` by ARM's minimum.
+    `minlength_seconds` is the minimum the scan's `info` listed titles with: MakeMKV numbers titles after its
+    minimum-length filter, so any other minimum would number them differently from the scan, and `title` would name
+    another title. The caller has already picked `title` by the rip's minimum, which is never below it.
     """
     return [
         "makemkvcon",
         "mkv",
         "--robot",
         "--progress=-stdout",
+        f"--minlength={minlength_seconds}",
         makemkv_source_url(device_path),
         str(title),
         str(output_dir),
@@ -237,8 +238,14 @@ async def rip_disc(
         cmd = _mkv_all_command(device_path, output_dir, minlength_seconds)
         logger.debug("makemkvcon mkv all device=%s outdir=%s minlength=%ds", device_path, output_dir, minlength_seconds)
     else:
-        cmd = _mkv_title_command(device_path, output_dir, title)
-        logger.debug("makemkvcon mkv title %d device=%s outdir=%s", title, device_path, output_dir)
+        cmd = _mkv_title_command(device_path, output_dir, title, minlength_seconds)
+        logger.debug(
+            "makemkvcon mkv title %d device=%s outdir=%s minlength=%ds",
+            title,
+            device_path,
+            output_dir,
+            minlength_seconds,
+        )
 
     eligible = eligible_source_indexes or []
     watch = RunWatch(
