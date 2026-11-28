@@ -151,3 +151,30 @@ async def test_the_wait_ends_early_when_the_drive_loses_its_disc_or_goes_away(
     clock = _Clock([_SETTLING, Probe(state, False)])
     assert await drive_ready.wait_until_readable("/dev/sr0", probe=clock.probe, sleep=clock.sleep) is outcome
     assert clock.pauses == [2.0]
+
+
+def _iso(tmp_path) -> str:
+    iso = tmp_path / "disc.iso"
+    iso.write_bytes(b"\0" * 4096)
+    return str(iso)
+
+
+def _disc_folder(tmp_path) -> str:
+    (tmp_path / "Movie" / "BDMV").mkdir(parents=True)
+    return str(tmp_path / "Movie")
+
+
+@pytest.mark.parametrize("make_source", [_iso, _disc_folder])
+def test_a_file_source_probes_as_a_readable_disc(tmp_path, make_source) -> None:
+    # The drive-status ioctl on a regular file fails ENOTTY, which used to read as NOT_READY for the whole budget.
+    assert drive_ready.probe_drive(make_source(tmp_path)) == Probe(DriveState.DISC_OK, True)
+
+
+async def test_an_iso_source_passes_the_gate_without_a_pause(tmp_path) -> None:
+    pauses: list[float] = []
+
+    async def sleep(seconds: float) -> None:
+        pauses.append(seconds)
+
+    assert await drive_ready.wait_until_readable(_iso(tmp_path), sleep=sleep) is ReadyOutcome.READY
+    assert pauses == []
