@@ -3,8 +3,8 @@
 `atomic_output`: the transcoder writes `<final>.arm-inprogress`; on success
 the helper `fsync`s that file, renames it to `<final>`, then `fsync`s the
 directory so the rename survives a power cut. Same filesystem, so rename is
-atomic. Plex/Jellyfin scanners ignore `.arm-inprogress`, so half-written
-files are invisible. On failure (exception, SIGTERM, container kill), the
+atomic. Plex/Jellyfin skip a file whose extension they do not recognise, so a
+half-written `.arm-inprogress` file is invisible to them. On failure (exception, SIGTERM, container kill), the
 partial file stays on disk for the Backend startup sweep.
 
 `copy_file_resumable`: the one copy primitive. It copies in chunks through
@@ -30,12 +30,18 @@ although source and destination sit on the same filesystem, it logs a hint
 that a single parent mount would make the move instant.
 
 `move_tree`: the folder counterpart of `transcode_none`, for the Blu-ray
-decrypted backup. `shutil.move` renames on the same filesystem and copies
-the tree then removes the source across filesystems; `move_tree` adds the
-refusal to overwrite an existing destination, the same `cancel` check
-(a cancelled copy removes the partial tree), the size of the tree, and the
-durability of the copy: each file is fsynced by the copier before it lands,
-and the destination directories are fsynced once the move returns.
+decrypted backup. It refuses an existing destination, then tries
+`os.rename`; across filesystems it copies the tree into a staging folder
+`<dst>.arm-inprogress` with the copier (each file fsynced before it lands), every directory fsynced
+once the copy is done, renames the staging folder to `<dst>`, fsyncs the
+parent, and only then removes the source. A copy error, a cancel (checked
+between chunks) or a crash leaves only the staging folder and the source;
+the next attempt replaces a leftover staging folder, and the Backend startup
+sweep removes an orphaned one. Unlike a single `.arm-inprogress` file, the
+staging folder holds ordinary `BDMV/STREAM/*.m2ts` files, so a library
+scanner may index the partial copy while it runs or until a leftover is
+removed; `<dst>` itself only ever appears complete. Returns the total size
+of the tree's files.
 """
 
 from __future__ import annotations
@@ -83,6 +89,23 @@ def _fsync_dir(path: Path) -> None:
         logger.debug("directory fsync failed for %s: %s", path, exc)
 
 
+def _make_parent_dirs(folder: Path) -> None:
+    """`folder.mkdir(parents=True, exist_ok=True)`, naming a dangling symlink on the way.
+
+    Docker mounts only the media folder, so a symlink inside it with an
+    absolute target (`/media/Movies -> /mnt/nas/movies`) is valid on the host
+    but dangles in the container, and `mkdir` on it fails with a bare
+    "[Errno 17] File exists" that points at the wrong problem.
+    """
+    for path in (folder, *folder.parents):
+        if path.is_symlink() and not path.exists():
+            raise OSError(
+                f"{path} is a symlink to {os.readlink(path)}, which does not exist inside the container; "
+                "mount the target or use a relative link"
+            )
+    folder.mkdir(parents=True, exist_ok=True)
+
+
 class CopyCancelled(Exception):
     """A passthrough copy stopped because its `cancel` event was set.
 
@@ -101,7 +124,7 @@ def atomic_output(final_path: Path) -> Iterator[Path]:
     caller mark the task `failed` via the REST API.
     """
     tmp_path = inprogress_path(final_path)
-    final_path.parent.mkdir(parents=True, exist_ok=True)
+    _make_parent_dirs(final_path.parent)
     try:
         yield tmp_path
     except Exception:
@@ -288,7 +311,7 @@ def copy_file_resumable(
     """
     tmp = inprogress_path(dst)
     stamp = _check_expected(src, expect, tmp)
-    dst.parent.mkdir(parents=True, exist_ok=True)
+    _make_parent_dirs(dst.parent)
     fout, start = _open_temp(tmp, resume_from, on_checkpoint)
     ckpt = (_CheckpointClock(clock), on_checkpoint) if on_checkpoint is not None else None
     with fout, src.open("rb") as fin:
@@ -334,7 +357,7 @@ def place_by_link(
     tmp = inprogress_path(dst)
     stamp = _check_expected(src, expect, tmp)
     tmp.unlink(missing_ok=True)
-    dst.parent.mkdir(parents=True, exist_ok=True)
+    _make_parent_dirs(dst.parent)
     _link_temp(src, tmp)
     _verify_source_unchanged(src, stamp, stamp.size, tmp)
     _commit_link(tmp, dst)
@@ -356,7 +379,7 @@ def place_by_rename(
     """
     tmp = inprogress_path(dst)
     stamp = _check_expected(src, expect, tmp)
-    dst.parent.mkdir(parents=True, exist_ok=True)
+    _make_parent_dirs(dst.parent)
     try:
         os.rename(src, dst)
     except OSError as exc:
@@ -450,16 +473,55 @@ def transcode_none(
 
 
 def _fsync_tree_dirs(root: Path) -> None:
-    """fsync every directory of a copied tree, deepest first, then its parent."""
+    """fsync every directory of a copied tree, deepest first, then the root itself."""
     for d in sorted((p for p in root.rglob("*") if p.is_dir() and not p.is_symlink()), reverse=True):
         _fsync_dir(d)
     _fsync_dir(root)
-    _fsync_dir(root.parent)
 
 
 def tree_size(root: Path) -> int:
     """Total size of the regular files under `root`; symlinks are not followed."""
     return sum(p.lstat().st_size for p in root.rglob("*") if p.is_file() and not p.is_symlink())
+
+
+def _copy_tree_across_filesystems(
+    src: Path, dst: Path, cancel: threading.Event | None, on_bytes: Callable[[int], None] | None
+) -> None:
+    """Copy the folder `src` to `dst` through `<dst>.arm-inprogress`, then remove `src`.
+
+    A copy error (ENOSPC, EIO, one unreadable file), a cancel or a crash
+    leaves only the staging folder, never a partial `dst` that the
+    destination-exists guard would refuse on every retry; the source is kept.
+    A staging folder already there is a copy that died part way and is
+    replaced. The source goes only once the backup is durable in place, and a
+    source that cannot be removed is left in /raw rather than ever taking the
+    only complete copy with it.
+    """
+    staging = inprogress_path(dst)
+    if staging.is_symlink() or staging.is_file():
+        staging.unlink()
+    elif staging.exists():
+        shutil.rmtree(staging)
+    _same_device_hint(src, dst.parent)
+
+    def copy(s: str, d: str) -> None:
+        # The copier fsyncs each file before it lands.
+        copy_file_resumable(Path(s), Path(d), cancel=cancel, on_bytes=on_bytes)
+
+    try:
+        shutil.copytree(src, staging, symlinks=True, copy_function=copy)
+        _fsync_tree_dirs(staging)
+        os.replace(staging, dst)
+    except BaseException:
+        shutil.rmtree(staging, ignore_errors=True)
+        raise
+    _fsync_dir(dst.parent)
+    try:
+        shutil.rmtree(src)
+    except OSError as exc:
+        logger.warning(
+            "passthrough folder copied to %s, but removing %s failed (%s); leaving it in /raw", dst, src, exc
+        )
 
 
 def move_tree(
@@ -475,32 +537,19 @@ def move_tree(
     caller that fails a task on `OSError` needs nothing extra). Unlike
     `transcode_none`'s rename, it never overwrites: an existing destination is
     always refused, whatever the session's overwrite flag.
+
+    A rename when it can; across filesystems, a copy staged at
+    `<dst>.arm-inprogress` (see `_copy_tree_across_filesystems`), so `dst`
+    only ever appears complete.
     """
     if dst.exists() or dst.is_symlink():
         raise FileExistsError(f"destination already exists: {dst}")
-    dst.parent.mkdir(parents=True, exist_ok=True)
-
-    copying = False
-
-    def copy(s: str, d: str) -> None:
-        # shutil.move only copies once its rename failed (another filesystem).
-        nonlocal copying
-        if not copying:
-            copying = True
-            _same_device_hint(src, dst.parent)
-        # The copier fsyncs each file before it lands, so it is durable before
-        # shutil.move removes the source tree.
-        copy_file_resumable(Path(s), Path(d), cancel=cancel, on_bytes=on_bytes)
-
+    _make_parent_dirs(dst.parent)
     try:
-        shutil.move(src, dst, copy_function=copy)
-    except CopyCancelled:
-        # Only a cross-filesystem copy can be cancelled, and it leaves the
-        # source in place; drop the partial tree.
-        shutil.rmtree(dst, ignore_errors=True)
-        raise
-    if copying:
-        _fsync_tree_dirs(dst)
+        os.rename(src, dst)
+    except OSError as exc:
+        logger.info("passthrough folder rename failed (%s); copying across filesystems", exc)
+        _copy_tree_across_filesystems(src, dst, cancel, on_bytes)
     size = tree_size(dst)
     logger.debug("passthrough moved folder to %s (%d bytes)", dst, size)
     return size
