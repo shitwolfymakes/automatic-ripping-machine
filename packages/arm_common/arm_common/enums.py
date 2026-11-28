@@ -123,6 +123,8 @@ TERMINAL_JOB_STATUSES: frozenset[JobStatus] = frozenset(
         JobStatus.FAILED,
     }
 )
+# Discs whose titles are video: the ones a job's version policy applies to.
+VIDEO_DISC_TYPES: frozenset[DiscType] = frozenset({DiscType.DVD, DiscType.BLURAY})
 # Pre-rip = disc present, not yet committed to a rip (reusable on re-identify).
 PRE_RIP_JOB_STATUSES: frozenset[JobStatus] = frozenset(
     {

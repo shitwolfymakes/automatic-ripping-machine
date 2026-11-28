@@ -99,6 +99,10 @@ class Config(SQLModel, table=True):
     # rip (suppressed while `ripping_paused`). Off = today's auto-rip behavior.
     hold_for_review: bool = Field(sa_column=Column(Boolean, nullable=False, server_default="false"))
     manual_wait_seconds: int = Field(sa_column=Column(Integer, nullable=False, server_default="60"))
+    # Default for new video discs: when a disc holds the same film more than once
+    # (angles, 3D and 2D, a copy without chapters), tick one version of it. Each
+    # job snapshots this at creation (`Job.tick_one_version`) and the card edits it.
+    tick_one_version: bool = Field(default=True, sa_column=Column(Boolean, nullable=False, server_default="true"))
     # A disc whose fingerprint matches an earlier rip (on any drive): hold it
     # for the operator, reject (eject) it, or rip it again. VARCHAR, validated
     # app-side by PreviouslyRippedAction.

@@ -11,14 +11,14 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Sequence
-from datetime import datetime, timezone
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import col, select
 
 from arm_backend.identity.events import emit_identity_resolved
 from arm_backend.identity.pipeline import ResolveOutcome, resolve_job
-from arm_backend.identity.proposals import record_preset_drop, revert_manual_track
+from arm_backend.identity.proposals import revert_manual_track
+from arm_backend.version_policy import recompute_ticks
 from arm_backend.ws import WSHub
 from arm_common import Job
 from arm_common.disc_titles import is_structure_scan, scan_candidates
@@ -108,15 +108,12 @@ def _refresh_from_makemkv(tracks: Sequence[Track], title_map: TitleMap, titles: 
     return changed
 
 
-def _drop_unrippable(job: Job, tracks: Sequence[Track], title_map: TitleMap) -> None:
-    """Unticks the refs MakeMKV cannot rip: the preset proposes their drop, and an operator tick made before the
-    map arrived is withdrawn."""
-    refs = [t.source_ref for t in tracks if t.source_ref in title_map.unexposed]
-    if not refs:
-        return
-    record_preset_drop(job, refs, now=datetime.now(timezone.utc))
-    for ref in refs:
-        revert_manual_track(job, ref, ["excluded"])
+def _withdraw_unrippable_ticks(job: Job, tracks: Sequence[Track], title_map: TitleMap) -> None:
+    """Withdraws an operator tick made before the map arrived on a ref MakeMKV cannot rip; the preset
+    claim for those refs is the policy's, recomputed with the map."""
+    for track in tracks:
+        if track.source_ref in title_map.unexposed:
+            revert_manual_track(job, track.source_ref, ["excluded"])
 
 
 async def apply_titles_report(db: AsyncSession, hub: WSHub, job: Job, report: TitlesReport) -> None:
@@ -141,7 +138,8 @@ async def apply_titles_report(db: AsyncSession, hub: WSHub, job: Job, report: Ti
     if title_map is not None:
         tracks = list((await db.execute(select(Track).where(col(Track.job_id) == job.id))).scalars().all())
         refreshed = _refresh_from_makemkv(tracks, title_map, report.titles)
-        _drop_unrippable(job, tracks, title_map)
+        _withdraw_unrippable_ticks(job, tracks, title_map)
+        refreshed |= await recompute_ticks(db, job, tracks, scan, rippable=frozenset(title_map.numbers))
         logger.info(
             "titles job_id=%s mapped=%d unexposed=%d makemkv_only=%d",
             job.id,

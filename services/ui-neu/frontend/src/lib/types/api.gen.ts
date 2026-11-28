@@ -741,6 +741,10 @@ export type ConfigUpdateRequest = {
      * Manual Wait Seconds
      */
     manual_wait_seconds?: number | null;
+    /**
+     * Tick One Version
+     */
+    tick_one_version?: boolean | null;
     on_previously_ripped?: PreviouslyRippedAction | null;
     /**
      * Notifications Enabled
@@ -886,6 +890,10 @@ export type ConfigView = {
      * Manual Wait Seconds
      */
     manual_wait_seconds: number;
+    /**
+     * Tick One Version
+     */
+    tick_one_version: boolean;
     on_previously_ripped: PreviouslyRippedAction;
     default_retention_policy: RetentionPolicy;
     /**
@@ -2586,6 +2594,10 @@ export type Job = {
      */
     pending_session_id?: string | null;
     /**
+     * Tick One Version
+     */
+    tick_one_version?: boolean | null;
+    /**
      * Disc Number
      */
     disc_number: number | null;
@@ -2893,6 +2905,10 @@ export type JobUpdateRequest = {
     disc_total?: number | null;
     media_type?: MediaType | null;
     /**
+     * Tick One Version
+     */
+    tick_one_version?: boolean | null;
+    /**
      * Tracks
      */
     tracks?: Array<TrackEditRequest> | null;
@@ -2933,6 +2949,10 @@ export type JobView = {
      * Pending Session Id
      */
     pending_session_id?: string | null;
+    /**
+     * Tick One Version
+     */
+    tick_one_version?: boolean | null;
     /**
      * Parked Session Ids
      */
@@ -6277,6 +6297,10 @@ export type JobViewWritable = {
      * Pending Session Id
      */
     pending_session_id?: string | null;
+    /**
+     * Tick One Version
+     */
+    tick_one_version?: boolean | null;
     /**
      * Parked Session Ids
      */

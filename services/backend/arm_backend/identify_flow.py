@@ -39,6 +39,7 @@ from arm_backend.identity.sources.thediscdb import (
 from arm_backend.identity.sources.thediscdb_snapshot import DiscMatch, SnapshotStore
 from arm_backend.identity.stage_runner import EpisodeStageRunner
 from arm_backend.track_selection import DiscBackupNeedsBluray, select_tracks_for_review
+from arm_backend.version_policy import selection_policy
 from arm_backend.ws import WSHub
 from arm_common import (
     Config,
@@ -49,7 +50,7 @@ from arm_common import (
     MediaType,
     Session,
 )
-from arm_common.enums import DriveKind, PreviouslyRippedAction
+from arm_common.enums import VIDEO_DISC_TYPES, DriveKind, PreviouslyRippedAction
 from arm_common.models import Track
 from arm_common.schemas import (
     flag_is_set,
@@ -79,7 +80,9 @@ async def _persist_review_tracks(db: AsyncSession, job: Job, scan: ScanResult) -
     }
     added: list[Track] = []
     try:
-        review_tracks = select_tracks_for_review(job.id, scan, preset, preferred=preferred_titles(job))
+        review_tracks = select_tracks_for_review(
+            job.id, scan, preset, preferred=preferred_titles(job), **await selection_policy(db, job)
+        )
     except DiscBackupNeedsBluray as exc:
         logger.warning("skipping review tracks for job_id=%s: %s", job.id, exc)
         return
@@ -225,7 +228,7 @@ class IdentifyFlow:
                 raise DiscAlreadyRippedError(previous.id)
         return previous
 
-    async def _reuse_or_create_job(self, drive: Drive, scan: ScanResult) -> Job:
+    async def _reuse_or_create_job(self, drive: Drive, cfg: Config, scan: ScanResult) -> Job:
         if self.reuse_job is not None:
             job = self.reuse_job
             # Guard 1 (no identity clobber): never re-run the dispatcher or overwrite
@@ -240,6 +243,7 @@ class IdentifyFlow:
                 drive_serial=drive.serial,
                 disc_type=scan.disc_type,
                 status=JobStatus.CREATED,
+                tick_one_version=cfg.tick_one_version if scan.disc_type in VIDEO_DISC_TYPES else None,
             )
             self.session.add(job)
             await self.session.flush()
@@ -580,7 +584,7 @@ class IdentifyFlow:
 
         self.previous = await self._apply_previously_ripped_policy(drive, cfg, scan)
 
-        self.job = job = await self._reuse_or_create_job(drive, scan)
+        self.job = job = await self._reuse_or_create_job(drive, cfg, scan)
 
         await self._persist_fingerprints(job, scan)
 

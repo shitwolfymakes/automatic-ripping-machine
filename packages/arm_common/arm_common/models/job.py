@@ -51,6 +51,10 @@ class Job(SQLModel, table=True):
         default=None,
         sa_column=Column(String, ForeignKey("sessions.id", ondelete="SET NULL"), nullable=True),
     )
+    # One version of the film per set (True) or every version (False): snapshotted
+    # from `Config.tick_one_version` when a video job is created, edited on the
+    # review card until the rip starts. NULL for a job that is not a video disc.
+    tick_one_version: bool | None = Field(default=None, sa_column=Column(Boolean, nullable=True))
     # Multi-disc CD sets: which disc of the set this job ripped (1-based) and
     # the set size. Null = single-disc / unknown. Set at identify (resolve) or
     # corrected later via PATCH. No Postgres enum — plain nullable ints.
