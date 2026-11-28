@@ -870,6 +870,10 @@ export type ConfigView = {
      */
     min_title_length_seconds: number;
     /**
+     * Default Scan Timeout Seconds
+     */
+    default_scan_timeout_seconds: number;
+    /**
      * Transcode Enabled
      */
     transcode_enabled: boolean;
@@ -5110,6 +5114,10 @@ export type RipperConfigView = {
      * Min Title Length Seconds
      */
     min_title_length_seconds?: number;
+    /**
+     * Scan Timeout Seconds
+     */
+    scan_timeout_seconds?: number;
 };
 
 /**

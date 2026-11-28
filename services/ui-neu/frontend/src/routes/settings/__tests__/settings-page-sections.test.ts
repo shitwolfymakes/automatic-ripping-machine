@@ -120,6 +120,7 @@ const mockConfig = {
 	search_provider_movie: 'omdb',
 	tmdb_api_key: '<hidden>',
 	auto_rip_on_insert: true,
+	default_scan_timeout_seconds: 300,
 	transcode_enabled: true,
 	auto_transcode_on_idle: false,
 	notifications_enabled: false
@@ -951,12 +952,12 @@ describe('Settings page sections', () => {
 			expect(screen.queryByTestId('drive-lifecycle-panel')).toBeNull();
 		});
 
-		it('an enrolled card takes the prescan defaults from arm_config', async () => {
+		it('an enrolled card takes the prescan defaults from arm_config and the scan timeout from config', async () => {
 			vi.mocked(fetchDrives).mockResolvedValue([drive({ display_name: 'Main Drive' })]);
 			settingsOnce({
+				config: { ...mockConfig, default_scan_timeout_seconds: 600 },
 				arm_config: {
 					PRESCAN_CACHE_MB: '64',
-					PRESCAN_TIMEOUT: '600',
 					PRESCAN_RETRIES: '5',
 					DISC_ENUM_TIMEOUT: '120'
 				}

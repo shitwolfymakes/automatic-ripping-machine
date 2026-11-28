@@ -50,7 +50,7 @@
 							onupdate={() => onrefresh()}
 							globalDefaults={{
 								prescan_cache_mb: Number(settings?.arm_config?.PRESCAN_CACHE_MB) || 1,
-								prescan_timeout: Number(settings?.arm_config?.PRESCAN_TIMEOUT) || 300,
+								prescan_timeout: settings?.config?.default_scan_timeout_seconds,
 								prescan_retries: Number(settings?.arm_config?.PRESCAN_RETRIES) || 3,
 								disc_enum_timeout: Number(settings?.arm_config?.DISC_ENUM_TIMEOUT) || 60
 							}}

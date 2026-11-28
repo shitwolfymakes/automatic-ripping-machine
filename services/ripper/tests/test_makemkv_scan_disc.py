@@ -122,6 +122,19 @@ async def test_idle_timeout_kills_reaps_and_reports_timed_out(monkeypatch: pytes
     assert proc.waited is True
 
 
+async def test_the_drives_scan_timeout_caps_the_whole_scan(monkeypatch: pytest.MonkeyPatch) -> None:
+    """D44: the drive's scan timeout (#325) is the watcher's hard ceiling; the idle window stays the ripper's."""
+    proc = _Proc(_HangingStream())
+    _spawn(monkeypatch, proc)
+
+    with pytest.raises(MakemkvScanFailed) as excinfo:
+        await scan_disc("/dev/sr0", 120, timeout_seconds=0.05)
+
+    assert excinfo.value.reason is ScanFailureReason.TIMED_OUT
+    assert "still running after 0.05s" in excinfo.value.detail
+    assert proc.killed is True
+
+
 async def test_nonzero_exit_reports_last_output_line_and_tail(monkeypatch: pytest.MonkeyPatch) -> None:
     _spawn(monkeypatch, _Proc(_Stream(b"stdout text\n"), stderr=b"  disc read failed \n", returncode=3))
 

@@ -19,6 +19,7 @@ from arm_ripper.eject import Ejector
 from arm_ripper.makemkv_prep import MakeMKVPrep
 from arm_ripper.makemkv_minlength import DEFAULT_MIN_TITLE_LENGTH_SECONDS
 from arm_ripper.ripper_config import ripper_config_or_none
+from arm_ripper.scan.makemkv import SCAN_MAX_SECONDS
 from arm_ripper.resolution_wait import IDENTIFY_WAIT, RESOLUTION_TIMEOUT_UNSET, REVIEW_WAIT, ResolutionWaiter, WaitSpec
 from arm_ripper.rip.dispatcher import NO_RIP_TOOL, rip_tool
 from arm_ripper.rip_events import disc_type_label, rip_started_message
@@ -240,13 +241,15 @@ class JobController:
         to the minimum the scan recorded."""
         if awaits_makemkv_titles(job.metadata_json):
             logger.info("re-adopted job_id=%s has no MakeMKV titles yet; reading them again", job.id)
-            self._titles.start(job.id, device_path, await self._scan_minimum(job.metadata_json.scan_result))
+            self._titles.start(job.id, device_path, *await self._titles_read_settings(job.metadata_json.scan_result))
 
-    async def _scan_minimum(self, scan: ScanResult | None) -> int:
-        """The minimum title length a scan listed titles with, or the configured one for a scan that recorded none."""
+    async def _titles_read_settings(self, scan: ScanResult | None) -> tuple[int, float]:
+        """The minimum title length a scan listed titles with (the configured one for a scan that recorded none) and
+        this drive's scan ceiling, for a MakeMKV title read of that scan."""
+        configured_min, timeout = await self._scan_settings()
         if scan is not None and scan.min_title_length_seconds is not None:
-            return scan.min_title_length_seconds
-        return await self._min_title_length()
+            return scan.min_title_length_seconds, timeout
+        return configured_min, timeout
 
     async def on_ws_command(self, envelope: WSEnvelope) -> None:
         """Handler registered for `ripper.commands.{drive_id}` topic: runs the handler for the command's event
@@ -395,12 +398,16 @@ class JobController:
         cfg = await ripper_config_or_none(self._client, "auto-rip config lookup", "proceeding fail-open")
         return cfg is None or cfg.auto_rip_on_insert
 
-    async def _min_title_length(self) -> int:
-        """The configured minimum title length the scan lists titles down to, or the host minimum when the config
-        can't be read."""
+    async def _scan_settings(self) -> tuple[int, float]:
+        """The minimum title length the scan lists titles down to and this drive's scan timeout, or the host minimum
+        and the default timeout when the config can't be read."""
         fallback = self._default_min_length_seconds
-        cfg = await ripper_config_or_none(self._client, "minimum title length lookup", f"using {fallback}s")
-        return fallback if cfg is None else cfg.min_title_length_seconds
+        cfg = await ripper_config_or_none(
+            self._client, "scan settings lookup", f"using {fallback}s minimum and {SCAN_MAX_SECONDS:.0f}s timeout"
+        )
+        if cfg is None:
+            return fallback, SCAN_MAX_SECONDS
+        return cfg.min_title_length_seconds, float(cfg.scan_timeout_seconds)
 
     async def _run_pipeline(self, device_path: str, *, pending_session_id: str | None) -> None:
         async with self._claim(None):
@@ -409,7 +416,8 @@ class JobController:
             # container up across a beta-key rotation doesn't scan/rip
             # protected discs with a stale key.
             await self._makemkv.prepare()
-            scan_result = await scan_or_none(device_path, await self._min_title_length())
+            min_title_length, scan_timeout = await self._scan_settings()
+            scan_result = await scan_or_none(device_path, min_title_length, timeout_seconds=scan_timeout)
             if scan_result is None:
                 return
 
@@ -422,7 +430,7 @@ class JobController:
             self._active_job_id = job.id
             if is_structure_scan(scan_result):
                 # The card is up from the playlists; MakeMKV names its title numbers while the operator reviews.
-                self._titles.start(job.id, device_path, await self._scan_minimum(scan_result))
+                self._titles.start(job.id, device_path, min_title_length, scan_timeout)
             try:
                 await self._after_identify(job, device_path)
             finally:

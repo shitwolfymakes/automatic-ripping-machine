@@ -8,6 +8,7 @@ from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import NamedTuple
 
+from arm_common.schemas.drives import DEFAULT_SCAN_TIMEOUT_SECONDS
 from arm_common import DiscType, ScanFailureReason
 from arm_common.schemas import DiscFingerprintInput, ScanResult, ScanTitle
 from arm_ripper.scan.data import sniff_video_image
@@ -18,9 +19,10 @@ from arm_ripper.source import makemkv_source_url
 logger = logging.getLogger("arm_ripper.scan.makemkv")
 
 # Stop waiting when makemkvcon has printed nothing (progress lines count) for
-# this long, or has been running this long in total.
+# this long, or has been running for the drive's scan ceiling in total (its
+# override, else this default).
 SCAN_IDLE_TIMEOUT_SECONDS = 180.0
-SCAN_MAX_SECONDS = 1200.0
+SCAN_MAX_SECONDS = float(DEFAULT_SCAN_TIMEOUT_SECONDS)
 # makemkvcon keeps printing the disc's CINFO (after `TCOUNT:0`) or title blocks
 # (after a successful end of output) and can then linger for minutes before it
 # exits; wait this long for the output to go quiet, then kill instead of waiting.
@@ -46,9 +48,10 @@ _EXPIRED_DETAIL = (
     "makemkvcon refused: binary is past its hard-coded expiry (MSG:5021 'application version is too old'); "
     "rebuild the ripper image after upstream ships a fresher tarball"
 )
-_TIMED_OUT_DETAIL = (
-    f"makemkvcon timed out: no output for {SCAN_IDLE_TIMEOUT_SECONDS:g}s or still running after {SCAN_MAX_SECONDS:g}s"
-)
+
+
+def _timed_out_detail(max_seconds: float) -> str:
+    return f"makemkvcon timed out: no output for {SCAN_IDLE_TIMEOUT_SECONDS:g}s or still running after {max_seconds:g}s"
 
 
 class ScanError(Exception):
@@ -179,6 +182,8 @@ class _ScanWatch:
 
     started_at: float
     last_line_at: float
+    # The hard ceiling on the whole scan: the drive's scan timeout.
+    max_seconds: float = SCAN_MAX_SECONDS
     stdout: list[str] = field(default_factory=list)
     tail: deque[str] = field(default_factory=lambda: deque(maxlen=SCAN_TAIL_LINES))
     reason: ScanFailureReason | None = None
@@ -208,7 +213,7 @@ class _ScanWatch:
     def deadline(self) -> float:
         """Pure: the monotonic time at which to stop waiting (idle window or the hard ceiling)."""
         window = SCAN_TERMINAL_GRACE_SECONDS if self.finished else SCAN_IDLE_TIMEOUT_SECONDS
-        return min(self.last_line_at + window, self.started_at + SCAN_MAX_SECONDS)
+        return min(self.last_line_at + window, self.started_at + self.max_seconds)
 
     def expire(self) -> None:
         """The deadline passed. Once the output is over that is the normal end of the scan, otherwise a timeout."""
@@ -283,7 +288,11 @@ async def _reap(proc: asyncio.subprocess.Process, pumps: list["asyncio.Task[None
 
 
 async def _run_info(
-    device_path: str, min_title_length_seconds: int, clock: Callable[[], float] = time.monotonic
+    device_path: str,
+    min_title_length_seconds: int,
+    clock: Callable[[], float] = time.monotonic,
+    *,
+    max_seconds: float = SCAN_MAX_SECONDS,
 ) -> _InfoRun:
     """Run `makemkvcon info` on the device, listing titles down to `min_title_length_seconds`, watching its output
     instead of a flat timeout.
@@ -308,7 +317,7 @@ async def _run_info(
         asyncio.create_task(_pump(proc.stdout, queue, True)),
         asyncio.create_task(_pump(proc.stderr, queue, False)),
     ]
-    watch = _ScanWatch(started_at=clock(), last_line_at=clock())
+    watch = _ScanWatch(started_at=clock(), last_line_at=clock(), max_seconds=max_seconds)
     try:
         if await _watch(queue, watch, clock):
             await proc.wait()
@@ -331,7 +340,7 @@ def _failure_of(run: _InfoRun) -> MakemkvScanFailed | None:
     if watch.reason and (watch.tcount_zero or watch.timed_out or run.returncode != 0):
         return _failed(watch.reason, f"makemkvcon reported {watch.reason.value}", watch)
     if watch.timed_out:
-        return _failed(ScanFailureReason.TIMED_OUT, _TIMED_OUT_DETAIL, watch)
+        return _failed(ScanFailureReason.TIMED_OUT, _timed_out_detail(watch.max_seconds), watch)
     if watch.tcount_zero or run.returncode == 0:
         return None
     last = watch.tail[-1] if watch.tail else ""
@@ -359,11 +368,13 @@ async def _failed_disc_type(device_path: str, stdout: list[str]) -> DiscType | N
     return await asyncio.to_thread(sniff_video_image, device_path)
 
 
-async def scan_titles(device_path: str, min_title_length_seconds: int) -> list[ScanTitle]:
-    """The titles `makemkvcon info` lists on the disc, down to `min_title_length_seconds`. Raises ScanError
-    (MakemkvScanFailed when makemkvcon ran and its scan failed); used on its own for a disc whose structure was read
-    separately."""
-    run = await _run_info(device_path, min_title_length_seconds)
+async def scan_titles(
+    device_path: str, min_title_length_seconds: int, *, timeout_seconds: float = SCAN_MAX_SECONDS
+) -> list[ScanTitle]:
+    """The titles `makemkvcon info` lists on the disc, down to `min_title_length_seconds`, never running longer than
+    `timeout_seconds`. Raises ScanError (MakemkvScanFailed when makemkvcon ran and its scan failed); used on its own
+    for a disc whose structure was read separately."""
+    run = await _run_info(device_path, min_title_length_seconds, max_seconds=timeout_seconds)
     failure = _failure_of(run)
     if failure is not None:
         raise failure
@@ -371,9 +382,12 @@ async def scan_titles(device_path: str, min_title_length_seconds: int) -> list[S
     return titles
 
 
-async def scan_disc(device_path: str, min_title_length_seconds: int) -> ScanResult:
-    """Scan the disc with `makemkvcon info`, listing titles down to `min_title_length_seconds`."""
-    run = await _run_info(device_path, min_title_length_seconds)
+async def scan_disc(
+    device_path: str, min_title_length_seconds: int, *, timeout_seconds: float = SCAN_MAX_SECONDS
+) -> ScanResult:
+    """Scan the disc with `makemkvcon info`, listing titles down to `min_title_length_seconds`, never running longer
+    than `timeout_seconds` (the drive's scan ceiling)."""
+    run = await _run_info(device_path, min_title_length_seconds, max_seconds=timeout_seconds)
 
     failure = _failure_of(run)
     if failure is not None:

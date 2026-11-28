@@ -7,7 +7,13 @@ from arm_ripper import iso_extract, prepare
 from arm_ripper.scan.bd_structure import BdStructure, scan_structure
 from arm_ripper.scan.data import scan_data
 from arm_ripper.scan.disc_probe import probe_disc
-from arm_ripper.scan.makemkv import MakemkvScanFailed, ScanError, disc_fingerprints, scan_disc as scan_makemkv
+from arm_ripper.scan.makemkv import (
+    SCAN_MAX_SECONDS,
+    MakemkvScanFailed,
+    ScanError,
+    disc_fingerprints,
+    scan_disc as scan_makemkv,
+)
 from arm_ripper.scan.musicbrainz_disc import scan_cd
 from arm_ripper.source import is_iso_source
 
@@ -16,7 +22,7 @@ logger = logging.getLogger("arm_ripper.scan")
 __all__ = ["MakemkvScanFailed", "ScanError", "scan"]
 
 
-async def _scan_extracted(device_path: str, min_title_length_seconds: int) -> ScanResult | None:
+async def _scan_extracted(device_path: str, min_title_length_seconds: int, timeout_seconds: float) -> ScanResult | None:
     """MakeMKV listed no titles from the image itself: unpack it (`iso_extract`)
     and scan the disc folder instead. None, with the extraction removed, when
     the image can't be unpacked or the folder has no titles either."""
@@ -24,7 +30,9 @@ async def _scan_extracted(device_path: str, min_title_length_seconds: int) -> Sc
         return None
     await prepare.report(IsoPreparePhase.SCANNING)
     try:
-        result: ScanResult | None = await scan_makemkv(device_path, min_title_length_seconds)
+        result: ScanResult | None = await scan_makemkv(
+            device_path, min_title_length_seconds, timeout_seconds=timeout_seconds
+        )
     except ScanError as e:
         logger.warning("makemkv scan of the extracted image failed device=%s err=%s", device_path, e)
         result = None
@@ -71,24 +79,28 @@ async def _scan_structure_first(device_path: str, structure: BdStructure, min_ti
     )
 
 
-async def scan(device_path: str, min_title_length_seconds: int) -> ScanResult:
+async def scan(
+    device_path: str, min_title_length_seconds: int, *, timeout_seconds: float = SCAN_MAX_SECONDS
+) -> ScanResult:
     """Heuristic disc scan: a Blu-ray's structure first, then MakeMKV (listing titles down to
-    `min_title_length_seconds`), then MusicBrainz disc-id, then data.
+    `min_title_length_seconds`, never longer than `timeout_seconds`), then MusicBrainz disc-id, then data.
 
     An ISO ripper reports this as its "preparing" phase (`prepare`, a no-op
     for a physical drive) until the scan is done and identify takes over."""
     await prepare.report(IsoPreparePhase.SCANNING)
     try:
-        return await _scan(device_path, min_title_length_seconds)
+        return await _scan(device_path, min_title_length_seconds, timeout_seconds)
     finally:
         await prepare.finish()
 
 
-async def _makemkv_or_failure(device_path: str, min_title_length_seconds: int) -> ScanResult | MakemkvScanFailed | None:
+async def _makemkv_or_failure(
+    device_path: str, min_title_length_seconds: int, timeout_seconds: float
+) -> ScanResult | MakemkvScanFailed | None:
     """MakeMKV's scan; its typed failure when it ran and failed (the caller decides what that means), None when
     it could not run at all."""
     try:
-        return await scan_makemkv(device_path, min_title_length_seconds)
+        return await scan_makemkv(device_path, min_title_length_seconds, timeout_seconds=timeout_seconds)
     except MakemkvScanFailed as e:
         logger.info("makemkv scan failed device=%s reason=%s err=%s", device_path, e.reason.value, e)
         return e
@@ -123,12 +135,12 @@ async def _fallback(device_path: str, mkv_result: ScanResult | MakemkvScanFailed
     return data
 
 
-async def _scan(device_path: str, min_title_length_seconds: int) -> ScanResult:
+async def _scan(device_path: str, min_title_length_seconds: int, timeout_seconds: float) -> ScanResult:
     structure = await scan_structure(device_path)
     if structure.playlists:
         return await _scan_structure_first(device_path, structure, min_title_length_seconds)
 
-    result = await _makemkv_or_failure(device_path, min_title_length_seconds)
+    result = await _makemkv_or_failure(device_path, min_title_length_seconds, timeout_seconds)
 
     if isinstance(result, ScanResult) and result.titles:
         if result.disc_type == DiscType.BLURAY:
@@ -143,7 +155,7 @@ async def _scan(device_path: str, min_title_length_seconds: int) -> ScanResult:
         return result
 
     if is_iso_source(device_path):
-        rescued = await _scan_extracted(device_path, min_title_length_seconds)
+        rescued = await _scan_extracted(device_path, min_title_length_seconds, timeout_seconds)
         if rescued is not None:
             return rescued
 

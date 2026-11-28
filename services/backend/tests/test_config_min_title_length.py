@@ -107,6 +107,16 @@ def test_config_view_shows_the_min_title_length() -> None:
     assert r.json()["min_title_length_seconds"] == 75
 
 
+def test_config_view_publishes_the_default_scan_timeout() -> None:
+    """#325: the drive card's placeholder for the scan timeout comes from here."""
+    db = FakeSession()
+    db.rows["config"] = [_config()]
+    app, auth = _config_app(db)
+    with TestClient(app) as client:
+        r = client.get("/api/config", headers=auth)
+    assert r.json()["default_scan_timeout_seconds"] == 1200
+
+
 @pytest.mark.parametrize("value", [0, 60, 3600])
 def test_patch_accepts_a_min_title_length_from_0_to_3600(value: int) -> None:
     db = FakeSession()

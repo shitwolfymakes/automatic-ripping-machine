@@ -37,7 +37,7 @@ class _Calls:
         self.cd_calls = 0
         self.data_calls = 0
 
-        async def _makemkv(_p: str, _min_title_length_seconds: int) -> ScanResult:
+        async def _makemkv(_p: str, _min_title_length_seconds: int, **_options: object) -> ScanResult:
             if isinstance(makemkv, Exception):
                 raise makemkv
             return makemkv

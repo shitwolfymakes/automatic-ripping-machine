@@ -11,6 +11,7 @@ from arm_common.enums import (
     ScanFailureReason,
     TrackStatus,
 )
+from arm_common.schemas.drives import DEFAULT_SCAN_TIMEOUT_SECONDS
 
 
 class MakemkvKeyStatusReport(BaseModel):
@@ -248,3 +249,6 @@ class RipperConfigView(BaseModel):
     # Shortest title the scan lists and the rip writes. Defaulted so older
     # backends omitting it still validate (MakeMKV's own 120 s default).
     min_title_length_seconds: int = 120
+    # This drive's MakeMKV scan timeout (its override, else the default).
+    # Defaulted so older backends omitting it still validate.
+    scan_timeout_seconds: int = DEFAULT_SCAN_TIMEOUT_SECONDS

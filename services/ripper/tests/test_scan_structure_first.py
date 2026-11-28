@@ -26,7 +26,7 @@ class _Calls:
 def calls(monkeypatch: pytest.MonkeyPatch) -> _Calls:
     calls = _Calls()
 
-    async def _makemkv(device: str, _min_title_length_seconds: int) -> ScanResult:
+    async def _makemkv(device: str, _min_title_length_seconds: int, **_options: object) -> ScanResult:
         calls.makemkv.append(device)
         return ScanResult(
             disc_type=DiscType.DVD, volume_label="MKV_LABEL", titles=[ScanTitle(index=0, duration_seconds=3600)]
@@ -93,7 +93,7 @@ async def test_a_blu_ray_whose_structure_read_failed_falls_back_and_says_so(
 ) -> None:
     _structure(monkeypatch, BdStructure())
 
-    async def _bd(device: str, _min_title_length_seconds: int) -> ScanResult:
+    async def _bd(device: str, _min_title_length_seconds: int, **_options: object) -> ScanResult:
         return ScanResult(disc_type=DiscType.BLURAY, titles=[ScanTitle(index=0, duration_seconds=7200)])
 
     monkeypatch.setattr(dispatcher_mod, "scan_makemkv", _bd)
