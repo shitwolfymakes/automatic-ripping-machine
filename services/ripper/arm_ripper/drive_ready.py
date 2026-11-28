@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 
 from arm_ripper.drive_poll import DriveErrorKind, DriveState, classify_drive_error, read_drive_status
+from arm_ripper.source import is_file_source
 
 # How long a title waits for the drive: enough for the 30-60 s "becoming ready" a re-bound drive reports.
 READY_BUDGET_SECONDS = 60.0
@@ -89,7 +90,12 @@ def _first_sector_readable(device_path: str) -> bool:
 
 
 def probe_drive(device_path: str) -> Probe:
-    """Look at the drive now. A node that cannot be opened reads as ABSENT, any other failure as not ready."""
+    """Look at the drive now. A node that cannot be opened reads as ABSENT, any other failure as not ready.
+
+    An ISO file or disc folder has no drive to settle: it reads as a seated, readable disc (the drive-status ioctl
+    would fail ENOTTY on it and hold the rip for the whole budget)."""
+    if is_file_source(device_path):
+        return Probe(DriveState.DISC_OK, True)
     try:
         state = read_drive_status(device_path)
     except OSError as exc:
