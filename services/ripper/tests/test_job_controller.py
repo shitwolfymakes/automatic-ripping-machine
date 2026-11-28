@@ -721,6 +721,43 @@ async def test_abandon_stale_job_during_other_rip_does_not_eject(eject_spy):
     other.cancel()
 
 
+async def test_cancel_scan_cancels_a_claimed_task_with_no_job(eject_spy):
+    controller = JobController(FakeClient(), "drv_test", device_path="/dev/sr0")
+    scan = asyncio.create_task(asyncio.sleep(3600))
+    controller._active_task = scan
+    controller._active_job_id = None
+
+    assert controller.cancel_scan() is True
+    with pytest.raises(asyncio.CancelledError):
+        await scan
+
+
+async def test_cancel_scan_is_a_noop_with_no_task(eject_spy):
+    controller = JobController(FakeClient(), "drv_test", device_path="/dev/sr0")
+    assert controller.cancel_scan() is False
+
+
+async def test_cancel_scan_leaves_a_task_that_has_a_job(eject_spy):
+    controller = JobController(FakeClient(), "drv_test", device_path="/dev/sr0")
+    rip = asyncio.create_task(asyncio.sleep(3600))
+    controller._active_task = rip
+    controller._active_job_id = "job_1"
+
+    assert controller.cancel_scan() is False
+    await asyncio.sleep(0)
+    assert not rip.cancelled()
+    rip.cancel()
+
+
+async def test_cancel_scan_ignores_a_finished_task(eject_spy):
+    controller = JobController(FakeClient(), "drv_test", device_path="/dev/sr0")
+    done = asyncio.create_task(asyncio.sleep(0))
+    await done
+    controller._active_task = done
+
+    assert controller.cancel_scan() is False
+
+
 async def test_spawn_eject_creates_task_that_ejects_the_device(eject_spy):
     """With a device path and no running task, _spawn_eject runs Ejector.eject(device_path) in a new task."""
     controller = JobController(FakeClient(), "drv_test", device_path="/dev/sr0")
@@ -1219,21 +1256,25 @@ async def test_scan_retry_iso_source_never_touches_drive_ioctl(monkeypatch, tmp_
     assert calls["n"] == 1
 
 
-async def test_scan_retry_stops_when_disc_pulled(monkeypatch):
+async def test_scan_backoff_does_not_recheck_the_drive(monkeypatch):
+    """The poller cancels the scan when the disc leaves, so the back-off wakes straight into the next scan."""
     monkeypatch.setattr(disc_scan_module.asyncio, "sleep", _noop_async)
-    calls = {"n": 0}
+    results = deque([_empty_scan(), _titled_scan()])
+    statuses = {"n": 0}
+
+    def _status(_p):
+        statuses["n"] += 1
+        return DriveState.DISC_OK
 
     async def _scan(device_path):
-        calls["n"] += 1
-        return _empty_scan()
+        return results.popleft()
 
-    states = deque([DriveState.DISC_OK, DriveState.NO_DISC])
     monkeypatch.setattr(disc_scan_module, "scan_disc", _scan)
-    monkeypatch.setattr(disc_scan_module, "read_drive_status", lambda _p: states.popleft())
+    monkeypatch.setattr(disc_scan_module, "read_drive_status", _status)
 
     out = await disc_scan_module._scan_with_ready_retry("/dev/sr0")
-    assert not out.titles
-    assert calls["n"] == 1
+    assert out.titles
+    assert statuses["n"] == 1  # only _zero_titles_are_final's check
 
 
 async def test_scan_retry_stops_pre_sleep_when_disc_absent(monkeypatch):

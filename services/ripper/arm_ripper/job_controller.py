@@ -122,6 +122,14 @@ class JobController:
         """
         return self._active_task is None
 
+    def cancel_scan(self) -> bool:
+        """Cancel the pre-job scan phase: the claimed task has no job yet. Returns whether a task was cancelled."""
+        task = self._active_task
+        if task is None or self._active_job_id is not None or task.done():
+            return False
+        task.cancel()
+        return True
+
     @contextlib.asynccontextmanager
     async def _claim(self, job_id: str | None) -> AsyncIterator[None]:
         """Hold the single-flight gate for this task and job: is_idle() is False, and job.abandoned can cancel the
