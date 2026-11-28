@@ -94,6 +94,12 @@ def stereo_3d_refs(scan: ScanResult) -> frozenset[str]:
     return frozenset(title_ref(t.source_file or "", t.angle) for t in scan_candidates(scan) if t.stereo_3d)
 
 
+def job_stereo_3d_refs(job: Job) -> frozenset[str]:
+    """`stereo_3d_refs` of the job's stored scan; empty when it has none."""
+    scan = stored_scan(job)
+    return frozenset() if scan is None else stereo_3d_refs(scan)
+
+
 def keep_3d_refs(scan: ScanResult | None, tracks: Sequence[Track], prefers_3d: bool) -> list[str]:
     """The `source_ref`s of the rip's tracks whose MVC dependent view the ripper must keep: 3D titles of a job that
     keeps 3D (D60: no transcode), in track order. MakeMKV leaves the dependent view out unless told otherwise."""

@@ -3,7 +3,16 @@ import { resolveSample, mediaTokens, MEDIA_SAMPLE } from '../sample-tokens';
 
 describe('mediaTokens', () => {
 	it('lists the movie tokens in chip order', () => {
-		expect(mediaTokens('movie')).toEqual(['title', 'year', 'track', 'duration_human', 'transcode_slug', 'ext']);
+		expect(mediaTokens('movie')).toEqual([
+			'title',
+			'year',
+			'edition',
+			'plex_edition',
+			'track',
+			'duration_human',
+			'transcode_slug',
+			'ext'
+		]);
 	});
 	it('lists the tv tokens in chip order', () => {
 		expect(mediaTokens('tv')).toEqual([
@@ -51,7 +60,7 @@ it('every declared token for a type has a sample value', () => {
 // recipe preview leaves real tokens like {show}/{disc} literally unsubstituted.
 it('samples every authoritative token per media type', () => {
 	const BACKEND_TOKENS: Record<string, string[]> = {
-		movie: ['title', 'year', 'track', 'duration_human', 'transcode_slug', 'ext'],
+		movie: ['title', 'year', 'edition', 'plex_edition', 'track', 'duration_human', 'transcode_slug', 'ext'],
 		tv: [
 			'show',
 			'year',

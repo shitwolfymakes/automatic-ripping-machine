@@ -4,6 +4,8 @@ export const MEDIA_SAMPLE: Record<MediaType, Record<string, string>> = {
 	movie: {
 		title: 'Fight Club',
 		year: '1999',
+		edition: "Director's Cut",
+		plex_edition: "{edition-Director's Cut}",
 		track: '01',
 		duration_human: '2h 19m',
 		transcode_slug: 'h265',

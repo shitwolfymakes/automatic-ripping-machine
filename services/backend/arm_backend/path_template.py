@@ -25,7 +25,16 @@ class TemplateValidationError(ValueError):
 
 # Per-media-type allowed tokens.
 _ALLOWED_TOKENS_BY_MEDIA: dict[MediaType, set[str]] = {
-    MediaType.MOVIE: {"title", "year", "track", "duration_human", "transcode_slug", "ext"},
+    MediaType.MOVIE: {
+        "title",
+        "year",
+        "edition",
+        "plex_edition",
+        "track",
+        "duration_human",
+        "transcode_slug",
+        "ext",
+    },
     MediaType.TV: {
         "show",
         "year",
@@ -49,6 +58,8 @@ _SYNTHETIC_CONTEXTS: dict[MediaType, dict[str, str]] = {
     MediaType.MOVIE: {
         "title": "Iron Man",
         "year": "2008",
+        "edition": "Director's Cut",
+        "plex_edition": "{edition-Director's Cut}",
         "track": "01",
         "duration_human": "02h05m",
         "transcode_slug": "plex-1080p-h265",
@@ -194,6 +205,14 @@ _TOKEN_DESCRIPTIONS: dict[str, str] = {
     "season": "Season number, zero-padded",
     "episode": "Episode number, zero-padded (01, or 01-E02 for a two-episode title)",
     "episode_title": "Episode title",
+    "edition": (
+        "Name of this version when the job keeps more than one version of the film "
+        "(Director's Cut, 3D, Angle 2, ...). Write {edition?} to drop it when there is only one"
+    ),
+    "plex_edition": (
+        "The same name in Plex's edition form, {edition-Director's Cut}. "
+        "Write {plex_edition?} to drop it when the job keeps one version"
+    ),
     "disc": "Disc number within the set",
     "track": "Track number, zero-padded",
     "track_title": "Per-track title (music)",

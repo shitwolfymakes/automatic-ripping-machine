@@ -1,6 +1,7 @@
 <script lang="ts">
 	import type { JobView, TrackView } from '$lib/types/api.gen';
 	import { patchJob } from '$lib/api/jobs';
+	import EditionField from '$lib/components/jobs/EditionField.svelte';
 	import { errorMessage } from '$lib/utils/errors';
 	import { formatTrackDuration } from '$lib/utils/format';
 	import { tickMeaning } from '$lib/jobs/rip-plan';
@@ -146,6 +147,16 @@
 	{#if multi}
 		{#each set.members as member (idOf(member))}
 			{@render fullRow(member, 'checkbox')}
+			<div class="version-set-edition" data-testid="version-edition">
+				<span>Edition name</span>
+				<EditionField
+					jobId={job.id}
+					trackId={idOf(member)}
+					edition={tracks.find((t) => t.id === idOf(member))?.edition}
+					{canEdit}
+					onsaved={onrefresh}
+				/>
+			</div>
 		{/each}
 	{:else if hasAxes}
 		{#if views.length > 1}
@@ -247,6 +258,13 @@
 		align-items: baseline;
 		gap: 0.25rem 0.5rem;
 		min-width: 0;
+	}
+	.version-set-edition {
+		display: flex;
+		gap: 0.5rem;
+		margin-left: 1.5rem;
+		font-size: 0.75rem;
+		color: var(--color-text-secondary);
 	}
 	.version-set-facts,
 	.version-set-line {

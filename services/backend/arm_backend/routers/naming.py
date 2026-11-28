@@ -21,6 +21,7 @@ from arm_backend.path_template import (
     tokens_for_media,
 )
 from arm_backend.routers._template_validation import validate_template_or_http
+from arm_backend.title_map_service import job_stereo_3d_refs
 from arm_backend.transcode_apply import ResolvedTask, compute_outputs
 from arm_common import Job, Session, Track, User
 from arm_common.enums import MediaType
@@ -117,7 +118,7 @@ async def job_naming_preview(
     )
 
     try:
-        resolved = compute_outputs(job, tracks, sess, transcode_preset)
+        resolved = compute_outputs(job, tracks, sess, transcode_preset, job_stereo_3d_refs(job))
     except TemplateValidationError as exc:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)) from exc
 

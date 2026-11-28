@@ -273,7 +273,8 @@ async def test_run_seeders_syncs_builtin_session_templates(tmp_path: Path, monke
     await run_seeders(db)
 
     assert (
-        builtin.output_path_template == "{title} ({year?})/{title} ({year?}) - Track {track} - {transcode_slug}.{ext}"
+        builtin.output_path_template
+        == "{title} ({year?})/{title} ({year?}) {plex_edition?} - Track {track} - {transcode_slug}.{ext}"
     )
     clone = next(s for s in db.rows["sessions"] if s.id == "ses_user_clone")
     assert clone.output_path_template == old

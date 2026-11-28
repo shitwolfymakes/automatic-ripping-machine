@@ -59,8 +59,12 @@ def _apply_track_edit(job: Job, track: Track, edit: TrackEditRequest) -> bool:
             setattr(track, key, value)
     if identity and record_manual_track(job, track, identity):
         identity_touched = True
-    if edit.revert_fields:
-        revert_manual_track(job, track.source_ref, edit.revert_fields)
+    if "edition" in edit.revert_fields:
+        # No automatic source proposes an edition name, so reverting it clears it.
+        track.edition = None
+    resolver_fields = [f for f in edit.revert_fields if f != "edition"]
+    if resolver_fields:
+        revert_manual_track(job, track.source_ref, resolver_fields)
         identity_touched = True
     return identity_touched
 

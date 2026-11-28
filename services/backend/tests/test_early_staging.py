@@ -74,7 +74,7 @@ def _outputs(monkeypatch: pytest.MonkeyPatch, preset: Any, track_ids: list[str] 
     async def tracks(_db: Any, _job: Any) -> list[Any]:
         return []
 
-    def compute(_job: Any, _tracks: Any, _sess: Any, _preset: Any) -> list[Any]:
+    def compute(_job: Any, _tracks: Any, _sess: Any, _preset: Any, _stereo: Any) -> list[Any]:
         if isinstance(track_ids, Exception):
             raise track_ids
         return [SimpleNamespace(track_id=t) for t in track_ids]

@@ -2879,3 +2879,24 @@ def test_an_operator_tick_on_a_listed_playlist_and_an_untick_of_an_unlisted_one_
     with TestClient(app) as client:
         r = client.patch(f"/api/jobs/{_JOB_ID_A}", json=body, headers=_auth(token))
     assert r.status_code == 200, r.text
+
+
+def test_patch_sets_and_reverts_a_track_edition(signing_key: bytes) -> None:
+    db = FakeSession()
+    _seed_job_with_track(db)
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as c:
+        r = c.patch(
+            f"/api/jobs/{_JOB_ID_A}",
+            json={"tracks": [{"track_id": _TRK_ID_A, "edition": "Director's Cut"}]},
+            headers=_auth(token),
+        )
+        assert r.status_code == 200, r.text
+        assert db.rows["tracks"][0].edition == "Director's Cut"
+        r = c.patch(
+            f"/api/jobs/{_JOB_ID_A}",
+            json={"tracks": [{"track_id": _TRK_ID_A, "revert_fields": ["edition"]}]},
+            headers=_auth(token),
+        )
+    assert r.status_code == 200, r.text
+    assert db.rows["tracks"][0].edition is None

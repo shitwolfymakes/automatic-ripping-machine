@@ -72,7 +72,8 @@ def test_job_metadata_identity_claims_valid_parses_invalid_passes_through() -> N
 
 
 def test_track_revert_field_literal_matches_track_claim_attrs() -> None:
-    assert set(get_args(TrackRevertField)) == set(TRACK_CLAIM_FIELDS.values())
+    # `edition` is a plain column no source proposes: reverting it clears it, so it has no claim field.
+    assert set(get_args(TrackRevertField)) == set(TRACK_CLAIM_FIELDS.values()) | {"edition"}
 
 
 def test_router_identity_attr_sets_derive_from_claim_fields() -> None:
