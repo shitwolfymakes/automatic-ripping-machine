@@ -14,6 +14,7 @@ import docker.types  # type: ignore[import-untyped]
 from arm_backend.config import Settings
 from arm_backend.container_logging import log_config
 from arm_backend.iso_library import iso_host_path
+from arm_backend.stack_identity import stack_identity_env
 from arm_common import Drive, DriveKind
 
 DOCKER_LABEL_KEY = "arm.drive_id"
@@ -89,10 +90,7 @@ def container_spec(settings: Settings, drive: Drive) -> dict[str, Any]:
     }
     if drive.by_id_name:
         env["ARM_DRIVE_BY_ID"] = drive.by_id_name
-    for key in ("PUID", "PGID", "CDROM_GID"):
-        value = getattr(s, key)
-        if value:
-            env[key] = value
+    env.update(stack_identity_env(s, include_cdrom=True))
     for setting, env_name in _TUNABLE_ENV.items():
         value = getattr(s, setting)
         if value:

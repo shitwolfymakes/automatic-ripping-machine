@@ -20,12 +20,14 @@ from arm_backend.constants import CONFIG_SINGLETON_ID
 from arm_backend.makemkv_status import makemkv_state_detail
 from arm_backend.storage_placement import root_placement
 from arm_backend.ripper_manager import RipperManager
+from arm_backend.transcode_access_message import ACCESS_ERROR_PREFIX
 from arm_backend.transcode_dispatcher import TranscodeDispatcher
 from arm_backend.transcode_queue import count_queued_encode_tasks
 from arm_backend.utils import default_roots
 from arm_common import (
     Config,
     Drive,
+    Gpu,
     DriveKind,
     DriveLifecycle,
     DriveStatus,
@@ -184,7 +186,18 @@ async def _ripper_only_status(db: AsyncSession) -> tuple[str, str | None]:
     return tc_status, tc_detail
 
 
-async def _probed_transcoder_status(dispatcher: TranscodeDispatcher) -> tuple[str, str | None, list[DiagnosticDetail]]:
+async def _gpu_folder_problem(db: AsyncSession) -> str | None:
+    """An enabled GPU's probe found a folder the transcoder cannot use."""
+    gpus = (await db.execute(select(Gpu))).scalars().all()
+    for gpu in gpus:
+        if gpu.enabled and (gpu.probe_error or "").startswith(ACCESS_ERROR_PREFIX):
+            return gpu.probe_error
+    return None
+
+
+async def _probed_transcoder_status(
+    dispatcher: TranscodeDispatcher, db: AsyncSession
+) -> tuple[str, str | None, list[DiagnosticDetail]]:
     # probe() pings a possibly-remote ssh docker host; run it off the
     # event loop so a slow/unreachable host doesn't block the server.
     ok, detail = await asyncio.to_thread(dispatcher.probe)
@@ -201,6 +214,9 @@ async def _probed_transcoder_status(dispatcher: TranscodeDispatcher) -> tuple[st
             f"{dispatcher.backend_url_warning} (ARM_TRANSCODE_BACKEND_URL_CHECK=warn: spawning anyway)",
             tc_details,
         )
+    folder_problem = await _gpu_folder_problem(db)
+    if folder_problem:
+        return "warning", folder_problem, tc_details
     return "ok", None, tc_details
 
 
@@ -214,7 +230,7 @@ async def _transcoder_status(
         return "warning", "transcoder dispatcher not running", []
     if not dispatcher.host_paths_set():
         return "warning", "transcoder disabled: ARM_HOST_*_PATH not set", []
-    return await _probed_transcoder_status(dispatcher)
+    return await _probed_transcoder_status(dispatcher, db)
 
 
 def _transcoder_location() -> tuple[str, str | None]:
