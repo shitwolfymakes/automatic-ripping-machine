@@ -305,11 +305,14 @@ class Retriever:
     def _list_key(source_id: str, kind: Kind, text: str, year: int | None) -> tuple[Any, ...]:
         return ("list", source_id, kind, tuple(sorted(candidate_tokens(text))), year)
 
-    def _cached(self, key: tuple[Any, ...], budget: Budget) -> Any:
+    def _cached(self, key: tuple[Any, ...], budget: Budget, call: tuple[str, Kind, Step, str]) -> Any:
+        """A copy of the cached answer to `call` (source, kind, step, detail), or None. A cached answer is reported
+        to the attempt sink like a live one, so a re-identify of a missed disc still says why it missed."""
         found = self._cache.get(key)
         if found is None:
             return None
         budget.cached += 1
+        self._note(*call[:3], "hit" if found else "miss", call[3])
         return copy.deepcopy(found)
 
     def _remember(self, key: tuple[Any, ...], value: Any) -> None:
@@ -336,7 +339,7 @@ class Retriever:
             for kind in kinds:
                 for source in sources_for(cfg, kind, self._sources):
                     key = self._list_key(source.id, kind, query.text, None)
-                    cached = self._cached(key, budget)
+                    cached = self._cached(key, budget, (source.id, kind, "list", query.text))
                     if cached is not None:
                         slots.append((kind, source.id, cached, None))
                     elif budget.take_list():
@@ -377,7 +380,7 @@ class Retriever:
         if any(m.year == year for g in groups if g.kind == "movie" for m in g.members.values()):
             return
         key = self._list_key("tmdb", "movie", queries[0].text, year)
-        found = self._cached(key, budget)
+        found = self._cached(key, budget, ("tmdb", "movie", "list", queries[0].text))
         if found is None:
             if not budget.take_retry():
                 return
@@ -473,7 +476,9 @@ class Retriever:
             target = self._detail_target(cfg, group)
             assert target is not None
             source, provider_id = target
-            cached = self._cached(("detail", source.id, group.kind, provider_id), budget)
+            cached = self._cached(
+                ("detail", source.id, group.kind, provider_id), budget, (source.id, group.kind, "detail", provider_id)
+            )
             if cached is not None:
                 calls.append((group, source.id, cached, None))
             elif budget.take_detail():

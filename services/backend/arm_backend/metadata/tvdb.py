@@ -148,12 +148,6 @@ class TVDBClient:
                 break
         return out
 
-    async def search_series(self, title: str) -> MetadataResult:
-        results = await self.search_candidates(title, limit=1)
-        if not results:
-            raise LookupError("tvdb search no results")
-        return results[0]
-
     async def lookup_by_imdb_id(self, imdb_id: str) -> MetadataResult:
         body = await self._get_authed(f"/search/remoteid/{quote(imdb_id, safe='')}")
         data = body.get("data") if isinstance(body, dict) else None

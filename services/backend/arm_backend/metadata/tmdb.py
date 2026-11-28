@@ -78,15 +78,6 @@ class TMDBClient:
         year_val = year_from(release)
         return MetadataResult(title=title_val, year=year_val, kind=kind, payload=top)
 
-    async def search_movie(self, title: str, year: int | None = None) -> MetadataResult:
-        params: dict[str, Any] = {"query": title}
-        if year is not None:
-            params["year"] = year
-        return await self._search("movie", params, kind="movie")
-
-    async def search_tv(self, title: str) -> MetadataResult:
-        return await self._search("tv", {"query": title}, kind="tv")
-
     async def search_movie_candidates(
         self, title: str, year: int | None = None, limit: int = 10, *, enrich: bool = True
     ) -> list[MetadataResult]:
@@ -256,18 +247,3 @@ class TMDBClient:
                 raise LookupError("tmdb find result missing title")
             return self._with_imdb_id(parsed, imdb_id)
         raise LookupError(f"tmdb find no results for {imdb_id}")
-
-    async def _search(
-        self,
-        endpoint: str,
-        params: dict[str, Any],
-        *,
-        kind: Literal["movie", "tv"],
-    ) -> MetadataResult:
-        results = await self._get_results(endpoint, params)
-        if not results:
-            raise LookupError(f"tmdb {endpoint} no results")
-        parsed = self._parse_one(results[0], kind)
-        if parsed is None:
-            raise LookupError(f"tmdb {endpoint} top result missing title")
-        return parsed

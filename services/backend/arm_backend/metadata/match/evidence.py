@@ -7,7 +7,7 @@ winner, because scoring weighs each source by how reliable it is. Pure; no I/O.
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Collection, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from statistics import median
@@ -236,13 +236,22 @@ def build_evidence(
     )
 
 
-def evidence_from_scan(scan: ScanResult, *, iso_name: str | None, now: datetime) -> DiscEvidence:
-    """`build_evidence` over a scan: its BDMT name, volume label, candidate titles and set numbers."""
-    meta = scan.bd_meta
+def evidence_from_scan(
+    scan: ScanResult,
+    *,
+    iso_name: str | None,
+    now: datetime,
+    enabled: Collection[str] = TITLE_SOURCES,
+) -> DiscEvidence:
+    """`build_evidence` over a scan: its BDMT name, volume label, candidate titles and set numbers.
+
+    `enabled`: the disc-hint sources the operator keeps on; a disabled source contributes nothing, neither its
+    text nor (for the BDMT name) its disc set numbers."""
+    meta = scan.bd_meta if "bd_title" in enabled else None
     return build_evidence(
         bd_title=meta.name if meta else None,
-        iso_name=iso_name,
-        label=scan.volume_label,
+        iso_name=iso_name if "iso_name" in enabled else None,
+        label=scan.volume_label if "label" in enabled else None,
         titles=scan_candidates(scan),
         structured=is_structure_scan(scan),
         set_number=meta.set_number if meta else None,

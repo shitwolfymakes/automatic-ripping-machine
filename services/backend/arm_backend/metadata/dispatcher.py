@@ -1,33 +1,27 @@
 import asyncio
 import contextvars
 import logging
-import re
-from collections.abc import Mapping
+from collections.abc import Collection, Mapping
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from typing import Any, Literal
 
 import httpx
 
-from arm_backend.identity.sources.registry import hint_sources_setting
 from arm_backend.metadata.base import LookupError, MetadataResult
+from arm_backend.metadata.match.evidence import TITLE_SOURCES, DiscEvidence, evidence_from_scan
+from arm_backend.metadata.match.retrieve import PROVIDER_TIMEOUT_SECONDS, Outcome, Retriever, Step, plan_kinds
+from arm_backend.metadata.match.run import explain_exact, identify_weighted
 from arm_backend.metadata.musicbrainz import TOC_NOT_FOUND
 from arm_backend.metadata.source_selection import fingerprint_sources, online_source_ids, sources_for
 from arm_backend.metadata.sources import Kind, OnlineSource, build_online_sources, capability
 from arm_backend.metadata.tmdb import TMDBClient
-from arm_backend.metadata.volume_label import normalize_volume_label
 from arm_common import Config, DiscType
-from arm_common.schemas import ScanResult
+from arm_common.schemas import IdentifyMatch, ScanResult
 
 logger = logging.getLogger("arm_backend.metadata.dispatcher")
 
-PROVIDER_TIMEOUT_SECONDS = 8.0
-
 DISPATCH_TIMEOUT_SECONDS = 25.0
-
-# A release year at the end of a disc-hint title (`THE_OFFICE_2005_S1_D2` ->
-# "the office 2005"). Capped at 2029 so a title ending in a later number
-# (BLADE_RUNNER_2049) is never shortened.
-_HINT_YEAR_SUFFIX_RE = re.compile(r"\s*\(?(?:19\d{2}|20[0-2]\d)\)?$")
 
 # One entry per source the dispatcher tried (or skipped) during an identify
 # call: why the automatic match missed, shown on the job's review card.
@@ -51,58 +45,13 @@ class _AttemptLog:
 _attempt_log: contextvars.ContextVar[_AttemptLog | None] = contextvars.ContextVar("identify_attempt_log", default=None)
 
 
-# A search candidate: (title, year, tv_first).
-_Candidate = tuple[str, int | None, bool]
+@dataclass(frozen=True)
+class Identification:
+    """What one identify concluded: the hit to apply (None for a shortlist or a miss) and, for a video disc,
+    the weighted search's breakdown of why (`metadata_json.identify_match`)."""
 
-
-def _search_candidates(
-    scan: ScanResult, cfg: Config, title_hint: str | None, title_hint_is_tv: bool
-) -> list[_Candidate]:
-    """The hint, hint-without-year and label titles to search, in order."""
-    # Disc hints (bd_title / label, see arm_backend.identity) supply a
-    # cleaner search title than the raw volume label — try it first, then
-    # fall back to the normalized volume-label title. Empty and duplicate
-    # (case-insensitive) candidates are skipped so a hint equal to the
-    # label title doesn't double the provider calls. A hint that carries
-    # a season claim (a season/box-set disc) is TV-shaped: search TV before
-    # movie for THAT candidate only. The label-derived candidate keeps the
-    # movie-first order. The label candidate's year is computed first so
-    # the hint candidate — which has no year of its own — is searched with
-    # the same year filter.
-    label_title: str | None = None
-    label_year: int | None = None
-    if scan.volume_label:
-        label_title, label_year = normalize_volume_label(scan.volume_label)
-    # The volume label is a search candidate only while the `label`
-    # disc hint is enabled; an operator who ignores disc text gets no
-    # label search at all. Its year still narrows the hint candidate.
-    label_enabled = "label" in hint_sources_setting(cfg)
-
-    candidates: list[_Candidate] = []
-    if title_hint and title_hint.strip():
-        hint = title_hint.strip()
-        candidates.append((hint, label_year, title_hint_is_tv))
-        # A trailing year can be the release year (THE_OFFICE_2005_S1_D2)
-        # or part of the title (WONDER_WOMAN_1984, 1917), and the label
-        # cannot tell which. Search the hint as given first, then without
-        # the year.
-        if without_year := _HINT_YEAR_SUFFIX_RE.sub("", hint).rstrip(" :,"):
-            candidates.append((without_year, label_year, title_hint_is_tv))
-    if label_title and label_enabled:
-        candidates.append((label_title, label_year, False))
-    return candidates
-
-
-def _dedupe_casefold(candidates: list[_Candidate]) -> list[_Candidate]:
-    """Drop candidates whose title repeats an earlier one, ignoring case."""
-    seen: set[str] = set()
-    unique: list[_Candidate] = []
-    for title, year, tv_first in candidates:
-        key = title.casefold()
-        if key not in seen:
-            seen.add(key)
-            unique.append((title, year, tv_first))
-    return unique
+    result: MetadataResult | None
+    match: IdentifyMatch | None = None
 
 
 class MetadataDispatcher:
@@ -114,6 +63,8 @@ class MetadataDispatcher:
     ) -> None:
         self._http = http
         self._sources: dict[str, OnlineSource] = dict(sources) if sources is not None else build_online_sources(http)
+        # One retriever, so its one-hour cache and per-source limits serve every identify.
+        self._retriever = Retriever(self._sources, timeout=PROVIDER_TIMEOUT_SECONDS, on_attempt=self._on_attempt)
 
     @property
     def last_attempts(self) -> list[dict[str, Any]]:
@@ -134,25 +85,43 @@ class MetadataDispatcher:
         await self._http.aclose()
 
     async def identify(
-        self,
-        scan: ScanResult,
-        cfg: Config,
-        *,
-        title_hint: str | None = None,
-        title_hint_is_tv: bool = False,
-        prefer_tv: bool = False,
-    ) -> MetadataResult | None:
+        self, scan: ScanResult, cfg: Config, *, hint_ids: Collection[str] = TITLE_SOURCES, iso_name: str | None = None
+    ) -> Identification:
+        """Identify a disc. `hint_ids`: the enabled disc-hint sources (`bd_title`, `iso_name`, `label`); a
+        disabled one contributes no text to the weighted search. `iso_name`: an ISO rip's file name."""
         self._reset_attempts()
         if scan.disc_type in (DiscType.DATA, DiscType.UNKNOWN):
-            return None
+            return Identification(None)
 
         if scan.disc_type == DiscType.CD:
-            return await self._identify_cd(scan, cfg)
+            return Identification(await self._identify_cd(scan, cfg))
 
-        hit = await self._identify_video(
-            scan, cfg, title_hint=title_hint, title_hint_is_tv=title_hint_is_tv, prefer_tv=prefer_tv
-        )
-        return await self.fill_external_ids(hit, cfg)
+        ev = self._evidence(scan, hint_ids, iso_name)
+        hit = await self.identify_from_fingerprint(scan, cfg)
+        if hit is not None:
+            hit = await self.fill_external_ids(hit, cfg) or hit
+            return Identification(hit, explain_exact(ev, hit, "fingerprint"))
+        for kind in plan_kinds(ev.p_tv):
+            self._walk(cfg, kind, "title", ev.titles[0].parsed.core if ev.titles else None)
+        weighted = await identify_weighted(self._retriever, cfg, ev)
+        return Identification(await self.fill_external_ids(weighted.result, cfg), weighted.match)
+
+    @staticmethod
+    def _evidence(scan: ScanResult, hint_ids: Collection[str], iso_name: str | None) -> DiscEvidence:
+        return evidence_from_scan(scan, iso_name=iso_name, now=datetime.now(timezone.utc), enabled=hint_ids)
+
+    def explain_exact(
+        self,
+        scan: ScanResult,
+        hit: MetadataResult,
+        *,
+        how: str,
+        hint_ids: Collection[str],
+        iso_name: str | None = None,
+    ) -> Identification:
+        """An exact hit found outside `identify` (TheDiscDB's release) with the text score the search would give
+        it, for the card to flag a mapping the disc's own text does not support (D68). The hit applies either way."""
+        return Identification(hit, explain_exact(self._evidence(scan, hint_ids, iso_name), hit, how))
 
     async def _identify_cd(self, scan: ScanResult, cfg: Config) -> MetadataResult | None:
         if not scan.musicbrainz_disc_id:
@@ -169,50 +138,6 @@ class MetadataDispatcher:
                 return hit
         return None
 
-    async def _identify_video(
-        self,
-        scan: ScanResult,
-        cfg: Config,
-        *,
-        title_hint: str | None = None,
-        title_hint_is_tv: bool = False,
-        prefer_tv: bool = False,
-    ) -> MetadataResult | None:
-        # Fingerprint sources first (the community crc64 → title DB). A hit
-        # beats fuzzy title matching because the fingerprint is unique to the
-        # disc and there's no false-positive risk.
-        hit = await self.identify_from_fingerprint(scan, cfg)
-        if hit is not None:
-            return hit
-
-        unique = _dedupe_casefold(_search_candidates(scan, cfg, title_hint, title_hint_is_tv))
-        if prefer_tv:
-            return await self._search_tv_then_movie(unique, cfg)
-        return await self._search_in_candidate_order(unique, cfg)
-
-    async def _search_tv_then_movie(self, candidates: list[_Candidate], cfg: Config) -> MetadataResult | None:
-        """Search TV for every candidate before any movie; the first hit wins."""
-        # The disc itself is TV-shaped (arm_common.disc_shape): search TV for
-        # every candidate before any movie, so one candidate's movie
-        # fallback can't win while another candidate would have found the
-        # series.
-        for kind in ("tv", "movie"):
-            for title, year, _ in candidates:
-                hit = await self._search_kind(title, year, cfg, kind)
-                if hit is not None:
-                    return hit
-        return None
-
-    async def _search_in_candidate_order(self, candidates: list[_Candidate], cfg: Config) -> MetadataResult | None:
-        """Search each candidate in its own kind order; the first hit wins."""
-        for title, year, tv_first in candidates:
-            kinds: tuple[Kind, Kind] = ("tv", "movie") if tv_first else ("movie", "tv")
-            for kind in kinds:
-                hit = await self._search_kind(title, year, cfg, kind)
-                if hit is not None:
-                    return hit
-        return None
-
     async def identify_from_fingerprint(self, scan: ScanResult, cfg: Config) -> MetadataResult | None:
         """The disc's fingerprint sources only: today the keyless
         community CRC64 database. Split out of `identify` so a caller that
@@ -227,17 +152,6 @@ class MetadataDispatcher:
             if lookup is None:
                 continue
             hit = await self._call(source.id, lookup(cfg, "crc64", crc64), step="fingerprint", kind=None, detail=crc64)
-            if hit is not None:
-                return hit
-        return None
-
-    async def _search_kind(self, title: str, year: int | None, cfg: Config, kind: Kind) -> MetadataResult | None:
-        """One kind: every enabled source for it, in the operator's order."""
-        for source in self._walk(cfg, kind, "title", title):
-            search = capability(source, "search_title")
-            if search is None:
-                continue
-            hit = await self._call(source.id, search(cfg, kind, title, year), step="title", kind=kind, detail=title)
             if hit is not None:
                 return hit
         return None
@@ -294,6 +208,9 @@ class MetadataDispatcher:
         kind = hit.kind
         if not cfg.tmdb_api_key or kind not in ("movie", "tv"):
             return hit
+        if "imdb_id" in hit.payload and "tvdb_id" in hit.payload:
+            # A detail call already carried the ids (the retriever's runtime lookup does).
+            return hit
         tmdb_id = hit.payload.get("id")
         if tmdb_id is None:
             return hit
@@ -308,6 +225,10 @@ class MetadataDispatcher:
         for key, value in found.items():
             hit.payload.setdefault(key, value)
         return hit
+
+    def _on_attempt(self, source_id: str, kind: Kind, step: Step, outcome: Outcome, detail: str) -> None:
+        """One call the retriever made, as an attempt on the identify call in the current task."""
+        self._record(source_id, "title", kind, outcome, detail if step == "list" else f"details {detail}")
 
     def _reset_attempts(self) -> None:
         _attempt_log.set(_AttemptLog())

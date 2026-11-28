@@ -57,28 +57,6 @@ class OMDBClient:
         body: dict[str, Any] = r.json()
         return body
 
-    async def lookup_by_title(
-        self,
-        title: str,
-        year: int | None = None,
-        kind: Literal["movie", "tv"] = "movie",
-    ) -> MetadataResult:
-        params: dict[str, Any] = {"t": title, "type": _OMDB_TYPE[kind]}
-        if year is not None:
-            params["y"] = year
-
-        body = await self._get_json(params)
-        if body.get("Response") != "True":
-            raise LookupError(f"omdb miss: {body.get('Error', 'unknown')}")
-
-        title_val = body.get("Title")
-        year_str = body.get("Year") or ""
-        year_val = year_from(year_str)
-        if not title_val:
-            raise LookupError("omdb hit missing title")
-
-        return MetadataResult(title=title_val, year=year_val, kind=kind, payload=body)
-
     async def search_candidates(
         self,
         title: str,

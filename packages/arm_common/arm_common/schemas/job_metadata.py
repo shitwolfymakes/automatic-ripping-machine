@@ -18,6 +18,9 @@ The bag holds four kinds of content, and this module gives each a home:
 - `identify_attempts` — on an automatic-match miss, each source the dispatcher
   tried and its outcome (`{source, step, kind, outcome, detail}`, at most 20);
   the review card says why the match missed. Dropped on a hit or a resolve.
+- `identify_match` — the weighted title search's breakdown (evidence, queries, call counts, the scored
+  candidates and why the top one won). Written on every automatic video identify (accepted, shortlisted,
+  no match or exact hit) and replaced by the next one; a shortlist's rows are its leading candidates.
 - `provider_raw` — everything a provider returned, keyed by provider name.
   Data for the raw viewer and future backfills, never read for behaviour.
   Rows migrated from the old top-level merge keep theirs under `"legacy"`.
@@ -144,6 +147,98 @@ class IdentitySuggestion(BaseModel):
     suggested_at: datetime
 
 
+class MatchTitle(BaseModel):
+    """One disc text the search read: where it came from, as written, and the title left once noise was stripped."""
+
+    source: str
+    text: str
+    core: str
+    # Format and edition words stripped from the tail: counted when a candidate has them, free when not.
+    optional: list[str] = Field(default_factory=list)
+
+
+class MatchYear(BaseModel):
+    year: int
+    sources: list[str]
+    reliability: float
+
+
+class MatchEvidence(BaseModel):
+    titles: list[MatchTitle] = Field(default_factory=list)
+    years: list[MatchYear] = Field(default_factory=list)
+    # Numbers a candidate title must carry (`2049` in Blade Runner 2049).
+    numbers: list[str] = Field(default_factory=list)
+    runtime_min: list[float] = Field(default_factory=list)
+    runtime_source: Literal["structure", "titles", "episodes"] | None = None
+    p_tv: float
+    kind_reasons: list[str] = Field(default_factory=list)
+
+
+class MatchQuery(BaseModel):
+    text: str
+    kinds: list[Literal["movie", "tv"]]
+
+
+class MatchCalls(BaseModel):
+    list: int = 0
+    detail: int = 0
+    # Answers served from the cache: no provider call.
+    cached: int = 0
+
+
+class MatchParts(BaseModel):
+    """The weighted parts of a candidate's score; they add up to `score`."""
+
+    title: float
+    year: float
+    runtime: float
+    kind: float
+    agreement: float
+
+
+class MatchCandidate(BaseModel):
+    title: str
+    year: int | None = None
+    kind: Literal["movie", "tv"]
+    runtime: float | None = None
+    # Every provider that returned it, and the best-ranked one (whose own record an accept applies).
+    providers: list[str] = Field(default_factory=list)
+    provider: str | None = None
+    ids: dict[str, str] = Field(default_factory=dict)
+    score: float
+    parts: MatchParts
+    # `numbers_differ`, `numbers_partial`, `disc_number_missing`, `candidate_sequel_number`, `year_mismatch`,
+    # `runtime_far`, `edition_tolerance`, `text_disagrees`.
+    flags: list[str] = Field(default_factory=list)
+
+
+class MatchThresholds(BaseModel):
+    accept: float
+    margin: float
+    floor: float
+    title_min: float
+
+
+class IdentifyMatch(BaseModel):
+    """Why the weighted search decided what it did (spec 6). `candidates` holds at most five, best first; for a
+    shortlist the first `shortlist` of them are the rows to offer. An exact hit (TheDiscDB, fingerprint) is never
+    re-ranked: its own text score is stored with `exact`, and `text_disagrees` when that score is very low."""
+
+    model_config = ConfigDict(extra="allow")
+
+    version: Literal[1] = 1
+    decision: Literal["accept", "shortlist", "no_match", "exact"]
+    exact: Literal["thediscdb", "fingerprint"] | None = None
+    text_disagrees: bool = False
+    evidence: MatchEvidence
+    queries: list[MatchQuery] = Field(default_factory=list)
+    calls: MatchCalls = Field(default_factory=MatchCalls)
+    candidates: list[MatchCandidate] = Field(default_factory=list)
+    shortlist: int = 0
+    runner_up: float | None = None
+    thresholds: MatchThresholds
+
+
 class JobMetadata(BaseModel):
     model_config = ConfigDict(extra="allow")
 
@@ -165,6 +260,8 @@ class JobMetadata(BaseModel):
     # Set on an automatic-match miss: what the dispatcher tried and how each
     # attempt ended (arm_backend.metadata.dispatcher.last_attempts).
     identify_attempts: list[dict[str, Any]] | None = None
+    # The weighted search's breakdown, kept after an apply (unlike the miss attempts above).
+    identify_match: IdentifyMatch | None = None
     provider_raw: dict[str, dict[str, Any]] = Field(default_factory=dict)
 
 

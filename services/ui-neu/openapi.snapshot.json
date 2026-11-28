@@ -12057,6 +12057,94 @@
         ],
         "title": "IdentificationMode"
       },
+      "IdentifyMatch": {
+        "properties": {
+          "version": {
+            "type": "integer",
+            "const": 1,
+            "title": "Version",
+            "default": 1
+          },
+          "decision": {
+            "type": "string",
+            "enum": [
+              "accept",
+              "shortlist",
+              "no_match",
+              "exact"
+            ],
+            "title": "Decision"
+          },
+          "exact": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "thediscdb",
+                  "fingerprint"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Exact"
+          },
+          "text_disagrees": {
+            "type": "boolean",
+            "title": "Text Disagrees",
+            "default": false
+          },
+          "evidence": {
+            "$ref": "#/components/schemas/MatchEvidence"
+          },
+          "queries": {
+            "items": {
+              "$ref": "#/components/schemas/MatchQuery"
+            },
+            "type": "array",
+            "title": "Queries"
+          },
+          "calls": {
+            "$ref": "#/components/schemas/MatchCalls"
+          },
+          "candidates": {
+            "items": {
+              "$ref": "#/components/schemas/MatchCandidate"
+            },
+            "type": "array",
+            "title": "Candidates"
+          },
+          "shortlist": {
+            "type": "integer",
+            "title": "Shortlist",
+            "default": 0
+          },
+          "runner_up": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Runner Up"
+          },
+          "thresholds": {
+            "$ref": "#/components/schemas/MatchThresholds"
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "required": [
+          "decision",
+          "evidence",
+          "thresholds"
+        ],
+        "title": "IdentifyMatch",
+        "description": "Why the weighted search decided what it did (spec 6). `candidates` holds at most five, best first; for a\nshortlist the first `shortlist` of them are the rows to offer. An exact hit (TheDiscDB, fingerprint) is never\nre-ranked: its own text score is stored with `exact`, and `text_disagrees` when that score is very low."
+      },
       "IdentifyRequest": {
         "properties": {
           "drive_id": {
@@ -13365,6 +13453,16 @@
             ],
             "title": "Identify Attempts"
           },
+          "identify_match": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/IdentifyMatch"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "provider_raw": {
             "additionalProperties": {
               "additionalProperties": true,
@@ -14058,6 +14156,112 @@
         ],
         "title": "ManualTriggerResponse"
       },
+      "MatchCalls": {
+        "properties": {
+          "list": {
+            "type": "integer",
+            "title": "List",
+            "default": 0
+          },
+          "detail": {
+            "type": "integer",
+            "title": "Detail",
+            "default": 0
+          },
+          "cached": {
+            "type": "integer",
+            "title": "Cached",
+            "default": 0
+          }
+        },
+        "type": "object",
+        "title": "MatchCalls"
+      },
+      "MatchCandidate": {
+        "properties": {
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "year": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Year"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "movie",
+              "tv"
+            ],
+            "title": "Kind"
+          },
+          "runtime": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Runtime"
+          },
+          "providers": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Providers"
+          },
+          "provider": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider"
+          },
+          "ids": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Ids"
+          },
+          "score": {
+            "type": "number",
+            "title": "Score"
+          },
+          "parts": {
+            "$ref": "#/components/schemas/MatchParts"
+          },
+          "flags": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Flags"
+          }
+        },
+        "type": "object",
+        "required": [
+          "title",
+          "kind",
+          "score",
+          "parts"
+        ],
+        "title": "MatchCandidate"
+      },
       "MatchEntryView": {
         "properties": {
           "source_ref": {
@@ -14126,6 +14330,70 @@
         ],
         "title": "MatchEntryView",
         "description": "One title's episode match within a `MatchOutcomeView`."
+      },
+      "MatchEvidence": {
+        "properties": {
+          "titles": {
+            "items": {
+              "$ref": "#/components/schemas/MatchTitle"
+            },
+            "type": "array",
+            "title": "Titles"
+          },
+          "years": {
+            "items": {
+              "$ref": "#/components/schemas/MatchYear"
+            },
+            "type": "array",
+            "title": "Years"
+          },
+          "numbers": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Numbers"
+          },
+          "runtime_min": {
+            "items": {
+              "type": "number"
+            },
+            "type": "array",
+            "title": "Runtime Min"
+          },
+          "runtime_source": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "structure",
+                  "titles",
+                  "episodes"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Runtime Source"
+          },
+          "p_tv": {
+            "type": "number",
+            "title": "P Tv"
+          },
+          "kind_reasons": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Kind Reasons"
+          }
+        },
+        "type": "object",
+        "required": [
+          "p_tv"
+        ],
+        "title": "MatchEvidence"
       },
       "MatchOutcomeView": {
         "properties": {
@@ -14205,6 +14473,40 @@
         "title": "MatchOutcomeView",
         "description": "One provider's outcome from a `/identity/match` call."
       },
+      "MatchParts": {
+        "properties": {
+          "title": {
+            "type": "number",
+            "title": "Title"
+          },
+          "year": {
+            "type": "number",
+            "title": "Year"
+          },
+          "runtime": {
+            "type": "number",
+            "title": "Runtime"
+          },
+          "kind": {
+            "type": "number",
+            "title": "Kind"
+          },
+          "agreement": {
+            "type": "number",
+            "title": "Agreement"
+          }
+        },
+        "type": "object",
+        "required": [
+          "title",
+          "year",
+          "runtime",
+          "kind",
+          "agreement"
+        ],
+        "title": "MatchParts",
+        "description": "The weighted parts of a candidate's score; they add up to `score`."
+      },
       "MatchPreview": {
         "properties": {
           "outcomes": {
@@ -14218,6 +14520,31 @@
         "type": "object",
         "title": "MatchPreview",
         "description": "`POST /api/jobs/{id}/identity/match` response, for both\n`apply=False` (a preview, nothing written) and `apply=True` (reflects the\nstored outcomes)."
+      },
+      "MatchQuery": {
+        "properties": {
+          "text": {
+            "type": "string",
+            "title": "Text"
+          },
+          "kinds": {
+            "items": {
+              "type": "string",
+              "enum": [
+                "movie",
+                "tv"
+              ]
+            },
+            "type": "array",
+            "title": "Kinds"
+          }
+        },
+        "type": "object",
+        "required": [
+          "text",
+          "kinds"
+        ],
+        "title": "MatchQuery"
       },
       "MatchRequest": {
         "properties": {
@@ -14289,6 +14616,91 @@
         "type": "object",
         "title": "MatchRequest",
         "description": "`POST /api/jobs/{id}/identity/match` body."
+      },
+      "MatchThresholds": {
+        "properties": {
+          "accept": {
+            "type": "number",
+            "title": "Accept"
+          },
+          "margin": {
+            "type": "number",
+            "title": "Margin"
+          },
+          "floor": {
+            "type": "number",
+            "title": "Floor"
+          },
+          "title_min": {
+            "type": "number",
+            "title": "Title Min"
+          }
+        },
+        "type": "object",
+        "required": [
+          "accept",
+          "margin",
+          "floor",
+          "title_min"
+        ],
+        "title": "MatchThresholds"
+      },
+      "MatchTitle": {
+        "properties": {
+          "source": {
+            "type": "string",
+            "title": "Source"
+          },
+          "text": {
+            "type": "string",
+            "title": "Text"
+          },
+          "core": {
+            "type": "string",
+            "title": "Core"
+          },
+          "optional": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Optional"
+          }
+        },
+        "type": "object",
+        "required": [
+          "source",
+          "text",
+          "core"
+        ],
+        "title": "MatchTitle",
+        "description": "One disc text the search read: where it came from, as written, and the title left once noise was stripped."
+      },
+      "MatchYear": {
+        "properties": {
+          "year": {
+            "type": "integer",
+            "title": "Year"
+          },
+          "sources": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Sources"
+          },
+          "reliability": {
+            "type": "number",
+            "title": "Reliability"
+          }
+        },
+        "type": "object",
+        "required": [
+          "year",
+          "sources",
+          "reliability"
+        ],
+        "title": "MatchYear"
       },
       "MediaType": {
         "type": "string",

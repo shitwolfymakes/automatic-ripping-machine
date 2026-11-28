@@ -2154,6 +2154,52 @@ export type HeldJobView = {
 export type IdentificationMode = 'required' | 'skip' | 'deferred_placeholder';
 
 /**
+ * IdentifyMatch
+ *
+ * Why the weighted search decided what it did (spec 6). `candidates` holds at most five, best first; for a
+ * shortlist the first `shortlist` of them are the rows to offer. An exact hit (TheDiscDB, fingerprint) is never
+ * re-ranked: its own text score is stored with `exact`, and `text_disagrees` when that score is very low.
+ */
+export type IdentifyMatch = {
+    /**
+     * Version
+     */
+    version?: 1;
+    /**
+     * Decision
+     */
+    decision: 'accept' | 'shortlist' | 'no_match' | 'exact';
+    /**
+     * Exact
+     */
+    exact?: 'thediscdb' | 'fingerprint' | null;
+    /**
+     * Text Disagrees
+     */
+    text_disagrees?: boolean;
+    evidence: MatchEvidence;
+    /**
+     * Queries
+     */
+    queries?: Array<MatchQuery>;
+    calls?: MatchCalls;
+    /**
+     * Candidates
+     */
+    candidates?: Array<MatchCandidate>;
+    /**
+     * Shortlist
+     */
+    shortlist?: number;
+    /**
+     * Runner Up
+     */
+    runner_up?: number | null;
+    thresholds: MatchThresholds;
+    [key: string]: unknown;
+};
+
+/**
  * IdentifyRequest
  */
 export type IdentifyRequest = {
@@ -2856,6 +2902,7 @@ export type JobMetadata = {
     identify_attempts?: Array<{
         [key: string]: unknown;
     }> | null;
+    identify_match?: IdentifyMatch | null;
     /**
      * Provider Raw
      */
@@ -3241,6 +3288,69 @@ export type ManualTriggerResponse = {
 };
 
 /**
+ * MatchCalls
+ */
+export type MatchCalls = {
+    /**
+     * List
+     */
+    list?: number;
+    /**
+     * Detail
+     */
+    detail?: number;
+    /**
+     * Cached
+     */
+    cached?: number;
+};
+
+/**
+ * MatchCandidate
+ */
+export type MatchCandidate = {
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Year
+     */
+    year?: number | null;
+    /**
+     * Kind
+     */
+    kind: 'movie' | 'tv';
+    /**
+     * Runtime
+     */
+    runtime?: number | null;
+    /**
+     * Providers
+     */
+    providers?: Array<string>;
+    /**
+     * Provider
+     */
+    provider?: string | null;
+    /**
+     * Ids
+     */
+    ids?: {
+        [key: string]: string;
+    };
+    /**
+     * Score
+     */
+    score: number;
+    parts: MatchParts;
+    /**
+     * Flags
+     */
+    flags?: Array<string>;
+};
+
+/**
  * MatchEntryView
  *
  * One title's episode match within a `MatchOutcomeView`.
@@ -3270,6 +3380,40 @@ export type MatchEntryView = {
      * Confidence
      */
     confidence?: number | null;
+};
+
+/**
+ * MatchEvidence
+ */
+export type MatchEvidence = {
+    /**
+     * Titles
+     */
+    titles?: Array<MatchTitle>;
+    /**
+     * Years
+     */
+    years?: Array<MatchYear>;
+    /**
+     * Numbers
+     */
+    numbers?: Array<string>;
+    /**
+     * Runtime Min
+     */
+    runtime_min?: Array<number>;
+    /**
+     * Runtime Source
+     */
+    runtime_source?: 'structure' | 'titles' | 'episodes' | null;
+    /**
+     * P Tv
+     */
+    p_tv: number;
+    /**
+     * Kind Reasons
+     */
+    kind_reasons?: Array<string>;
 };
 
 /**
@@ -3315,6 +3459,34 @@ export type MatchOutcomeView = {
 };
 
 /**
+ * MatchParts
+ *
+ * The weighted parts of a candidate's score; they add up to `score`.
+ */
+export type MatchParts = {
+    /**
+     * Title
+     */
+    title: number;
+    /**
+     * Year
+     */
+    year: number;
+    /**
+     * Runtime
+     */
+    runtime: number;
+    /**
+     * Kind
+     */
+    kind: number;
+    /**
+     * Agreement
+     */
+    agreement: number;
+};
+
+/**
  * MatchPreview
  *
  * `POST /api/jobs/{id}/identity/match` response, for both
@@ -3326,6 +3498,20 @@ export type MatchPreview = {
      * Outcomes
      */
     outcomes?: Array<MatchOutcomeView>;
+};
+
+/**
+ * MatchQuery
+ */
+export type MatchQuery = {
+    /**
+     * Text
+     */
+    text: string;
+    /**
+     * Kinds
+     */
+    kinds: Array<'movie' | 'tv'>;
 };
 
 /**
@@ -3358,6 +3544,70 @@ export type MatchRequest = {
      * Scan Seasons
      */
     scan_seasons?: boolean;
+};
+
+/**
+ * MatchThresholds
+ */
+export type MatchThresholds = {
+    /**
+     * Accept
+     */
+    accept: number;
+    /**
+     * Margin
+     */
+    margin: number;
+    /**
+     * Floor
+     */
+    floor: number;
+    /**
+     * Title Min
+     */
+    title_min: number;
+};
+
+/**
+ * MatchTitle
+ *
+ * One disc text the search read: where it came from, as written, and the title left once noise was stripped.
+ */
+export type MatchTitle = {
+    /**
+     * Source
+     */
+    source: string;
+    /**
+     * Text
+     */
+    text: string;
+    /**
+     * Core
+     */
+    core: string;
+    /**
+     * Optional
+     */
+    optional?: Array<string>;
+};
+
+/**
+ * MatchYear
+ */
+export type MatchYear = {
+    /**
+     * Year
+     */
+    year: number;
+    /**
+     * Sources
+     */
+    sources: Array<string>;
+    /**
+     * Reliability
+     */
+    reliability: number;
 };
 
 /**

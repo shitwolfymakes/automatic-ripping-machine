@@ -10,7 +10,7 @@ from arm_common.enums import TrackRole
 from arm_common.schemas import BdDiscMeta, ScanResult
 from arm_common.schemas.identity import SourceClaims, TrackClaim
 
-from arm_backend.identity.hints import hint_is_tv, hint_season, hint_title
+from arm_backend.identity.hints import hint_season
 from arm_backend.identity.pipeline import resolve_job, run_disc_hints
 from arm_backend.identity.proposals import put_source, claims_of
 from tests._fakes import FakeSession
@@ -126,14 +126,6 @@ def test_run_disc_hints_records_both_sources_and_skips() -> None:
     sources = claims_of(job).sources
     assert sources["bd_title"].status == "skipped"
     assert sources["label"].job.model_dump(exclude_unset=True) == {"season": 2, "disc_number": 3, "title": "lost"}
-    assert hint_title(job) == "lost"
-
-
-def test_hint_title_prefers_bd_title() -> None:
-    job = Job(id="job_1", drive_id="d", disc_type=DiscType.BLURAY, status=JobStatus.CREATED, metadata_json={})
-    scan = ScanResult(disc_type=DiscType.BLURAY, volume_label="WW_S3D2", bd_meta=BdDiscMeta(name="The West Wing"))
-    run_disc_hints(job, scan, now=NOW)
-    assert hint_title(job) == "the west wing"
 
 
 def test_run_disc_hints_sources_param_limits_which_sources_run() -> None:
@@ -149,59 +141,11 @@ def test_run_disc_hints_sources_param_limits_which_sources_run() -> None:
     assert sources["label"].status == "ok"
 
 
-def test_hint_title_sources_param_ignores_other_stored_entries() -> None:
-    """`hint_title` only reads the passed `sources`, so a stored bd_title
-    entry (from a prior, differently-configured run) is not consulted."""
-    from arm_backend.identity.sources.registry import LABEL
-
-    job = Job(id="job_1", drive_id="d", disc_type=DiscType.BLURAY, status=JobStatus.CREATED, metadata_json={})
-    scan = ScanResult(disc_type=DiscType.BLURAY, volume_label="LOST_S2D3", bd_meta=BdDiscMeta(name="The West Wing"))
-    run_disc_hints(job, scan, now=NOW)
-    assert hint_title(job) == "the west wing"  # bd_title outranks label by default
-    assert hint_title(job, (LABEL,)) == "lost"
-
-
-def test_hint_title_none_without_hints() -> None:
-    job = Job(id="job_1", drive_id="d", disc_type=DiscType.CD, status=JobStatus.CREATED, metadata_json={})
-    run_disc_hints(job, ScanResult(disc_type=DiscType.CD), now=NOW)
-    assert hint_title(job) is None
-
-
-def test_hint_is_tv_true_for_season_shaped_label() -> None:
-    job = Job(id="job_1", drive_id="d", disc_type=DiscType.DVD, status=JobStatus.CREATED, metadata_json={})
-    run_disc_hints(job, ScanResult(disc_type=DiscType.DVD, volume_label="LOST_S2D3"), now=NOW)
-    assert hint_is_tv(job) is True
-
-
 def test_hint_season_is_the_hinted_season_or_none() -> None:
     job = Job(id="job_1", drive_id="d", disc_type=DiscType.DVD, status=JobStatus.CREATED, metadata_json={})
     assert hint_season(job) is None
     run_disc_hints(job, ScanResult(disc_type=DiscType.DVD, volume_label="LOST_S2D3"), now=NOW)
     assert hint_season(job) == 2
-
-
-def test_hint_is_tv_false_for_movie_shaped_label() -> None:
-    job = Job(id="job_1", drive_id="d", disc_type=DiscType.DVD, status=JobStatus.CREATED, metadata_json={})
-    run_disc_hints(job, ScanResult(disc_type=DiscType.DVD, volume_label="LOTR_FELLOWSHIP_D2"), now=NOW)
-    assert hint_is_tv(job) is False
-
-
-def test_hint_is_tv_false_for_cd() -> None:
-    job = Job(id="job_1", drive_id="d", disc_type=DiscType.CD, status=JobStatus.CREATED, metadata_json={})
-    run_disc_hints(job, ScanResult(disc_type=DiscType.CD), now=NOW)
-    assert hint_is_tv(job) is False
-
-
-def test_hint_is_tv_ignores_a_season_claim_from_an_unlisted_source() -> None:
-    """`hint_is_tv` only consults the passed `sources` -- a label claim with
-    a season (stored from a prior, differently-configured run) does not make
-    the job TV-shaped when `sources` narrows to bd_title alone."""
-    from arm_backend.identity.sources.registry import BD_TITLE, LABEL
-
-    job = Job(id="job_1", drive_id="d", disc_type=DiscType.DVD, status=JobStatus.CREATED, metadata_json={})
-    run_disc_hints(job, ScanResult(disc_type=DiscType.DVD, volume_label="LOST_S2D3"), now=NOW, sources=(LABEL,))
-    assert claims_of(job).sources["label"].job.season == 2
-    assert hint_is_tv(job, (BD_TITLE,)) is False
 
 
 def test_run_disc_hints_handles_pathological_bd_name() -> None:
@@ -219,7 +163,6 @@ def test_run_disc_hints_handles_pathological_bd_name() -> None:
     assert sources["label"].job.model_dump(exclude_unset=True) == {"season": 2, "disc_number": 3, "title": "lost"}
     # bd_title is ranked ahead of label and its (low-quality but non-empty)
     # title wins.
-    assert hint_title(job) == "x"
 
 
 def test_run_disc_hints_handles_source_applies_to_exception(monkeypatch) -> None:
@@ -270,7 +213,6 @@ def test_run_disc_hints_error_keeps_last_good_after_prior_ok(monkeypatch) -> Non
     assert entry.status == "ok"
     assert entry.job.model_dump(exclude_unset=True) == {"title": "the west wing"}
     assert entry.extra["last_error"]["detail"] == "RuntimeError: provider outage"
-    assert hint_title(job) == "the west wing"
 
 
 def test_run_disc_hints_error_with_changed_inputs_replaces_last_good(monkeypatch) -> None:
@@ -291,7 +233,6 @@ def test_run_disc_hints_error_with_changed_inputs_replaces_last_good(monkeypatch
     entry = claims_of(job).sources["bd_title"]
     assert entry.status == "error"
     assert entry.inputs == {"name": "Lost"}
-    assert hint_title(job) is None
 
 
 def test_run_disc_hints_records_label_inputs_on_error(monkeypatch) -> None:
