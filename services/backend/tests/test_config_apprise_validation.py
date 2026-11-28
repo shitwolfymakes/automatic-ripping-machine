@@ -3,8 +3,9 @@
 `notification_apprise_urls` is not on the
 editable surface — it is absent from `ConfigUpdateRequest`, so a PATCH that
 sends it is silently ignored (the legacy flat list never dispatches; channels
-do). It still round-trips in `ConfigView` for read back-compat. These tests
-assert the field is inert on write but readable on GET.
+do). `ConfigView` still carries it for read back-compat, redacted to each
+URL's scheme because the URLs hold credentials. These tests assert the field
+is inert on write and never shows a credential on read.
 """
 
 from __future__ import annotations
@@ -70,7 +71,7 @@ def _auth(token: str) -> dict[str, str]:
 
 def test_apprise_urls_patch_is_ignored(signing_key: bytes) -> None:
     # The field is off the editable surface, so a PATCH carrying it is silently
-    # dropped (200) and the stored list is unchanged — but it still reads back.
+    # dropped (200) and the stored list is unchanged; it reads back redacted.
     db = FakeSession()
     _seed(db, urls=["mailto://orig@host"])
     app, token = _make_app(signing_key, db)
@@ -82,7 +83,7 @@ def test_apprise_urls_patch_is_ignored(signing_key: bytes) -> None:
         )
     assert r.status_code == 200, r.text
     # Unchanged: the PATCH value never reached the row.
-    assert r.json()["notification_apprise_urls"] == ["mailto://orig@host"]
+    assert r.json()["notification_apprise_urls"] == ["mailto://****"]
     assert db.rows["config"][0].notification_apprise_urls == ["mailto://orig@host"]
 
 
@@ -103,15 +104,27 @@ def test_invalid_apprise_url_no_longer_validated(signing_key: bytes) -> None:
     assert db.rows["config"][0].notification_apprise_urls == []
 
 
-def test_apprise_urls_readable_in_view(signing_key: bytes) -> None:
-    # GET still projects the stored list for back-compat.
+def test_apprise_urls_are_redacted_in_view(signing_key: bytes) -> None:
+    # Apprise URLs carry the destination's credential (in the userinfo, the
+    # path or the query, depending on the service). GET keeps the list for
+    # back-compat but shows only each URL's scheme, as the channel views do.
     db = FakeSession()
-    _seed(db, urls=["mailto://user@host"])
+    _seed(
+        db,
+        urls=[
+            "mailto://user:hunter2@gmail.com",
+            "discord://123456/webhooktoken-SECRET",
+            "pover://userkey@apptoken?priority=high&token=QSECRET",
+            "no-scheme-SECRET",
+        ],
+    )
     app, token = _make_app(signing_key, db)
     with TestClient(app) as client:
         r = client.get("/api/config", headers=_auth(token))
     assert r.status_code == 200, r.text
-    assert r.json()["notification_apprise_urls"] == ["mailto://user@host"]
+    assert r.json()["notification_apprise_urls"] == ["mailto://****", "discord://****", "pover://****", "****"]
+    for secret in ("hunter2", "webhooktoken", "SECRET", "userkey", "apptoken"):
+        assert secret not in r.text
 
 
 def test_notifications_enabled_round_trips(signing_key: bytes) -> None:
