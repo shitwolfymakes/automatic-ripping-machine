@@ -217,13 +217,20 @@ const heldAt = (readout: Readout): Position => ({
 	readout
 });
 
+function suggestionReadout(suggestion: IdentitySuggestion): Readout {
+	const n = suggestion.alternatives?.length ?? 0;
+	return suggestion.reason === 'close' && n > 0
+		? say('Pick the match', `${n} close titles`)
+		: say('Confirm the match', suggestion.title);
+}
+
 function awaitingReview(job: ProgressJob, ctx: ProgressContext): Position {
 	switch (reviewCase(job, ctx)) {
 		case 'suggestion':
 			return {
 				states: row('attention', 'pending', 'pending', 'pending', 'pending'),
 				pct: null,
-				readout: say('Confirm the match', (identitySuggestionOf(job) as IdentitySuggestion).title)
+				readout: suggestionReadout(identitySuggestionOf(job) as IdentitySuggestion)
 			};
 		case 'previous':
 			return heldAt(say('Ripped before', 'rip again or discard'));

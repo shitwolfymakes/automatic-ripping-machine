@@ -3,7 +3,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Sequence
 
-from fastapi import APIRouter, Body, Depends, HTTPException, Query, Response, status
+from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request, Response, status
 from sqlalchemy import ColumnElement, func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -26,6 +26,8 @@ from arm_backend.job_failure import scan_failure_text
 from arm_backend.job_files import delete_job_files, remove_staging_dir
 from arm_backend.job_views import job_detail_view, job_list_views
 from arm_backend.log_reader import per_job_log_path
+from arm_backend.metadata import MetadataDispatcher
+from arm_backend.metadata.base import MetadataResult
 from arm_backend.metadata.identity_payload import external_ids_of
 from arm_backend.path_template import TemplateValidationError
 from arm_backend.routers._deps import get_hub, get_stage_runner
@@ -64,6 +66,7 @@ from arm_common.schemas import (
     ManualTriggerRequest,
     ManualTriggerResponse,
     RipAgainResponse,
+    AcceptIdentityRequest,
     ResolveRequest,
     ResolveResponse,
     SessionApplicationView,
@@ -77,6 +80,7 @@ from arm_common.enums import (
     TERMINAL_JOB_STATUSES,
 )
 from arm_common.schemas.job_metadata import (
+    IdentitySuggestion,
     identity_suggestion_of,
     previously_ripped_job_id,
     with_flags,
@@ -762,25 +766,65 @@ async def resolve(
     return await resolve_identity(session, job, req, hub=hub, stage_runner=stage_runner)
 
 
+def _get_dispatcher(request: Request) -> MetadataDispatcher:
+    dispatcher: MetadataDispatcher = request.app.state.dispatcher
+    return dispatcher
+
+
+async def _suggested_result(
+    suggestion: IdentitySuggestion, alternative: int | None, cfg: Config | None, dispatcher: MetadataDispatcher
+) -> MetadataResult:
+    """The hit an accept applies: the held one as identify saw it, or a shortlist row asked of its provider again."""
+    rows = suggestion.alternatives
+    if suggestion.reason != "close":
+        if alternative is not None:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="this match has no alternatives"
+            )
+        return suggestion_to_result(suggestion)
+    if alternative is None or alternative >= len(rows):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="pick one of the shortlisted titles (alternative)"
+        )
+    found = await dispatcher.refetch(rows[alternative], cfg) if cfg is not None else None
+    if found is None:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"could not fetch {rows[alternative].title!r} from its provider; try again or use the search",
+        )
+    return found
+
+
+def _with_pick(metadata_json: dict[str, Any] | None, alternative: int | None) -> dict[str, Any]:
+    """The bag without the suggestion, and with the breakdown marked at the shortlist row that was picked."""
+    md = without_identity_suggestion(metadata_json)
+    if alternative is not None and isinstance(md.get("identify_match"), dict):
+        md["identify_match"] = {**md["identify_match"], "picked": alternative}
+    return md
+
+
 @router.post("/{job_id}/identity/accept", response_model=ResolveResponse)
 async def accept_identity_suggestion(
     job_id: JobIdParam,
+    req: AcceptIdentityRequest | None = None,
     _: User = Depends(require_writer),
     session: AsyncSession = Depends(get_session),
     hub: WSHub = Depends(get_hub),
     stage_runner: EpisodeStageRunner | None = Depends(get_stage_runner),
+    dispatcher: MetadataDispatcher = Depends(_get_dispatcher),
 ) -> ResolveResponse:
-    """Confirm the confident match identify held because the media type's
-    auto-apply switch was off.
+    """Confirm the match identify did not apply: the confident one a switched-off auto-apply held, or one row of a
+    shortlist of close ones (`alternative`, an index into the suggestion's `alternatives`; D64: the operator's pick
+    is a confirmation, applied exactly like a held hit).
 
-    Applies the stored hit exactly as identify would have, then hands the
-    job to the resolve path (provenance, fan-out, `identify.resolved`, the
+    Applies the hit, then hands the job to the resolve path (provenance, fan-out, `identify.resolved`, the
     episode stage). The status is settled first: a held disc is released to
     rip when the review gate is off, or gets the gate's countdown when it is
     on; a pause keeps it held with no countdown until un-pause stamps one;
     a ripped placeholder follows resolve's promote rule. A job also held as
     previously ripped keeps that hold untouched (status, no countdown).
     """
+    alternative = req.alternative if req is not None else None
     job = (await session.execute(select(Job).where(col(Job.id) == job_id).with_for_update())).scalar_one_or_none()
     if job is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown job_id: {job_id}")
@@ -795,10 +839,10 @@ async def accept_identity_suggestion(
             detail=f"job {job_id} is in status {job.status.value}, not in an identify-resolvable status",
         )
     cfg = (await session.execute(select(Config).where(col(Config.id) == CONFIG_SINGLETON_ID))).scalar_one_or_none()
+    result = await _suggested_result(suggestion, alternative, cfg, dispatcher)
     before_identity = identity_snapshot(job)
     now = datetime.now(timezone.utc)
-    result = suggestion_to_result(suggestion)
-    job.metadata_json = without_identity_suggestion(job.metadata_json)
+    job.metadata_json = _with_pick(job.metadata_json, alternative)
     apply_identity_result(job, result, now=now)
     if previously_ripped_job_id(job.metadata_json) is not None:
         # The previously-ripped hold still wins: identifying the disc neither
@@ -806,12 +850,12 @@ async def accept_identity_suggestion(
         pass
     elif job.status == JobStatus.AWAITING_REVIEW:
         hold_or_release(job, cfg, now)
-    req = ResolveRequest(
+    resolve_req = ResolveRequest(
         title=result.title, year=result.year, media_type=MediaType(result.kind), external_ids=external_ids_of(result)
     )
     logger.info("accept job_id=%s: %s suggestion %r applied -> %s", job.id, result.kind, result.title, job.status.value)
     return await resolve_identity(
-        session, job, req, hub=hub, stage_runner=stage_runner, before_identity=before_identity
+        session, job, resolve_req, hub=hub, stage_runner=stage_runner, before_identity=before_identity, keep_match=True
     )
 
 

@@ -661,3 +661,79 @@ async def test_an_empty_tv_search_records_no_sources():
     )
     # Recorded once per kind, however many queries were searched.
     assert sum(1 for a in dispatcher.last_attempts if a["outcome"] == "no_sources") == 1
+
+
+def _detail_source(sid: str, reason: str | None, hit, calls: list[str]):
+    class S:
+        id = sid
+        media_types = frozenset({"movie", "tv"})
+        requires_key = None
+
+        def configured(self, cfg):
+            return reason
+
+        async def details(self, cfg, kind, provider_id):
+            calls.append(f"{sid}:{kind}:{provider_id}")
+            return hit
+
+    return S()
+
+
+async def test_refetch_asks_the_best_provider_by_the_id_its_details_take():
+    from arm_backend.metadata.base import MetadataResult
+    from arm_common.schemas import SuggestionCandidate
+
+    calls: list[str] = []
+    recall = MetadataResult(title="Total Recall", year=1990, kind="movie", payload={"id": 861})
+    reg = {"tmdb": _detail_source("tmdb", None, recall, calls), "omdb": _detail_source("omdb", None, recall, calls)}
+    row = SuggestionCandidate(
+        title="Total Recall",
+        year=1990,
+        kind="movie",
+        provider="tmdb",
+        providers=["omdb", "tmdb"],
+        ids={"tmdb": "861", "imdb": "tt0100802"},
+        score=71.0,
+    )
+    async with httpx.AsyncClient() as client:
+        hit = await MetadataDispatcher(client, sources=reg).refetch(row, _config())
+    assert hit is not None and hit.provider == "tmdb" and hit.title == "Total Recall"
+    assert calls == ["tmdb:movie:861"]
+
+
+async def test_refetch_falls_through_an_unreachable_provider_to_the_next_that_returned_it():
+    from arm_backend.metadata.base import MetadataResult
+    from arm_common.schemas import SuggestionCandidate
+
+    calls: list[str] = []
+    recall = MetadataResult(title="Total Recall", year=1990, kind="movie", payload={"imdbID": "tt0100802"})
+    reg = {
+        "tmdb": _detail_source("tmdb", "no tmdb key", None, calls),
+        "omdb": _detail_source("omdb", None, recall, calls),
+    }
+    row = SuggestionCandidate(
+        title="Total Recall",
+        year=1990,
+        kind="movie",
+        provider="tmdb",
+        providers=["tmdb", "omdb"],
+        ids={"tmdb": "861", "imdb": "tt0100802"},
+        score=71.0,
+    )
+    async with httpx.AsyncClient() as client:
+        hit = await MetadataDispatcher(client, sources=reg).refetch(row, _config())
+    # OMDb takes the IMDb id.
+    assert hit is not None and hit.provider == "omdb" and calls == ["omdb:movie:tt0100802"]
+
+
+async def test_refetch_is_none_when_no_provider_can_answer():
+    from arm_common.schemas import SuggestionCandidate
+
+    calls: list[str] = []
+    reg = {"omdb": _detail_source("omdb", None, None, calls)}
+    row = SuggestionCandidate(
+        title="X", kind="movie", provider="tmdb", providers=["tmdb", "omdb"], ids={"tmdb": "1", "imdb": "tt1"}, score=50
+    )
+    async with httpx.AsyncClient() as client:
+        assert await MetadataDispatcher(client, sources=reg).refetch(row, _config()) is None
+    assert calls == ["omdb:movie:tt1"]

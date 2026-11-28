@@ -5,6 +5,11 @@ import { createJob } from '../../../__fixtures__/job';
 import { ApiError, NETWORK_ERROR_MESSAGE } from '$lib/api/client';
 import type { JobView } from '$lib/types/api.gen';
 import { posterSrc } from '$lib/match/poster';
+import {
+	BLADE_RUNNER_ACCEPTED,
+	TOTAL_RECALL_SHORTLIST,
+	TOTAL_RECALL_SUGGESTION
+} from '$lib/__fixtures__/identify-match';
 
 vi.mock('$lib/api/jobs', () => ({
 	acceptIdentitySuggestion: vi.fn(() => Promise.resolve({ job: {}, fan_out: [] }))
@@ -141,5 +146,75 @@ describe('IdentitySuggestionBanner', () => {
 	it('renders nothing without a suggestion', () => {
 		renderBanner(heldJob(null));
 		expect(screen.queryByTestId('identity-suggestion')).toBeNull();
+	});
+
+	describe('a shortlist of close titles', () => {
+		const shortlistJob = () =>
+			createJob({
+				id: 'job_held',
+				status: 'awaiting_review',
+				title: 'TOTAL_RECALL',
+				wait_start_time: null,
+				metadata_json: {
+					identity_suggestion: TOTAL_RECALL_SUGGESTION,
+					identify_match: TOTAL_RECALL_SHORTLIST,
+					flags: { unidentified: true }
+				} as never
+			});
+
+		it('lists each row with its kind, runtime and score, and the disc runtime', () => {
+			renderBanner(shortlistJob());
+			expect(screen.getByText('Several titles fit this disc')).toBeInTheDocument();
+			expect(screen.getByText(/the disc runs 113 min/)).toBeInTheDocument();
+			const rows = screen.getAllByTestId('shortlist-row');
+			expect(rows).toHaveLength(2);
+			expect(rows[0]).toHaveTextContent('Total Recall (1990)');
+			expect(rows[0]).toHaveTextContent('113 min');
+			expect(rows[1]).toHaveTextContent('Total Recall (2012)');
+			expect(rows[1]).toHaveTextContent('runtime far off');
+			expect(screen.queryByRole('button', { name: 'Use this title' })).toBeNull();
+		});
+
+		it('Use this accepts that row by its index, then calls onaccepted', async () => {
+			const { onaccepted } = renderBanner(shortlistJob());
+			await fireEvent.click(screen.getAllByRole('button', { name: 'Use this' })[1]);
+			await waitFor(() => expect(mockAccept).toHaveBeenCalledWith('job_held', 1));
+			await waitFor(() => expect(onaccepted).toHaveBeenCalled());
+		});
+
+		it('a refused pick shows the detail inline and keeps the shortlist', async () => {
+			mockAccept.mockRejectedValueOnce(new ApiError(502, "could not fetch 'Total Recall' from its provider", null));
+			renderBanner(shortlistJob());
+			await fireEvent.click(screen.getAllByRole('button', { name: 'Use this' })[0]);
+			expect(await screen.findByText("could not fetch 'Total Recall' from its provider")).toBeInTheDocument();
+			expect(screen.getAllByTestId('shortlist-row')).toHaveLength(2);
+		});
+
+		it('None of these hands off to the search', async () => {
+			const { onsearch } = renderBanner(shortlistJob());
+			await fireEvent.click(screen.getByRole('button', { name: 'None of these, search' }));
+			expect(onsearch).toHaveBeenCalledTimes(1);
+		});
+
+		it('a guest sees the rows but no buttons', () => {
+			renderBanner(shortlistJob(), false);
+			expect(screen.getAllByTestId('shortlist-row')).toHaveLength(2);
+			expect(screen.queryByRole('button')).toBeNull();
+		});
+
+		it('says nothing about the disc runtime when it has none', () => {
+			const job = shortlistJob();
+			(job.metadata_json as any).identify_match = null;
+			renderBanner(job);
+			expect(screen.queryByText(/the disc runs/)).toBeNull();
+			expect(screen.getAllByTestId('shortlist-row')).toHaveLength(2);
+		});
+	});
+
+	it('shows Why this match under a held single match', () => {
+		const job = heldJob();
+		(job.metadata_json as any).identify_match = BLADE_RUNNER_ACCEPTED;
+		renderBanner(job);
+		expect(screen.getByText('Why this match')).toBeInTheDocument();
 	});
 });

@@ -1,5 +1,6 @@
 // What a review card says about a held or missed identify.
 import type { IdentitySuggestion, JobView } from '$lib/types/api.gen';
+import { closestMiss, identifyMatchOf } from '$lib/jobs/match-explain';
 
 type BadgeJob = Pick<JobView, 'status' | 'title' | 'transcode_progress'> & {
 	metadata_json?: JobView['metadata_json'];
@@ -58,15 +59,19 @@ export function missReason(
 	if (outcomes.includes('no_sources')) return 'No online source is switched on for this kind of disc.';
 	if (outcomes.every((o) => o === 'not_configured')) return 'No API keys are saved for the sources in your lists.';
 	if (outcomes.includes('timeout') && !outcomes.includes('miss')) return 'The lookup timed out. Try the search below.';
-	// The searched title: the last title search that names one. The
-	// whole-dispatch timeout entry (no source) carries a message, not a title.
-	const searched = attempts.findLast(
-		(a) => a.step === 'title' && a.source != null && typeof a.detail === 'string' && a.detail
-	)?.detail as string | undefined;
+	// The searched title: the weighted search's own first query, else the last title search that names one.
+	// The whole-dispatch timeout entry (no source) carries a message, not a title.
+	const match = identifyMatchOf(job);
+	const searched =
+		match?.queries?.[0]?.text ??
+		(attempts.findLast((a) => a.step === 'title' && a.source != null && typeof a.detail === 'string' && a.detail)
+			?.detail as string | undefined);
 	const title = searched || job.title?.trim() || 'this disc';
 	// The CD card's search is MusicSearch: there is no source to switch.
 	if (job.disc_type === 'cd') return `No source found a close match for "${title}".`;
-	return `No source found a close match for "${title}". Try another source in the search below.`;
+	const closest = closestMiss(match);
+	const named = closest ? ` Closest: ${closest}.` : '';
+	return `No close match for "${title}".${named} Try another source in the search below.`;
 }
 
 const CONFIRM_TITLE_STATUSES = new Set(['awaiting_review', 'awaiting_user_id', 'ripped_awaiting_identify']);

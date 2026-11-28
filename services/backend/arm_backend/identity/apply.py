@@ -10,14 +10,14 @@ a hit identify held (`suggest_identity`).
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 
 from arm_backend.metadata.base import MetadataResult
 from arm_backend.metadata.identity_payload import external_ids_of, first_str, metadata_with_identity
 from arm_backend.metadata.poster import extract_poster_url
 from arm_common import Job
 from arm_common.enums import MediaType
-from arm_common.schemas.job_metadata import IdentitySuggestion, with_flags
+from arm_common.schemas.job_metadata import IdentifyMatch, IdentitySuggestion, SuggestionCandidate, with_flags
 
 
 def apply_identity_result(job: Job, result: MetadataResult, *, now: datetime) -> None:
@@ -38,7 +38,14 @@ def apply_identity_result(job: Job, result: MetadataResult, *, now: datetime) ->
             job.disc_number = raw_disc
 
 
-def suggest_identity(metadata_json: dict[str, Any] | None, result: MetadataResult, *, now: datetime) -> dict[str, Any]:
+def suggest_identity(
+    metadata_json: dict[str, Any] | None,
+    result: MetadataResult,
+    *,
+    now: datetime,
+    reason: Literal["auto_apply_off", "ambiguous_toc"],
+    score: float | None = None,
+) -> dict[str, Any]:
     """Store `result` for the operator to confirm instead of applying it.
 
     The job stays unidentified (flag set: a rip started without confirming
@@ -48,6 +55,8 @@ def suggest_identity(metadata_json: dict[str, Any] | None, result: MetadataResul
     identify route's auto-apply-off branch)."""
     payload = result.payload or {}
     suggestion = IdentitySuggestion(
+        reason=reason,
+        score=score,
         provider=result.provider or "unknown",
         title=result.title,
         year=result.year,
@@ -56,6 +65,38 @@ def suggest_identity(metadata_json: dict[str, Any] | None, result: MetadataResul
         external_ids=external_ids_of(result),
         overview=first_str(payload.get("overview"), payload.get("Plot")),
         payload=dict(payload),
+        suggested_at=now,
+    )
+    md = with_flags(metadata_json, unidentified=True)
+    md["identity_suggestion"] = suggestion.model_dump(mode="json", exclude_none=True)
+    return md
+
+
+def suggest_shortlist(metadata_json: dict[str, Any] | None, match: IdentifyMatch, *, now: datetime) -> dict[str, Any]:
+    """Store the shortlist's rows (`match.candidates[:match.shortlist]`) for the operator to pick from. The top-level
+    fields repeat the first row; none of them carries a provider record, so an accept asks the provider again."""
+    rows = [
+        SuggestionCandidate(
+            title=c.title,
+            year=c.year,
+            kind=c.kind,
+            runtime=c.runtime,
+            providers=c.providers,
+            provider=c.provider,
+            ids=c.ids,
+            score=c.score,
+        )
+        for c in match.candidates[: match.shortlist]
+    ]
+    top = rows[0]
+    suggestion = IdentitySuggestion(
+        reason="close",
+        score=top.score,
+        provider=top.provider or "unknown",
+        title=top.title,
+        year=top.year,
+        kind=top.kind,
+        alternatives=rows,
         suggested_at=now,
     )
     md = with_flags(metadata_json, unidentified=True)

@@ -98,6 +98,13 @@ describe('jobProgress: status table', () => {
 		expect(states(j)).toEqual(['attention', 'pending', 'pending', 'pending', 'pending']);
 		expect(readout(j)).toEqual({ tone: 'default', label: 'Confirm the match', detail: 'Heat', figure: null });
 	});
+	it('awaiting_review: a shortlist asks for a pick', () => {
+		const alternatives = [{ title: 'Total Recall' }, { title: 'Total Recall' }];
+		const j = waiting({
+			metadata_json: { identity_suggestion: { reason: 'close', provider: 'tmdb', title: 'Total Recall', alternatives } }
+		});
+		expect(readout(j)).toEqual({ tone: 'default', label: 'Pick the match', detail: '2 close titles', figure: null });
+	});
 	it('awaiting_review: previously ripped', () => {
 		const j = waiting({ metadata_json: { previously_ripped: { job_id: 'j0' } } });
 		expect(states(j)).toEqual(['done', 'attention', 'pending', 'pending', 'pending']);

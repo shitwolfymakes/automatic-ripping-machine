@@ -125,14 +125,34 @@ class PreviouslyRipped(BaseModel):
     job_id: str
 
 
+class SuggestionCandidate(BaseModel):
+    """One row of a shortlist. It carries no provider record: accepting it asks the provider for the title again by
+    `ids`, so the job's metadata does not grow by five payloads."""
+
+    title: str
+    year: int | None = None
+    kind: Literal["movie", "tv"]
+    runtime: float | None = None
+    # Every provider that returned it, and the best-ranked one (asked first on accept).
+    providers: list[str] = Field(default_factory=list)
+    provider: str | None = None
+    ids: dict[str, str] = Field(default_factory=dict)
+    score: float
+
+
 class IdentitySuggestion(BaseModel):
-    """A confident online match identify did not apply because the media
-    type's "Apply confident matches" switch is off. The job keeps its miss title and the `unidentified` flag and
-    waits in AWAITING_REVIEW with no countdown until the operator accepts
-    it (POST /api/jobs/{id}/identity/accept) or identifies the disc another
-    way (any resolve clears this section)."""
+    """A match identify did not apply: a confident one the media type's "Apply confident matches" switch held
+    (`auto_apply_off`, `ambiguous_toc`), or a shortlist of close ones (`close`; `alternatives` are its rows, best
+    first, and the top-level fields repeat the first). The job keeps its miss title and the `unidentified` flag and
+    waits until the operator accepts it (POST /api/jobs/{id}/identity/accept, with `alternative` for a shortlist) or
+    identifies the disc another way (any resolve clears this section). A held job waits in AWAITING_REVIEW with no
+    countdown; a shortlist with `block_on_miss` off lets the disc rip unidentified and keeps the section."""
 
     model_config = ConfigDict(extra="allow")
+
+    reason: Literal["auto_apply_off", "close", "ambiguous_toc"] = "auto_apply_off"
+    score: float | None = None
+    alternatives: list[SuggestionCandidate] = Field(default_factory=list)
 
     provider: str
     title: str
@@ -235,6 +255,8 @@ class IdentifyMatch(BaseModel):
     calls: MatchCalls = Field(default_factory=MatchCalls)
     candidates: list[MatchCandidate] = Field(default_factory=list)
     shortlist: int = 0
+    # The shortlist row the operator picked: its breakdown is the one that explains the applied title.
+    picked: int | None = None
     runner_up: float | None = None
     thresholds: MatchThresholds
 

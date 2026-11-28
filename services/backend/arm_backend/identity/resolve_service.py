@@ -225,7 +225,7 @@ def _apply_match_poster(job: Job, match: ResolveMatch, show_changed: bool) -> No
         job.poster_url_manual = None
 
 
-def _clear_spent_markers(new_metadata: dict[str, Any]) -> None:
+def _clear_spent_markers(new_metadata: dict[str, Any], *, keep_match: bool) -> None:
     # The spent `unidentified` flag (flags section + the legacy
     # top-level key) must be cleared on BOTH branches, not just PROMOTE. A
     # resolved RIPPED_PARTIAL placeholder stays in PRESERVE (partiality wins
@@ -238,6 +238,9 @@ def _clear_spent_markers(new_metadata: dict[str, Any]) -> None:
     new_metadata.pop("identity_suggestion", None)
     # ...and the automatic match's miss reasons no longer apply.
     new_metadata.pop("identify_attempts", None)
+    # ...and so does the automatic search's breakdown, unless the identity applied is one of its own candidates.
+    if not keep_match:
+        new_metadata.pop("identify_match", None)
     if isinstance(new_metadata.get("flags"), dict):
         new_metadata["flags"] = {k: v for k, v in new_metadata["flags"].items() if k != "unidentified"}
 
@@ -311,8 +314,12 @@ async def resolve_identity(
     hub: WSHub,
     stage_runner: EpisodeStageRunner | None,
     before_identity: tuple[int | None, int | None, MediaType | None, str | None, dict[str, Any]] | None = None,
+    keep_match: bool = False,
 ) -> ResolveResponse:
     """The resolve route's body, shared with the suggestion accept route.
+
+    A resolve drops `identify_match`: it explains the automatic search, and the identity is now the operator's.
+    The accept route keeps it (`keep_match`) because the title it applies is one the search itself scored.
 
     `before_identity` lets a caller that already changed the job's identity
     (accept) still get the episode stage scheduled: the snapshot is taken
@@ -340,7 +347,7 @@ async def resolve_identity(
     rip_waited_for_identity = was_ripped_placeholder or (
         job.status == JobStatus.RIPPED_PARTIAL and flag_is_set(job.metadata_json, "unidentified")
     )
-    _clear_spent_markers(new_metadata)
+    _clear_spent_markers(new_metadata, keep_match=keep_match)
     held_for_review = job.status in RESOLVABLE_PROMOTE_JOB_STATUSES and await _promote(session, job)
     job.metadata_json = new_metadata
     if show_changed:
