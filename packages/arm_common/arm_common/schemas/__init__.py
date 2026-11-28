@@ -142,6 +142,7 @@ from arm_common.schemas.ripper import (
     ScanResult,
     ScanTitle,
     SdfStatusReport,
+    TitlesReport,
     TrackUpdateRequest,
 )
 from arm_common.schemas.session_routes import (
@@ -425,6 +426,7 @@ __all__ = [
     "TrackClaim",
     "TrackEditRequest",
     "TrackFilters",
+    "TitlesReport",
     "TrackStageView",
     "TrackUpdateRequest",
     "TrackView",

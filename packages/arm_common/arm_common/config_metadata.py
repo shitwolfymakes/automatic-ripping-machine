@@ -350,6 +350,17 @@ CONFIG_FIELD_META: list[ConfigFieldMeta] = [
         editable=True,
     ),
     ConfigFieldMeta(
+        key="tick_one_version",
+        group="Ripping",
+        tier="operator",
+        label="Tick one version of the film",
+        help="The default for new discs. When a disc has the same film more than once "
+        "(angles, 3D and 2D, a copy without chapters), only one starts ticked; you can "
+        "change it on each disc's review card. Exact copies and decoy playlists are always unticked.",
+        type="bool",
+        editable=True,
+    ),
+    ConfigFieldMeta(
         key="max_parallel_iso_rips",
         group="Ripping",
         tier="operator",

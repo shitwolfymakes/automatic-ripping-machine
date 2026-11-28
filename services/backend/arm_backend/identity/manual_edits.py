@@ -12,6 +12,8 @@ from arm_backend.identity.proposals import (
 )
 from arm_backend.identity.resolve_service import identity_snapshot
 from arm_backend.identity.stage_runner import EpisodeStageRunner
+from arm_backend.title_map_service import rippable_refs, stored_scan, unrippable_refs
+from arm_backend.version_policy import policy_applies, recompute_ticks, withdraw_manual_ticks
 from arm_backend.ws import WSHub
 from arm_common import Job, TrackStatus
 from arm_common.models import Track
@@ -63,9 +65,40 @@ def _apply_track_edit(job: Job, track: Track, edit: TrackEditRequest) -> bool:
     return identity_touched
 
 
+def _refuse_unrippable_tick(track: Track, edit: TrackEditRequest, unrippable: frozenset[str]) -> None:
+    """422 for a tick on a playlist MakeMKV does not list: there is no title number to rip it as."""
+    if edit.excluded is False and track.source_ref in unrippable:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=f"MakeMKV won't rip playlist {track.source_ref}; it cannot be included",
+        )
+
+
+async def _apply_version_toggle(db: AsyncSession, job: Job, previous: bool | None) -> bool:
+    """The card's "one version / every version" switch changed the job's policy: the operator's ticks on
+    every member of a version set are dropped (nothing outside a set is touched) and the preset's ticks are
+    recomputed. 409 for a job the policy does not apply to. Returns whether a claim changed."""
+    if not policy_applies(job):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"job {job.id} is not a video disc that has yet to start; it has no version policy to change",
+        )
+    if job.tick_one_version == previous:
+        return False
+    scan = stored_scan(job)
+    if scan is None:
+        return False
+    tracks = list((await db.execute(select(Track).where(col(Track.job_id) == job.id))).scalars().all())
+    withdraw_manual_ticks(job, tracks)
+    await recompute_ticks(db, job, tracks, scan, rippable=rippable_refs(scan))
+    return True
+
+
 async def _apply_track_edits(db: AsyncSession, job: Job, edits: list[TrackEditRequest]) -> tuple[list[str], bool]:
     identity_touched = False
     edited_track_ids: list[str] = []
+    scan = stored_scan(job)
+    unrippable = unrippable_refs(scan) if scan is not None else frozenset()
     rows = list((await db.execute(select(Track).where(col(Track.job_id) == job.id))).scalars().all())
     by_id = {t.id: t for t in rows}
     # Duplicate track_ids in req.tracks → last-wins (idempotent setattr);
@@ -79,6 +112,7 @@ async def _apply_track_edits(db: AsyncSession, job: Job, edits: list[TrackEditRe
                 detail=f"unknown track_id {edit.track_id} for job {job.id}",
             )
         _refuse_unripped_tick(track, edit)
+        _refuse_unrippable_tick(track, edit, unrippable)
         if _apply_track_edit(job, track, edit):
             identity_touched = True
         db.add(track)
@@ -114,8 +148,11 @@ async def apply_manual_edits(
 ) -> None:
     before_identity = identity_snapshot(job)
 
+    previous_policy = job.tick_one_version
     job_identity_touched = _apply_job_fields(job, req)
     db.add(job)
+    if "tick_one_version" in req.model_fields_set:
+        job_identity_touched = await _apply_version_toggle(db, job, previous_policy) or job_identity_touched
 
     edited_track_ids: list[str] = []
     track_identity_touched = False

@@ -1,11 +1,9 @@
-"""BD playlist reader: MPLS parsing from in-memory bytes, disc reads through a fake 7-Zip on PATH."""
+"""BD playlist reader: MPLS parsing from in-memory bytes (the disc read is `bd_structure`'s, tested there)."""
 
 from __future__ import annotations
 
 import asyncio
 import logging
-import os
-import signal
 import struct
 from pathlib import Path
 
@@ -16,7 +14,6 @@ from bd_builders import (
     SUBPATH_MVC,
     SUBPATH_TEXT_SUBTITLE,
     extension_data,
-    fake_7zz,
     mpls,
     play_item,
     ss_sub_paths,
@@ -24,8 +21,8 @@ from bd_builders import (
     sub_play_item,
 )
 
-from arm_ripper.scan import bd_extract, bd_playlists
-from arm_ripper.scan.bd_playlists import parse_mpls, parse_playlists, read_mpls_files, scan_playlists
+from arm_ripper.scan import bd_extract
+from arm_ripper.scan.bd_playlists import parse_mpls, parse_playlists, read_mpls_files
 
 # --- parse_mpls -----------------------------------------------------------------
 
@@ -233,173 +230,7 @@ def test_2d_uhd_playlist_has_no_angles_and_no_dependent_view() -> None:
     )
 
 
-# --- fake 7-Zip on PATH ---------------------------------------------------------------
-
-
-def _alive(pid: int) -> bool:
-    try:
-        os.kill(pid, 0)
-    except ProcessLookupError:
-        return False
-    return True
-
-
-async def test_hung_read_is_killed_and_reaped_before_returning(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
-) -> None:
-    pid_file = tmp_path / "pid"
-    fake_7zz(tmp_path, monkeypatch, f"echo $$ > {pid_file}\nexec /bin/sleep 5")
-    monkeypatch.setattr(bd_playlists, "PLAYLIST_TIMEOUT_SECONDS", 0.3)
-    image = tmp_path / "disc.iso"
-    image.write_bytes(b"x")
-    with caplog.at_level(logging.INFO, logger="arm_ripper.scan.bd_playlists"):
-        assert await scan_playlists(str(image)) == []
-    pid = int(pid_file.read_text())
-    try:
-        assert not _alive(pid), "the read process is still running (or unreaped) after scan_playlists returned"
-    finally:
-        if _alive(pid):
-            os.kill(pid, signal.SIGKILL)
-    assert any("count=0" in r.getMessage() and "reason=timeout" in r.getMessage() for r in caplog.records)
-
-
-async def test_event_loop_keeps_running_and_no_executor_thread_reads_the_drive(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    src = tmp_path / "src"
-    (src / "BDMV" / "PLAYLIST").mkdir(parents=True)
-    (src / "BDMV" / "PLAYLIST" / "00001.mpls").write_bytes(mpls([play_item(2, 30.0)]))
-    fake_7zz(tmp_path, monkeypatch, f'/bin/sleep 0.4\n/bin/cp -r {src}/. "$OUT"/')
-    image = tmp_path / "disc.iso"
-    image.write_bytes(b"x")
-    loop = asyncio.get_running_loop()
-    offloaded: list[object] = []
-    real = loop.run_in_executor
-    monkeypatch.setattr(loop, "run_in_executor", lambda *a, **k: (offloaded.append(a), real(*a, **k))[1])
-    ticks = 0
-
-    async def _ticker() -> None:
-        nonlocal ticks
-        while True:
-            await asyncio.sleep(0.02)
-            ticks += 1
-
-    task = asyncio.create_task(_ticker())
-    try:
-        playlists = await scan_playlists(str(image))
-    finally:
-        task.cancel()
-    assert [p.name for p in playlists] == ["00001.mpls"]
-    assert ticks >= 10  # the loop ran during the ~0.4 s read
-    assert offloaded == []  # the drive is read by a killable subprocess, not an uninterruptible thread
-
-
-def _copy_into_out(tmp_path: Path, files: dict[str, bytes]) -> str:
-    """Shell body that lays `files` out under $OUT/BDMV/PLAYLIST like `7zz x ... BDMV/PLAYLIST/*.mpls` does."""
-    src = tmp_path / "src" / "BDMV" / "PLAYLIST"
-    src.mkdir(parents=True)
-    for name, data in files.items():
-        (src / name).write_bytes(data)
-    return f'/bin/cp -r {tmp_path / "src"}/. "$OUT"/'
-
-
-async def test_scan_extracts_through_7z_and_parses(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    body = _copy_into_out(
-        tmp_path,
-        {
-            "00800.MPLS": mpls([play_item(1, 120.0)], marks=[1]),
-            "00001.mpls": mpls([play_item(2, 30.0)]),
-            "notes.txt": b"not a playlist",
-            "00003.mpls": b"garbage",
-        },
-    )
-    fake_7zz(tmp_path, monkeypatch, body)
-    playlists = await scan_playlists("/dev/sr0")
-    assert [p.name for p in playlists] == ["00001.mpls", "00800.mpls"]
-    assert playlists[1].chapter_count == 1
-    assert playlists[1].duration_seconds == 120
-
-
-async def test_scan_passes_device_and_pattern_to_7z(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    argv = tmp_path / "argv"
-    fake_7zz(tmp_path, monkeypatch, f'printf "%s\\n" "$@" > {argv}')
-    await scan_playlists("/dev/sr0")
-    lines = argv.read_text().splitlines()
-    assert lines[0] == "x"
-    assert lines[-3:] == ["--", "/dev/sr0", "BDMV/PLAYLIST/*.mpls"]
-
-
-async def test_scan_disc_without_bdmv_is_empty(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    fake_7zz(tmp_path, monkeypatch, "exit 1")  # 7z warns "no files to process"
-    assert await scan_playlists("/dev/sr0") == []
-
-
-async def test_scan_reads_a_disc_folder_without_7z(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("PATH", "")
-    folder = tmp_path / "disc"
-    (folder / "BDMV" / "PLAYLIST").mkdir(parents=True)
-    (folder / "BDMV" / "PLAYLIST" / "00001.MPLS").write_bytes(mpls([play_item(4, 10.0)]))
-    (folder / "BDMV" / "PLAYLIST" / "readme.txt").write_bytes(b"x")
-    playlists = await scan_playlists(str(folder))
-    assert [(p.name, p.clips) for p in playlists] == [("00001.mpls", [4])]
-
-
-async def test_scan_folder_without_playlist_dir_is_empty(tmp_path: Path) -> None:
-    (tmp_path / "BDMV").mkdir()
-    assert await scan_playlists(str(tmp_path)) == []
-
-
-async def test_scan_without_7z_is_empty_and_logged(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog) -> None:
-    monkeypatch.setenv("PATH", str(tmp_path))
-    with caplog.at_level(logging.INFO, logger="arm_ripper.scan.bd_playlists"):
-        assert await scan_playlists("/dev/sr0") == []
-    assert any("count=0" in r.getMessage() and "reason=no-7z" in r.getMessage() for r in caplog.records)
-
-
-async def test_scan_spawn_failure_is_empty(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog) -> None:
-    bin_dir = fake_7zz(tmp_path, monkeypatch, "")
-    (bin_dir / "7zz").write_text("not a script, no shebang \x00")  # exec format error
-    with caplog.at_level(logging.INFO, logger="arm_ripper.scan.bd_playlists"):
-        assert await scan_playlists("/dev/sr0") == []
-    assert any("reason=spawn-failed" in r.getMessage() for r in caplog.records)
-
-
-async def test_scan_never_raises(monkeypatch: pytest.MonkeyPatch, caplog) -> None:
-    async def _boom(_p: str) -> tuple[dict[str, bytes], str]:
-        raise OSError("disc gone")
-
-    monkeypatch.setattr(bd_playlists, "_read_files", _boom)
-    with caplog.at_level(logging.INFO, logger="arm_ripper.scan.bd_playlists"):
-        assert await scan_playlists("/dev/sr0") == []
-    assert any("reason=error" in r.getMessage() for r in caplog.records)
-
-
-async def test_scan_logs_count_and_elapsed(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog) -> None:
-    fake_7zz(tmp_path, monkeypatch, _copy_into_out(tmp_path, {"00001.mpls": mpls([play_item(2, 1.0)])}))
-    with caplog.at_level(logging.INFO, logger="arm_ripper.scan.bd_playlists"):
-        await scan_playlists("/dev/sr0")
-    assert any(
-        r.getMessage().startswith("bd_playlists device=/dev/sr0 count=1 elapsed_ms=")
-        and r.getMessage().endswith("reason=ok")
-        for r in caplog.records
-    )
-
-
-async def test_cancelled_scan_kills_and_reaps_the_read(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    pid_file = tmp_path / "pid"
-    fake_7zz(tmp_path, monkeypatch, f"echo $$ > {pid_file}\nexec /bin/sleep 5")
-    task = asyncio.create_task(scan_playlists("/dev/sr0"))
-    while not pid_file.exists() or not pid_file.read_text().strip():
-        await asyncio.sleep(0.01)
-    pid = int(pid_file.read_text())
-    task.cancel()
-    with pytest.raises(asyncio.CancelledError):
-        await task
-    try:
-        assert not _alive(pid)
-    finally:
-        if _alive(pid):
-            os.kill(pid, signal.SIGKILL)
+# --- reading and ordering ---------------------------------------------------------------
 
 
 def test_read_mpls_files_missing_directory(tmp_path: Path) -> None:

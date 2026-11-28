@@ -29,6 +29,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import col, select
 
 from arm_backend.config import settings
+from arm_backend.identity.events import emit_identity_resolved
+from arm_backend.identity.pipeline import ResolveOutcome, resolve_job
 from arm_backend.path_template import TemplateValidationError
 from arm_backend.session_eviction import evict_colliding_tasks
 from arm_backend.session_routing import (
@@ -39,6 +41,7 @@ from arm_backend.session_routing import (
 )
 from arm_backend.stager import wake_active_stager
 from arm_backend.staging import ensure_stage_rows
+from arm_backend.title_map_service import rippable_refs, stored_scan
 from arm_backend.transcode_apply import (
     ResolvedTask,
     compute_outputs,
@@ -47,6 +50,7 @@ from arm_backend.transcode_apply import (
     is_passthrough_preset,
     transcode_enabled_now,
 )
+from arm_backend.version_policy import recompute_ticks
 from arm_backend.ws import WSHub
 from arm_common import (
     Job,
@@ -63,7 +67,12 @@ from arm_common import (
     with_log_context,
 )
 from arm_common.encoders import get_encoder
-from arm_common.enums import APPLY_OK_JOB_STATUSES, APPLY_PARK_JOB_STATUSES, POST_RIP_JOB_STATUSES
+from arm_common.enums import (
+    APPLY_OK_JOB_STATUSES,
+    APPLY_PARK_JOB_STATUSES,
+    POST_RIP_JOB_STATUSES,
+    PRE_RIP_JOB_STATUSES,
+)
 from arm_common.models._columns import enum_value_str
 from arm_common.schemas import ApplySkippedReason, CollisionInfo
 
@@ -347,6 +356,21 @@ def _log_apply_result(
         )
 
 
+async def _refresh_version_ticks(
+    db: AsyncSession, hub: WSHub | None, job: Job, sess: Session, tracks: list[Track]
+) -> None:
+    """A session applied before the rip decides whether the disc transcodes (D60), which moves the
+    2D/3D pick: recompute the job's ticks with that session as the transcode signal."""
+    scan = stored_scan(job)
+    if job.status not in PRE_RIP_JOB_STATUSES or scan is None or not tracks:
+        return
+    reclassified = await recompute_ticks(db, job, tracks, scan, rippable=rippable_refs(scan), sess=sess)
+    resolved = await resolve_job(db, job)
+    if hub is not None:
+        outcome = ResolveOutcome(changed=resolved.changed, track_ids=resolved.track_ids | reclassified)
+        await emit_identity_resolved(db, hub, job, outcome, sources={})
+
+
 async def _apply_session_internal(
     db: AsyncSession,
     *,
@@ -469,6 +493,7 @@ async def _apply_session_internal(
         # passed in, but the helper made no unflushed writes to it here.
         return outcome
 
+    await _refresh_version_ticks(db, hub, job, sess, tracks)
     await db.commit()
     if outcome.application is not None:  # pragma: no branch — error branches early-return above
         await db.refresh(outcome.application)

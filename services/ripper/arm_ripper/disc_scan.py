@@ -4,6 +4,7 @@ import asyncio
 import logging
 
 from arm_common import DiscType
+from arm_common.disc_titles import is_structure_scan
 from arm_common.schemas import ScanFailure, ScanResult
 from arm_ripper.drive_poll import DriveErrorKind, DriveState, classify_drive_error, read_drive_status
 from arm_ripper.scan import MakemkvScanFailed, ScanError, scan as scan_disc
@@ -56,8 +57,11 @@ _RESCANNABLE_DISC_TYPES = frozenset({DiscType.BLURAY, DiscType.DVD, DiscType.UNK
 
 def _worth_rescanning(result: ScanResult) -> bool:
     """Pure: whether a scan can come out differently on a retry: a video (or unidentified) disc with no titles.
-    A data or audio-CD result is what the disc is."""
-    return not result.titles and result.disc_type in _RESCANNABLE_DISC_TYPES
+    A data or audio-CD result is what the disc is, and a structure scan carries no MakeMKV titles by design: its
+    playlists are the readable disc."""
+    if result.titles or is_structure_scan(result):
+        return False
+    return result.disc_type in _RESCANNABLE_DISC_TYPES
 
 
 async def _scan_with_ready_retry(device_path: str) -> ScanResult:

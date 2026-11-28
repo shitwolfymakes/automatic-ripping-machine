@@ -110,6 +110,11 @@ const SECTIONS: Record<string, SettingsSection[]> = {
 			keys: ['rip_end_on_completion_message']
 		},
 		{
+			title: 'Title selection',
+			blurb: 'Which titles start ticked when a disc has the film more than once.',
+			keys: ['tick_one_version']
+		},
+		{
 			title: 'Decryption data',
 			blurb: 'Key material MakeMKV needs for protected discs, refreshed in the background.',
 			keys: ['community_keydb_enabled', 'makemkv_sdf_enabled']

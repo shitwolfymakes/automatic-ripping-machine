@@ -699,6 +699,73 @@
         }
       }
     },
+    "/api/ripper/jobs/{job_id}/titles": {
+      "post": {
+        "tags": [
+          "ripper"
+        ],
+        "summary": "Post Titles",
+        "description": "MakeMKV's titles for a disc whose card was posted from the playlist structure (or why it could not read\nthe disc): stored in the job's scan, mapped onto the structure's title refs, unrippable refs unticked.",
+        "operationId": "post_titles_api_ripper_jobs__job_id__titles_post",
+        "security": [
+          {
+            "ServiceToken": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Job Id"
+            }
+          },
+          {
+            "name": "x-arm-hostname",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Arm-Hostname"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TitlesReport"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/ripper/jobs/{job_id}/resume": {
       "post": {
         "tags": [
@@ -9291,6 +9358,17 @@
             ],
             "title": "Manual Wait Seconds"
           },
+          "tick_one_version": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tick One Version"
+          },
           "on_previously_ripped": {
             "anyOf": [
               {
@@ -9557,6 +9635,10 @@
             "type": "integer",
             "title": "Manual Wait Seconds"
           },
+          "tick_one_version": {
+            "type": "boolean",
+            "title": "Tick One Version"
+          },
           "on_previously_ripped": {
             "$ref": "#/components/schemas/PreviouslyRippedAction"
           },
@@ -9709,6 +9791,7 @@
           "ripping_paused",
           "hold_for_review",
           "manual_wait_seconds",
+          "tick_one_version",
           "on_previously_ripped",
           "default_retention_policy",
           "notification_apprise_urls",
@@ -12774,6 +12857,17 @@
             ],
             "title": "Pending Session Id"
           },
+          "tick_one_version": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tick One Version"
+          },
           "disc_number": {
             "anyOf": [
               {
@@ -13390,6 +13484,17 @@
               }
             ]
           },
+          "tick_one_version": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tick One Version"
+          },
           "tracks": {
             "anyOf": [
               {
@@ -13497,6 +13602,17 @@
               }
             ],
             "title": "Pending Session Id"
+          },
+          "tick_one_version": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tick One Version"
           },
           "parked_session_ids": {
             "items": {
@@ -16353,6 +16469,13 @@
           "end_on_completion_message": {
             "type": "boolean",
             "title": "End On Completion Message"
+          },
+          "title_numbers": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "type": "object",
+            "title": "Title Numbers"
           }
         },
         "type": "object",
@@ -18142,6 +18265,30 @@
         ],
         "title": "TitleClass",
         "description": "What the classifier (arm_common.title_classes) decides about one scanned\nBlu-ray title."
+      },
+      "TitlesReport": {
+        "properties": {
+          "titles": {
+            "items": {
+              "$ref": "#/components/schemas/ScanTitle"
+            },
+            "type": "array",
+            "title": "Titles"
+          },
+          "failure": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ScanFailure"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "title": "TitlesReport",
+        "description": "POST /api/ripper/jobs/{job_id}/titles body: what the background `makemkvcon info` run found on a disc\nwhose review card was posted from the playlist structure. `failure` is why MakeMKV could not read the disc\n(then `titles` is empty); the job keeps its card and cannot start, or fails when Start was already pressed."
       },
       "TrackClaim": {
         "properties": {

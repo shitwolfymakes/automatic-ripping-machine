@@ -77,6 +77,7 @@ class ConfigView(BaseModel):
     ripping_paused: bool
     hold_for_review: bool
     manual_wait_seconds: int
+    tick_one_version: bool
     on_previously_ripped: PreviouslyRippedAction
     default_retention_policy: RetentionPolicy
     notification_apprise_urls: list[str]
@@ -124,6 +125,7 @@ class ConfigUpdateRequest(BaseModel):
     ripping_paused: bool | None = None
     hold_for_review: bool | None = None
     manual_wait_seconds: int | None = None
+    tick_one_version: bool | None = None
     on_previously_ripped: PreviouslyRippedAction | None = None
     notifications_enabled: bool | None = None
     movie_sources: list[str] | None = None

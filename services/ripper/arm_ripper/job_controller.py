@@ -7,6 +7,7 @@ from typing import Any
 import httpx
 
 from arm_common import DiscType, Job, JobStatus, with_log_context
+from arm_common.disc_titles import awaits_makemkv_titles, is_structure_scan
 from arm_common.schemas import JobView, RipStartResponse, ScanFailure, ScanResult, WSEnvelope
 from arm_ripper import raw_dir
 from arm_ripper.backend_client import BackendClient
@@ -22,6 +23,7 @@ from arm_ripper.rip.dispatcher import DEFAULT_MIN_LENGTH_SECONDS
 from arm_ripper.disc_scan import scan_or_none
 from arm_ripper.drive_poll import DriveState, read_drive_status
 from arm_ripper.source import is_file_source
+from arm_ripper.titles_read import TitlesRead
 from arm_ripper.ws_client import WSClient
 
 logger = logging.getLogger("arm_ripper.job_controller")
@@ -68,6 +70,9 @@ class JobController:
         # Getting MakeMKV ready for a disc: key refresh plus the background KEYDB/SDF refreshes.
         self._makemkv = MakeMKVPrep(client)
         self._wipe_tasks: set[asyncio.Task[None]] = set()
+        # MakeMKV's title read for a disc whose card came from the playlist structure: runs while the operator
+        # reviews, and a rip waits for it.
+        self._titles = TitlesRead(self._backend)
         self._drive_id = drive_id
         self._ws = ws
         # Each ripper container owns exactly one optical drive. The node it
@@ -168,7 +173,18 @@ class JobController:
         async with self._claim(job.id):
             with with_log_context(job_id=job.id):
                 logger.info("pickup: re-acquiring job %s status=%s", job.id, job.status.value)
-                await self._run_rip(job, device_path)
+                self._readopt_titles_read(job, device_path)
+                try:
+                    await self._run_rip(job, device_path)
+                finally:
+                    await self._titles.cancel(job.id)
+
+    def _readopt_titles_read(self, job: JobView, device_path: str) -> None:
+        """A re-adopted job whose MakeMKV title read died with the previous process (a structure scan with no titles
+        reported and no failure recorded) gets the read again, so Start is not left waiting for a map."""
+        if awaits_makemkv_titles(job.metadata_json):
+            logger.info("re-adopted job_id=%s has no MakeMKV titles yet; reading them again", job.id)
+            self._titles.start(job.id, device_path)
 
     async def on_ws_command(self, envelope: WSEnvelope) -> None:
         """Handler registered for `ripper.commands.{drive_id}` topic: runs the handler for the command's event
@@ -247,6 +263,7 @@ class JobController:
         if active is not None and owns:
             logger.info("job.abandoned: cancelling active task for job_id=%s", job_id)
             active.cancel()
+        spawn_tracked(self._titles.cancel(job_id), self._wipe_tasks)
         if delete_raw:
             spawn_tracked(raw_dir.wipe_raw_dir(job_id), self._wipe_tasks)
         if self._abandon_ejects(owns):
@@ -334,26 +351,35 @@ class JobController:
                 await self._end_failed_scan(job, scan_result.failure, device_path)
                 return
             self._active_job_id = job.id
+            if is_structure_scan(scan_result):
+                # The card is up from the playlists; MakeMKV names its title numbers while the operator reviews.
+                self._titles.start(job.id, device_path)
+            try:
+                await self._after_identify(job, device_path)
+            finally:
+                await self._titles.cancel(job.id)
 
-            # Every log line below carries job_id once identify lands.
-            with with_log_context(job_id=job.id):
-                if not await self._pass_gate(job, IDENTIFY_WAIT):
-                    return
+    async def _after_identify(self, job: Job, device_path: str) -> None:
+        """Park the identified job at its gates, then rip it."""
+        # Every log line below carries job_id once identify lands.
+        with with_log_context(job_id=job.id):
+            if not await self._pass_gate(job, IDENTIFY_WAIT):
+                return
 
-                # Timed review gate: the backend parks an identified disc here
-                # when hold_for_review is on. Wait for Start (-> ripping) or the
-                # auto-start path (-> identified); either proceeds to the rip.
-                if not await self._pass_gate(job, REVIEW_WAIT):
-                    return
+            # Timed review gate: the backend parks an identified disc here
+            # when hold_for_review is on. Wait for Start (-> ripping) or the
+            # auto-start path (-> identified); either proceeds to the rip.
+            if not await self._pass_gate(job, REVIEW_WAIT):
+                return
 
-                # Proceed for: identified (normal / operator Start landed),
-                # ripping (operator Start already transitioned), or
-                # awaiting_review (timed auto-start — rip-start transitions it).
-                if job.status not in (JobStatus.IDENTIFIED, JobStatus.RIPPING, JobStatus.AWAITING_REVIEW):
-                    logger.info("job %s in unexpected status %s; not ripping", job.id, job.status.value)
-                    return
+            # Proceed for: identified (normal / operator Start landed),
+            # ripping (operator Start already transitioned), or
+            # awaiting_review (timed auto-start — rip-start transitions it).
+            if job.status not in (JobStatus.IDENTIFIED, JobStatus.RIPPING, JobStatus.AWAITING_REVIEW):
+                logger.info("job %s in unexpected status %s; not ripping", job.id, job.status.value)
+                return
 
-                await self._run_rip_guarded(job, device_path)
+            await self._run_rip_guarded(job, device_path)
 
     async def _end_failed_scan(self, job: Job, failure: ScanFailure, device_path: str) -> None:
         """The backend failed this job for a MakeMKV scan failure: write why, and MakeMKV's last output, to the
@@ -430,6 +456,10 @@ class JobController:
             return None
 
     async def _run_rip(self, job: Job | JobView, device_path: str) -> None:
+        # Start waits for MakeMKV's title map: the rip names its titles by MakeMKV number.
+        if not await self._titles.wait(job.id):
+            logger.error("MakeMKV cannot read the disc; the rip of job_id=%s does not start", job.id)
+            return
         rip_start = await self._backend.rip_start(job.id)
         logger.info(
             "rip-start job_id=%s preset=%s tracks=%d",
@@ -455,14 +485,18 @@ class JobController:
         async with self._claim(job.id):
             with with_log_context(job_id=job.id):
                 logger.info("reboot recovery: re-parking held job %s", job.id)
-                resolved = await self._waiter.await_resolution(job.id, REVIEW_WAIT)
-                if resolved is None:
-                    return
-                job = resolved
-                if job.status not in (JobStatus.IDENTIFIED, JobStatus.RIPPING):
-                    logger.info("recovered job %s in status %s; not ripping", job.id, job.status.value)
-                    return
-                await self._run_rip(job, device_path)
+                self._readopt_titles_read(job, device_path)
+                try:
+                    resolved = await self._waiter.await_resolution(job.id, REVIEW_WAIT)
+                    if resolved is None:
+                        return
+                    job = resolved
+                    if job.status not in (JobStatus.IDENTIFIED, JobStatus.RIPPING):
+                        logger.info("recovered job %s in status %s; not ripping", job.id, job.status.value)
+                        return
+                    await self._run_rip(job, device_path)
+                finally:
+                    await self._titles.cancel(job.id)
 
     async def resume_inflight_job(self, job: JobView, device_path: str) -> None:
         """Drive a crash-recovered rip from the boot probe.

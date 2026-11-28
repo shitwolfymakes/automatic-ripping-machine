@@ -10,7 +10,6 @@ from typing import NamedTuple
 
 from arm_common import DiscType, ScanFailureReason
 from arm_common.schemas import DiscFingerprintInput, ScanResult, ScanTitle
-from arm_ripper.scan.bd_playlists import scan_playlists
 from arm_ripper.scan.data import sniff_video_image
 from arm_ripper.scan.disc_probe import DiscProbe, probe_disc
 from arm_ripper.scan.makemkv_info import parse_makemkvcon_info
@@ -328,7 +327,7 @@ def _failure_of(run: _InfoRun) -> MakemkvScanFailed | None:
     return _failed(ScanFailureReason.MAKEMKV_ERROR, f"makemkvcon exited {run.returncode}: {last}", watch)
 
 
-def _fingerprints(probe: DiscProbe) -> list[DiscFingerprintInput]:
+def disc_fingerprints(probe: DiscProbe) -> list[DiscFingerprintInput]:
     """The disc fingerprints the probe found, in the order crc64, thediscdb, matrix256; empty values are skipped."""
     fingerprints: list[DiscFingerprintInput] = []
     if probe.crc64:
@@ -349,10 +348,18 @@ async def _failed_disc_type(device_path: str, stdout: list[str]) -> DiscType | N
     return await asyncio.to_thread(sniff_video_image, device_path)
 
 
+async def scan_titles(device_path: str) -> list[ScanTitle]:
+    """The titles `makemkvcon info` lists on the disc. Raises ScanError (MakemkvScanFailed when makemkvcon ran and
+    its scan failed); used on its own for a disc whose structure was read separately."""
+    run = await _run_info(device_path)
+    failure = _failure_of(run)
+    if failure is not None:
+        raise failure
+    _, titles, _ = parse_makemkvcon_info(run.watch.stdout)
+    return titles
+
+
 async def scan_disc(device_path: str) -> ScanResult:
-    # Before makemkvcon: the playlist read is the early track list, and its
-    # logged elapsed_ms is the measurement of how early that list can arrive.
-    playlists = await scan_playlists(device_path)
     run = await _run_info(device_path)
 
     failure = _failure_of(run)
@@ -377,7 +384,6 @@ async def scan_disc(device_path: str) -> ScanResult:
         disc_type=disc_type,
         volume_label=volume_label,
         titles=titles,
-        fingerprints=_fingerprints(probe),
+        fingerprints=disc_fingerprints(probe),
         bd_meta=probe.bd_meta,
-        playlists=playlists,
     )

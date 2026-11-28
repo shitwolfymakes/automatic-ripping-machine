@@ -741,6 +741,10 @@ export type ConfigUpdateRequest = {
      * Manual Wait Seconds
      */
     manual_wait_seconds?: number | null;
+    /**
+     * Tick One Version
+     */
+    tick_one_version?: boolean | null;
     on_previously_ripped?: PreviouslyRippedAction | null;
     /**
      * Notifications Enabled
@@ -890,6 +894,10 @@ export type ConfigView = {
      * Manual Wait Seconds
      */
     manual_wait_seconds: number;
+    /**
+     * Tick One Version
+     */
+    tick_one_version: boolean;
     on_previously_ripped: PreviouslyRippedAction;
     default_retention_policy: RetentionPolicy;
     /**
@@ -2610,6 +2618,10 @@ export type Job = {
      */
     pending_session_id?: string | null;
     /**
+     * Tick One Version
+     */
+    tick_one_version?: boolean | null;
+    /**
      * Disc Number
      */
     disc_number: number | null;
@@ -2921,6 +2933,10 @@ export type JobUpdateRequest = {
     disc_total?: number | null;
     media_type?: MediaType | null;
     /**
+     * Tick One Version
+     */
+    tick_one_version?: boolean | null;
+    /**
      * Tracks
      */
     tracks?: Array<TrackEditRequest> | null;
@@ -2961,6 +2977,10 @@ export type JobView = {
      * Pending Session Id
      */
     pending_session_id?: string | null;
+    /**
+     * Tick One Version
+     */
+    tick_one_version?: boolean | null;
     /**
      * Parked Session Ids
      */
@@ -4520,6 +4540,12 @@ export type RipStartResponse = {
      * End On Completion Message
      */
     end_on_completion_message: boolean;
+    /**
+     * Title Numbers
+     */
+    title_numbers?: {
+        [key: string]: number;
+    };
 };
 
 /**
@@ -5543,6 +5569,21 @@ export type TemplatePreviewResponse = {
 export type TitleClass = 'primary' | 'edition' | 'duplicate' | 'decoy' | 'variant' | 'angle' | 'subset' | 'view';
 
 /**
+ * TitlesReport
+ *
+ * POST /api/ripper/jobs/{job_id}/titles body: what the background `makemkvcon info` run found on a disc
+ * whose review card was posted from the playlist structure. `failure` is why MakeMKV could not read the disc
+ * (then `titles` is empty); the job keeps its card and cannot start, or fails when Start was already pressed.
+ */
+export type TitlesReport = {
+    /**
+     * Titles
+     */
+    titles?: Array<ScanTitle>;
+    failure?: ScanFailure | null;
+};
+
+/**
  * TrackClaim
  */
 export type TrackClaim = {
@@ -6372,6 +6413,10 @@ export type JobViewWritable = {
      */
     pending_session_id?: string | null;
     /**
+     * Tick One Version
+     */
+    tick_one_version?: boolean | null;
+    /**
      * Parked Session Ids
      */
     parked_session_ids?: Array<string>;
@@ -6855,6 +6900,42 @@ export type RipStartApiRipperJobsJobIdRipStartPostResponses = {
 };
 
 export type RipStartApiRipperJobsJobIdRipStartPostResponse = RipStartApiRipperJobsJobIdRipStartPostResponses[keyof RipStartApiRipperJobsJobIdRipStartPostResponses];
+
+export type PostTitlesApiRipperJobsJobIdTitlesPostData = {
+    body: TitlesReport;
+    headers?: {
+        /**
+         * X-Arm-Hostname
+         */
+        'x-arm-hostname'?: string | null;
+    };
+    path: {
+        /**
+         * Job Id
+         */
+        job_id: string;
+    };
+    query?: never;
+    url: '/api/ripper/jobs/{job_id}/titles';
+};
+
+export type PostTitlesApiRipperJobsJobIdTitlesPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type PostTitlesApiRipperJobsJobIdTitlesPostError = PostTitlesApiRipperJobsJobIdTitlesPostErrors[keyof PostTitlesApiRipperJobsJobIdTitlesPostErrors];
+
+export type PostTitlesApiRipperJobsJobIdTitlesPostResponses = {
+    /**
+     * Successful Response
+     */
+    204: void;
+};
+
+export type PostTitlesApiRipperJobsJobIdTitlesPostResponse = PostTitlesApiRipperJobsJobIdTitlesPostResponses[keyof PostTitlesApiRipperJobsJobIdTitlesPostResponses];
 
 export type ResumeApiRipperJobsJobIdResumePostData = {
     body?: never;

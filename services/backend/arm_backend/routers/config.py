@@ -93,6 +93,7 @@ def _to_view(cfg: Config) -> ConfigView:
         # server_default only) for rows/fixtures predating these columns.
         hold_for_review=bool(cfg.hold_for_review),
         manual_wait_seconds=int(cfg.manual_wait_seconds) if cfg.manual_wait_seconds is not None else 60,
+        tick_one_version=cfg.tick_one_version is not False,
         on_previously_ripped=cfg.on_previously_ripped or PreviouslyRippedAction.HOLD,
         drive_scan_interval_seconds=int(cfg.drive_scan_interval_seconds or 30),
         drive_detected_prune_days=int(cfg.drive_detected_prune_days or 7),

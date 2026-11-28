@@ -64,7 +64,7 @@ def test_registry_carries_the_official_presets_link():
 
 def test_config_ids_name_every_settings_field():
     assert config_ids() == {f"config.{m.key}" for m in CONFIG_FIELD_META}
-    assert len(config_ids()) == 41
+    assert len(config_ids()) == 42
 
 
 def test_handbrake_ids_are_the_overlay_groups_and_the_encoder_families():

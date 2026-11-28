@@ -115,6 +115,7 @@ class DiscRip:
         self._start_path = device_path
         self._output_dir = output_dir
         self._tracks = list(rip_start.tracks)
+        self._title_numbers = rip_start.title_numbers
         self._resumable = _resumable(disc_type, device_path, self._tracks)
         self._lost = asyncio.Event()
         # Track ids whose title the lost drive left unfinished, and the files
@@ -293,6 +294,7 @@ class DiscRip:
                 on_track_done=self._on_track_done,
                 on_track_progress=self._on_track_progress,
                 min_length_seconds=self._min_length_seconds,
+                title_numbers=self._title_numbers,
                 stop=self._lost if self._resumable else None,
                 skip_track_ids=self._skip,
                 drive_lost=(functools.partial(self._drive_gone, self._rip_path) if self._resumable else None),

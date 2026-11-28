@@ -180,6 +180,11 @@
       "page": "guide/configuring-arm",
       "section": "Keys"
     },
+    "config.tick_one_version": {
+      "type": "internal",
+      "page": "guide/configuring-arm",
+      "section": "Rip / transcode behaviour"
+    },
     "config.tmdb_api_key": {
       "type": "external",
       "url": "https://developer.themoviedb.org/docs/getting-started"

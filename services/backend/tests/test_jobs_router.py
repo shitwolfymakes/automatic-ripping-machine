@@ -22,6 +22,7 @@ from arm_backend.config import settings
 from arm_backend.auto_session import ApplySessionOutcome, SessionNotFoundError
 from arm_backend.db import get_session
 from arm_backend.identity.proposals import record_manual_job
+from arm_backend.job_failure import scan_failure_text
 from arm_backend.jwt_utils import issue_access_token
 from arm_backend.path_template import TemplateValidationError
 from arm_backend.routers import jobs as jobs_router
@@ -42,7 +43,8 @@ from arm_common import (
     TrackStatus,
     User,
 )
-from arm_common.enums import TrackKind, TrackRole
+from arm_common.enums import ScanFailureReason, TrackKind, TrackRole
+from arm_common.schemas import ScanFailure
 from arm_common.models import Track
 from arm_common import StageStatus, TrackStage
 from arm_common.models.user import GUEST_ROLE
@@ -2653,3 +2655,75 @@ def test_abandon_without_delete_raw_leaves_the_stage_copy_alone(
     spy = _abandon_with_spy(signing_key, tmp_path, monkeypatch, None)
     assert spy.calls == []
     assert spy.staged_dir.exists()
+
+
+# --- structure-scan jobs: MakeMKV failure and unrippable playlists ---------------
+
+
+def _structure_review_job(
+    db: FakeSession, *, titles_without: str | None = None, failure: ScanFailureReason | None = None
+) -> None:
+    """A Blu-ray held in review with tracks keyed by title ref; MakeMKV's titles present unless `failure`."""
+    from tests.bd_structure_scans import PICK, br3d_makemkv_titles, br3d_structure_scan
+
+    scan = br3d_structure_scan()
+    if failure is None:
+        scan = scan.model_copy(update={"titles": [t for t in br3d_makemkv_titles() if t.source_file != titles_without]})
+    meta: dict[str, Any] = {"scan_result": scan.model_dump(mode="json")}
+    if failure is not None:
+        meta["makemkv_failure"] = ScanFailure(reason=failure, detail="makemkvcon timed out").model_dump(mode="json")
+    db.rows["jobs"] = [
+        Job(
+            id=_JOB_ID_A,
+            drive_id=_DRV_ID_A,
+            disc_type=DiscType.BLURAY,
+            status=JobStatus.AWAITING_REVIEW,
+            title="Feature",
+            resumed_from_crash=False,
+            metadata_json=meta,
+        )
+    ]
+    db.rows["tracks"] = [
+        Track(id=f"trk_{n:026d}", job_id=_JOB_ID_A, kind=TrackKind.VIDEO_TITLE, index=n, source_ref=ref, excluded=True)
+        for n, ref in enumerate(["00102.mpls", PICK, "00334.mpls:2", "00342.mpls"])
+    ]
+
+
+def test_rip_start_review_is_refused_after_makemkv_failed(signing_key: bytes) -> None:
+    db = FakeSession()
+    app, token = _make_app(signing_key, db)
+    _structure_review_job(db, failure=ScanFailureReason.TIMED_OUT)
+    with TestClient(app) as client:
+        r = client.post(f"/api/jobs/{_JOB_ID_A}/rip-start-review", headers=_auth(token))
+    assert r.status_code == 409
+    assert r.json()["detail"] == scan_failure_text(ScanFailure(reason=ScanFailureReason.TIMED_OUT, detail="d"))
+    assert db.rows["jobs"][0].status == JobStatus.AWAITING_REVIEW
+
+
+def test_an_operator_tick_on_a_playlist_makemkv_does_not_list_is_refused(signing_key: bytes) -> None:
+    db = FakeSession()
+    app, token = _make_app(signing_key, db)
+    _structure_review_job(db, titles_without="00102.mpls")
+    body = {"tracks": [{"track_id": db.rows["tracks"][0].id, "excluded": False}]}
+    with TestClient(app) as client:
+        r = client.patch(f"/api/jobs/{_JOB_ID_A}", json=body, headers=_auth(token))
+    assert r.status_code == 422
+    assert "00102.mpls" in r.json()["detail"]
+
+
+def test_an_operator_tick_on_a_listed_playlist_and_an_untick_of_an_unlisted_one_are_allowed(
+    signing_key: bytes,
+) -> None:
+    db = FakeSession()
+    app, token = _make_app(signing_key, db)
+    _structure_review_job(db, titles_without="00102.mpls")
+    tracks = db.rows["tracks"]
+    body = {
+        "tracks": [
+            {"track_id": tracks[1].id, "excluded": False},
+            {"track_id": tracks[0].id, "excluded": True},
+        ]
+    }
+    with TestClient(app) as client:
+        r = client.patch(f"/api/jobs/{_JOB_ID_A}", json=body, headers=_auth(token))
+    assert r.status_code == 200, r.text

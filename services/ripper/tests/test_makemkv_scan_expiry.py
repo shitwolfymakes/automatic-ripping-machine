@@ -27,17 +27,6 @@ from arm_ripper.scan.makemkv import (
 )
 
 
-@pytest.fixture(autouse=True)
-def _no_playlist_read(monkeypatch: pytest.MonkeyPatch) -> None:
-    """scan_disc reads the Blu-ray playlists with a 7zz subprocess before makemkvcon; these tests fake only
-    makemkvcon's subprocess, so the playlist read is stubbed to an empty list."""
-
-    async def _none(_device: str) -> list[Any]:
-        return []
-
-    monkeypatch.setattr(makemkv_mod, "scan_playlists", _none)
-
-
 class _AsyncByteStream:
     """Async-iterable byte stream — drop-in for `proc.stdout` / `proc.stderr`.
     Each item is a line (bytes, newline-included)."""

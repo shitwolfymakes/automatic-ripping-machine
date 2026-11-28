@@ -7,7 +7,7 @@ from typing import Any
 
 import pytest
 
-from arm_backend import identify_flow
+from arm_backend import identify_flow, job_failure
 from arm_backend.job_failure import fail_job
 from arm_common import Drive, DriveStatus, Job, JobStatus, SessionApplication
 from arm_common.enums import DiscType, ScanFailureReason, SessionApplicationStatus
@@ -60,18 +60,18 @@ async def test_fail_job_fails_the_job_with_the_reason() -> None:
 
 @pytest.mark.parametrize("reason", list(ScanFailureReason))
 def test_failure_text_is_a_sentence_for_every_reason(reason: ScanFailureReason) -> None:
-    text = identify_flow._failure_text(ScanFailure(reason=reason, detail="the detail"))
+    text = job_failure.scan_failure_text(ScanFailure(reason=reason, detail="the detail"))
     assert text.endswith(".")
     assert len(text) > 40
 
 
 def test_failure_texts_differ_per_reason() -> None:
-    texts = {identify_flow._failure_text(ScanFailure(reason=r, detail="d")) for r in ScanFailureReason}
+    texts = {job_failure.scan_failure_text(ScanFailure(reason=r, detail="d")) for r in ScanFailureReason}
     assert len(texts) == len(ScanFailureReason)
 
 
 def test_failure_text_names_no_ip_address_for_an_unknown_key() -> None:
-    text = identify_flow._failure_text(ScanFailure(reason=ScanFailureReason.VOLUME_KEY_UNKNOWN, detail="d"))
+    text = job_failure.scan_failure_text(ScanFailure(reason=ScanFailureReason.VOLUME_KEY_UNKNOWN, detail="d"))
     assert "volume key is unknown" in text
     assert "HTTPS (TCP 443)" in text
     assert not re.search(r"\d+\.\d+\.\d+\.\d+", text)
@@ -108,7 +108,7 @@ async def test_run_with_a_scan_failure_fails_the_job_and_does_nothing_else() -> 
 
     assert job.status == JobStatus.FAILED
     assert job.disc_type == DiscType.BLURAY
-    assert job.failure_reason == identify_flow._failure_text(scan.failure)  # type: ignore[arg-type]
+    assert job.failure_reason == job_failure.scan_failure_text(scan.failure)  # type: ignore[arg-type]
     assert job.title is None
     assert [r for r in db.added if type(r).__name__ == "DiscFingerprint"] == []
     assert [e["event_type"] for e in hub.events] == ["rip.failed"]

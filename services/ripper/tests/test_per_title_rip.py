@@ -101,6 +101,7 @@ class _Rig:
         *,
         with_progress: bool = True,
         options: RipOptions = RipOptions(per_title=True),
+        title_numbers: dict[str, int] | None = None,
     ) -> None:
         async def on_start(track: TrackView) -> None:
             self.started.append(track.id)
@@ -119,6 +120,7 @@ class _Rig:
             on_track_done=on_done,
             on_track_progress=on_progress if with_progress else None,
             min_length_seconds=60,
+            title_numbers={t.source_ref: int(t.source_ref) for t in tracks} if title_numbers is None else title_numbers,
             stop=self.stop,
             skip_track_ids=skip,
             options=options,

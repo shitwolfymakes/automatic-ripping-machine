@@ -425,3 +425,40 @@ def test_tinfo_15_is_the_angle():
     lines = ['TINFO:2,9,0,"0:10:00"', 'TINFO:2,15,0,"2"', 'TINFO:2,16,0,"00334.mpls"']
     _, titles, _ = parse_makemkvcon_info(lines)
     assert [(t.source_file, t.angle) for t in titles] == [("00334.mpls", 2)]
+
+
+def test_parse_segment_map_takes_the_base_clip_of_each_3d_pair():
+    assert _parse_segment_map("364/365,368/369") == [364, 368]
+    assert _parse_segment_map("368/369") == [368]
+    assert _parse_segment_map("1/2,7") == [1, 7]  # a pair among plain clips
+
+
+def test_parse_segment_map_rejects_a_malformed_pair():
+    assert _parse_segment_map("364/") is None
+    assert _parse_segment_map("364/x") is None
+    assert _parse_segment_map("/365") is None
+
+
+def test_a_title_with_dependent_view_pairs_is_stereo_3d():
+    lines = ['TINFO:0,9,0,"2:00:00"', 'TINFO:0,26,0,"364/365,368/369"', 'TINFO:1,9,0,"0:10:00"', 'TINFO:1,26,0,"7"']
+    _, titles, _ = parse_makemkvcon_info(lines)
+    assert [(t.segment_map, t.stereo_3d) for t in titles] == [([364, 368], True), ([7], False)]
+
+
+def test_a_malformed_segment_map_does_not_mark_the_title_3d():
+    _, titles, _ = parse_makemkvcon_info(['TINFO:0,9,0,"2:00:00"', 'TINFO:0,26,0,"364/x"'])
+    assert (titles[0].segment_map, titles[0].stereo_3d) == (None, False)
+
+
+def test_3d_angles_info_matches_the_shared_scan_titles_fixture():
+    """The 3D reference disc's info output parses to the titles the arm_common fixtures hold: base clips from the
+    pairs, angle from TINFO 15, 3D from the pairs."""
+    lines = (FIXTURES / "makemkvcon_bd_3d_angles.txt").read_text().splitlines()
+    volume_label, titles, disc_type = parse_makemkvcon_info(lines)
+    expected = json.loads(
+        (
+            Path(__file__).resolve().parents[3] / "packages/arm_common/tests/fixtures/scan_titles/bd_3d_angles.json"
+        ).read_text()
+    )
+    assert disc_type == DiscType.BLURAY and volume_label == "Feature 3D"
+    assert [t.model_dump(mode="json") for t in titles] == expected

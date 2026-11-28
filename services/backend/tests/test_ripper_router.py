@@ -24,7 +24,7 @@ import pytest
 from arm_backend.config import settings as _settings
 from arm_backend.db import get_session
 from arm_backend.metadata.base import MetadataResult
-from arm_backend import identify_flow, rip_preset_resolution
+from arm_backend import identify_flow, job_failure, rip_preset_resolution
 from arm_backend.routers import ripper as ripper_router
 from arm_backend.identity.sources.thediscdb_snapshot import DiscMatch
 from arm_common import (
@@ -502,7 +502,7 @@ def test_identify_with_a_scan_failure_makes_a_failed_job_with_the_reason() -> No
     out = r.json()
     assert out["status"] == "failed"
     assert out["disc_type"] == "bluray"
-    assert out["failure_reason"] == identify_flow._failure_text(
+    assert out["failure_reason"] == job_failure.scan_failure_text(
         ScanFailure(reason=ScanFailureReason.VOLUME_KEY_UNKNOWN, detail="d")
     )
     assert out["title"] is None
@@ -515,12 +515,12 @@ def test_identify_with_a_scan_failure_makes_a_failed_job_with_the_reason() -> No
 
 @pytest.mark.parametrize("reason", list(ScanFailureReason))
 def test_failure_text_has_a_sentence_for_every_reason(reason: ScanFailureReason) -> None:
-    text = identify_flow._failure_text(ScanFailure(reason=reason, detail="d"))
+    text = job_failure.scan_failure_text(ScanFailure(reason=reason, detail="d"))
     assert text.endswith(".")
 
 
 def test_failure_text_for_an_unknown_key_names_the_port_not_an_address() -> None:
-    text = identify_flow._failure_text(ScanFailure(reason=ScanFailureReason.VOLUME_KEY_UNKNOWN, detail="d"))
+    text = job_failure.scan_failure_text(ScanFailure(reason=ScanFailureReason.VOLUME_KEY_UNKNOWN, detail="d"))
     assert "volume key is unknown" in text
     assert "HTTPS (TCP 443)" in text
     assert not re.search(r"\d+\.\d+\.\d+\.\d+", text)

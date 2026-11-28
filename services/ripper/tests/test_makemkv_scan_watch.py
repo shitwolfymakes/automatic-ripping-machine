@@ -37,17 +37,6 @@ from arm_ripper.scan.makemkv import (  # noqa: E402
 )
 
 
-@pytest.fixture(autouse=True)
-def _no_playlist_read(monkeypatch: pytest.MonkeyPatch) -> None:
-    """scan_disc reads the Blu-ray playlists with a 7zz subprocess before makemkvcon; these tests fake only
-    makemkvcon's subprocess, so the playlist read is stubbed to an empty list."""
-
-    async def _none(_device: str) -> list[Any]:
-        return []
-
-    monkeypatch.setattr(mk, "scan_playlists", _none)
-
-
 FIXTURES = Path(__file__).parent / "fixtures"
 
 

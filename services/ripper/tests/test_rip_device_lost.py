@@ -95,6 +95,11 @@ def env(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> dict[str, Any]:
     return {"handle": handle, "client": client, "controller": controller, "ejected": ejected, "raw": tmp_path / _JOB}
 
 
+def _numbers(tracks: list[TrackView]) -> dict[str, int]:
+    """The backend's identity title numbers for numeric refs."""
+    return {t.source_ref: int(t.source_ref) for t in tracks if t.source_ref.isdigit()}
+
+
 def _script(monkeypatch: pytest.MonkeyPatch, passes: list[Any]) -> list[dict[str, Any]]:
     """Replace rip_all with scripted passes; returns each call's kwargs."""
     calls: list[dict[str, Any]] = []
@@ -145,7 +150,13 @@ async def test_a_drive_that_comes_back_on_a_new_node_resumes_the_rest(monkeypatc
         job_id=_JOB,
         disc_type=DiscType.BLURAY,
         device_path="/dev/sr0",
-        rip_start=RipStartResponse(end_on_completion_message=False, job_id=_JOB, rip_preset_id="rpr", tracks=tracks),
+        rip_start=RipStartResponse(
+            end_on_completion_message=False,
+            job_id=_JOB,
+            rip_preset_id="rpr",
+            tracks=tracks,
+            title_numbers=_numbers(tracks),
+        ),
     )
 
     client: _Client = env["client"]
@@ -179,7 +190,13 @@ async def test_a_drive_that_stays_away_finishes_partial_saying_why(monkeypatch, 
         job_id=_JOB,
         disc_type=DiscType.BLURAY,
         device_path="/dev/sr0",
-        rip_start=RipStartResponse(end_on_completion_message=False, job_id=_JOB, rip_preset_id="rpr", tracks=tracks),
+        rip_start=RipStartResponse(
+            end_on_completion_message=False,
+            job_id=_JOB,
+            rip_preset_id="rpr",
+            tracks=tracks,
+            title_numbers=_numbers(tracks),
+        ),
     )
 
     client: _Client = env["client"]
@@ -205,7 +222,13 @@ async def test_a_title_failure_with_the_drive_still_there_fails_the_title(monkey
         job_id=_JOB,
         disc_type=DiscType.DVD,
         device_path="/dev/sr0",
-        rip_start=RipStartResponse(end_on_completion_message=False, job_id=_JOB, rip_preset_id="rpr", tracks=tracks),
+        rip_start=RipStartResponse(
+            end_on_completion_message=False,
+            job_id=_JOB,
+            rip_preset_id="rpr",
+            tracks=tracks,
+            title_numbers=_numbers(tracks),
+        ),
     )
     assert len(calls) == 1
     assert env["client"].statuses("trk_1") == [TrackStatus.IN_PROGRESS, TrackStatus.FAILED]
@@ -232,7 +255,13 @@ async def test_a_title_failure_on_a_node_that_no_longer_answers_is_held_for_the_
         job_id=_JOB,
         disc_type=DiscType.BLURAY,
         device_path="/dev/sr0",
-        rip_start=RipStartResponse(end_on_completion_message=False, job_id=_JOB, rip_preset_id="rpr", tracks=tracks),
+        rip_start=RipStartResponse(
+            end_on_completion_message=False,
+            job_id=_JOB,
+            rip_preset_id="rpr",
+            tracks=tracks,
+            title_numbers=_numbers(tracks),
+        ),
     )
     assert len(calls) == 1
     error = [f["last_error"] for t, f in env["client"].patches if "last_error" in f]
@@ -259,7 +288,11 @@ async def test_cds_and_disc_backups_are_not_resumed(monkeypatch, env) -> None:
             disc_type=disc_type,
             device_path="/dev/sr0",
             rip_start=RipStartResponse(
-                end_on_completion_message=False, job_id=_JOB, rip_preset_id="rpr", tracks=tracks
+                end_on_completion_message=False,
+                job_id=_JOB,
+                rip_preset_id="rpr",
+                tracks=tracks,
+                title_numbers=_numbers(tracks),
             ),
         )
         assert env["client"].statuses("trk_0") == [TrackStatus.IN_PROGRESS, TrackStatus.FAILED]
@@ -300,7 +333,13 @@ async def test_a_title_makemkvcon_moved_on_from_is_resumed_not_kept(monkeypatch,
         job_id=_JOB,
         disc_type=DiscType.BLURAY,
         device_path="/dev/sr0",
-        rip_start=RipStartResponse(end_on_completion_message=False, job_id=_JOB, rip_preset_id="rpr", tracks=tracks),
+        rip_start=RipStartResponse(
+            end_on_completion_message=False,
+            job_id=_JOB,
+            rip_preset_id="rpr",
+            tracks=tracks,
+            title_numbers=_numbers(tracks),
+        ),
     )
 
     client: _Client = env["client"]
@@ -330,7 +369,13 @@ async def _run_one_pass(
         job_id=_JOB,
         disc_type=DiscType.BLURAY,
         device_path="/dev/sr0",
-        rip_start=RipStartResponse(end_on_completion_message=False, job_id=_JOB, rip_preset_id="rpr", tracks=tracks),
+        rip_start=RipStartResponse(
+            end_on_completion_message=False,
+            job_id=_JOB,
+            rip_preset_id="rpr",
+            tracks=tracks,
+            title_numbers=_numbers(tracks),
+        ),
     )
 
 
@@ -648,6 +693,7 @@ async def test_a_restart_resume_keeps_the_settled_title_and_rips_the_rest_per_ti
             job_id=_JOB,
             rip_preset_id="rpr",
             tracks=tracks,
+            title_numbers=_numbers(tracks),
             rip_invocation=RipInvocation.PER_TITLE,
         ),
     )
@@ -679,6 +725,7 @@ async def test_a_restart_resume_in_mkv_all_mode_reads_the_whole_disc_again(monke
             job_id=_JOB,
             rip_preset_id="rpr",
             tracks=tracks,
+            title_numbers=_numbers(tracks),
             rip_invocation=RipInvocation.MKV_ALL,
         ),
     )
@@ -697,7 +744,13 @@ async def test_a_restart_resume_rips_into_the_first_unused_resume_folder(monkeyp
         job_id=_JOB,
         disc_type=DiscType.BLURAY,
         device_path="/dev/sr0",
-        rip_start=RipStartResponse(end_on_completion_message=False, job_id=_JOB, rip_preset_id="rpr", tracks=tracks),
+        rip_start=RipStartResponse(
+            end_on_completion_message=False,
+            job_id=_JOB,
+            rip_preset_id="rpr",
+            tracks=tracks,
+            title_numbers=_numbers(tracks),
+        ),
     )
 
     assert calls[0]["output_dir"] == raw / "resume-2"
@@ -711,7 +764,13 @@ async def test_a_fresh_rip_reads_the_whole_disc_into_the_job_folder(monkeypatch,
         job_id=_JOB,
         disc_type=DiscType.BLURAY,
         device_path="/dev/sr0",
-        rip_start=RipStartResponse(end_on_completion_message=False, job_id=_JOB, rip_preset_id="rpr", tracks=tracks),
+        rip_start=RipStartResponse(
+            end_on_completion_message=False,
+            job_id=_JOB,
+            rip_preset_id="rpr",
+            tracks=tracks,
+            title_numbers=_numbers(tracks),
+        ),
     )
 
     assert calls[0]["skip_track_ids"] == set()
@@ -732,6 +791,7 @@ async def test_a_fresh_rip_in_per_title_mode_goes_per_title_into_the_job_folder(
             job_id=_JOB,
             rip_preset_id="rpr",
             tracks=tracks,
+            title_numbers=_numbers(tracks),
             rip_invocation=RipInvocation.PER_TITLE,
         ),
     )
@@ -758,6 +818,7 @@ async def test_a_drive_drop_resume_stays_per_title_in_per_title_mode(monkeypatch
             job_id=_JOB,
             rip_preset_id="rpr",
             tracks=tracks,
+            title_numbers=_numbers(tracks),
             rip_invocation=RipInvocation.PER_TITLE,
         ),
     )
@@ -788,6 +849,7 @@ async def test_a_skipped_title_is_settled_from_the_first_pass_of_a_fresh_rip(mon
             job_id=_JOB,
             rip_preset_id="rpr",
             tracks=tracks,
+            title_numbers=_numbers(tracks),
             rip_invocation=RipInvocation.PER_TITLE,
         ),
     )
@@ -816,6 +878,7 @@ async def test_a_restart_resume_keeps_a_skipped_title_settled_beside_a_done_one(
             job_id=_JOB,
             rip_preset_id="rpr",
             tracks=tracks,
+            title_numbers=_numbers(tracks),
             rip_invocation=RipInvocation.PER_TITLE,
         ),
     )
@@ -837,3 +900,26 @@ async def test_the_rip_start_end_on_completion_flag_reaches_every_rip_pass(monke
     )
 
     assert calls[0]["options"].end_on_completion is flag
+
+
+async def test_the_rip_is_handed_the_title_numbers_of_the_rip_start_response(monkeypatch, env) -> None:
+    tracks = [_track(0).model_copy(update={"source_ref": "00334.mpls:2"})]
+
+    async def only(**kw: Any) -> None:
+        await _ok(kw, tracks[0], "Disc_t00.mkv")
+
+    calls = _script(monkeypatch, [only])
+    await env["controller"]._execute_rip(
+        job_id=_JOB,
+        disc_type=DiscType.BLURAY,
+        device_path="/dev/sr0",
+        rip_start=RipStartResponse(
+            end_on_completion_message=False,
+            job_id=_JOB,
+            rip_preset_id="rpr",
+            tracks=tracks,
+            title_numbers={"00334.mpls:2": 7},
+        ),
+    )
+
+    assert calls[0]["title_numbers"] == {"00334.mpls:2": 7}
