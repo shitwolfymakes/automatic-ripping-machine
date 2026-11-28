@@ -369,6 +369,11 @@ class _SpawnPass:
         dispatcher = self._dispatcher
         tail = await asyncio.to_thread(dispatcher._discard_container, name, task_id)
         del dispatcher._awaiting_checkin[task_id]
+        if not await self._still_queued(task_id):
+            # The removal takes seconds; a /claim that committed meanwhile owns the task and its GPU. The
+            # stale-claim sweep recovers it if its transcoder went with the container.
+            logger.warning("transcode task_id=%s claimed while its container %s was being removed", task_id, name)
+            return
         reason = f"transcoder did not check in within {limit} s"
         if tail:
             reason += f": {tail}"
@@ -380,6 +385,15 @@ class _SpawnPass:
         except Exception:
             logger.exception("could not count the check-in timeout task_id=%s", task_id)
             await self._db.rollback()
+
+    async def _still_queued(self, task_id: str) -> bool:
+        """Whether `task_id` is still QUEUED, read fresh (no transcoder has claimed it)."""
+        task = (
+            await self._db.execute(
+                select(TranscodeTask).where(col(TranscodeTask.id) == task_id).execution_options(populate_existing=True)
+            )
+        ).scalar_one_or_none()
+        return task is not None and task.status == TranscodeTaskStatus.QUEUED
 
     def _note_held_for_staging(self, task: TranscodeTask, stage: TrackStage | None) -> None:
         """Count a task held for its stage; a task with no stage row at all is logged once."""
