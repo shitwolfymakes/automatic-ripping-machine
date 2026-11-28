@@ -6,7 +6,7 @@ from urllib.parse import quote
 import httpx
 
 from arm_backend.config import settings
-from arm_backend.metadata.base import LookupError, LookupTimeout, MetadataResult
+from arm_backend.metadata.base import LookupError, LookupTimeout, MetadataResult, json_object
 from arm_backend.metadata.years import year_from
 
 logger = logging.getLogger("arm_backend.metadata.tmdb")
@@ -232,10 +232,7 @@ class TMDBClient:
             raise LookupError("tmdb auth failed")
         if r.status_code != 200:
             raise LookupError(f"tmdb find status={r.status_code}")
-        try:
-            data = r.json()
-        except ValueError as e:
-            raise LookupError("tmdb find returned non-JSON response") from e
+        data = json_object(r, "tmdb find")
         if data.get("movie_results"):
             parsed = self._parse_one(data["movie_results"][0], "movie")
             if parsed is None:

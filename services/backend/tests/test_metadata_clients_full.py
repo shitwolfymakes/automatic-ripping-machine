@@ -521,3 +521,47 @@ async def test_tmdb_detail_result_tolerates_non_dict_external_ids(http_client):
     )
     r = await TMDBClient("k", http_client).detail_result(8, "movie")
     assert r.payload["imdb_id"] is None
+
+
+# --- a 200 whose body is not a JSON object ---------------------------------------
+# A proxy error page or captive portal answers 200 with HTML; a broken mirror
+# can answer with a bare JSON list. Either must surface as the module
+# LookupError (one provider's miss), never a ValueError/AttributeError that
+# escapes the dispatcher and fails identify with a 500.
+
+_NOT_A_JSON_OBJECT = [
+    pytest.param({"text": "<html>Proxy error</html>"}, "non-JSON", id="html"),
+    pytest.param({"json": ["not", "an", "object"]}, "non-object JSON", id="json-list"),
+]
+
+
+@pytest.mark.parametrize(("body", "why"), _NOT_A_JSON_OBJECT)
+@respx.mock
+async def test_omdb_body_that_is_not_a_json_object(http_client, body, why) -> None:  # type: ignore[no-untyped-def]
+    respx.get("https://www.omdbapi.com/").mock(return_value=httpx.Response(200, **body))
+    with pytest.raises(LookupError, match=f"omdb returned a {why} response"):
+        await OMDBClient("k", http_client).lookup_by_title("x")
+
+
+@pytest.mark.parametrize(("body", "why"), _NOT_A_JSON_OBJECT)
+@respx.mock
+async def test_musicbrainz_body_that_is_not_a_json_object(http_client, body, why) -> None:  # type: ignore[no-untyped-def]
+    respx.get("https://musicbrainz.org/ws/2/discid/abc123").mock(return_value=httpx.Response(200, **body))
+    with pytest.raises(LookupError, match=f"musicbrainz returned a {why} response"):
+        await MusicBrainzClient("arm-test/0.0 (test@example.com)", http_client).lookup_disc_id("abc123")
+
+
+@pytest.mark.parametrize(("body", "why"), _NOT_A_JSON_OBJECT)
+@respx.mock
+async def test_arm_server_body_that_is_not_a_json_object(http_client, body, why) -> None:  # type: ignore[no-untyped-def]
+    respx.get(_ARM).mock(return_value=httpx.Response(200, **body))
+    with pytest.raises(LookupError, match=f"arm_server returned a {why} response"):
+        await ArmServerClient(http_client).lookup_by_crc64("c1")
+
+
+@pytest.mark.parametrize(("body", "why"), _NOT_A_JSON_OBJECT)
+@respx.mock
+async def test_tmdb_find_body_that_is_not_a_json_object(http_client, body, why) -> None:  # type: ignore[no-untyped-def]
+    respx.get(f"{_TMDB}/find/tt0000001").mock(return_value=httpx.Response(200, **body))
+    with pytest.raises(LookupError, match=f"tmdb find returned a {why} response"):
+        await TMDBClient("k", http_client).find_by_imdb_id("tt0000001")
