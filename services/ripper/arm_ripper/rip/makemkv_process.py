@@ -24,6 +24,10 @@ from arm_ripper.rip.subprocess_cleanup import kill_if_running
 logger = logging.getLogger("arm_ripper.rip.makemkv")
 
 RIP_TIMEOUT_SECONDS = 6 * 60 * 60  # 6 hours: worst-case BD
+# After a normal exit every output line is already buffered; the streamer only
+# has to finish them, callbacks (backend calls) included. A callback stuck
+# retrying against a dead backend is cut off after this so the rip still ends.
+DRAIN_TIMEOUT_SECONDS = 30.0
 # The error a rip reports when its caller set `stop` (the drive dropped off the
 # bus mid-rip, arm_ripper.job_controller): makemkvcon was killed, not failed.
 STOPPED_ERROR = "makemkvcon stopped: the drive disconnected"
@@ -212,21 +216,39 @@ async def run_makemkvcon(
     except asyncio.TimeoutError:
         proc.kill()
         await proc.wait()
-        streamer.cancel()
+        await _cancel(streamer)
         return compose_error(f"makemkvcon timed out after {RIP_TIMEOUT_SECONDS}s", state.diagnostics)
-    finally:
+    except BaseException:
+        # The caller was cancelled: kill and unwind, nothing left to report.
         await kill_if_running(proc)
         streamer.cancel()
+        raise
 
-    # Drain the streamer so every line after EOF is processed before callers read `state`.
+    # A stopped run, or a settled one that outlived its SIGTERM, is killed here; an exited one is left alone.
+    await kill_if_running(proc)
+    if ending is _Ending.STOPPED:
+        await _cancel(streamer)
+        _log_run_end(state, watch, start, wall_start, state.clock(), False)
+        return STOPPED_ERROR
+
+    # A normal (or settled) exit: let the streamer finish every buffered line, and any callback it is in the middle
+    # of, before callers read `state`. Cancelling it here cut off a callback and lost the lines after it: the last
+    # progress, the move to the next title, MakeMKV's own reason for a failure.
     try:
-        await streamer
-    except asyncio.CancelledError:
-        pass
+        await asyncio.wait_for(streamer, timeout=DRAIN_TIMEOUT_SECONDS)
+    except asyncio.TimeoutError:
+        logger.warning(
+            "still processing makemkvcon output %gs after it exited; the remaining lines are dropped",
+            DRAIN_TIMEOUT_SECONDS,
+        )
 
     ended_early = ending is _Ending.SETTLED
     _log_run_end(state, watch, start, wall_start, state.clock(), ended_early)
-    if ending is _Ending.STOPPED:
-        return STOPPED_ERROR
-
     return await _exit_error(proc, state, ended_early=ended_early)
+
+
+async def _cancel(task: asyncio.Task[None]) -> None:
+    """Cancel `task` and wait for it to unwind."""
+    task.cancel()
+    with contextlib.suppress(asyncio.CancelledError):
+        await task
