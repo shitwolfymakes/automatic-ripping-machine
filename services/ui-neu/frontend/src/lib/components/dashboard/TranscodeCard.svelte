@@ -245,7 +245,7 @@
 	.transcode-card-progress-row {
 		margin-top: 0.5rem;
 		border-top: 1px solid var(--color-border);
-		padding: 0.625rem 1rem 0.625rem 4rem;
+		padding: 0.625rem 1rem;
 	}
 	.transcode-card-detail {
 		border-top: 1px solid var(--color-border);
