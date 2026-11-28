@@ -1,0 +1,52 @@
+{
+  "evidence": {
+    "bd_title": null,
+    "iso_name": null,
+    "label": "TOTAL_RECALL",
+    "titles": [
+      {
+        "minutes": 113,
+        "clips": [
+          1
+        ]
+      }
+    ],
+    "structured": false
+  },
+  "candidates": [
+    {
+      "title": "Total Recall",
+      "original_title": null,
+      "year": 1990,
+      "kind": "movie",
+      "runtime_minutes": 113,
+      "providers": [
+        "tmdb",
+        "omdb"
+      ],
+      "provider_rank": 0
+    },
+    {
+      "title": "Total Recall",
+      "original_title": null,
+      "year": 2012,
+      "kind": "movie",
+      "runtime_minutes": 118,
+      "providers": [
+        "tmdb",
+        "omdb"
+      ],
+      "provider_rank": 0
+    }
+  ],
+  "expected": {
+    "decision": "shortlist",
+    "winner": "Total Recall (1990)",
+    "scores": {
+      "Total Recall (1990)": 72.0,
+      "Total Recall (2012)": 69.5
+    }
+  },
+  "name": "total_recall_remake",
+  "now": "2026-11-27"
+}

@@ -1,0 +1,78 @@
+{
+  "evidence": {
+    "bd_title": null,
+    "iso_name": null,
+    "label": "THE_MATRIX_NTSC",
+    "titles": [
+      {
+        "minutes": 136,
+        "clips": [
+          1
+        ]
+      }
+    ],
+    "structured": false
+  },
+  "candidates": [
+    {
+      "title": "The Matrix",
+      "original_title": null,
+      "year": 1999,
+      "kind": "movie",
+      "runtime_minutes": 136,
+      "providers": [
+        "tmdb",
+        "omdb"
+      ],
+      "provider_rank": 0
+    },
+    {
+      "title": "The Matrix Reloaded",
+      "original_title": null,
+      "year": 2003,
+      "kind": "movie",
+      "runtime_minutes": 138,
+      "providers": [
+        "tmdb",
+        "omdb"
+      ],
+      "provider_rank": 0
+    },
+    {
+      "title": "The Matrix Resurrections",
+      "original_title": null,
+      "year": 2021,
+      "kind": "movie",
+      "runtime_minutes": 148,
+      "providers": [
+        "tmdb",
+        "omdb"
+      ],
+      "provider_rank": 0
+    },
+    {
+      "title": "The Matrix Revolutions",
+      "original_title": null,
+      "year": 2003,
+      "kind": "movie",
+      "runtime_minutes": null,
+      "providers": [
+        "tmdb",
+        "omdb"
+      ],
+      "provider_rank": 0
+    }
+  ],
+  "expected": {
+    "decision": "accept",
+    "winner": "The Matrix (1999)",
+    "scores": {
+      "The Matrix (1999)": 72.0,
+      "The Matrix Reloaded (2003)": 60.75,
+      "The Matrix Resurrections (2021)": 50.55,
+      "The Matrix Revolutions (2003)": 46.75
+    }
+  },
+  "name": "the_matrix_ntsc",
+  "now": "2026-11-27"
+}

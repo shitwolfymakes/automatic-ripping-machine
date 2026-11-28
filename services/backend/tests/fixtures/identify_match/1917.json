@@ -1,0 +1,65 @@
+{
+  "evidence": {
+    "bd_title": null,
+    "iso_name": null,
+    "label": "1917",
+    "titles": [
+      {
+        "minutes": 119,
+        "clips": [
+          1
+        ]
+      }
+    ],
+    "structured": true
+  },
+  "candidates": [
+    {
+      "title": "1917",
+      "original_title": null,
+      "year": 2019,
+      "kind": "movie",
+      "runtime_minutes": 119,
+      "providers": [
+        "tmdb",
+        "omdb"
+      ],
+      "provider_rank": 0
+    },
+    {
+      "title": "1917",
+      "original_title": null,
+      "year": 1998,
+      "kind": "movie",
+      "runtime_minutes": 95,
+      "providers": [
+        "tmdb",
+        "omdb"
+      ],
+      "provider_rank": 0
+    },
+    {
+      "title": "1917: The Real Story",
+      "original_title": null,
+      "year": 2019,
+      "kind": "movie",
+      "runtime_minutes": 45,
+      "providers": [
+        "tmdb",
+        "omdb"
+      ],
+      "provider_rank": 0
+    }
+  ],
+  "expected": {
+    "decision": "accept",
+    "winner": "1917 (2019)",
+    "scores": {
+      "1917 (2019)": 78.0,
+      "1917 (1998)": 38.0,
+      "1917: The Real Story (2019)": 23.0
+    }
+  },
+  "name": "1917",
+  "now": "2026-11-27"
+}
