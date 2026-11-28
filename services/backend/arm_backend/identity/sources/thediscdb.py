@@ -190,9 +190,8 @@ def release_kind(match: DiscMatch) -> Literal["movie", "tv"]:
 
 
 # A release-year suffix on a title slug (`round-midnight-1986`). Capped at
-# 2029, the same bound and reasoning as the dispatcher's
-# `_HINT_YEAR_SUFFIX_RE`: a title that genuinely ends in a later number
-# (`blade-runner-2049`) must never be shortened to "Blade Runner".
+# 2029: a title that genuinely ends in a later number (`blade-runner-2049`)
+# must never be shortened to "Blade Runner".
 _SLUG_YEAR_RE = re.compile(r"-(19\d{2}|20[0-2]\d)$")
 
 

@@ -22,6 +22,7 @@ import pytest
 from arm_backend.db import get_session
 from arm_backend.jwt_utils import issue_access_token
 from arm_backend.metadata.base import MetadataResult
+from arm_backend.metadata.dispatcher import Identification
 from arm_backend.routers import config as config_router
 from arm_backend.routers import jobs as jobs_router
 from arm_backend.routers import ripper as ripper_router
@@ -89,8 +90,11 @@ class _Dispatcher:
     def __init__(self, result: MetadataResult | None) -> None:
         self.result = result
 
-    async def identify(self, _scan: Any, _cfg: Any, **_kw: Any) -> MetadataResult | None:
-        return self.result
+    async def identify(self, _scan: Any, _cfg: Any, **_kw: Any) -> Identification:
+        return Identification(self.result)
+
+    def explain_exact(self, _scan: Any, hit: MetadataResult, **_kw: Any) -> Identification:
+        return Identification(hit)
 
 
 def _config(

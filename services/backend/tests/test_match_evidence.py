@@ -194,6 +194,27 @@ def test_structure_scan_keeps_every_edition_runtime() -> None:
     assert ev.runtime.source == "structure"
 
 
+def test_a_long_extra_does_not_widen_the_feature_runtimes() -> None:
+    # A 100-minute documentary extra is kept next to a 163-minute feature, but it is under 70% of the longest.
+    titles = [
+        ScanTitle(index=0, duration_seconds=163 * 60, segment_map=[1, 2], source_file="00800.mpls"),
+        ScanTitle(index=1, duration_seconds=100 * 60, segment_map=[7], source_file="00801.mpls"),
+    ]
+    ev = _build(label="MOVIE", titles=titles, structured=True)
+    assert ev.runtime is not None
+    assert ev.runtime.feature_minutes == (163.0,)
+
+
+def test_an_edition_within_seventy_percent_of_the_longest_is_still_kept() -> None:
+    titles = [
+        ScanTitle(index=0, duration_seconds=163 * 60, segment_map=[1, 2], source_file="00800.mpls"),
+        ScanTitle(index=1, duration_seconds=120 * 60, segment_map=[1, 3], source_file="00801.mpls"),
+    ]
+    ev = _build(label="MOVIE", titles=titles, structured=True)
+    assert ev.runtime is not None
+    assert ev.runtime.feature_minutes == (120.0, 163.0)
+
+
 def test_evidence_from_a_dvd_scan() -> None:
     scan = ScanResult(disc_type=DiscType.DVD, volume_label="THE_MATRIX_NTSC", titles=[_title(0, 136), _title(1, 5)])
     ev = evidence_from_scan(scan, iso_name=None, now=NOW)
@@ -210,3 +231,16 @@ def test_build_is_deterministic() -> None:
 @pytest.mark.parametrize("year", [2026, 2027])
 def test_next_year_is_still_a_year(year: int) -> None:
     assert _years(_build(iso_name=f"Movie {year}")) == [(year, 0.5)]
+
+
+def test_a_disabled_hint_source_contributes_no_text() -> None:
+    scan = br3d_structure_scan().model_copy(update={"bd_meta": BdDiscMeta(name=BD_NAME, set_number=1, num_sets=2)})
+    both = evidence_from_scan(scan, iso_name=ISO_NAME, now=NOW)
+    assert [t.source for t in both.titles][:2] == ["bd_title", "iso_name"]
+    assert both.set_position == (1, 2)
+    only_iso = evidence_from_scan(scan, iso_name=ISO_NAME, now=NOW, enabled=("iso_name",))
+    assert [t.source for t in only_iso.titles] == ["iso_name"]
+    nothing = evidence_from_scan(scan, iso_name=ISO_NAME, now=NOW, enabled=())
+    assert nothing.titles == ()
+    # A disabled BDMT name takes its disc set numbers with it.
+    assert nothing.set_position == (None, None)

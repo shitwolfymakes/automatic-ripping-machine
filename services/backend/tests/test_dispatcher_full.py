@@ -11,8 +11,8 @@ from __future__ import annotations
 import httpx
 import respx
 
+from arm_backend.metadata.base import MetadataResult
 from arm_backend.metadata.dispatcher import MetadataDispatcher
-from arm_backend.metadata.volume_label import normalize_volume_label
 from arm_common import Config, DiscType
 from arm_common.schemas import ScanResult
 
@@ -30,15 +30,13 @@ def _config(**overrides: object) -> Config:
     return Config(**base)  # type: ignore[arg-type]
 
 
+async def _identify(dispatcher: MetadataDispatcher, *args: object, **kwargs: object) -> MetadataResult | None:
+    """The hit `identify` found (None for a shortlist or a miss)."""
+    return (await dispatcher.identify(*args, **kwargs)).result  # type: ignore[arg-type]
+
+
 def _scan(**kw: object) -> ScanResult:
     return ScanResult(disc_type=DiscType.DVD, **kw)  # type: ignore[arg-type]
-
-
-def test_normalize_year_out_of_range() -> None:
-    """A 4-digit run outside 1900-2100 is not treated as a year (35->37)."""
-    title, year = normalize_volume_label("DISC_3050")
-    assert year is None
-    assert "3050" not in title or title  # number kept in title, just not parsed as year
 
 
 async def test_crc64_arm_server_hit_wins() -> None:
@@ -50,64 +48,9 @@ async def test_crc64_arm_server_hit_wins() -> None:
         )
         async with httpx.AsyncClient(timeout=5.0) as http:
             scan = _scan(volume_label="ANYTHING", fingerprints=[{"algo": "crc64", "value": "abc"}])
-            result = await MetadataDispatcher(http).identify(scan, _config())
+            result = await _identify(MetadataDispatcher(http), scan, _config())
     assert result is not None
     assert result.title == "Iron Man"
-
-
-async def test_crc64_miss_then_tmdb_fallback() -> None:
-    with respx.mock:
-        respx.get(_ARM).mock(return_value=httpx.Response(200, json={"success": False}))
-        respx.get("https://api.themoviedb.org/3/search/movie").mock(
-            return_value=httpx.Response(200, json={"results": [{"title": "Found", "release_date": "2010-01-01"}]})
-        )
-        async with httpx.AsyncClient(timeout=5.0) as http:
-            scan = _scan(volume_label="FOUND_2010", fingerprints=[{"algo": "crc64", "value": "x"}])
-            result = await MetadataDispatcher(http).identify(scan, _config())
-    assert result is not None and result.title == "Found"
-
-
-async def test_no_volume_label_after_crc64_miss_returns_none() -> None:
-    with respx.mock:
-        respx.get(_ARM).mock(return_value=httpx.Response(200, json={"success": False}))
-        async with httpx.AsyncClient(timeout=5.0) as http:
-            scan = _scan(volume_label=None, fingerprints=[{"algo": "crc64", "value": "x"}])
-            result = await MetadataDispatcher(http).identify(scan, _config())
-    assert result is None
-
-
-async def test_empty_title_after_normalize_returns_none() -> None:
-    """A volume label that is purely a year normalizes to an empty title."""
-    async with httpx.AsyncClient(timeout=5.0) as http:
-        result = await MetadataDispatcher(http).identify(_scan(volume_label="1999"), _config())
-    assert result is None
-
-
-async def test_tmdb_movie_miss_tv_hit() -> None:
-    with respx.mock:
-        respx.get("https://api.themoviedb.org/3/search/movie").mock(
-            return_value=httpx.Response(200, json={"results": []})
-        )
-        # Kind-major order: OMDb's movie search runs before TMDb TV.
-        respx.get("https://www.omdbapi.com/").mock(
-            return_value=httpx.Response(200, json={"Response": "False", "Error": "Movie not found!"})
-        )
-        respx.get("https://api.themoviedb.org/3/search/tv").mock(
-            return_value=httpx.Response(200, json={"results": [{"name": "Show", "first_air_date": "2015"}]})
-        )
-        async with httpx.AsyncClient(timeout=5.0) as http:
-            result = await MetadataDispatcher(http).identify(_scan(volume_label="SHOW"), _config())
-    assert result is not None and result.kind == "tv"
-
-
-async def test_omdb_used_when_no_tmdb_key() -> None:
-    with respx.mock:
-        respx.get("https://www.omdbapi.com/").mock(
-            return_value=httpx.Response(200, json={"Response": "True", "Title": "OmdbOnly", "Year": "2001"})
-        )
-        async with httpx.AsyncClient(timeout=5.0) as http:
-            result = await MetadataDispatcher(http).identify(_scan(volume_label="OMDBONLY"), _config(tmdb_api_key=None))
-    assert result is not None and result.title == "OmdbOnly"
 
 
 async def test_call_swallows_lookup_error() -> None:
@@ -116,8 +59,10 @@ async def test_call_swallows_lookup_error() -> None:
     with respx.mock:
         respx.get("https://www.omdbapi.com/").mock(return_value=httpx.Response(503))
         async with httpx.AsyncClient(timeout=5.0) as http:
-            result = await MetadataDispatcher(http).identify(
-                _scan(volume_label="BOOM"), _config(tmdb_api_key=None, episode_sources=["tmdb"])
+            result = await _identify(
+                MetadataDispatcher(http),
+                _scan(volume_label="BOOM"),
+                _config(tmdb_api_key=None, episode_sources=["tmdb"]),
             )
     assert result is None
 
@@ -126,8 +71,10 @@ async def test_call_swallows_timeout() -> None:
     with respx.mock:
         respx.get("https://www.omdbapi.com/").mock(side_effect=httpx.TimeoutException("t"))
         async with httpx.AsyncClient(timeout=5.0) as http:
-            result = await MetadataDispatcher(http).identify(
-                _scan(volume_label="SLOW"), _config(tmdb_api_key=None, episode_sources=["tmdb"])
+            result = await _identify(
+                MetadataDispatcher(http),
+                _scan(volume_label="SLOW"),
+                _config(tmdb_api_key=None, episode_sources=["tmdb"]),
             )
     assert result is None
 
@@ -136,8 +83,10 @@ async def test_no_providers_configured_returns_none() -> None:
     """No crc64, no TMDB key, no OMDB key → fall through to return None
     (the `if omdb_key:` false branch, 96->102)."""
     async with httpx.AsyncClient(timeout=5.0) as http:
-        result = await MetadataDispatcher(http).identify(
-            _scan(volume_label="TITLE"), _config(tmdb_api_key=None, omdb_api_key=None, episode_sources=["tmdb"])
+        result = await _identify(
+            MetadataDispatcher(http),
+            _scan(volume_label="TITLE"),
+            _config(tmdb_api_key=None, omdb_api_key=None, episode_sources=["tmdb"]),
         )
     assert result is None
 

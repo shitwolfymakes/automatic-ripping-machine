@@ -7,7 +7,7 @@ winner, because scoring weighs each source by how reliable it is. Pure; no I/O.
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Collection, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from statistics import median
@@ -42,6 +42,9 @@ P_TV_SEASON = 0.80
 P_TV_FEATURE = 0.15
 P_TV_DISC_MARKER = 0.60
 P_TV_NONE = 0.40
+
+# A kept title counts as a version of the feature only from this share of the longest kept title's length.
+FEATURE_VERSION_SHARE = 0.7
 
 _ISO_EXTENSION = ".iso"
 
@@ -139,7 +142,9 @@ def _feature_seconds(titles: Sequence[ScanTitle], structured: bool) -> list[int]
     if structured:
         verdicts = classify_titles(titles)
         kept = [t for t in titles if verdicts[t.index].title_class in KEPT_CLASSES]
-        return [t.duration_seconds for t in kept if t.duration_seconds >= MAIN_FEATURE_MIN_SECONDS]
+        seconds = [t.duration_seconds for t in kept if t.duration_seconds >= MAIN_FEATURE_MIN_SECONDS]
+        # A long extra (a documentary) is kept next to the film but is not a version of it.
+        return [d for d in seconds if d >= FEATURE_VERSION_SHARE * max(seconds)]
     longest = max((t.duration_seconds for t in titles), default=0)
     return [longest] if longest >= MAIN_FEATURE_MIN_SECONDS else []
 
@@ -231,13 +236,22 @@ def build_evidence(
     )
 
 
-def evidence_from_scan(scan: ScanResult, *, iso_name: str | None, now: datetime) -> DiscEvidence:
-    """`build_evidence` over a scan: its BDMT name, volume label, candidate titles and set numbers."""
-    meta = scan.bd_meta
+def evidence_from_scan(
+    scan: ScanResult,
+    *,
+    iso_name: str | None,
+    now: datetime,
+    enabled: Collection[str] = TITLE_SOURCES,
+) -> DiscEvidence:
+    """`build_evidence` over a scan: its BDMT name, volume label, candidate titles and set numbers.
+
+    `enabled`: the disc-hint sources the operator keeps on; a disabled source contributes nothing, neither its
+    text nor (for the BDMT name) its disc set numbers."""
+    meta = scan.bd_meta if "bd_title" in enabled else None
     return build_evidence(
         bd_title=meta.name if meta else None,
-        iso_name=iso_name,
-        label=scan.volume_label,
+        iso_name=iso_name if "iso_name" in enabled else None,
+        label=scan.volume_label if "label" in enabled else None,
         titles=scan_candidates(scan),
         structured=is_structure_scan(scan),
         set_number=meta.set_number if meta else None,

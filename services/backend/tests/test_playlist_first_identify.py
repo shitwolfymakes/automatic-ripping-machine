@@ -17,7 +17,7 @@ from arm_backend.track_selection import select_tracks_for_review
 from arm_common import DiscType, JobStatus, TrackStatus
 from arm_common.enums import TrackKind
 from arm_common.models import Track
-from arm_common.schemas import BdPlaylist, DiscFingerprintInput, ScanFailure, ScanResult, ScanTitle
+from arm_common.schemas import DiscFingerprintInput, ScanFailure, ScanResult, ScanTitle
 from arm_common.title_classes import TitleClass
 from tests._fakes import FakeSession
 from tests.bd_structure_scans import (
@@ -135,26 +135,6 @@ def test_identify_with_a_structure_scan_and_thediscdb_claims_keys_them_by_ref() 
         )
     assert r.status_code == 200, r.text
     assert set(claims_of(db.rows["jobs"][0]).sources["thediscdb"].tracks) == {EXTRA}
-
-
-def test_identify_reads_the_structures_titles_for_the_tv_signal() -> None:
-    episodes = [
-        BdPlaylist(name=f"0000{n}.mpls", clips=[n], clip_seconds=[2400.0], duration_seconds=2400, chapter_count=4)
-        for n in range(1, 5)
-    ]
-    db = FakeSession()
-    db.rows["drives"] = [_drive()]
-    db.rows["config"] = [_config()]
-    dispatcher = _Dispatcher()
-    scan = ScanResult(disc_type=DiscType.BLURAY, playlists=episodes)
-    with TestClient(_make_app(db, dispatcher=dispatcher)) as client:
-        r = client.post(
-            "/api/ripper/identify",
-            json={"drive_id": "drv_x", "scan_result": scan.model_dump(mode="json")},
-            headers=_SERVICE_AUTH,
-        )
-    assert r.status_code == 200, r.text
-    assert dispatcher.received_kwargs["prefer_tv"] is True
 
 
 # --- the title map arrives ---

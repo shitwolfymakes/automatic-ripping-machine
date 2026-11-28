@@ -15,81 +15,11 @@ async def http_client():
 
 
 @respx.mock
-async def test_tmdb_movie_hit(http_client):
-    respx.get("https://api.themoviedb.org/3/search/movie").mock(
-        return_value=httpx.Response(
-            200,
-            json={"results": [{"title": "The Matrix", "release_date": "1999-03-31", "id": 603}]},
-        )
-    )
-    client = TMDBClient("v4-bearer-key", http_client)
-    result = await client.search_movie("the matrix", 1999)
-    assert result.title == "The Matrix"
-    assert result.year == 1999
-    assert result.kind == "movie"
-    assert result.payload["id"] == 603
-
-    request = respx.calls.last.request
-    assert request.headers["Authorization"] == "Bearer v4-bearer-key"
-    assert "v4-bearer-key" not in str(request.url)
-
-
-@respx.mock
-async def test_tmdb_movie_miss(http_client):
-    respx.get("https://api.themoviedb.org/3/search/movie").mock(return_value=httpx.Response(200, json={"results": []}))
-    client = TMDBClient("k", http_client)
-    with pytest.raises(LookupError):
-        await client.search_movie("nope")
-
-
-@respx.mock
 async def test_tmdb_auth_failed(http_client):
     respx.get("https://api.themoviedb.org/3/search/movie").mock(return_value=httpx.Response(401))
     client = TMDBClient("k", http_client)
     with pytest.raises(LookupError):
-        await client.search_movie("x")
-
-
-@respx.mock
-async def test_omdb_hit(http_client):
-    respx.get("https://www.omdbapi.com/").mock(
-        return_value=httpx.Response(
-            200,
-            json={"Response": "True", "Title": "Some Movie", "Year": "2010", "imdbID": "tt0000001"},
-        )
-    )
-    client = OMDBClient("k", http_client)
-    result = await client.lookup_by_title("Some Movie", 2010)
-    assert result.title == "Some Movie"
-    assert result.year == 2010
-
-
-@respx.mock
-async def test_omdb_lookup_by_title_tv_kind_maps_to_series_type(http_client):
-    """Our `kind="tv"` isn't a valid OMDb `type=` value (movie/series/
-    episode) — it must map to `type=series` on the wire, while the returned
-    MetadataResult.kind stays "tv"."""
-    route = respx.get("https://www.omdbapi.com/").mock(
-        return_value=httpx.Response(
-            200,
-            json={"Response": "True", "Title": "Lost", "Year": "2004"},
-        )
-    )
-    client = OMDBClient("k", http_client)
-    result = await client.lookup_by_title("lost", kind="tv")
-    assert result.title == "Lost"
-    assert result.kind == "tv"
-    assert route.calls.last.request.url.params["type"] == "series"
-
-
-@respx.mock
-async def test_omdb_miss(http_client):
-    respx.get("https://www.omdbapi.com/").mock(
-        return_value=httpx.Response(200, json={"Response": "False", "Error": "not found"})
-    )
-    client = OMDBClient("k", http_client)
-    with pytest.raises(LookupError):
-        await client.lookup_by_title("nope")
+        await client.search_movie_candidates("x")
 
 
 @respx.mock
@@ -461,7 +391,7 @@ async def test_omdb_lookup_by_imdb_id(http_client):
 
 
 @respx.mock
-async def test_omdb_lookup_by_title_timeout_raises(http_client):
+async def test_omdb_search_candidates_timeout_raises(http_client):
 
     def _raise_timeout(request):
         raise httpx.TimeoutException("timed out", request=request)
@@ -469,11 +399,11 @@ async def test_omdb_lookup_by_title_timeout_raises(http_client):
     respx.get("https://www.omdbapi.com/").mock(side_effect=_raise_timeout)
     client = OMDBClient("k", http_client)
     with pytest.raises(LookupTimeout):
-        await client.lookup_by_title("x")
+        await client.search_candidates("x")
 
 
 @respx.mock
-async def test_omdb_lookup_by_title_transport_error_raises(http_client):
+async def test_omdb_search_candidates_transport_error_raises(http_client):
 
     def _raise_transport(request):
         raise httpx.ConnectError("conn refused", request=request)
@@ -481,45 +411,34 @@ async def test_omdb_lookup_by_title_transport_error_raises(http_client):
     respx.get("https://www.omdbapi.com/").mock(side_effect=_raise_transport)
     client = OMDBClient("k", http_client)
     with pytest.raises(LookupError):
-        await client.lookup_by_title("x")
+        await client.search_candidates("x")
 
 
 @respx.mock
-async def test_omdb_lookup_by_title_401_raises(http_client):
+async def test_omdb_search_candidates_401_raises(http_client):
 
     respx.get("https://www.omdbapi.com/").mock(return_value=httpx.Response(401))
     client = OMDBClient("k", http_client)
     with pytest.raises(LookupError, match="omdb auth failed"):
-        await client.lookup_by_title("x")
+        await client.search_candidates("x")
 
 
 @respx.mock
-async def test_omdb_lookup_by_title_5xx_raises(http_client):
+async def test_omdb_search_candidates_5xx_raises(http_client):
 
     respx.get("https://www.omdbapi.com/").mock(return_value=httpx.Response(503))
     client = OMDBClient("k", http_client)
     with pytest.raises(LookupError, match="5xx"):
-        await client.lookup_by_title("x")
+        await client.search_candidates("x")
 
 
 @respx.mock
-async def test_omdb_lookup_by_title_non200_raises(http_client):
+async def test_omdb_search_candidates_non200_raises(http_client):
 
     respx.get("https://www.omdbapi.com/").mock(return_value=httpx.Response(404))
     client = OMDBClient("k", http_client)
     with pytest.raises(LookupError, match="omdb status=404"):
-        await client.lookup_by_title("x")
-
-
-@respx.mock
-async def test_omdb_lookup_by_title_missing_title_raises(http_client):
-
-    respx.get("https://www.omdbapi.com/").mock(
-        return_value=httpx.Response(200, json={"Response": "True", "Title": "", "Year": "2000"})
-    )
-    client = OMDBClient("k", http_client)
-    with pytest.raises(LookupError, match="missing title"):
-        await client.lookup_by_title("x")
+        await client.search_candidates("x")
 
 
 # ---------------------------------------------------------------------------
@@ -740,56 +659,6 @@ async def test_tmdb_get_results_timeout_raises(http_client):
     client = TMDBClient("k", http_client)
     with pytest.raises(LookupTimeout):
         await client.search_movie_candidates("x")
-
-
-@respx.mock
-async def test_tmdb_search_movie_top_hit_with_year(http_client):
-    # Covers single-hit search_movie + the year-param branch.
-    respx.get("https://api.themoviedb.org/3/search/movie").mock(
-        return_value=httpx.Response(
-            200,
-            json={
-                "results": [
-                    {"title": "Iron Man", "release_date": "2008-05-02", "id": 1726},
-                ]
-            },
-        )
-    )
-    client = TMDBClient("k", http_client)
-    result = await client.search_movie("iron man", 2008)
-    assert result.title == "Iron Man"
-    assert result.year == 2008
-    assert "year=2008" in str(respx.calls.last.request.url)
-
-
-@respx.mock
-async def test_tmdb_search_tv_top_hit(http_client):
-    # Covers single-hit search_tv path.
-    respx.get("https://api.themoviedb.org/3/search/tv").mock(
-        return_value=httpx.Response(
-            200,
-            json={
-                "results": [
-                    {"name": "The Expanse", "first_air_date": "2015-12-14", "id": 63639},
-                ]
-            },
-        )
-    )
-    client = TMDBClient("k", http_client)
-    result = await client.search_tv("expanse")
-    assert result.title == "The Expanse"
-    assert result.kind == "tv"
-
-
-@respx.mock
-async def test_tmdb_search_top_result_missing_title_raises(http_client):
-    # Covers the _search "top result missing title" branch.
-    respx.get("https://api.themoviedb.org/3/search/movie").mock(
-        return_value=httpx.Response(200, json={"results": [{"release_date": "1999-01-01", "id": 1}]})
-    )
-    client = TMDBClient("k", http_client)
-    with pytest.raises(LookupError, match="missing title"):
-        await client.search_movie("x")
 
 
 @respx.mock

@@ -10,7 +10,7 @@ import pytest  # noqa: E402
 import respx  # noqa: E402
 
 from arm_backend.metadata.base import LookupError, LookupTimeout  # noqa: E402
-from arm_backend.metadata.tvmaze import TVMazeClient, show_to_result, title_is_close  # noqa: E402
+from arm_backend.metadata.tvmaze import TVMazeClient, show_to_result  # noqa: E402
 
 _BASE = "https://api.tvmaze.com"
 _SHOW = {
@@ -47,18 +47,10 @@ def test_show_to_result_tolerates_missing_fields():
 
 
 @respx.mock
-async def test_search_show_uses_singlesearch(http_client):
-    route = respx.get(f"{_BASE}/singlesearch/shows").mock(return_value=httpx.Response(200, json=_SHOW))
-    result = await TVMazeClient(http_client).search_show("lost")
-    assert result.title == "Lost" and result.payload["tvmaze_id"] == "4607"
-    assert route.calls.last.request.url.params["q"] == "lost"
-
-
-@respx.mock
-async def test_search_show_404_is_a_lookup_error(http_client):
-    respx.get(f"{_BASE}/singlesearch/shows").mock(return_value=httpx.Response(404, json={"name": "Not Found"}))
+async def test_search_candidates_404_is_a_lookup_error(http_client):
+    respx.get(f"{_BASE}/search/shows").mock(return_value=httpx.Response(404, json={"name": "Not Found"}))
     with pytest.raises(LookupError):
-        await TVMazeClient(http_client).search_show("nothing here")
+        await TVMazeClient(http_client).search_candidates("nothing here")
 
 
 @respx.mock
@@ -80,9 +72,9 @@ async def test_lookup_by_imdb_id_follows_redirects(http_client):
 
 @respx.mock
 async def test_timeout_and_transport_errors(http_client):
-    respx.get(f"{_BASE}/singlesearch/shows").mock(side_effect=httpx.ReadTimeout("slow"))
+    respx.get(f"{_BASE}/search/shows").mock(side_effect=httpx.ReadTimeout("slow"))
     with pytest.raises(LookupTimeout):
-        await TVMazeClient(http_client).search_show("lost")
+        await TVMazeClient(http_client).search_candidates("lost")
     respx.get(f"{_BASE}/search/shows").mock(side_effect=httpx.ConnectError("down"))
     with pytest.raises(LookupError):
         await TVMazeClient(http_client).search_candidates("lost")
@@ -91,32 +83,11 @@ async def test_timeout_and_transport_errors(http_client):
         await TVMazeClient(http_client).lookup_by_imdb_id("tt1")
 
 
-def test_title_is_close_rules():
-    assert title_is_close("the.office!", "The Office")
-    assert title_is_close("lost", "Lost")
-    assert title_is_close("the office", "The Office (US)")
-    assert title_is_close("heat", "Heat of the Night")  # deliberate: whole-word containment
-    assert not title_is_close("blade runner 1982", "Lost")
-    assert not title_is_close("", "Lost")
-    assert not title_is_close("lost", "")
-    assert title_is_close("君の名は", "君の名は")
-    assert title_is_close("Война и мир", "война и мир")
-    assert title_is_close("Amélie", "Amélie")
-    assert title_is_close("amelie", "Amélie")  # pinned: difflib ratio is above 0.75
-
-
 @respx.mock
-async def test_search_show_rejects_a_far_match(http_client):
-    respx.get(f"{_BASE}/singlesearch/shows").mock(return_value=httpx.Response(200, json=_SHOW))
-    with pytest.raises(LookupError, match="not close"):
-        await TVMazeClient(http_client).search_show("blade runner")
-
-
-@respx.mock
-async def test_search_show_non_json_body_is_a_lookup_error(http_client):
-    respx.get(f"{_BASE}/singlesearch/shows").mock(return_value=httpx.Response(200, content=b"<html>"))
+async def test_search_candidates_non_json_body_is_a_lookup_error(http_client):
+    respx.get(f"{_BASE}/search/shows").mock(return_value=httpx.Response(200, content=b"<html>"))
     with pytest.raises(LookupError):
-        await TVMazeClient(http_client).search_show("lost")
+        await TVMazeClient(http_client).search_candidates("lost")
 
 
 @respx.mock
