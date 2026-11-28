@@ -51,7 +51,7 @@ async def test_dispatcher_cd_with_an_html_reply_from_musicbrainz_is_a_miss_not_a
         dispatcher = MetadataDispatcher(client)
         scan = ScanResult(disc_type=DiscType.CD, musicbrainz_disc_id="abc123")
         result = await dispatcher.identify(scan, _config())
-    assert result is None
+    assert result.result is None
     assert [(a["source"], a["outcome"]) for a in dispatcher.last_attempts] == [("musicbrainz", "error")]
 
 
@@ -64,7 +64,7 @@ async def test_dispatcher_html_reply_from_one_provider_does_not_stop_the_walk():
         dispatcher = MetadataDispatcher(client)
         scan = ScanResult(disc_type=DiscType.DVD, volume_label="OBSCURE_TITLE")
         result = await dispatcher.identify(scan, _config(episode_sources=["tmdb"]))
-    assert result is None
+    assert result.result is None
     assert ("omdb", "error") in [(a["source"], a["outcome"]) for a in dispatcher.last_attempts]
 
 

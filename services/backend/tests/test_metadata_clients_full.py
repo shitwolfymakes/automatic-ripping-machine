@@ -540,7 +540,7 @@ _NOT_A_JSON_OBJECT = [
 async def test_omdb_body_that_is_not_a_json_object(http_client, body, why) -> None:  # type: ignore[no-untyped-def]
     respx.get("https://www.omdbapi.com/").mock(return_value=httpx.Response(200, **body))
     with pytest.raises(LookupError, match=f"omdb returned a {why} response"):
-        await OMDBClient("k", http_client).lookup_by_title("x")
+        await OMDBClient("k", http_client).lookup_by_imdb_id("tt0000001")
 
 
 @pytest.mark.parametrize(("body", "why"), _NOT_A_JSON_OBJECT)
