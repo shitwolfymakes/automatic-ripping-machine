@@ -8,6 +8,7 @@ import contextlib
 import enum
 import logging
 import time
+from collections.abc import Mapping
 from typing import Any
 
 from arm_ripper.rip.makemkv_settle import (
@@ -169,6 +170,7 @@ async def run_makemkvcon(
     gate_disc_progress: bool = True,
     stop: asyncio.Event | None = None,
     watch: RunWatch | None = None,
+    env: Mapping[str, str] | None = None,
 ) -> str | None:
     """Run one makemkvcon invocation to completion, streaming its robot output
     into `state`. Returns None on a clean exit, else the error text: not on
@@ -178,13 +180,14 @@ async def run_makemkvcon(
 
     `watch` names the output the run should leave. When it allows ending on completion, a run that has said it is
     complete (MSG:5036/5037, or the save reaching 100 %), whose output is quiet and whose files are provably closed, is
-    ended without waiting for it to exit, and that is no failure. Logs one INFO line about when the run completed.
+    ended without waiting for it to exit, and that is no failure. `env` is the run's environment (None: this process's). Logs one INFO line about when the run completed.
     Cancel-safe: a cancelled caller kills the subprocess before unwinding."""
     try:
         proc = await asyncio.create_subprocess_exec(
             *cmd,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
+            env=env,
         )
     except FileNotFoundError as e:
         return f"makemkvcon not on PATH: {e}"
