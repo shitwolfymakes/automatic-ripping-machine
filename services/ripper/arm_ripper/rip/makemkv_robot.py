@@ -35,8 +35,12 @@ TITLE_FAIL_CODE = 5003
 COPY_COMPLETE_CODES = frozenset({5036, 5037})
 
 
-def _prgv_fractions(line: str) -> tuple[float, float] | None:
-    """(current/max, total/max) from a PRGV line, each clamped to [0, 1], or None."""
+def parse_progress_fractions(line: str) -> tuple[float, float] | None:
+    """Return `(current/max, total/max)`, each clamped to [0, 1], from a PRGV line, or None.
+
+    `current/max` is the current operation's progress, which resets at each
+    title in `mkv ... all` mode; `total/max` is the whole disc's.
+    """
     m = _PRGV_RE.match(line.strip())
     if not m:
         return None
@@ -44,26 +48,6 @@ def _prgv_fractions(line: str) -> tuple[float, float] | None:
     if max_ <= 0:
         return None
     return min(1.0, max(0.0, current / max_)), min(1.0, max(0.0, total / max_))
-
-
-def parse_progress_total(line: str) -> float | None:
-    """Return the disc-overall fraction [0, 1] from a PRGV line (`total/max`), or None.
-
-    PRGV also carries `current/max`, per-operation progress that resets
-    at each title in `mkv ... all` mode; the bar shows the whole disc,
-    so only `total/max` is read for it.
-    """
-    fractions = _prgv_fractions(line)
-    return None if fractions is None else fractions[1]
-
-
-def parse_progress_current(line: str) -> float | None:
-    """Return the per-operation fraction [0, 1] from a PRGV line (`current/max`), or None.
-
-    The completion watch reads it to see when the save of the current title reaches 100 %.
-    """
-    fractions = _prgv_fractions(line)
-    return None if fractions is None else fractions[0]
 
 
 def parse_msg_args(line: str) -> tuple[int, list[str]] | None:

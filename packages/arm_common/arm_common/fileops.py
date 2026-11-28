@@ -114,7 +114,7 @@ def atomic_output(final_path: Path) -> Iterator[Path]:
     _fsync_file(tmp_path)
     os.replace(tmp_path, final_path)
     _fsync_dir(final_path.parent)
-    logger.info("atomic rename → %s", final_path)
+    logger.debug("atomic rename → %s", final_path)
 
 
 @dataclass(frozen=True)
@@ -365,17 +365,29 @@ def place_by_rename(
     return PlaceResult(size=stamp.size, linked=True)
 
 
+_shared_filesystem_advised = False
+
+
 def _same_device_hint(src: Path, dst_dir: Path) -> None:
     try:
         same = src.stat().st_dev == dst_dir.stat().st_dev
     except OSError:
         return
     if same:
-        logger.info(
-            "passthrough is copying %s although source and destination share a filesystem; "
-            "mount their common parent once (raw and media as subfolders) to make this an instant rename",
-            src.name,
-        )
+        _log_shared_filesystem_hint(src.name)
+
+
+def _log_shared_filesystem_hint(name: str) -> None:
+    """The operator advice at INFO once per process; repeats for later files are DEBUG."""
+    global _shared_filesystem_advised
+    level = logging.DEBUG if _shared_filesystem_advised else logging.INFO
+    _shared_filesystem_advised = True
+    logger.log(
+        level,
+        "passthrough is copying %s although source and destination share a filesystem; "
+        "mount their common parent once (raw and media as subfolders) to make this an instant rename",
+        name,
+    )
 
 
 def _copy_then_remove(
@@ -433,7 +445,7 @@ def transcode_none(
     except LinkUnavailable as exc:
         logger.info("passthrough link failed (%s); falling back", exc)
         result = _place_without_link(input_path, output_path, exc.errno, cancel, on_bytes)
-    logger.info("passthrough wrote %s (%d bytes)", output_path, result.size)
+    logger.debug("passthrough wrote %s (%d bytes)", output_path, result.size)
     return result
 
 
@@ -490,5 +502,5 @@ def move_tree(
     if copying:
         _fsync_tree_dirs(dst)
     size = tree_size(dst)
-    logger.info("passthrough moved folder to %s (%d bytes)", dst, size)
+    logger.debug("passthrough moved folder to %s (%d bytes)", dst, size)
     return size

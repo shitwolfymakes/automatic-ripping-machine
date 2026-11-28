@@ -23,6 +23,7 @@ Covers:
 from __future__ import annotations
 
 import asyncio
+import logging
 from typing import Any
 
 import pytest
@@ -175,6 +176,28 @@ async def test_transcode_audio_mp3_succeeds(monkeypatch, tmp_path):
         progress_callback=cb,
     )
     assert size == out_path.stat().st_size
+
+
+@pytest.mark.asyncio
+async def test_transcode_audio_logs_the_command_line_at_debug(monkeypatch, tmp_path, caplog):
+    _stub_subprocess(monkeypatch, stdout_lines=_progress_lines([10_000_000]))
+    out_path = tmp_path / "out.mp3"
+    out_path.write_bytes(b"\xff\xfb" + b"\x00" * 100)
+
+    async def cb(_p: int, _t: int | None, _n: str | None, _f: float | None, _a: float | None) -> None:
+        return None
+
+    with caplog.at_level(logging.DEBUG, logger="arm_transcode.ffmpeg_audio"):
+        await transcode_audio(
+            input_path=tmp_path / "in.wav",
+            output_path=out_path,
+            preset_ref="mp3",
+            duration_seconds=10,
+            progress_callback=cb,
+        )
+
+    [record] = [r for r in caplog.records if r.getMessage().startswith("ffmpeg launching")]
+    assert record.levelno == logging.DEBUG
 
 
 @pytest.mark.asyncio

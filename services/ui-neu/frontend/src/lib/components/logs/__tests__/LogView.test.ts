@@ -7,31 +7,43 @@ import type { LogEntry } from '$lib/api/logs';
 
 const ENTRIES: LogEntry[] = [
 	{
-		timestamp: '2026-09-05T10:00:00Z',
+		ts: '2026-09-05T10:00:00Z',
 		level: 'info',
 		logger: 'arm',
-		event: 'backend line',
+		msg: 'backend line',
 		job_id: 'job_a',
-		label: null,
-		service: 'arm-backend'
+		service: 'arm-backend',
+		track_id: null,
+		session_application_id: null,
+		event: null,
+		fields: {},
+		exc: null
 	},
 	{
-		timestamp: '2026-09-05T10:00:01Z',
+		ts: '2026-09-05T10:00:01Z',
 		level: 'warning',
 		logger: 'ripper',
-		event: 'ripper line',
+		msg: 'ripper line',
 		job_id: 'job_a',
-		label: null,
-		service: 'arm-ripper-XYZ'
+		service: 'arm-ripper-XYZ',
+		track_id: null,
+		session_application_id: null,
+		event: null,
+		fields: {},
+		exc: null
 	},
 	{
-		timestamp: '2026-09-05T10:00:02Z',
+		ts: '2026-09-05T10:00:02Z',
 		level: 'error',
 		logger: 'transcode',
-		event: 'transcode line',
+		msg: 'transcode line',
 		job_id: 'job_a',
-		label: null,
-		service: 'arm-transcode-t1'
+		service: 'arm-transcode-t1',
+		track_id: null,
+		session_application_id: null,
+		event: null,
+		fields: {},
+		exc: null
 	}
 ];
 
@@ -178,8 +190,8 @@ describe('LogView', () => {
 
 		const more: LogEntry[] = [
 			...ENTRIES,
-			{ ...ENTRIES[0], timestamp: '2026-09-05T10:00:03Z', event: 'late one' },
-			{ ...ENTRIES[0], timestamp: '2026-09-05T10:00:04Z', event: 'late two' }
+			{ ...ENTRIES[0], ts: '2026-09-05T10:00:03Z', msg: 'late one' },
+			{ ...ENTRIES[0], ts: '2026-09-05T10:00:04Z', msg: 'late two' }
 		];
 		await rerender({ entries: more });
 		expect(screen.getByTestId('job-log-follow')).toHaveTextContent('Paused | 2 new lines');
@@ -195,9 +207,9 @@ describe('LogView', () => {
 		// the cap dropped as many old lines as arrived: same length, new tail
 		const shifted: LogEntry[] = [
 			...ENTRIES.slice(3),
-			{ ...ENTRIES[0], timestamp: '2026-09-05T10:00:03Z', event: 'late one' },
-			{ ...ENTRIES[0], timestamp: '2026-09-05T10:00:04Z', event: 'late two' },
-			{ ...ENTRIES[0], timestamp: '2026-09-05T10:00:05Z', event: 'late three' }
+			{ ...ENTRIES[0], ts: '2026-09-05T10:00:03Z', msg: 'late one' },
+			{ ...ENTRIES[0], ts: '2026-09-05T10:00:04Z', msg: 'late two' },
+			{ ...ENTRIES[0], ts: '2026-09-05T10:00:05Z', msg: 'late three' }
 		].slice(-ENTRIES.length);
 		await rerender({ entries: shifted, appended: 8 });
 		expect(screen.getByTestId('job-log-follow')).toHaveTextContent('Paused | 3 new lines');
@@ -228,7 +240,7 @@ describe('LogView', () => {
 	});
 
 	it('tones warning, error and debug lines', () => {
-		const withDebug: LogEntry[] = [...ENTRIES, { ...ENTRIES[0], level: 'debug', event: 'debug line' }];
+		const withDebug: LogEntry[] = [...ENTRIES, { ...ENTRIES[0], level: 'debug', msg: 'debug line' }];
 		renderComponent(LogView, { props: { entries: withDebug } });
 		expect(screen.getByText('backend line')).not.toHaveAttribute('data-tone');
 		expect(screen.getByText('ripper line')).toHaveAttribute('data-tone', 'warning');

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import ssl
 from collections.abc import Awaitable, Callable, Iterator
 from contextlib import contextmanager
@@ -413,6 +414,28 @@ async def test_report_complete_sends_path_relative_to_media_root() -> None:
         duration=7,
     )
     assert api.calls == [("t1", {"output_path": "Movies/a.mkv", "size_bytes": 5, "duration_seconds": 7})]
+
+
+async def test_report_complete_logs_the_completion_at_debug(caplog: pytest.LogCaptureFixture) -> None:
+    api = _CompleteRecorder()
+    with caplog.at_level(logging.DEBUG, logger="arm_transcode.main"):
+        await m._report_complete(
+            api=api,  # type: ignore[arg-type]
+            task_id="t1",
+            media_root="/media",
+            final_output=Path("/media/Movies/a.mkv"),
+            size=5,
+            duration=7,
+        )
+    [record] = [r for r in caplog.records if r.getMessage().startswith("task complete output=")]
+    assert record.levelno == logging.DEBUG
+
+
+async def test_startup_line_logs_at_debug(h: Harness, caplog: pytest.LogCaptureFixture) -> None:
+    with caplog.at_level(logging.DEBUG, logger="arm_transcode.main"):
+        assert await m.run() == 0
+    [record] = [r for r in caplog.records if r.getMessage().startswith("transcoder starting")]
+    assert record.levelno == logging.DEBUG
 
 
 async def test_report_complete_output_equal_to_media_root_is_dot() -> None:

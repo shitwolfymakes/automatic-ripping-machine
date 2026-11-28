@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { untrack, type Snippet } from 'svelte';
 	import type { LogEntry } from '$lib/api/logs';
-	import { logService, serviceLabel } from '$lib/logs/service';
+	import { entryGroup, serviceLabel } from '$lib/logs/service';
 	import {
 		chipBackground,
 		chipText,
@@ -172,7 +172,7 @@
 					<p class="log-view-message">No log lines for this job yet.</p>
 				{:else}
 					{#each filtered as entry, i (i)}
-						{@const svc = logService(entry.service)}
+						{@const svc = entryGroup(entry)}
 						<div class="flex items-start gap-2 py-0.5" data-testid="job-log-line" data-service={svc}>
 							<span class="shrink-0 log-view-time">{entryTimeLabel(entry)}</span>
 							<span
@@ -182,7 +182,7 @@
 							>
 								{serviceLabel(svc)}
 							</span>
-							<span class="log-view-line" data-tone={levelTone(entry.level)}>{entry.event}</span>
+							<span class="log-view-line" data-tone={levelTone(entry.level)}>{entry.msg}</span>
 						</div>
 					{/each}
 				{/if}

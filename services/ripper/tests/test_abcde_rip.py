@@ -224,7 +224,7 @@ async def test_rip_cd_logs_abcde_output_for_the_job_log(monkeypatch, tmp_path, c
         lines=["Grabbing entire CD - tracks: 01"],
         stderr_lines=["(== PROGRESS == [  >   ] ==)\r(== PROGRESS == [ done ] ==)"],
     )
-    caplog.set_level("INFO", logger="arm_ripper.rip.abcde")
+    caplog.set_level("DEBUG", logger="arm_ripper.rip.abcde")
 
     await rip_cd("/dev/sr0", tmp_path, [1])
 
@@ -443,20 +443,15 @@ async def test_rip_cd_runs_abcde_with_cwd_set_to_output_dir(monkeypatch, tmp_pat
     assert captured.get("cwd") == str(tmp_path)
 
 
-def test_abcde_config_uses_valid_cddbmethod_and_disables_lookup(tmp_path):
-    """Regression: abcde validates `CDDBMETHOD` at startup against an
-    allowlist (cdtext, cddb, musicbrainz). Passing `none` makes it abort
-    with "Unknown lookup method none". To actually skip metadata lookup,
-    set `CDDBAVAIL=N`; keep `CDDBMETHOD` set to a real method so the
-    keyword parses."""
-    conf = abcde_rip._abcde_config(tmp_path)
-    assert 'CDDBAVAIL="N"' in conf
-    assert 'CDDBMETHOD="none"' not in conf
-    # The CDDBMETHOD value, if present, must be one abcde recognises.
-    for line in conf.splitlines():
-        if line.startswith("CDDBMETHOD="):
-            value = line.split("=", 1)[1].strip().strip('"')
-            assert value in {"cdtext", "cddb", "musicbrainz"}
+def test_abcde_config_disables_the_lookup_with_abcdes_own_spelling(tmp_path):
+    """The `move` action turns abcde's lookup phase on (DOCDDB=y), and that phase only honours a lowercase
+    `CDDBAVAIL=n` and only skips the query for the `cddb` method; `musicbrainz` queries regardless. The
+    method must still be one abcde accepts at startup."""
+    lines = abcde_rip._abcde_config(tmp_path).splitlines()
+    assert 'CDDBAVAIL="n"' in lines
+    assert 'CDDBMETHOD="cddb"' in lines
+    assert 'CDDBAVAIL="N"' not in lines
+    assert not any("musicbrainz" in line for line in lines)
 
 
 def test_abcde_config_lands_wavs_at_output_dir_via_force_y(tmp_path):
@@ -666,6 +661,7 @@ async def test_cd_tracks_finalize_records_the_wav_and_fires_the_callback_once(tm
 
     assert first.ok is True
     assert first.size_bytes == 3
+    assert first.duration_seconds == 0
     assert tracks.results[1] is first
     assert calls == [(1, first)]
 
@@ -862,6 +858,44 @@ def test_output_line_of_a_plain_line_is_the_line():
 
 
 def test_log_output_skips_a_blank_line(caplog):
-    caplog.set_level("INFO", logger="arm_ripper.rip.abcde")
+    caplog.set_level("DEBUG", logger="arm_ripper.rip.abcde")
     abcde_rip._log_output("")
     assert caplog.records == []
+
+
+def test_log_output_logs_an_ordinary_line_at_debug(caplog):
+    caplog.set_level("DEBUG", logger="arm_ripper.rip.abcde")
+    abcde_rip._log_output("Grabbing track 01: Overture...")
+    assert [(r.levelname, r.getMessage()) for r in caplog.records] == [
+        ("DEBUG", "abcde: Grabbing track 01: Overture...")
+    ]
+
+
+@pytest.mark.parametrize("line", ["[ERROR] abcde: CDROM has not been defined", "[WARNING] abcde: no CD found"])
+def test_log_output_logs_abcdes_own_error_and_warning_lines_at_warning(caplog, line):
+    caplog.set_level("DEBUG", logger="arm_ripper.rip.abcde")
+    abcde_rip._log_output(line)
+    assert [(r.levelname, r.getMessage()) for r in caplog.records] == [("WARNING", f"abcde: {line}")]
+
+
+async def test_cd_tracks_finalize_measures_the_track_length_from_the_wav(tmp_path):
+    """The ripped length comes from the WAV itself, so the job log and the track row carry it like a MakeMKV title."""
+    (tmp_path / "track01.wav").write_bytes(b"\0" * (3 * 176_400 + 44))
+    tracks, _ = _recording_tracks(tmp_path, [1])
+
+    await tracks.finalize(1)
+
+    assert tracks.results[1].duration_seconds == 3
+
+
+@pytest.mark.asyncio
+async def test_rip_cd_logs_its_start_at_debug_only(monkeypatch, tmp_path, caplog):
+    """rip.started already announces the rip at info; the device and work dir line is detail."""
+    _write_track_wav(tmp_path, 1)
+    _stub_subprocess(monkeypatch, lines=[])
+    caplog.set_level("DEBUG", logger="arm_ripper.rip.abcde")
+
+    await rip_cd("/dev/sr0", tmp_path, [1])
+
+    start = [r for r in caplog.records if r.getMessage().startswith("abcde rip device=")]
+    assert [r.levelname for r in start] == ["DEBUG"]

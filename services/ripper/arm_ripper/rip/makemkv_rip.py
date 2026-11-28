@@ -235,10 +235,10 @@ async def rip_disc(
     output_dir.mkdir(parents=True, exist_ok=True)
     if title is None:
         cmd = _mkv_all_command(device_path, output_dir, minlength_seconds)
-        logger.info("makemkvcon mkv all device=%s outdir=%s minlength=%ds", device_path, output_dir, minlength_seconds)
+        logger.debug("makemkvcon mkv all device=%s outdir=%s minlength=%ds", device_path, output_dir, minlength_seconds)
     else:
         cmd = _mkv_title_command(device_path, output_dir, title)
-        logger.info("makemkvcon mkv title %d device=%s outdir=%s", title, device_path, output_dir)
+        logger.debug("makemkvcon mkv title %d device=%s outdir=%s", title, device_path, output_dir)
 
     eligible = eligible_source_indexes or []
     watch = RunWatch(

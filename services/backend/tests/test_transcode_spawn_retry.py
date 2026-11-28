@@ -94,7 +94,7 @@ async def test_checkin_timeout_on_the_last_attempt_fails_the_task_honestly(monke
     now = tdmod.time.monotonic()
     monkeypatch.setattr(tdmod.time, "monotonic", lambda: now + 61)
 
-    with caplog.at_level("ERROR", logger="arm_backend.transcode_dispatcher"):
+    with caplog.at_level("DEBUG", logger="arm_backend.transcode_dispatcher"):
         await d.spawn_pending(db)
 
     task = db.rows["transcode_tasks"][0]

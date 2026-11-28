@@ -32,7 +32,7 @@ from arm_common.enums import TrackKind, TrackStatus
 from arm_common.schemas import TrackView
 
 from arm_ripper.drive_status import probe_drive_media
-from arm_ripper.rip.dispatcher import _effective_disc_type, rip_all as _rip_all
+from arm_ripper.rip.dispatcher import NO_RIP_TOOL, _effective_disc_type, rip_all as _rip_all, rip_tool
 from arm_ripper.rip.makemkv_rip import RipDiscResult
 from arm_ripper.rip.optical_rip import (
     _eligible_source_indexes,
@@ -1972,3 +1972,20 @@ def test_active_index_is_the_first_key_not_finished() -> None:
 
 def test_active_index_is_the_last_key_once_all_are_finished() -> None:
     assert track_callbacks_module.active_index([3, 5, 9], {3, 5, 9}) == 9
+
+
+@pytest.mark.parametrize(
+    ("disc_type", "kinds", "tool"),
+    [
+        (DiscType.CD, [TrackKind.AUDIO_TRACK], "abcde"),
+        (DiscType.DVD, [TrackKind.VIDEO_TITLE], "makemkv"),
+        (DiscType.BLURAY, [TrackKind.VIDEO_TITLE], "makemkv"),
+        (DiscType.BLURAY, [TrackKind.DISC_BACKUP], "makemkv"),
+        (DiscType.DATA, [TrackKind.DATA_DUMP], "dd"),
+        (DiscType.BLURAY, [TrackKind.DATA_DUMP], "dd"),
+        (DiscType.UNKNOWN, [TrackKind.VIDEO_TITLE], NO_RIP_TOOL),
+    ],
+)
+def test_rip_tool_names_the_tool_the_dispatcher_runs(disc_type, kinds, tool) -> None:
+    tracks = [_track(i).model_copy(update={"kind": k}) for i, k in enumerate(kinds)]
+    assert rip_tool(disc_type, tracks) == tool

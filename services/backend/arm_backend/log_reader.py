@@ -1,12 +1,11 @@
-"""Finding and reading the log files under `LOG_DIR` (per-job, legacy
-service, or any one file), capped by line and byte limits.
+"""Finding and reading the per-job log files under `LOG_DIR/jobs`, capped by
+line and byte limits.
 """
 
 from __future__ import annotations
 
-import json
 import os
-from collections.abc import Callable, Iterable, Iterator
+from collections.abc import Iterable, Iterator
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import TextIO
@@ -38,8 +37,7 @@ def per_job_log_path(job_id: str) -> Path:
 
 # Defaults / caps for the streaming grep + zip endpoints are env-tunable via
 # the `ARM_LOG_*` settings (see config.py); resolved at call time so a
-# `monkeypatch.setattr(settings, ...)` or env override flows through. Per-file
-# (not global) — see the logs router's module docstring.
+# `monkeypatch.setattr(settings, ...)` or env override flows through.
 
 
 def effective_cap(limit: int | None) -> int:
@@ -54,41 +52,31 @@ def _open_log(path: Path) -> TextIO | None:
         return None
 
 
-def _normalised_lines(lines: Iterable[str], predicate: Callable[[str], bool]) -> Iterator[str]:
+def _normalised_lines(lines: Iterable[str]) -> Iterator[str]:
     for line in lines:
-        if not predicate(line):
-            continue
         yield line if line.endswith("\n") else line + "\n"
 
 
-def _iter_lines(path: Path, predicate: Callable[[str], bool], cap: int) -> Iterator[bytes]:
+def _iter_lines(path: Path, cap: int) -> Iterator[bytes]:
     fh = _open_log(path)
     if fh is None:
         return
     with fh:
         yielded = 0
-        for normalised in _normalised_lines(fh, predicate):
+        for normalised in _normalised_lines(fh):
             yield normalised.encode("utf-8")
             yielded += 1
             if yielded >= cap:
                 break
 
 
-def _iter_legacy(job_id: str, cap: int) -> Iterator[bytes]:
-    for path in sorted(LOG_DIR.glob("*.log")):
-        yield from _iter_lines(path, lambda line: _line_matches_job(line, job_id), cap)
-
-
 def job_log_lines(job_id: str, cap: int) -> Iterator[bytes]:
-    # `_iter_lines` checks the cap only after yielding, so a zero cap
-    # would still emit one line (per file on the fallback path).
-    if cap == 0:
-        return
+    """The lines of the job's per-job file, up to `cap`; nothing when the file
+    is absent.
+    """
     per_job = per_job_log_path(job_id)
     if per_job.is_file():
         yield from file_log_lines(per_job, cap)
-    else:
-        yield from _iter_legacy(job_id, cap)
 
 
 def file_log_lines(path: Path, cap: int) -> Iterator[bytes]:
@@ -99,7 +87,7 @@ def file_log_lines(path: Path, cap: int) -> Iterator[bytes]:
     # would still emit one line.
     if cap == 0:
         return
-    yield from _iter_lines(path, lambda _: True, cap)
+    yield from _iter_lines(path, cap)
 
 
 def job_log_files() -> list[JobLogFileView]:
@@ -130,16 +118,15 @@ def job_log_files() -> list[JobLogFileView]:
 
 
 def job_log_slices(job_id: str) -> Iterator[tuple[str, list[str]]]:
+    """The job's per-job file as one zip entry; nothing when the file is
+    absent or empty.
+    """
     per_job = per_job_log_path(job_id)
-    if per_job.is_file():
-        lines = file_log_slice(per_job)
-        if lines:
-            yield per_job.name, lines
+    if not per_job.is_file():
         return
-    for path in sorted(LOG_DIR.glob("*.log")):
-        lines = _read_capped_lines(path, lambda line: _line_matches_job(line, job_id))
-        if lines:
-            yield path.name, lines
+    lines = file_log_slice(per_job)
+    if lines:
+        yield per_job.name, lines
 
 
 def file_log_slice(path: Path) -> list[str]:
@@ -147,18 +134,18 @@ def file_log_slice(path: Path) -> list[str]:
     and capped by the zip line and byte limits; empty when it cannot be
     opened.
     """
-    return _read_capped_lines(path, lambda _: True)
+    return _read_capped_lines(path)
 
 
-def _read_capped_lines(path: Path, predicate: Callable[[str], bool]) -> list[str]:
-    """Read lines from `path` matching `predicate`, capped by line+byte limits."""
+def _read_capped_lines(path: Path) -> list[str]:
+    """Read the lines of `path`, capped by line+byte limits."""
     out: list[str] = []
     byte_count = 0
     fh = _open_log(path)
     if fh is None:
         return out
     with fh:
-        for normalised in _normalised_lines(fh, predicate):
+        for normalised in _normalised_lines(fh):
             out.append(normalised)
             byte_count += len(normalised)
             if (
@@ -167,14 +154,3 @@ def _read_capped_lines(path: Path, predicate: Callable[[str], bool]) -> list[str
             ):
                 break
     return out
-
-
-def _line_matches_job(line: str, job_id: str) -> bool:
-    """True iff `line` is a JSON record whose `job_id` field equals `job_id`."""
-    if not line.strip():
-        return False
-    try:
-        record = json.loads(line)
-    except ValueError:
-        return False
-    return bool(record.get("job_id") == job_id)

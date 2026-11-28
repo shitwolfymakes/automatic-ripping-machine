@@ -6752,7 +6752,7 @@
           "logs"
         ],
         "summary": "Download Job Logs Zip",
-        "description": "In-memory zip of every line tagged with `job_id`.\n\nSource preference:\n  1. `/logs/jobs/{job_id}.log` \u2014 the per-job aggregated file written\n     by `LogTailer`. Single zip entry, named `<job_id>.log`.\n  2. Fallback (per-job file absent, e.g. jobs predating the tailer's\n     per-job append): walk `/logs/*.log` and write one entry per\n     service that contributed any matching lines.",
+        "description": "In-memory zip of every line tagged with `job_id`.\n\nSourced from `/logs/jobs/{job_id}.log`, the per-job file written by\n`LogTailer`, as a single entry named `<job_id>.log` and capped by the\nper-entry line and byte limits. The zip has no entries when that file\nis absent or empty.",
         "operationId": "download_job_logs_zip_api_logs__job_id__zip_get",
         "security": [
           {
@@ -6800,7 +6800,7 @@
           "logs"
         ],
         "summary": "Stream Job Logs",
-        "description": "NDJSON stream of every line tagged with `job_id`.\n\nReads `/logs/jobs/{job_id}.log` directly when present; otherwise\nfalls back to scanning `/logs/*.log` (alphabetical order; lines\nwithin a file in append order; no cross-file resort \u2014 the consumer\ncan sort by `ts` if global ordering matters).",
+        "description": "NDJSON stream of every line tagged with `job_id`.\n\nReads `/logs/jobs/{job_id}.log`, the per-job file written by\n`LogTailer`, in append order; the stream is empty when that file is\nabsent. `limit` caps the line count (server default when omitted,\nclamped to the hard cap).",
         "operationId": "stream_job_logs_api_logs__job_id__get",
         "security": [
           {

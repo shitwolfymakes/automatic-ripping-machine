@@ -45,6 +45,7 @@ from arm_common import (
 )
 from tests._fakes import FakeSession
 from tests._hb_schema import fixture_schema
+from tests._logs import LineCapture, log_commits
 
 _HOSTNAME = "arm-transcode-abc123"
 _SERVICE_AUTH = {"Authorization": "Bearer tok-service", "X-ARM-Hostname": _HOSTNAME}
@@ -885,3 +886,121 @@ def test_register_without_a_runner_is_a_no_op_refresh() -> None:
     _seed(db)
     r = _register(_make_app(db), schema_hash="other")
     assert r.status_code == 200, r.text
+
+
+# --- schema_hash guard and refresh -------------------------------------------
+
+_SETTINGS = {"common": {"PictureWidth": 1280}}
+_PREDATES = "transcode image predates HandBrake settings; rebuild or pull it"
+
+
+# --- job-log milestones ----------------------------------------------------
+
+
+def test_container_task_logs_its_milestones(job_log: LineCapture) -> None:
+    """Claim, a heartbeat run and complete log started once, each quarter crossed once, and completed."""
+    db = FakeSession()
+    _seed(db)
+    with TestClient(_make_app(db)) as client:
+        assert client.post("/api/transcoder/tasks/txt_1/claim", headers=_SERVICE_AUTH).status_code == 200
+        for pct in (10, 30, 30, 80, 100):
+            r = client.patch("/api/transcoder/tasks/txt_1/heartbeat", json={"progress_pct": pct}, headers=_SERVICE_AUTH)
+            assert r.status_code == 200, r.text
+        r = client.patch(
+            "/api/transcoder/tasks/txt_1/complete",
+            json={"output_path": "Iron Man (2008)/Iron Man.mkv", "size_bytes": 1024000},
+            headers=_SERVICE_AUTH,
+        )
+        assert r.status_code == 200, r.text
+
+    (started,) = job_log.lines(event="transcode.started")
+    assert started["msg"] == "transcoding track 1/1 to Plex 1080p H.265"
+    assert started["job_id"] == "job_01JZXR7K3M5Q8N4VWA00000001" and started["track_id"] == "trk_1"
+    progress = job_log.lines(event="transcode.progress")
+    assert [line["fields"]["percent"] for line in progress] == [25, 75, 100]
+    (completed,) = job_log.lines(event="transcode.completed")
+    assert completed["fields"]["size_bytes"] == 1024000
+    assert completed["fields"]["output"] == "Iron Man (2008)/Iron Man.mkv"
+    (session_done,) = job_log.lines(event="session.completed")
+    assert session_done["msg"] == "transcode complete: 1/1" and session_done["session_application_id"] == "sap_x"
+    assert job_log.lines(logger_prefix="arm_backend.routers.transcoder") == []
+
+
+def test_container_task_failure_logs_an_error(job_log: LineCapture) -> None:
+    db = FakeSession()
+    _seed(db, task_status=TranscodeTaskStatus.IN_PROGRESS)
+    db.rows["session_applications"][0].status = SessionApplicationStatus.RUNNING
+    with TestClient(_make_app(db)) as client:
+        r = client.patch(
+            "/api/transcoder/tasks/txt_1/fail", json={"last_error": "HandBrakeCLI exited rc=1"}, headers=_SERVICE_AUTH
+        )
+    assert r.status_code == 200, r.text
+    (line,) = job_log.lines(event="transcode.failed")
+    assert line["level"] == "error" and line["msg"] == "track 1/1 transcode failed: HandBrakeCLI exited rc=1"
+    (session_done,) = job_log.lines(event="session.completed")
+    assert session_done["msg"] == "transcode failed: 0/1" and session_done["level"] == "warning"
+
+
+@pytest.mark.parametrize(
+    ("method", "path", "body", "status", "announcer"),
+    [
+        ("post", "claim", None, TranscodeTaskStatus.QUEUED, "announce_started"),
+        ("patch", "heartbeat", {"progress_pct": 50}, TranscodeTaskStatus.IN_PROGRESS, "announce_progress"),
+        ("patch", "complete", {"output_path": "a.mkv"}, TranscodeTaskStatus.IN_PROGRESS, "announce_completed"),
+        ("patch", "fail", {"last_error": "x"}, TranscodeTaskStatus.IN_PROGRESS, "announce_failed"),
+    ],
+)
+def test_a_failed_milestone_log_does_not_fail_the_request(
+    job_log: LineCapture,
+    monkeypatch: pytest.MonkeyPatch,
+    method: str,
+    path: str,
+    body: dict[str, Any] | None,
+    status: TranscodeTaskStatus,
+    announcer: str,
+) -> None:
+    async def _broken(*_args: Any) -> None:
+        raise RuntimeError("log bug")
+
+    monkeypatch.setattr(transcoder_router.transcode_task_events, announcer, _broken)
+    db = FakeSession()
+    _seed(db, task_status=status)
+    with TestClient(_make_app(db)) as client:
+        r = getattr(client, method)(f"/api/transcoder/tasks/txt_1/{path}", json=body, headers=_SERVICE_AUTH)
+    assert r.status_code == 200, r.text
+    assert job_log.lines(level="error")[-1]["msg"].startswith("could not log the transcode.")
+
+
+_SETTLE_ORDER = ("commit", "transcode.completed", "transcode.failed", "session.completed")
+
+
+@pytest.mark.parametrize(
+    ("path", "body", "task_event"),
+    [
+        ("complete", {"output_path": "a.mkv"}, "transcode.completed"),
+        ("fail", {"last_error": "HandBrakeCLI exited rc=1"}, "transcode.failed"),
+    ],
+)
+def test_session_completed_follows_the_commit_and_the_task_line(
+    job_log: LineCapture, path: str, body: dict[str, Any], task_event: str
+) -> None:
+    """The last task's line comes before the session's, and both only once the transition is committed."""
+    db = FakeSession()
+    _seed(db, task_status=TranscodeTaskStatus.IN_PROGRESS)
+    log_commits(db)
+    with TestClient(_make_app(db)) as client:
+        r = client.patch(f"/api/transcoder/tasks/txt_1/{path}", json=body, headers=_SERVICE_AUTH)
+    assert r.status_code == 200, r.text
+    assert job_log.events(*_SETTLE_ORDER) == ["commit", task_event, "session.completed"]
+
+
+@pytest.mark.parametrize(
+    ("path", "body"), [("complete", {"output_path": "a.mkv"}), ("fail", {"last_error": "HandBrakeCLI exited rc=1"})]
+)
+def test_a_failed_commit_logs_no_session_completed(job_log: LineCapture, path: str, body: dict[str, Any]) -> None:
+    db = FakeSession()
+    _seed(db, task_status=TranscodeTaskStatus.IN_PROGRESS)
+    db.commit_raises = RuntimeError("db gone")
+    with TestClient(_make_app(db)) as client, pytest.raises(RuntimeError, match="db gone"):
+        client.patch(f"/api/transcoder/tasks/txt_1/{path}", json=body, headers=_SERVICE_AUTH)
+    assert job_log.lines(event="session.completed") == []

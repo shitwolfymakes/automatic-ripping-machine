@@ -1,0 +1,32 @@
+"""Message builders for the events only the ripper can see."""
+
+from arm_common import DiscType
+
+_DISC_TYPE_LABELS: dict[DiscType, str] = {
+    DiscType.CD: "CD",
+    DiscType.BLURAY: "Blu-ray",
+    DiscType.DVD: "DVD",
+    DiscType.DATA: "data disc",
+    DiscType.UNKNOWN: "unknown disc",
+}
+
+
+def disc_type_label(disc_type: DiscType) -> str:
+    """The disc type as an operator reads it."""
+    return _DISC_TYPE_LABELS[disc_type]
+
+
+def rip_started_message(disc_type: str, track_count: int, preset: str, tool: str) -> str:
+    """The `rip.started` line: what is being ripped, how many tracks, with which preset and tool."""
+    noun = "track" if track_count == 1 else "tracks"
+    return f"rip started: {disc_type}, {track_count} {noun}, preset {preset} ({tool})"
+
+
+def title_started_message(title_index: int, file_position: int, file_count: int) -> str:
+    """The `title.started` line: the source title being saved and where its file falls among the eligible titles."""
+    return f"saving title {title_index} (file {file_position} of {file_count})"
+
+
+def title_progress_message(title_index: int, percent: int) -> str:
+    """The `title.progress` line: a source title's own save progress at a quarter step."""
+    return f"title {title_index}: {percent}%"

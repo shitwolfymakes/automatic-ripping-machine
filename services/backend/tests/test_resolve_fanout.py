@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import secrets
 from pathlib import Path
+from typing import Any
 
 
 import pytest
@@ -46,6 +47,7 @@ from arm_common import (
 )
 
 from tests._fakes import FakeSession
+from tests._logs import LineCapture
 
 
 @pytest.fixture
@@ -726,3 +728,69 @@ def test_resolve_unidentified_partial_rip_runs_after_rip(
     assert r.status_code == 200, r.text
     assert r.json()["job"]["status"] == "ripped_partial"
     assert calls == (["after_rip"] if expect_after_rip else ["fan_out"])
+
+
+@pytest.mark.parametrize(
+    ("flags", "path"),
+    [({}, "resolve fan-out"), ({"unidentified": True}, "after-rip drain")],
+)
+def test_resolve_logs_session_applied_once_per_queued_application(
+    signing_key: bytes, tmp_path: Path, job_log: LineCapture, flags: dict[str, bool], path: str
+) -> None:
+    db = FakeSession()
+    _seed(db, job_status=JobStatus.RIPPED_AWAITING_IDENTIFY, extra_sessions=1)
+    db.rows["jobs"][0].metadata_json = dict(flags)
+    app, token = _make_app(signing_key, db, tmp_path, _CapturingHub())
+    with TestClient(app) as client:
+        r = client.post(
+            "/api/jobs/job_01JZXR7K3M5Q8N4VWA00000001/resolve",
+            json={"title": "Iron Man", "year": 2008},
+            headers=_auth(token),
+        )
+    assert r.status_code == 200, r.text
+    lines = job_log.lines(event="session.applied")
+    assert sorted(line["msg"] for line in lines) == [
+        "Extra 0 applied (manual): 1 transcode queued",
+        "My Plex applied (manual): 1 transcode queued",
+    ], path
+    assert {line["job_id"] for line in lines} == {"job_01JZXR7K3M5Q8N4VWA00000001"}
+
+
+@pytest.mark.parametrize("flags", [{}, {"unidentified": True}])
+def test_resolve_survives_a_failing_session_applied_log(
+    signing_key: bytes, tmp_path: Path, job_log: LineCapture, monkeypatch: pytest.MonkeyPatch, flags: dict[str, bool]
+) -> None:
+    from arm_backend import job_events
+
+    def _boom(*_a: Any, **_k: Any) -> None:
+        raise RuntimeError("log bug")
+
+    monkeypatch.setattr(job_events, "log_session_applied", _boom)
+    db = FakeSession()
+    _seed(db, job_status=JobStatus.RIPPED_AWAITING_IDENTIFY)
+    db.rows["jobs"][0].metadata_json = dict(flags)
+    app, token = _make_app(signing_key, db, tmp_path, _CapturingHub())
+    with TestClient(app) as client:
+        r = client.post(
+            "/api/jobs/job_01JZXR7K3M5Q8N4VWA00000001/resolve",
+            json={"title": "Iron Man", "year": 2008},
+            headers=_auth(token),
+        )
+    assert r.status_code == 200, r.text
+    assert job_log.lines(level="error")[-1]["msg"] == "could not log the session.applied milestone"
+
+
+def test_resolve_logs_in_the_jobs_context(signing_key: bytes, tmp_path: Path, job_log: LineCapture) -> None:
+    db = FakeSession()
+    _seed(db, job_status=JobStatus.RIPPED_AWAITING_IDENTIFY)
+    app, token = _make_app(signing_key, db, tmp_path, _CapturingHub())
+    with TestClient(app) as client:
+        r = client.post(
+            "/api/jobs/job_01JZXR7K3M5Q8N4VWA00000001/resolve",
+            json={"title": "Iron Man", "year": 2008},
+            headers=_auth(token),
+        )
+    assert r.status_code == 200, r.text
+    (line,) = [entry for entry in job_log.lines(logger_prefix="arm_backend.identity.resolve_service")]
+    assert line["msg"] == "resolve -> ripped title=Iron Man fan_out=1"
+    assert line["job_id"] == "job_01JZXR7K3M5Q8N4VWA00000001"

@@ -3,14 +3,12 @@
 Two read-only endpoints scoped to a single `job_id`:
 
 - `GET /api/logs/{job_id}` — NDJSON stream of every line tagged with
-  the requested `job_id`. Sourced from `/logs/jobs/{job_id}.log`
-  (written by `LogTailer`); falls back to scanning `/logs/*.log` when
-  the per-job file is absent (legacy jobs predating the tailer's
-  per-job append). `?limit=N` caps the line count.
+  the requested `job_id`. Sourced only from `/logs/jobs/{job_id}.log`
+  (written by `LogTailer`); empty when that file is absent. `?limit=N`
+  caps the line count.
 
 - `GET /api/logs/{job_id}.zip` — in-memory zip. Single entry sourced
-  from the per-job file when present; legacy fallback walks the
-  service logs and writes one entry per service. Per-entry caps:
+  from the per-job file; no entry when it is absent. Per-entry caps:
   `ARM_LOG_ZIP_PER_ENTRY_LINE_CAP` lines or `ARM_LOG_ZIP_PER_ENTRY_BYTE_CAP`
   bytes (env-tunable; defaults: 5000 lines / 5 MB), whichever hits first.
 
@@ -60,12 +58,10 @@ async def download_job_logs_zip(
 ) -> Response:
     """In-memory zip of every line tagged with `job_id`.
 
-    Source preference:
-      1. `/logs/jobs/{job_id}.log` — the per-job aggregated file written
-         by `LogTailer`. Single zip entry, named `<job_id>.log`.
-      2. Fallback (per-job file absent, e.g. jobs predating the tailer's
-         per-job append): walk `/logs/*.log` and write one entry per
-         service that contributed any matching lines.
+    Sourced from `/logs/jobs/{job_id}.log`, the per-job file written by
+    `LogTailer`, as a single entry named `<job_id>.log` and capped by the
+    per-entry line and byte limits. The zip has no entries when that file
+    is absent or empty.
     """
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
@@ -91,9 +87,9 @@ async def stream_job_logs(
 ) -> StreamingResponse:
     """NDJSON stream of every line tagged with `job_id`.
 
-    Reads `/logs/jobs/{job_id}.log` directly when present; otherwise
-    falls back to scanning `/logs/*.log` (alphabetical order; lines
-    within a file in append order; no cross-file resort — the consumer
-    can sort by `ts` if global ordering matters).
+    Reads `/logs/jobs/{job_id}.log`, the per-job file written by
+    `LogTailer`, in append order; the stream is empty when that file is
+    absent. `limit` caps the line count (server default when omitted,
+    clamped to the hard cap).
     """
     return StreamingResponse(job_log_lines(job_id, effective_cap(limit)), media_type="application/x-ndjson")

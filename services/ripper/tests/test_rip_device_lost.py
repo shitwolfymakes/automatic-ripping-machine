@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import asyncio
 import errno
+import logging
 from pathlib import Path
 from typing import Any
 
@@ -923,3 +924,20 @@ async def test_the_rip_is_handed_the_title_numbers_of_the_rip_start_response(mon
     )
 
     assert calls[0]["title_numbers"] == {"00334.mpls:2": 7}
+
+
+class _PatchSpy:
+    async def patch_track(self, track_id: str, **fields: object) -> None:
+        return None
+
+
+async def test_a_ripped_titles_done_line_is_debug(caplog) -> None:
+    track = _track(0)
+    result = RipResult(ok=True, output_path=None, size_bytes=8, duration_seconds=3)
+    dr = disc_rip_module.DiscRip.__new__(disc_rip_module.DiscRip)
+    dr._kept = set()
+    dr._backend = _PatchSpy()
+    with caplog.at_level(logging.DEBUG, logger="arm_ripper.job_controller"):
+        await dr._record_ripped(track, result)
+    done = [r for r in caplog.records if r.getMessage().startswith("track trk_0 done")]
+    assert [r.levelno for r in done] == [logging.DEBUG]

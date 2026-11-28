@@ -10,6 +10,7 @@ from arm_ripper.rip.abcde_output import (
     read_workdir_file,
     track_errors,
     wav_bytes_written,
+    wav_duration_seconds,
 )
 
 # The head of a real abcde 2.9.3 status file, taken mid-rip on an 18-track CD.
@@ -82,3 +83,12 @@ def test_track_errors_maps_each_failed_track_to_its_reason() -> None:
 
 def test_track_errors_ignores_lines_about_other_steps() -> None:
     assert track_errors("encodetrack-03: lame returned code 1\n") == {}
+
+
+def test_wav_duration_seconds_is_the_wav_size_over_the_cd_audio_rate() -> None:
+    """A 44-byte WAV header does not change the rounded length."""
+    assert wav_duration_seconds(245 * 176_400 + 44) == 245
+
+
+def test_wav_duration_seconds_rounds_to_the_nearest_second() -> None:
+    assert wav_duration_seconds(int(10.6 * 176_400)) == 11

@@ -41,8 +41,9 @@
 # its display_name; --clean / re-runs key off those. IDs are real ULIDs
 # generated via the backend (the detail routes validate the ULID pattern;
 # readable ids 422). Per-job log files at /logs/jobs/<id>.log mirror the
-# arm_common JSON-log format ({ts, level, service, job_id, msg, extra}) and
-# carry extra.seed=true so --clean can prune exactly the seeded ones.
+# arm_common JSON-log format ({ts, level, service, logger, job_id, track_id,
+# session_application_id, event, msg, fields, exc}) and carry fields.seed=true
+# so --clean can prune exactly the seeded ones.
 set -euo pipefail
 
 usage() {
@@ -97,9 +98,9 @@ backend_exec() {
     docker compose exec -T --user "${puid:-1000}:${pgid:-1000}" "$@"
 }
 
-# --- remove seed-owned per-job log files (tagged extra.seed=true in line 1) ---
+# --- remove seed-owned per-job log files (tagged fields.seed=true in line 1) ---
 # Job ULIDs are regenerated each run, so we can't match by id; instead each
-# seeded /logs/jobs/<id>.log carries "seed": true in its first line's `extra`,
+# seeded /logs/jobs/<id>.log carries "seed": true in its first line's `fields`,
 # and this prunes exactly those (real job logs never carry it).
 clean_seed_logs() {
     backend_exec arm-backend python - <<'PY'
@@ -112,7 +113,7 @@ for p in glob.glob("/logs/jobs/*.log"):
         rec = json.loads(first) if first.strip() else {}
     except (OSError, ValueError):
         continue
-    if isinstance(rec, dict) and isinstance(rec.get("extra"), dict) and rec["extra"].get("seed") is True:
+    if isinstance(rec, dict) and isinstance(rec.get("fields"), dict) and rec["fields"].get("seed") is True:
         os.remove(p)
         removed += 1
 print(f"  removed {removed} seed log file(s)")
@@ -221,11 +222,14 @@ for pos, (jid, (title, status)) in enumerate(zip(ids, META)):
                 "ts": (t0 + timedelta(seconds=off)).isoformat(),
                 "level": level,
                 "service": logger.split(".")[0].replace("_", "-"),
+                "logger": logger,
                 "job_id": jid,
                 "track_id": None,
                 "session_application_id": None,
+                "event": None,
                 "msg": msg,
-                "extra": {"logger": logger, "seed": True},
+                "fields": {"seed": True},
+                "exc": None,
             }) + "\n")
 print(f"  wrote {len(ids)} per-job log file(s) under /logs/jobs/")
 PY

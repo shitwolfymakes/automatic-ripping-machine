@@ -28,6 +28,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import col, select
 
+from arm_backend import job_events
 from arm_backend.config import settings
 from arm_backend.identity.events import emit_identity_resolved
 from arm_backend.identity.pipeline import ResolveOutcome, resolve_job
@@ -327,32 +328,29 @@ def _missing_backup_track(rip_preset: RipPreset, job: Job, tracks: list[Track]) 
     )
 
 
-def _log_apply_result(
-    outcome: ApplySessionOutcome, session_id: str, job: Job, overwrite: bool, source: ApplySource
-) -> None:
-    """Log how the apply ended: parked with no tracks, parked with no outputs, or fanned out."""
+def _log_apply_result(outcome: ApplySessionOutcome, sess: Session, job: Job, source: ApplySource) -> None:
+    """Log how the apply ended: parked with no tracks, parked with no outputs, or fanned out (`session.applied`)."""
     if outcome.skipped_reason == "no_tracks":
         logger.info(
             "apply: parked session_id=%s job_id=%s (not ripped yet; fans out at rip-complete) source=%s",
-            session_id,
+            sess.id,
             job.id,
             source,
         )
     elif outcome.skipped_reason == "no_outputs":
         logger.info(
             "apply: parked session_id=%s job_id=%s (tracks exist but none resolved an output; stays parked) source=%s",
-            session_id,
+            sess.id,
             job.id,
             source,
         )
     else:
-        logger.info(
-            "apply session_id=%s job_id=%s tasks=%d overwrite=%s source=%s",
-            session_id,
-            job.id,
-            len(outcome.tasks),
-            overwrite,
+        job_events.log_session_applied(
+            job,
+            sess.name,
             source,
+            len(outcome.tasks),
+            session_application_id=outcome.application.id if outcome.application is not None else None,
         )
 
 
@@ -498,7 +496,7 @@ async def _apply_session_internal(
     for task in outcome.tasks:
         await db.refresh(task)
 
-    _log_apply_result(outcome, session_id, job, overwrite, source)
+    _log_apply_result(outcome, sess, job, source)
 
     return outcome
 

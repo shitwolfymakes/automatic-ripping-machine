@@ -8,13 +8,15 @@ from __future__ import annotations
 import logging
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, NamedTuple
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from sqlmodel import col, select
 
 from arm_backend.config import Settings
 from arm_backend.gpu_claim import release_gpu_for_task
+from arm_backend.log_safely import log_safely
+from arm_backend.transcode_task_events import announce_failed
 from arm_common import (
     SessionApplication,
     SessionApplicationStatus,
@@ -24,9 +26,27 @@ from arm_common import (
 )
 
 if TYPE_CHECKING:
+    from arm_backend.transcode_apply import AggregateOutcome
     from arm_backend.ws.hub import WSHub
 
 logger = logging.getLogger(__name__)
+
+
+class _HardFailed(NamedTuple):
+    """A task the stale sweep failed, kept to log once the sweep commits."""
+
+    task: TranscodeTask
+    application: SessionApplication
+    outcome: AggregateOutcome
+    error: str
+
+
+def _requeue(task: TranscodeTask) -> None:
+    """Put a stale task back on the queue for another attempt."""
+    task.status = TranscodeTaskStatus.QUEUED
+    task.claimed_by = None
+    task.claim_heartbeat_at = None
+    logger.warning("transcode task reset to queued after stale claim task_id=%s attempts=%d", task.id, task.attempts)
 
 
 class TranscodeSweeps:
@@ -58,58 +78,67 @@ class TranscodeSweeps:
         )
         if not stale:
             return 0
-        touched = 0
+        hard_failed: list[_HardFailed] = []
         for task in stale:
-            # Per-task wrap so the per-job log view picks up every line emitted
-            # for this task. job_id is loaded once via application.
+            failure = await self._sweep_stale_task(db, task)
+            if failure is not None:
+                hard_failed.append(failure)
+        await db.commit()
+        for failure in hard_failed:
+            await self._log_hard_failed(db, failure)
+        return len(stale)
+
+    async def _sweep_stale_task(self, db: AsyncSession, task: TranscodeTask) -> _HardFailed | None:
+        """Release the stale task's GPU, then re-queue it, or hard-fail it once its attempts are spent."""
+        # Per-task wrap so the per-job log view picks up every line emitted
+        # for this task. job_id is loaded once via application.
+        stale_application = (
+            await db.execute(
+                select(SessionApplication).where(col(SessionApplication.id) == task.session_application_id)
+            )
+        ).scalar_one_or_none()
+        stale_job_id = stale_application.job_id if stale_application is not None else None
+        with with_log_context(
+            job_id=stale_job_id,
+            track_id=task.source_track_id,
+            session_application_id=task.session_application_id,
+        ):
+            # Release any GPU this task held; a stale claim cannot be holding
+            # a real container any more.
+            await release_gpu_for_task(db, task.id)
+            if task.attempts >= self._settings.ARM_TRANSCODE_MAX_ATTEMPTS:
+                return await self._hard_fail(db, task, stale_application)
+            _requeue(task)
+            return None
+
+    async def _hard_fail(
+        self, db: AsyncSession, task: TranscodeTask, stale_application: SessionApplication | None
+    ) -> _HardFailed:
+        """Fail a task whose stale claims spent its attempts, emit `task.failed` and settle its application."""
+        from arm_backend.transcode_apply import emit_task_failed, settle_session_application
+
+        error = f"exceeded retry limit after stale claim (attempts={task.attempts})"
+        task.status = TranscodeTaskStatus.FAILED
+        task.last_error = error
+        logger.debug("transcode task hard-failed after %d stale resets task_id=%s", task.attempts, task.id)
+        await emit_task_failed(self._hub, db, task)
+        # Race guard: the app row appearing between the two checks.
+        if stale_application is None:  # pragma: no cover
+            # Re-load defensively in case the row appeared between checks.
             stale_application = (
                 await db.execute(
                     select(SessionApplication).where(col(SessionApplication.id) == task.session_application_id)
                 )
-            ).scalar_one_or_none()
-            stale_job_id = stale_application.job_id if stale_application is not None else None
-            with with_log_context(
-                job_id=stale_job_id,
-                track_id=task.source_track_id,
-                session_application_id=task.session_application_id,
-            ):
-                # Release any GPU this task held; a stale claim cannot be holding
-                # a real container any more.
-                await release_gpu_for_task(db, task.id)
-                if task.attempts >= self._settings.ARM_TRANSCODE_MAX_ATTEMPTS:
-                    task.status = TranscodeTaskStatus.FAILED
-                    task.last_error = f"exceeded retry limit after stale claim (attempts={task.attempts})"
-                    logger.error(
-                        "transcode task hard-failed after %d stale resets task_id=%s",
-                        task.attempts,
-                        task.id,
-                    )
-                    from arm_backend.transcode_apply import emit_task_failed, settle_session_application
+            ).scalar_one()
+        outcome = await settle_session_application(db, self._hub, stale_application)
+        return _HardFailed(task, stale_application, outcome, error)
 
-                    await emit_task_failed(self._hub, db, task)
-                    # Race guard: the app row appearing between the two checks.
-                    if stale_application is None:  # pragma: no cover
-                        # Re-load defensively in case the row appeared between checks.
-                        stale_application = (
-                            await db.execute(
-                                select(SessionApplication).where(
-                                    col(SessionApplication.id) == task.session_application_id
-                                )
-                            )
-                        ).scalar_one()
-                    await settle_session_application(db, self._hub, stale_application)
-                else:
-                    task.status = TranscodeTaskStatus.QUEUED
-                    task.claimed_by = None
-                    task.claim_heartbeat_at = None
-                    logger.warning(
-                        "transcode task reset to queued after stale claim task_id=%s attempts=%d",
-                        task.id,
-                        task.attempts,
-                    )
-                touched += 1
-        await db.commit()
-        return touched
+    async def _log_hard_failed(self, db: AsyncSession, failure: _HardFailed) -> None:
+        """Log a committed hard fail: `transcode.failed`, then any `session.completed`."""
+        from arm_backend.transcode_apply import log_session_settled
+
+        await log_safely("transcode.failed", announce_failed(db, failure.task, failure.error))
+        await log_session_settled(db, failure.application, failure.outcome)
 
     # --- orphaned application sweep -------------------------------------------
 

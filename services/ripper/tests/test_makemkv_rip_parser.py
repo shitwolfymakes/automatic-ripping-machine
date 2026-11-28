@@ -9,34 +9,33 @@ from arm_ripper.rip.makemkv_robot import (
     parse_msg_args,
     parse_prgc_save_position,
     parse_prgt_title,
-    parse_progress_current,
-    parse_progress_total,
+    parse_progress_fractions,
 )
 
 
-def test_progress_total_is_the_disc_overall_fraction():
-    # current=2500, total=5000, max=10000: the per-operation 0.25 is ignored, the disc-overall 0.5 is returned.
-    assert parse_progress_total("PRGV:2500,5000,10000") == 0.5
+def test_progress_fractions_are_the_title_and_disc_overall_fractions():
+    # current=2500, total=5000, max=10000: the per-title 0.25 and the disc-overall 0.5.
+    assert parse_progress_fractions("PRGV:2500,5000,10000") == (0.25, 0.5)
 
 
-def test_progress_total_clamps_to_one():
-    # total > max can happen when MakeMKV emits the final frame with total==max+epsilon.
-    assert parse_progress_total("PRGV:10001,10001,10000") == 1.0
+def test_progress_fractions_clamp_to_one():
+    # Past max can happen when MakeMKV emits the final frame with total==max+epsilon.
+    assert parse_progress_fractions("PRGV:10001,10001,10000") == (1.0, 1.0)
 
 
-def test_progress_total_handles_zero_max():
-    assert parse_progress_total("PRGV:0,0,0") is None
+def test_progress_fractions_handle_zero_max():
+    assert parse_progress_fractions("PRGV:0,0,0") is None
 
 
-def test_progress_total_returns_none_for_non_prgv():
-    assert parse_progress_total("MSG:5021,260,1,...") is None
-    assert parse_progress_total('PRGT:5018,1,"Saving title #2"') is None
-    assert parse_progress_total("") is None
-    assert parse_progress_total("garbage") is None
+def test_progress_fractions_return_none_for_non_prgv():
+    assert parse_progress_fractions("MSG:5021,260,1,...") is None
+    assert parse_progress_fractions('PRGT:5018,1,"Saving title #2"') is None
+    assert parse_progress_fractions("") is None
+    assert parse_progress_fractions("garbage") is None
 
 
-def test_progress_total_tolerates_whitespace():
-    assert parse_progress_total("  PRGV:1,1,4  ") == 0.25
+def test_progress_fractions_tolerate_whitespace():
+    assert parse_progress_fractions("  PRGV:1,1,4  ") == (0.25, 0.25)
 
 
 def test_diagnostic_msg_extracts_known_codes():
@@ -226,10 +225,3 @@ def test_copy_complete_with_unreadable_counts_is_none():
     assert parse_copy_complete('MSG:5036,0,1,"Copy complete.","Copy complete."') is None
     assert parse_copy_complete('MSG:5036,0,2,"x","y","many"') is None
     assert parse_copy_complete('MSG:5037,0,2,"x","y","1","few"') is None
-
-
-def test_parse_progress_current_reads_the_per_operation_channel() -> None:
-    assert parse_progress_current("PRGV:2500,5000,10000") == 0.25
-    assert parse_progress_current("PRGV:10001,10001,10000") == 1.0
-    assert parse_progress_current("PRGV:0,0,0") is None
-    assert parse_progress_current("garbage") is None
