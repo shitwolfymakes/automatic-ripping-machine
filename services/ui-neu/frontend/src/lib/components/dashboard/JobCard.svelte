@@ -30,7 +30,7 @@
 		<div class="job-card-body">
 			<PosterImage
 				url={jobPoster(job)}
-				alt={job.title ?? 'Poster'}
+				alt=""
 				class="job-card-poster {job.disc_type === 'cd' ? 'job-card-poster-square' : ''}"
 			/>
 			<div class="min-w-0 flex-1">
@@ -58,7 +58,7 @@
 					>
 					{#if job.disc_type}
 						<span class="inline-flex items-center gap-1 job-card-disc-pill">
-							<DiscTypeIcon disctype={job.disc_type} size="h-3.5 w-3.5" />
+							<DiscTypeIcon disctype={job.disc_type} size="h-3.5 w-3.5" decorative />
 							{discTypeLabel(job.disc_type)}
 						</span>
 					{/if}

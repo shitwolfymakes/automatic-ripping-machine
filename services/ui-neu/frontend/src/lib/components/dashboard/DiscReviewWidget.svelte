@@ -212,7 +212,7 @@
 		<div class="disc-review-widget-body">
 			<PosterImage
 				url={displayJob.poster_url_manual ?? displayJob.poster_url}
-				alt={displayJob.title ?? 'Poster'}
+				alt=""
 				class="disc-review-widget-poster {isMusic ? 'disc-review-widget-poster-square' : ''}"
 			/>
 
