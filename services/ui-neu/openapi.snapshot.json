@@ -18994,6 +18994,17 @@
             ],
             "title": "Custom Filename"
           },
+          "edition": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Edition"
+          },
           "revert_fields": {
             "items": {
               "type": "string",
@@ -19005,7 +19016,8 @@
                 "episode_number_end",
                 "episode_name",
                 "custom_filename",
-                "excluded"
+                "excluded",
+                "edition"
               ]
             },
             "type": "array",

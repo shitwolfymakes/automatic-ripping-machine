@@ -228,3 +228,33 @@ def test_preview_and_apply_agree(signing_key: bytes) -> None:
     applied = [x.output_path for x in compute_outputs(job, tracks, session, None, job_stereo_3d_refs(job))]
     assert preview == applied
     assert PurePosixPath(preview[1]).name == "Blade Runner {edition-Angle 2} - Track 01.mkv"
+
+
+def test_an_edited_edition_reaches_apply_and_preview(signing_key: bytes) -> None:
+    from arm_backend.identity.manual_edits import _apply_track_edit
+    from arm_common.schemas import TrackEditRequest
+
+    tracks = [_track(0, "00800.mpls"), _track(1, "00800.mpls:2", TitleClass.ANGLE, "00800.mpls")]
+    job = _job()
+    job.pending_session_id = "ses_x"
+    session = _session()
+    session.transcode_preset_id = None
+    session.output_path_template = "{title}/{title} {plex_edition?} - {edition?} - Track {track}.mkv"
+    _apply_track_edit(job, tracks[1], TrackEditRequest(track_id=tracks[1].id, edition="Director's Cut"))
+    db = FakeSession()
+    _seed(db)
+    db.rows["sessions"] = [session]
+    db.rows["jobs"] = [job]
+    db.rows["tracks"] = tracks
+    db.rows["transcode_presets"] = []
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as client:
+        r = client.get(f"/api/jobs/{job.id}/naming-preview", headers=_auth(token))
+    preview = [i["output_path"] for i in r.json()["items"]]
+    applied = [x.output_path for x in compute_outputs(job, tracks, session, None)]
+    assert preview == applied
+    assert applied[1] == "Blade Runner/Blade Runner {edition-Director's Cut} - Director's Cut - Track 01.mkv"
+    _apply_track_edit(job, tracks[1], TrackEditRequest(track_id=tracks[1].id, revert_fields=["edition"]))
+    assert compute_outputs(job, tracks, session, None)[1].output_path.endswith(
+        "{edition-Angle 2} - Angle 2 - Track 01.mkv"
+    )

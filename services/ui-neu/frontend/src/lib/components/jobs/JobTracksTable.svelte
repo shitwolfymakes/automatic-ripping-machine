@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { canNameVersion } from '$lib/jobs/edition';
 	import JobTrackRow from '$lib/components/jobs/JobTrackRow.svelte';
 	import { refIndexOf, titleClassLabel } from '$lib/jobs/title-class';
 	import type { JobView, NamingPreviewItem, TrackView } from '$lib/types/api.gen';
@@ -67,6 +68,8 @@
 						{job}
 						{track}
 						classLabel={titleClassLabel(track, refIndex)}
+						nameable={canNameVersion(track, tracks)}
+						onedited={ontitleapplied}
 						{preview}
 						{tracksAreSeries}
 						editing={editingTrackId === track.id}

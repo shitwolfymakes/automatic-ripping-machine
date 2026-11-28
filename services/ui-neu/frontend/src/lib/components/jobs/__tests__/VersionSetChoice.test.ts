@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import { renderComponent, screen, cleanup, fireEvent, waitFor } from '$lib/testing/render';
-import { patchJob } from '$lib/api/jobs';
+import { patchJob, updateTrack } from '$lib/api/jobs';
 import VersionSetChoice from '../VersionSetChoice.svelte';
 import { groupVersions, isVersionSet, type VersionSet } from '$lib/jobs/version-sets';
 import { refIndexOf } from '$lib/jobs/title-class';
@@ -9,7 +9,7 @@ import { bladeRunnerTracks } from '../../../__fixtures__/version-sets';
 import { createJob } from '../../../__fixtures__/job';
 import type { TrackView } from '$lib/types/api.gen';
 
-vi.mock('$lib/api/jobs', () => ({ patchJob: vi.fn() }));
+vi.mock('$lib/api/jobs', () => ({ patchJob: vi.fn(), updateTrack: vi.fn() }));
 
 const THREE = ['00334.mpls:1', '00334.mpls:2', '00342.mpls'];
 
@@ -41,6 +41,7 @@ const three = () => bladeRunnerTracks().filter((t) => THREE.includes(t.source_re
 
 beforeEach(() => {
 	vi.mocked(patchJob).mockResolvedValue({} as never);
+	vi.mocked(updateTrack).mockResolvedValue({} as never);
 });
 afterEach(() => {
 	cleanup();
@@ -177,5 +178,19 @@ describe('VersionSetChoice', () => {
 	it('names each version with its chips', () => {
 		show(three());
 		expect(screen.getAllByText('3D').length).toBeGreaterThan(0);
+	});
+});
+
+describe('VersionSetChoice edition names', () => {
+	it('names a kept version in place when more than one is kept', async () => {
+		const tracks = three().map((t) => ({ ...t, excluded: false }));
+		const onrefresh = show(tracks);
+		const edits = screen.getAllByRole('button', { name: 'Edit Edition name' });
+		expect(edits).toHaveLength(3);
+		await fireEvent.click(edits[0]);
+		const input = screen.getByRole('textbox', { name: 'Edition name' });
+		await fireEvent.input(input, { target: { value: 'Theatrical' } });
+		await fireEvent.keyDown(input, { key: 'Enter' });
+		await waitFor(() => expect(onrefresh).toHaveBeenCalled());
 	});
 });

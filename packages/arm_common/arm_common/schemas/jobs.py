@@ -343,7 +343,15 @@ class HeldJobView(BaseModel):
 
 
 TrackRevertField = Literal[
-    "role", "title", "season", "episode_number", "episode_number_end", "episode_name", "custom_filename", "excluded"
+    "role",
+    "title",
+    "season",
+    "episode_number",
+    "episode_number_end",
+    "episode_name",
+    "custom_filename",
+    "excluded",
+    "edition",
 ]
 
 
@@ -368,6 +376,8 @@ class TrackEditRequest(BaseModel):
     episode_name: str | None = None
     excluded: bool | None = None
     custom_filename: str | None = None
+    # The name of this version of the film (`{edition?}` in the output path); null or a revert clears it.
+    edition: str | None = None
     revert_fields: list[TrackRevertField] = Field(default_factory=list)
 
 

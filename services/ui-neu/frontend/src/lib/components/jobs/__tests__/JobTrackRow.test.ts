@@ -45,6 +45,7 @@ interface Overrides {
 	editing?: boolean;
 	excludeError?: string | null;
 	classLabel?: TitleClassLabel | null;
+	nameable?: boolean;
 }
 
 function renderRow(track: TrackView, overrides: Overrides = {}) {
@@ -52,6 +53,7 @@ function renderRow(track: TrackView, overrides: Overrides = {}) {
 		job: createJob(overrides.job ?? {}),
 		track,
 		classLabel: overrides.classLabel ?? null,
+		nameable: overrides.nameable ?? false,
 		preview: overrides.preview,
 		tracksAreSeries: overrides.tracksAreSeries ?? false,
 		editing: overrides.editing ?? false,
@@ -166,6 +168,22 @@ describe('JobTrackRow', () => {
 			);
 			expect(within(title).getByText('Extended')).toBeInTheDocument();
 			expect(within(title).getByText('episode')).toBeInTheDocument();
+		});
+
+		it('lets an admin name a version of the film, and hides the edit from a title that is not one', async () => {
+			renderRow({ ...pilot(), edition: null }, { nameable: true });
+			expect(within(cell('Title')).getByRole('button', { name: 'Edit Edition name' })).toBeInTheDocument();
+			cleanup();
+			renderRow({ ...pilot(), edition: null });
+			expect(within(cell('Title')).queryByRole('button', { name: 'Edit Edition name' })).toBeNull();
+		});
+
+		it('shows an edition name read-only to a non-admin', () => {
+			setRole('guest');
+			renderRow(pilot(), { nameable: true });
+			expect(within(cell('Title')).getByText('Extended')).toBeInTheDocument();
+			expect(within(cell('Title')).queryByRole('button', { name: 'Edit Edition name' })).toBeNull();
+			setRole('admin');
 		});
 
 		it('swaps a broken track poster for the poster fallback', async () => {

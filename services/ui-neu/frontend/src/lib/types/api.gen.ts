@@ -5955,9 +5955,13 @@ export type TrackEditRequest = {
      */
     custom_filename?: string | null;
     /**
+     * Edition
+     */
+    edition?: string | null;
+    /**
      * Revert Fields
      */
-    revert_fields?: Array<'role' | 'title' | 'season' | 'episode_number' | 'episode_number_end' | 'episode_name' | 'custom_filename' | 'excluded'>;
+    revert_fields?: Array<'role' | 'title' | 'season' | 'episode_number' | 'episode_number_end' | 'episode_name' | 'custom_filename' | 'excluded' | 'edition'>;
 };
 
 /**

@@ -2,6 +2,7 @@
 	import PosterImage from '$lib/components/shared/PosterImage.svelte';
 	import StatusBadge from '$lib/components/shared/StatusBadge.svelte';
 	import TrackTitleSearch from '$lib/components/match/TrackTitleSearch.svelte';
+	import EditionField from '$lib/components/jobs/EditionField.svelte';
 	import TrackStageRow from '$lib/components/jobs/TrackStageRow.svelte';
 	import { showsStageLine, waitingForFiles } from '$lib/jobs/staging';
 	import { formatFps } from '$lib/transcode/fps';
@@ -18,6 +19,10 @@
 		track: TrackView;
 		/** What the classifier made of this title, or null for a plain one. */
 		classLabel: TitleClassLabel | null;
+		/** The title is one version of a film the disc holds more than once: an admin can name it. */
+		nameable?: boolean;
+		/** The edition name was saved. */
+		onedited?: () => void;
 		preview: NamingPreviewItem | undefined;
 		tracksAreSeries: boolean;
 		editing: boolean;
@@ -36,6 +41,8 @@
 		job,
 		track,
 		classLabel,
+		nameable = false,
+		onedited,
 		preview,
 		tracksAreSeries,
 		editing,
@@ -105,9 +112,6 @@
 								class="badge badge-imdb job-detail-track-imdb-badge">IMDb</a
 							>
 						{/if}
-						{#if track.edition}
-							<span class="job-detail-track-meta-pill">{track.edition}</span>
-						{/if}
 						{#if classLabel}
 							<span class="job-detail-track-meta-pill" data-testid="track-class-label">{classLabel.text}</span>
 						{/if}
@@ -119,6 +123,11 @@
 			</div>
 		{:else}
 			{@render editTrigger(untitledText)}
+		{/if}
+		{#if track.edition || (nameable && $isAdmin)}
+			<div class="job-detail-track-edition" data-testid="track-edition">
+				<EditionField jobId={job.id} trackId={track.id} edition={track.edition} canEdit={$isAdmin} onsaved={onedited} />
+			</div>
 		{/if}
 	</td>
 	{#if tracksAreSeries}
@@ -277,6 +286,13 @@
 		border-radius: 9999px;
 		padding: 0.125rem 0.375rem;
 		font-size: 9px;
+	}
+	.job-detail-track-edition {
+		position: relative;
+		z-index: 1;
+		margin-top: 0.25rem;
+		font-size: 0.75rem;
+		color: var(--color-text-secondary);
 	}
 	.job-detail-track-meta-pill {
 		border-radius: var(--radius-sm);
