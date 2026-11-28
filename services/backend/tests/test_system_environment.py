@@ -257,7 +257,9 @@ def test_empty_host_paths_keep_every_mount_and_show_unset(make_settings):
     [rip] = ripper_container_views(s, [drive])
     assert {m.container for m in rip.mounts if m.host == "(unset)"} == {"/raw", "/logs"}
     cpu = transcode_container_views(s, [], _absent)[0]
-    assert {m.container for m in cpu.mounts if m.host == "(unset)"} == {"/raw", "/media", "/logs"}
+    # The transcoder mounts staging, not raw; with raw unset staging reads `.staging` (no host raw path to join).
+    assert {m.container for m in cpu.mounts if m.host == "(unset)"} == {"/media", "/logs"}
+    assert "/staging" in {m.container for m in cpu.mounts} and "/raw" not in {m.container for m in cpu.mounts}
 
 
 def test_spec_error_degrades_to_a_view(make_settings):
