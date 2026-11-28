@@ -8,7 +8,18 @@ from typing import Any
 import pytest
 
 from arm_backend.routers import ripper as ripper_router
-from arm_common import DiscType, Job, JobStatus, MediaType, Session, TrackKind, TrackStatus, TranscodePreset
+from arm_common import (
+    DiscType,
+    Job,
+    JobStatus,
+    MediaType,
+    Session,
+    SessionApplication,
+    SessionApplicationStatus,
+    TrackKind,
+    TrackStatus,
+    TranscodePreset,
+)
 from arm_common.enums import ContainerFormat, TranscodeTool
 from arm_common.models import Track
 from arm_common.schemas import BdClip, BdPlaylist, ScanResult
@@ -88,10 +99,33 @@ def _session(tool: TranscodeTool | None) -> tuple[Session, list[TranscodePreset]
     return sess, presets
 
 
-async def _answer(monkeypatch: pytest.MonkeyPatch, tool: TranscodeTool | None) -> Any:
+_NO_PARKED = object()
+
+
+async def _answer(
+    monkeypatch: pytest.MonkeyPatch,
+    tool: TranscodeTool | None,
+    *,
+    parked: TranscodeTool | None | object = _NO_PARKED,
+) -> Any:
+    """`tool` is the routed session's transcode tool; `parked` (when given) the tool of a session parked
+    on the job before the rip."""
     sess, presets = _session(tool)
     db = FakeSession()
     db.rows["transcode_presets"] = presets
+    if parked is not _NO_PARKED:
+        parked_sess, parked_presets = _session(parked)  # type: ignore[arg-type]
+        parked_sess.id = "ses_parked"
+        if parked_presets:
+            parked_presets[0].id = "tpr_parked"
+            parked_sess.transcode_preset_id = "tpr_parked"
+        db.rows["transcode_presets"] = [*presets, *parked_presets]
+        db.rows["sessions"] = [parked_sess]
+        db.rows["session_applications"] = [
+            SessionApplication(
+                id="sap_x", session_id="ses_parked", job_id=_JOB, status=SessionApplicationStatus.WAITING_IDENTIFY
+            )
+        ]
 
     async def routed(_db: Any, _job: Job) -> Session:
         return sess
@@ -117,3 +151,23 @@ async def test_a_transcoding_job_keeps_no_3d_but_still_marks_the_3d_track(monkey
     answer = await _answer(monkeypatch, TranscodeTool.HANDBRAKE)
     assert answer.keep_3d_refs == []
     assert {t.source_ref: t.stereo_3d for t in answer.tracks} == {"00100.mpls": False, "00101.mpls": True}
+
+
+@pytest.mark.anyio
+async def test_a_parked_transcode_session_drops_the_3d_with_no_routed_session(monkeypatch: pytest.MonkeyPatch) -> None:
+    answer = await _answer(monkeypatch, None, parked=TranscodeTool.HANDBRAKE)
+    assert answer.keep_3d_refs == []
+
+
+@pytest.mark.anyio
+async def test_a_parked_passthrough_session_keeps_the_3d(monkeypatch: pytest.MonkeyPatch) -> None:
+    answer = await _answer(monkeypatch, None, parked=TranscodeTool.NONE)
+    assert answer.keep_3d_refs == ["00101.mpls"]
+
+
+@pytest.mark.anyio
+async def test_the_parked_session_wins_over_the_routed_one(monkeypatch: pytest.MonkeyPatch) -> None:
+    assert (await _answer(monkeypatch, TranscodeTool.NONE, parked=TranscodeTool.HANDBRAKE)).keep_3d_refs == []
+    assert (await _answer(monkeypatch, TranscodeTool.HANDBRAKE, parked=TranscodeTool.NONE)).keep_3d_refs == [
+        "00101.mpls"
+    ]

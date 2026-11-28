@@ -356,15 +356,13 @@ def _log_apply_result(
         )
 
 
-async def _refresh_version_ticks(
-    db: AsyncSession, hub: WSHub | None, job: Job, sess: Session, tracks: list[Track]
-) -> None:
-    """A session applied before the rip decides whether the disc transcodes (D60), which moves the
-    2D/3D pick: recompute the job's ticks with that session as the transcode signal."""
+async def _refresh_version_ticks(db: AsyncSession, hub: WSHub | None, job: Job, tracks: list[Track]) -> None:
+    """A session applied (parked) before the rip decides whether the disc transcodes (D60), which moves the
+    2D/3D pick: recompute the job's ticks, whose transcode signal reads that parked session."""
     scan = stored_scan(job)
     if job.status not in PRE_RIP_JOB_STATUSES or scan is None or not tracks:
         return
-    reclassified = await recompute_ticks(db, job, tracks, scan, rippable=rippable_refs(scan), sess=sess)
+    reclassified = await recompute_ticks(db, job, tracks, scan, rippable=rippable_refs(scan))
     resolved = await resolve_job(db, job)
     if hub is not None:
         outcome = ResolveOutcome(changed=resolved.changed, track_ids=resolved.track_ids | reclassified)
@@ -493,7 +491,7 @@ async def _apply_session_internal(
         # passed in, but the helper made no unflushed writes to it here.
         return outcome
 
-    await _refresh_version_ticks(db, hub, job, sess, tracks)
+    await _refresh_version_ticks(db, hub, job, tracks)
     await db.commit()
     if outcome.application is not None:  # pragma: no branch — error branches early-return above
         await db.refresh(outcome.application)
