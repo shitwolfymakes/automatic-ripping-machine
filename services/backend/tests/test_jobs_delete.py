@@ -25,7 +25,19 @@ from arm_backend.db import get_session
 from arm_backend.jwt_utils import issue_access_token
 from arm_backend.routers import jobs as jobs_router
 from arm_backend import log_reader
-from arm_common import DiscType, Job, JobStatus, User
+from arm_common import (
+    DiscType,
+    Gpu,
+    GpuStatus,
+    GpuVendor,
+    Job,
+    JobStatus,
+    SessionApplication,
+    SessionApplicationStatus,
+    TranscodeTask,
+    TranscodeTaskStatus,
+    User,
+)
 
 from tests._fakes import FakeSession
 
@@ -907,3 +919,121 @@ def test_bulk_delete_stops_the_stage_copy_of_each_deleted_job_only(
         r = client.delete("/api/jobs", headers=_auth(token))
     assert r.status_code == 200
     assert spy.cancelled == ["job_01JZXR7K3M5Q8N4VWA00000007"]
+
+
+# --- a job with a running transcode is not deletable -------------------------
+# Deleting it would cascade the task out from under the transcoder (its final
+# report 404s, a claimed GPU stays busy until a restart) and, with
+# delete_raw=true, remove the input it is reading. A queued task counts only
+# once it holds a GPU (spawned, before its /claim); one the dispatcher is
+# holding (transcoding disabled, no docker, image missing) holds nothing.
+
+_TRANSCODING_JOB = "job_01JZXR7K3M5Q8N4VWA0000000T"
+
+
+def _seed_transcode(
+    db: FakeSession, job_id: str, task_status: TranscodeTaskStatus, *, n: int = 1, gpu: bool = False
+) -> None:
+    db.rows.setdefault("session_applications", []).append(
+        SessionApplication(
+            id=f"sap_{job_id[-4:]}",
+            session_id="ses_x",
+            job_id=job_id,
+            status=SessionApplicationStatus.RUNNING,
+            overwrite=False,
+        )
+    )
+    task_id = f"txt_{job_id[-4:]}{n}"
+    db.rows.setdefault("transcode_tasks", []).append(
+        TranscodeTask(
+            id=task_id,
+            session_application_id=f"sap_{job_id[-4:]}",
+            source_track_id="trk_x",
+            status=task_status,
+            attempts=0,
+            progress_pct=0,
+            output_path="X/x.mkv",
+        )
+    )
+    if gpu:
+        db.rows.setdefault("gpus", []).append(
+            Gpu(
+                id=f"gpu_{job_id[-4:]}",
+                vendor=GpuVendor.QSV,
+                device_path="/dev/dri/renderD128",
+                encoder_kinds=["h264"],
+                status=GpuStatus.BUSY,
+                enabled=True,
+                claimed_by_task_id=task_id,
+            )
+        )
+
+
+@pytest.mark.parametrize(
+    ("task_status", "gpu"),
+    [(TranscodeTaskStatus.IN_PROGRESS, False), (TranscodeTaskStatus.QUEUED, True)],
+    ids=["in_progress", "queued_holding_gpu"],
+)
+def test_delete_refuses_a_job_that_is_transcoding(
+    signing_key: bytes, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, task_status: TranscodeTaskStatus, gpu: bool
+) -> None:
+    raw_dir = tmp_path / "raw" / _TRANSCODING_JOB
+    raw_dir.mkdir(parents=True)
+    monkeypatch.setattr(jobs_router.settings, "RAW_ROOT", str(tmp_path / "raw"))
+    monkeypatch.setattr(jobs_router.settings, "MEDIA_ROOT", str(tmp_path / "media"))
+    db = FakeSession()
+    _seed_admin(db)
+    db.rows["jobs"] = [_make_job(_TRANSCODING_JOB, status=JobStatus.RIPPED)]
+    _seed_transcode(db, _TRANSCODING_JOB, task_status, gpu=gpu)
+    app, token = _make_app(signing_key, db, _CapturingHub())
+    with TestClient(app) as client:
+        r = client.delete(f"/api/jobs/{_TRANSCODING_JOB}?delete_raw=true", headers=_auth(token))
+    assert r.status_code == 409
+    assert "transcod" in r.json()["detail"]
+    assert len(db.rows["jobs"]) == 1
+    assert len(db.rows["transcode_tasks"]) == 1
+    assert raw_dir.exists()
+
+
+@pytest.mark.parametrize(
+    "task_status", [TranscodeTaskStatus.DONE, TranscodeTaskStatus.FAILED, TranscodeTaskStatus.QUEUED]
+)
+def test_delete_allows_a_job_with_no_running_transcode(signing_key: bytes, task_status: TranscodeTaskStatus) -> None:
+    """QUEUED here is a task the dispatcher holds: no container, no GPU."""
+    db = FakeSession()
+    _seed_admin(db)
+    db.rows["jobs"] = [_make_job(_TRANSCODING_JOB, status=JobStatus.RIPPED)]
+    _seed_transcode(db, _TRANSCODING_JOB, task_status)
+    app, token = _make_app(signing_key, db, _CapturingHub())
+    with TestClient(app) as client:
+        r = client.delete(f"/api/jobs/{_TRANSCODING_JOB}", headers=_auth(token))
+    assert r.status_code == 204
+    assert db.rows["jobs"] == []
+
+
+def test_bulk_delete_skips_a_job_that_is_transcoding(signing_key: bytes) -> None:
+    """Reported with the other in-flight jobs it refuses, which the UI words as
+    "skipped N in-flight job(s)". A job whose queued task is held is deleted."""
+    idle = "job_01JZXR7K3M5Q8N4VWA0000000V"
+    held = "job_01JZXR7K3M5Q8N4VWA0000000H"
+    spawned = "job_01JZXR7K3M5Q8N4VWA0000000S"
+    db = FakeSession()
+    _seed_admin(db)
+    db.rows["jobs"] = [
+        _make_job(_TRANSCODING_JOB, status=JobStatus.RIPPED),
+        _make_job(idle, status=JobStatus.RIPPED),
+        _make_job(held, status=JobStatus.RIPPED),
+        _make_job(spawned, status=JobStatus.RIPPED),
+    ]
+    _seed_transcode(db, _TRANSCODING_JOB, TranscodeTaskStatus.IN_PROGRESS)
+    _seed_transcode(db, idle, TranscodeTaskStatus.DONE)
+    _seed_transcode(db, held, TranscodeTaskStatus.QUEUED)
+    _seed_transcode(db, spawned, TranscodeTaskStatus.QUEUED, gpu=True)
+    app, token = _make_app(signing_key, db, _CapturingHub())
+    with TestClient(app) as client:
+        r = client.delete("/api/jobs", headers=_auth(token))
+    assert r.status_code == 200
+    body = r.json()
+    assert sorted(body["deleted_ids"]) == sorted([idle, held])
+    assert sorted(body["skipped_non_terminal"]) == sorted([_TRANSCODING_JOB, spawned])
+    assert sorted(j.id for j in db.rows["jobs"]) == sorted([_TRANSCODING_JOB, spawned])

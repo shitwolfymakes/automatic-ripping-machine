@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import pytest
 
 from arm_common import DiscType, JobStatus
 from arm_common.schemas.jobs import JobView, TranscodeProgressSummary
@@ -15,6 +16,7 @@ def test_transcode_progress_summary_shape() -> None:
         "tasks_done": 2,
         "tasks_failed": 0,
         "percent": 100.0,
+        "tasks_active": 0,
     }
 
 
@@ -75,6 +77,25 @@ def test_running_session_is_transcoding() -> None:
     assert s.percent == 70.0
 
 
+def test_tasks_active_counts_running_tasks_and_queued_tasks_holding_a_gpu() -> None:
+    """The count the job's Delete action is gated on. A queued task the
+    dispatcher holds (no GPU claimed) is not counted."""
+    sa = _sa("sap_1", SessionApplicationStatus.RUNNING)
+    tasks = [
+        _task("txt_1", "sap_1", TranscodeTaskStatus.DONE, 100),
+        _task("txt_2", "sap_1", TranscodeTaskStatus.IN_PROGRESS, 40),
+        _task("txt_3", "sap_1", TranscodeTaskStatus.QUEUED, 0),
+        _task("txt_4", "sap_1", TranscodeTaskStatus.FAILED, 0),
+        _task("txt_5", "sap_1", TranscodeTaskStatus.QUEUED, 0),
+    ]
+    s = _summarize_transcode_progress([sa], tasks, gpu_claimed_task_ids={"txt_3"})
+    assert s is not None
+    assert s.tasks_active == 2
+    held = _summarize_transcode_progress([sa], tasks)
+    assert held is not None
+    assert held.tasks_active == 1
+
+
 def test_all_done_is_done() -> None:
     sa = _sa("sap_1", SessionApplicationStatus.DONE)
     tasks = [
@@ -85,6 +106,7 @@ def test_all_done_is_done() -> None:
     assert s is not None
     assert s.state == "done"
     assert s.tasks_done == 2 and s.tasks_total == 2 and s.percent == 100.0
+    assert s.tasks_active == 0
 
 
 def test_done_partial_is_done_partial() -> None:
@@ -526,3 +548,42 @@ def test_ripped_job_with_only_a_parked_app_reads_no_transcode_state() -> None:
     assert detail["job"]["transcode_progress"] is None
     assert detail["job"]["parked_session_ids"] == ["ses_x"]
     assert next(j for j in listed if j["id"] == job_id)["transcode_progress"] is None
+
+
+from arm_common import Gpu, GpuStatus, GpuVendor  # noqa: E402
+
+_QUEUED_JOB = "job_01JZXR7K3M5Q8N4VWA00000040"
+
+
+def _seed_queued_job(db: FakeSession, *, gpu: bool) -> None:
+    db.rows["jobs"] = [_ripped_job(_QUEUED_JOB)]
+    sa = _sa("sap_40", SessionApplicationStatus.RUNNING)
+    sa.job_id = _QUEUED_JOB
+    db.rows["session_applications"] = [sa]
+    db.rows["transcode_tasks"] = [_task("txt_40", "sap_40", TranscodeTaskStatus.QUEUED, 0)]
+    db.rows["gpus"] = [
+        Gpu(
+            id="gpu_1",
+            vendor=GpuVendor.QSV,
+            device_path="/dev/dri/renderD128",
+            encoder_kinds=["h264"],
+            status=GpuStatus.BUSY if gpu else GpuStatus.AVAILABLE,
+            enabled=True,
+            claimed_by_task_id="txt_40" if gpu else None,
+        )
+    ]
+
+
+@pytest.mark.parametrize(("gpu", "can_delete"), [(False, True), (True, False)], ids=["held", "holding_gpu"])
+def test_list_and_detail_can_delete_follow_the_delete_rule(gpu: bool, can_delete: bool) -> None:
+    """A held queued task leaves Delete offered; one holding a GPU removes it,
+    matching DELETE /api/jobs/{id}."""
+    db = FakeSession()
+    _seed_admin(db)
+    _seed_queued_job(db, gpu=gpu)
+    app, token = _make_app(db)
+    with TestClient(app) as client:
+        listed = client.get("/api/jobs", headers=_auth(token))
+        detail = client.get(f"/api/jobs/{_QUEUED_JOB}", headers=_auth(token))
+    assert listed.json()[0]["actions"]["can_delete"] is can_delete
+    assert detail.json()["job"]["actions"]["can_delete"] is can_delete
