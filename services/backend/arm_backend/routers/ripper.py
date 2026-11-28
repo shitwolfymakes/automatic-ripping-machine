@@ -29,6 +29,14 @@ from arm_backend.identity.pipeline import resolve_job
 from arm_backend.identity.proposals import preferred_titles, record_preset
 from arm_backend.identity.stage_runner import EpisodeStageRunner
 from arm_backend.routers._deps import get_hub, get_stage_runner
+from arm_backend.title_map_service import (
+    NotAStructureScan,
+    apply_titles_report,
+    rippable_refs,
+    start_blocker,
+    stored_scan,
+    title_numbers,
+)
 from arm_backend.track_selection import DiscBackupNeedsBluray, select_tracks
 from arm_backend.ws import WSHub
 from arm_common import (
@@ -45,6 +53,7 @@ from arm_common import (
     TrackStatus,
 )
 from arm_common.enums import NON_TERMINAL_JOB_STATUSES, DriveKind, DriveSourceKind
+from arm_common.disc_titles import scan_candidates
 from arm_common.models import Track
 from arm_common.models._columns import enum_value_str
 from arm_common.schemas import (
@@ -65,6 +74,7 @@ from arm_common.schemas import (
     RipStartResponse,
     ScanResult,
     SdfStatusReport,
+    TitlesReport,
     TrackUpdateRequest,
     TrackView,
 )
@@ -444,7 +454,15 @@ def _rip_start_response(
         rip_preset_id=preset_id,
         tracks=[TrackView.model_validate(t) for t in tracks],
         min_length_seconds=min_length_seconds,
+        title_numbers=title_numbers(stored_scan(job), tracks),
     )
+
+
+def _require_titles(job: Job) -> None:
+    """409 while a structure-scan job still lacks MakeMKV's titles: the ripper cannot name the titles to rip."""
+    blocker = start_blocker(job)
+    if blocker is not None:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=blocker)
 
 
 async def _ensure_ripping(session: AsyncSession, job: Job) -> None:
@@ -499,13 +517,13 @@ async def _select_or_fail(
     # whatever the scan found, so it never lands in the no-titles handling
     # below; a FOLDER preset on anything but a Blu-ray is refused here.
     try:
-        new_tracks = select_tracks(job.id, scan, preset, preferred=preferred_titles(job))
+        new_tracks = select_tracks(job.id, scan, preset, preferred=preferred_titles(job), rippable=rippable_refs(scan))
     except DiscBackupNeedsBluray as exc:
         # Fail the job with the reason on its event: the ripper gives up on a
         # 4xx, and the job would otherwise sit IDENTIFIED with nothing to say why.
         await _fail_titleless_source(session, hub, job, str(exc))
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)) from exc
-    virtual = None if new_tracks or scan.titles else await _virtual_source_drive(session, job)
+    virtual = None if new_tracks or scan_candidates(scan) else await _virtual_source_drive(session, job)
     if virtual is not None:
         # MakeMKV found nothing in the image (not even once it was unpacked,
         # arm_ripper.iso_extract) or in the disc folder. Fail it like a disc with no titles, with
@@ -556,6 +574,7 @@ async def rip_start(
     hub: WSHub = Depends(get_hub),
     stage_runner: EpisodeStageRunner | None = Depends(get_stage_runner),
 ) -> RipStartResponse:
+    _require_titles(job)
     preset_id, min_length_seconds = await _routed_rip_choice(session, job)
 
     existing = await _job_tracks(session, job.id)
@@ -587,6 +606,26 @@ async def rip_start(
     return _rip_start_response(job, preset_id, refreshed, min_length_seconds)
 
 
+@router.post("/jobs/{job_id}/titles", status_code=status.HTTP_204_NO_CONTENT)
+async def post_titles(
+    req: TitlesReport,
+    job: Job = Depends(require_drive_owner_by_job),
+    session: AsyncSession = Depends(get_session),
+    hub: WSHub = Depends(get_hub),
+) -> None:
+    """MakeMKV's titles for a disc whose card was posted from the playlist structure (or why it could not read
+    the disc): stored in the job's scan, mapped onto the structure's title refs, unrippable refs unticked."""
+    try:
+        await apply_titles_report(session, hub, job, req)
+    except NotAStructureScan as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT, detail="job has no structure scan to attach titles to"
+        ) from exc
+    if req.failure is not None and job.status == JobStatus.RIPPING:
+        # Start was pressed while MakeMKV was still reading: the rip waits for a map that will never come.
+        await _fail_titleless_source(session, hub, job, f"MakeMKV cannot read this disc: {req.failure}")
+
+
 @router.post("/jobs/{job_id}/resume", response_model=RipStartResponse)
 async def resume(
     job: Job = Depends(require_drive_owner_by_job),
@@ -603,6 +642,7 @@ async def resume(
             status_code=status.HTTP_409_CONFLICT,
             detail=f"job not in ripping state: status={job.status.value}",
         )
+    _require_titles(job)
 
     # One routed-session resolution for this request (see _routed_rip_choice).
     preset_id, min_length_seconds = await _routed_rip_choice(session, job)

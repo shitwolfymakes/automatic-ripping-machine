@@ -4,8 +4,10 @@ from arm_common import DiscType, IsoPreparePhase
 from arm_common.schemas import ScanResult
 
 from arm_ripper import iso_extract, prepare
+from arm_ripper.scan.bd_structure import BdStructure, scan_structure
 from arm_ripper.scan.data import scan_data
-from arm_ripper.scan.makemkv import ScanError, scan_disc as scan_makemkv
+from arm_ripper.scan.disc_probe import probe_disc
+from arm_ripper.scan.makemkv import ScanError, disc_fingerprints, scan_disc as scan_makemkv
 from arm_ripper.scan.musicbrainz_disc import scan_cd
 from arm_ripper.source import is_iso_source
 
@@ -45,8 +47,30 @@ async def _scan_extracted(device_path: str) -> ScanResult | None:
     return result
 
 
+async def _scan_structure_first(device_path: str, structure: BdStructure) -> ScanResult:
+    """A Blu-ray scan from the disc's structure alone: the playlists and clips, the disc probe's fingerprints and
+    BDMT name, and the volume label. No MakeMKV titles: `makemkvcon info` runs afterwards (arm_ripper.titles_read).
+    """
+    probe = await probe_disc(device_path, bluray=True)
+    label = (await scan_data(device_path)).volume_label
+    logger.info(
+        "scan complete device=%s via structure disc_type=bluray volume=%s playlists=%d",
+        device_path,
+        label,
+        len(structure.playlists),
+    )
+    return ScanResult(
+        disc_type=DiscType.BLURAY,
+        volume_label=label,
+        fingerprints=disc_fingerprints(probe),
+        bd_meta=probe.bd_meta,
+        playlists=structure.playlists,
+        clips=structure.clips,
+    )
+
+
 async def scan(device_path: str) -> ScanResult:
-    """Heuristic disc scan: MakeMKV first, fall back to MusicBrainz disc-id, then data.
+    """Heuristic disc scan: a Blu-ray's structure first, then MakeMKV, then MusicBrainz disc-id, then data.
 
     An ISO ripper reports this as its "preparing" phase (`prepare`, a no-op
     for a physical drive) until the scan is done and identify takes over."""
@@ -58,6 +82,10 @@ async def scan(device_path: str) -> ScanResult:
 
 
 async def _scan(device_path: str) -> ScanResult:
+    structure = await scan_structure(device_path)
+    if structure.playlists:
+        return await _scan_structure_first(device_path, structure)
+
     try:
         result = await scan_makemkv(device_path)
     except ScanError as e:
@@ -65,6 +93,8 @@ async def _scan(device_path: str) -> ScanResult:
         result = None
 
     if result is not None and result.titles:
+        if result.disc_type == DiscType.BLURAY:
+            logger.info("scan: no playlists read; blu-ray titles from makemkv structure_source=makemkv")
         logger.info(
             "scan complete device=%s disc_type=%s volume=%s titles=%d",
             device_path,

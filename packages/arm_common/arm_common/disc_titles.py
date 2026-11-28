@@ -18,9 +18,13 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
-from arm_common.schemas import BdClip, BdPlaylist, ScanTitle
+from arm_common.enums import DiscType
+from arm_common.schemas import BdClip, BdPlaylist, ScanResult, ScanTitle
 
 _ANGLE_SEPARATOR = ":"
+
+# MakeMKV lists no title shorter than this (its own default minimum), so the structure's candidates stop here too.
+MAKEMKV_MIN_TITLE_SECONDS = 120
 
 
 def title_ref(source_file: str, angle: int | None) -> str:
@@ -137,3 +141,25 @@ def titles_from_structure(
             title = _angle_title(playlist, angle, by_number)
             titles.append(title.model_copy(update={"index": len(titles)}))
     return titles
+
+
+def is_structure_scan(scan: ScanResult) -> bool:
+    """A Blu-ray scan the structure read produced (it has playlists): its titles are candidates built from the
+    playlists, keyed by title ref, and MakeMKV's own titles arrive later. A Blu-ray whose structure read failed
+    carries no playlists and is a MakeMKV scan like a DVD's."""
+    return scan.disc_type == DiscType.BLURAY and bool(scan.playlists)
+
+
+def scan_candidates(scan: ScanResult) -> list[ScanTitle]:
+    """The titles tracks are built from: the structure's for a structure scan, else the scan's own."""
+    if is_structure_scan(scan):
+        return titles_from_structure(scan.playlists, scan.clips, MAKEMKV_MIN_TITLE_SECONDS)
+    return scan.titles
+
+
+def track_ref(scan: ScanResult, title: ScanTitle) -> str:
+    """The `Track.source_ref` of one of the scan's candidate titles: its title ref for a structure scan, else its
+    index."""
+    if is_structure_scan(scan):
+        return title_ref(title.source_file or "", title.angle)
+    return str(title.index)

@@ -7,6 +7,7 @@ from typing import Any
 import httpx
 
 from arm_common import DiscType, Job, JobStatus, with_log_context
+from arm_common.disc_titles import is_structure_scan
 from arm_common.schemas import JobView, RipStartResponse, ScanResult, WSEnvelope
 from arm_ripper import raw_dir
 from arm_ripper.backend_client import BackendClient
@@ -22,6 +23,7 @@ from arm_ripper.rip.dispatcher import DEFAULT_MIN_LENGTH_SECONDS
 from arm_ripper.disc_scan import scan_or_none
 from arm_ripper.drive_poll import DriveState, read_drive_status
 from arm_ripper.source import is_file_source
+from arm_ripper.titles_read import TitlesRead
 from arm_ripper.ws_client import WSClient
 
 logger = logging.getLogger("arm_ripper.job_controller")
@@ -63,6 +65,9 @@ class JobController:
         # Getting MakeMKV ready for a disc: key refresh plus the background KEYDB/SDF refreshes.
         self._makemkv = MakeMKVPrep(client)
         self._wipe_tasks: set[asyncio.Task[None]] = set()
+        # MakeMKV's title read for a disc whose card came from the playlist structure: runs while the operator
+        # reviews, and a rip waits for it.
+        self._titles = TitlesRead(self._backend)
         self._drive_id = drive_id
         self._ws = ws
         # Each ripper container owns exactly one optical drive. The node it
@@ -222,6 +227,7 @@ class JobController:
         if active is not None and owns:
             logger.info("job.abandoned: cancelling active task for job_id=%s", job_id)
             active.cancel()
+        spawn_tracked(self._titles.cancel(job_id), self._wipe_tasks)
         if delete_raw:
             spawn_tracked(raw_dir.wipe_raw_dir(job_id), self._wipe_tasks)
         if self._abandon_ejects(owns):
@@ -306,26 +312,35 @@ class JobController:
             if job is None:
                 return
             self._active_job_id = job.id
+            if is_structure_scan(scan_result):
+                # The card is up from the playlists; MakeMKV names its title numbers while the operator reviews.
+                self._titles.start(job.id, device_path)
+            try:
+                await self._after_identify(job, device_path)
+            finally:
+                await self._titles.cancel(job.id)
 
-            # Every log line below carries job_id once identify lands.
-            with with_log_context(job_id=job.id):
-                if not await self._pass_gate(job, IDENTIFY_WAIT):
-                    return
+    async def _after_identify(self, job: Job, device_path: str) -> None:
+        """Park the identified job at its gates, then rip it."""
+        # Every log line below carries job_id once identify lands.
+        with with_log_context(job_id=job.id):
+            if not await self._pass_gate(job, IDENTIFY_WAIT):
+                return
 
-                # Timed review gate: the backend parks an identified disc here
-                # when hold_for_review is on. Wait for Start (-> ripping) or the
-                # auto-start path (-> identified); either proceeds to the rip.
-                if not await self._pass_gate(job, REVIEW_WAIT):
-                    return
+            # Timed review gate: the backend parks an identified disc here
+            # when hold_for_review is on. Wait for Start (-> ripping) or the
+            # auto-start path (-> identified); either proceeds to the rip.
+            if not await self._pass_gate(job, REVIEW_WAIT):
+                return
 
-                # Proceed for: identified (normal / operator Start landed),
-                # ripping (operator Start already transitioned), or
-                # awaiting_review (timed auto-start — rip-start transitions it).
-                if job.status not in (JobStatus.IDENTIFIED, JobStatus.RIPPING, JobStatus.AWAITING_REVIEW):
-                    logger.info("job %s in unexpected status %s; not ripping", job.id, job.status.value)
-                    return
+            # Proceed for: identified (normal / operator Start landed),
+            # ripping (operator Start already transitioned), or
+            # awaiting_review (timed auto-start — rip-start transitions it).
+            if job.status not in (JobStatus.IDENTIFIED, JobStatus.RIPPING, JobStatus.AWAITING_REVIEW):
+                logger.info("job %s in unexpected status %s; not ripping", job.id, job.status.value)
+                return
 
-                await self._run_rip_guarded(job, device_path)
+            await self._run_rip_guarded(job, device_path)
 
     async def _pass_gate(self, job: Job, spec: WaitSpec) -> bool:
         """Wait a job parked at `spec`'s gate until it leaves, recording the status it left in; True unless it left
@@ -388,6 +403,10 @@ class JobController:
             return None
 
     async def _run_rip(self, job: Job | JobView, device_path: str) -> None:
+        # Start waits for MakeMKV's title map: the rip names its titles by MakeMKV number.
+        if not await self._titles.wait(job.id):
+            logger.error("MakeMKV cannot read the disc; the rip of job_id=%s does not start", job.id)
+            return
         rip_start = await self._backend.rip_start(job.id)
         logger.info(
             "rip-start job_id=%s preset=%s tracks=%d",

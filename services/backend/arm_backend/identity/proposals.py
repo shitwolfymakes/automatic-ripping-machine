@@ -40,13 +40,13 @@ def claims_of(job: Job) -> IdentityClaims:
         return IdentityClaims()
 
 
-def preferred_titles(job: Job) -> frozenset[int]:
-    """Indices of the titles TheDiscDB calls the main movie in the job's stored
-    claims; empty before that source has run."""
+def preferred_titles(job: Job) -> frozenset[str]:
+    """Refs (`Track.source_ref`) of the titles TheDiscDB calls the main movie in
+    the job's stored claims; empty before that source has run."""
     source = claims_of(job).sources.get("thediscdb")
     if source is None:
         return frozenset()
-    return frozenset(int(ref) for ref, claim in source.tracks.items() if claim.role == TrackRole.MAIN)
+    return frozenset(ref for ref, claim in source.tracks.items() if claim.role == TrackRole.MAIN)
 
 
 def _store(job: Job, claims: IdentityClaims) -> None:
@@ -242,6 +242,16 @@ def record_preset(job: Job, tracks: Iterable[Track], *, now: datetime) -> None:
     claims = claims_of(job)
     preset = claims.sources.get(PRESET) or SourceClaims()
     preset.tracks = {**preset.tracks, **{t.source_ref: TrackClaim(selected=not t.excluded) for t in tracks}}
+    preset.run_at = now
+    claims.sources = {**claims.sources, PRESET: preset}
+    _store(job, claims)
+
+
+def record_preset_drop(job: Job, refs: Iterable[str], *, now: datetime) -> None:
+    """Drop `refs` through the preset's lowest-tier `excluded` proposal: titles MakeMKV cannot rip."""
+    claims = claims_of(job)
+    preset = claims.sources.get(PRESET) or SourceClaims()
+    preset.tracks = {**preset.tracks, **{ref: TrackClaim(selected=False) for ref in refs}}
     preset.run_at = now
     claims.sources = {**claims.sources, PRESET: preset}
     _store(job, claims)

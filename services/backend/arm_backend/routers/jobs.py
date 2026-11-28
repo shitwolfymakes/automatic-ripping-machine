@@ -22,6 +22,7 @@ from arm_backend.identity.resolve_service import identity_snapshot, resolve_iden
 from arm_backend.identity.stage_runner import EpisodeStageRunner
 from arm_backend.job_abandon import abandon_job_transition
 from arm_backend.job_files import delete_job_files
+from arm_backend.title_map_service import makemkv_failure
 from arm_backend.job_views import job_detail_view, job_list_views
 from arm_backend.log_reader import per_job_log_path
 from arm_backend.metadata.identity_payload import external_ids_of
@@ -249,6 +250,9 @@ async def rip_start_review(
             status_code=status.HTTP_409_CONFLICT,
             detail=f"rip-start-review only valid for awaiting_review, got {enum_value_str(job.status)}",
         )
+    failure = makemkv_failure(job)
+    if failure is not None:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=f"MakeMKV cannot read this disc: {failure}")
     await _start_held_job(db, hub, job)
     await db.refresh(job)
     logger.info("rip-start-review job_id=%s -> ripping", job.id)

@@ -18,13 +18,16 @@ import arm_ripper.job_controller as jc_module
 import arm_ripper.raw_dir as raw_dir_module
 import arm_ripper.resolution_wait as resolution_wait_module
 import arm_ripper.makemkv_prep as makemkv_prep_module
+import arm_ripper.titles_read as titles_read_module
 from arm_common import MediaType, DiscType, Job, JobStatus
 from arm_common.schemas import (
+    BdPlaylist,
     JobView,
     RipperConfigView,
     RipStartResponse,
     ScanResult,
     ScanTitle,
+    TitlesReport,
     TrackView,
     WSEnvelope,
 )
@@ -32,6 +35,7 @@ from arm_ripper.drive_poll import DriveState
 from arm_ripper.eject import Ejector
 from arm_ripper.job_controller import JobController
 from arm_ripper.resolution_wait import ResolutionWaiter
+from arm_ripper.scan.makemkv import ScanError
 from arm_ripper.makemkv_prep import MakeMKVPrep
 
 
@@ -96,6 +100,12 @@ class FakeClient:
         self.keydb_reports: list = []
         self.sdf_reports: list = []
         self.makemkv_sdf_enabled: bool = True
+        self.events: list[str] = []
+        self.titles_reports: list[tuple[str, TitlesReport]] = []
+
+    async def post_titles(self, job_id: str, report: TitlesReport) -> None:
+        self.events.append("titles")
+        self.titles_reports.append((job_id, report))
 
     async def identify(
         self,
@@ -117,6 +127,7 @@ class FakeClient:
 
     async def rip_start(self, job_id: str) -> RipStartResponse:
         self.rip_start_calls.append(job_id)
+        self.events.append("rip_start")
         return RipStartResponse(
             job_id=job_id,
             rip_preset_id="rpr_builtin_movie_archive",
@@ -1185,6 +1196,28 @@ async def test_scan_retry_recovers_transient_not_ready(monkeypatch):
     assert calls["n"] == 2
 
 
+async def test_scan_retry_does_not_retry_a_structure_scan_that_has_no_titles_yet(monkeypatch):
+    """A Blu-ray scanned from its structure has playlists and, by design, no MakeMKV titles."""
+    monkeypatch.setattr(disc_scan_module.asyncio, "sleep", _noop_async)
+    calls = {"n": 0}
+    structure = ScanResult(
+        disc_type=DiscType.BLURAY,
+        playlists=[
+            BdPlaylist(name="00800.mpls", clips=[1], clip_seconds=[7200.0], duration_seconds=7200, chapter_count=1)
+        ],
+    )
+
+    async def _scan(device_path):
+        calls["n"] += 1
+        return structure
+
+    monkeypatch.setattr(disc_scan_module, "scan_disc", _scan)
+    monkeypatch.setattr(disc_scan_module, "read_drive_status", lambda _p: DriveState.DISC_OK)
+
+    assert await disc_scan_module._scan_with_ready_retry("/dev/sr0") == structure
+    assert calls["n"] == 1
+
+
 async def test_scan_retry_exhausts_and_logs_marker(monkeypatch, caplog):
     monkeypatch.setattr(disc_scan_module.asyncio, "sleep", _noop_async)
     monkeypatch.setattr(disc_scan_module, "scan_disc", lambda _p: _async_return(_empty_scan()))
@@ -1882,3 +1915,134 @@ async def test_auto_rip_lookup_failure_proceeds_fail_open(caplog, stub_scan, stu
     assert "auto-rip config lookup failed (down); proceeding fail-open" in warnings
     assert client.rip_start_calls == ["job_test"]
     assert client.rip_complete_calls == ["job_test"]
+
+
+# --- a Blu-ray scanned from its structure: MakeMKV reads its titles in the background ---
+
+
+def _structure_scan() -> ScanResult:
+    return ScanResult(
+        disc_type=DiscType.BLURAY,
+        volume_label="FEATURE",
+        playlists=[
+            BdPlaylist(name="00800.mpls", clips=[1], clip_seconds=[7200.0], duration_seconds=7200, chapter_count=1)
+        ],
+    )
+
+
+@pytest.fixture
+def stub_structure_scan(monkeypatch):
+    async def _scan(_device_path: str) -> ScanResult:
+        return _structure_scan()
+
+    monkeypatch.setattr(disc_scan_module, "scan_disc", _scan)
+
+
+def _read_titles(monkeypatch, result, *, gate: asyncio.Event | None = None):
+    """Stub the MakeMKV info run: it returns (or raises) `result`, after `gate` when given."""
+    runs: list[str] = []
+
+    async def _scan_titles(device_path: str):
+        runs.append(device_path)
+        if gate is not None:
+            await gate.wait()
+        if isinstance(result, Exception):
+            raise result
+        return result
+
+    monkeypatch.setattr(titles_read_module, "scan_titles", _scan_titles)
+    return runs
+
+
+_MKV_TITLES = [ScanTitle(index=0, duration_seconds=7200, source_file="00800.mpls")]
+
+
+async def test_a_structure_scan_posts_makemkvs_titles_before_the_rip_starts(
+    stub_structure_scan, stub_eject, monkeypatch
+):
+    runs = _read_titles(monkeypatch, _MKV_TITLES)
+    client = FakeClient()
+    client.identify_responses.append(_job(JobStatus.IDENTIFIED, title="Feature"))
+    controller = JobController(client, "drv_test")
+
+    await asyncio.wait_for(controller.handle_disc_inserted("/dev/sr0"), timeout=2.0)
+
+    assert runs == ["/dev/sr0"]
+    assert client.titles_reports == [("job_test", TitlesReport(titles=_MKV_TITLES))]
+    assert client.events == ["titles", "rip_start"]
+
+
+async def test_start_waits_for_the_titles_that_are_still_being_read(stub_structure_scan, stub_eject, monkeypatch):
+    gate = asyncio.Event()
+    _read_titles(monkeypatch, _MKV_TITLES, gate=gate)
+    client = FakeClient()
+    client.identify_responses.append(_job(JobStatus.IDENTIFIED, title="Feature"))
+    controller = JobController(client, "drv_test")
+
+    pipeline = asyncio.create_task(controller.handle_disc_inserted("/dev/sr0"))
+    await asyncio.sleep(0.05)
+    assert client.rip_start_calls == []  # Start is held for the title map
+    gate.set()
+    await asyncio.wait_for(pipeline, timeout=2.0)
+
+    assert client.events == ["titles", "rip_start"]
+
+
+async def test_a_failed_title_read_posts_the_reason_and_the_rip_does_not_start(
+    stub_structure_scan, stub_eject, monkeypatch, caplog
+):
+    _read_titles(monkeypatch, ScanError("makemkvcon timed out after 300.0s"))
+    client = FakeClient()
+    client.identify_responses.append(_job(JobStatus.IDENTIFIED, title="Feature"))
+    controller = JobController(client, "drv_test")
+
+    with caplog.at_level(logging.INFO, logger="arm_ripper.job_controller"):
+        await asyncio.wait_for(controller.handle_disc_inserted("/dev/sr0"), timeout=2.0)
+
+    assert client.titles_reports == [("job_test", TitlesReport(failure="makemkvcon timed out after 300.0s"))]
+    assert client.rip_start_calls == [] and client.rip_complete_calls == []
+    assert "MakeMKV cannot read the disc" in caplog.text
+
+
+async def test_a_dvd_reads_no_titles_in_the_background(stub_scan, stub_eject, monkeypatch):
+    runs = _read_titles(monkeypatch, _MKV_TITLES)
+    client = FakeClient()
+    client.identify_responses.append(_job(JobStatus.IDENTIFIED, title="Test Movie"))
+
+    await asyncio.wait_for(JobController(client, "drv_test").handle_disc_inserted("/dev/sr0"), timeout=2.0)
+
+    assert runs == [] and client.titles_reports == []
+    assert client.rip_start_calls == ["job_test"]
+
+
+async def test_abandoning_the_job_stops_the_title_read(stub_structure_scan, eject_spy, monkeypatch):
+    monkeypatch.setattr(resolution_wait_module, "RESOLUTION_WS_FIRST_WAIT_SECONDS", 5.0)
+    monkeypatch.setattr(resolution_wait_module, "RESOLUTION_WAIT_TIMEOUT_SECONDS", 30.0)
+    gate = asyncio.Event()
+    _read_titles(monkeypatch, _MKV_TITLES, gate=gate)
+    client = FakeClient()
+    client.identify_responses.append(_job(JobStatus.AWAITING_USER_ID))
+    controller = JobController(client, "drv_test", device_path="/dev/sr0")
+
+    pipeline = asyncio.create_task(controller.handle_disc_inserted("/dev/sr0"))
+    await asyncio.sleep(0.05)
+    await controller.on_ws_command(_abandon_envelope())
+    with pytest.raises(asyncio.CancelledError):
+        await asyncio.wait_for(pipeline, timeout=2.0)
+    await asyncio.sleep(0.01)
+
+    assert controller._titles._tasks == {}
+    assert client.titles_reports == []
+
+
+async def test_a_pipeline_that_ends_without_ripping_stops_the_title_read(stub_structure_scan, monkeypatch):
+    gate = asyncio.Event()
+    _read_titles(monkeypatch, _MKV_TITLES, gate=gate)
+    client = FakeClient()
+    client.identify_responses.append(_job(JobStatus.RIPPED))  # an unexpected status: the pipeline returns
+    controller = JobController(client, "drv_test")
+
+    await asyncio.wait_for(controller.handle_disc_inserted("/dev/sr0"), timeout=2.0)
+
+    assert controller._titles._tasks == {}
+    assert client.titles_reports == []

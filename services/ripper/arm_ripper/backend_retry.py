@@ -7,7 +7,7 @@ from collections.abc import Awaitable, Callable
 import httpx
 
 from arm_common import Job
-from arm_common.schemas import JobView, RipStartResponse, ScanResult
+from arm_common.schemas import JobView, RipStartResponse, ScanResult, TitlesReport
 from arm_ripper.backend_client import BackendClient
 
 # Same logger name the calls had in job_controller, so log records and caplog filters are unchanged.
@@ -56,6 +56,10 @@ class BackendRetry:
     async def rip_start(self, job_id: str) -> RipStartResponse:
         """Mark the job ripping on the backend, retrying a transient failure."""
         return await self.call(lambda: self._client.rip_start(job_id), f"rip-start {job_id}")
+
+    async def post_titles(self, job_id: str, report: TitlesReport) -> None:
+        """Give the backend MakeMKV's titles for the job, retrying a transient failure."""
+        await self.call(lambda: self._client.post_titles(job_id, report), f"titles {job_id}")
 
     async def rip_complete(self, job_id: str) -> JobView:
         """Mark the job's rip complete on the backend, retrying a transient failure."""

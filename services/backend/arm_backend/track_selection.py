@@ -1,4 +1,5 @@
 from arm_common import TrackStatus, DiscType, OutputMode, RipPreset, Track, TrackKind, TrackSelection
+from arm_common.disc_titles import scan_candidates, track_ref
 from arm_common.schemas import ScanResult, ScanTitle, TrackFilters
 from arm_common.title_classes import KEPT_CLASSES, MAIN_FEATURE_MIN_SECONDS, TitleClass, TitleVerdict, classify_titles
 
@@ -9,27 +10,27 @@ class TrackSelectionError(ValueError):
     pass
 
 
-def _verdict_fields(verdict: TitleVerdict | None) -> dict[str, TitleClass | str | None]:
+def _verdict_fields(verdict: TitleVerdict | None, refs: dict[int, str]) -> dict[str, TitleClass | str | None]:
     """The track columns a classifier verdict fills; all NULL without one (a
     DVD, or a title the classifier never saw). `title_class_ref` is the
     `source_ref` of the kept title a copy points at."""
     if verdict is None:
         return {"title_class": None, "title_class_ref": None}
-    ref = None if verdict.of_index is None else str(verdict.of_index)
+    ref = None if verdict.of_index is None else refs[verdict.of_index]
     return {"title_class": verdict.title_class, "title_class_ref": ref}
 
 
-def _video_track(job_id: str, title: ScanTitle, verdicts: dict[int, TitleVerdict]) -> Track:
+def _video_track(job_id: str, title: ScanTitle, verdicts: dict[int, TitleVerdict], refs: dict[int, str]) -> Track:
     return Track(
         job_id=job_id,
         kind=TrackKind.VIDEO_TITLE,
         index=title.index,
-        source_ref=str(title.index),
+        source_ref=refs[title.index],
         expected_duration_seconds=title.duration_seconds,
         expected_size_bytes=title.size_bytes,
         source_file=title.source_file,
         playlist_name=title.playlist_name,
-        **_verdict_fields(verdicts.get(title.index)),
+        **_verdict_fields(verdicts.get(title.index), refs),
     )
 
 
@@ -90,12 +91,15 @@ def _clip_seconds(scan: ScanResult) -> dict[int, float]:
     return merged
 
 
-def _classify(scan: ScanResult, preferred: frozenset[int]) -> dict[int, TitleVerdict]:
+def _classify(
+    scan: ScanResult, titles: list[ScanTitle], refs: dict[int, str], preferred: frozenset[str]
+) -> dict[int, TitleVerdict]:
     """Verdicts for every title of a Blu-ray scan; `{}` for any other disc, which
-    leaves every title a candidate."""
+    leaves every title a candidate. `preferred` are title refs."""
     if scan.disc_type != DiscType.BLURAY:
         return {}
-    return classify_titles(scan.titles, preferred=preferred, clip_seconds=_clip_seconds(scan))
+    preferred_indexes = frozenset(i for i, ref in refs.items() if ref in preferred)
+    return classify_titles(titles, preferred=preferred_indexes, clip_seconds=_clip_seconds(scan))
 
 
 def _kept_titles(titles: list[ScanTitle], verdicts: dict[int, TitleVerdict]) -> list[ScanTitle]:
@@ -122,23 +126,34 @@ def _custom_pool(titles: list[ScanTitle], candidates: list[ScanTitle], filters: 
     return titles if filters.title_indices is not None else candidates
 
 
-def _select_video(scan: ScanResult, rip_preset: RipPreset, job_id: str, preferred: frozenset[int]) -> list[Track]:
-    titles = scan.titles
+def _select_video(
+    scan: ScanResult,
+    rip_preset: RipPreset,
+    job_id: str,
+    preferred: frozenset[str],
+    rippable: frozenset[str] | None,
+) -> list[Track]:
+    titles = scan_candidates(scan)
     if not titles:
         return []
-    verdicts = _classify(scan, preferred)
+    refs = {t.index: track_ref(scan, t) for t in titles}
+    verdicts = _classify(scan, titles, refs, preferred)
     candidates = _kept_titles(titles, verdicts)
+    if rippable is not None:
+        candidates = [t for t in candidates if refs[t.index] in rippable]
     rule = rip_preset.track_selection
     if rule == TrackSelection.MAIN_FEATURE:
-        return [_video_track(job_id, t, verdicts) for t in _main_feature(candidates, verdicts)]
+        return [_video_track(job_id, t, verdicts, refs) for t in _main_feature(candidates, verdicts)]
     if rule == TrackSelection.ALL_TRACKS:
-        return [_video_track(job_id, t, verdicts) for t in candidates if t.duration_seconds >= ALL_TRACKS_MIN_SECONDS]
+        return [
+            _video_track(job_id, t, verdicts, refs) for t in candidates if t.duration_seconds >= ALL_TRACKS_MIN_SECONDS
+        ]
     if rule == TrackSelection.ARCHIVE:
-        return [_video_track(job_id, t, verdicts) for t in candidates]
+        return [_video_track(job_id, t, verdicts, refs) for t in candidates]
     if rule == TrackSelection.CUSTOM:
         filters = _parse_filters(rip_preset)
         return [
-            _video_track(job_id, t, verdicts)
+            _video_track(job_id, t, verdicts, refs)
             for t in _apply_custom_filters(_custom_pool(titles, candidates, filters), filters)
         ]
     # Unreachable: TrackSelection enum is exhaustively handled above.
@@ -190,23 +205,29 @@ def _whole_disc_tracks(job_id: str, scan: ScanResult, rip_preset: RipPreset) -> 
 
 
 def select_tracks(
-    job_id: str, scan: ScanResult, rip_preset: RipPreset, *, preferred: frozenset[int] = frozenset()
+    job_id: str,
+    scan: ScanResult,
+    rip_preset: RipPreset,
+    *,
+    preferred: frozenset[str] = frozenset(),
+    rippable: frozenset[str] | None = None,
 ) -> list[Track]:
     """Apply rip-preset track-selection rules to a scan. `preferred` are the
-    title indices a metadata source calls the main feature; the classifier uses
-    them to break ties between look-alike titles."""
+    title refs a metadata source calls the main feature; the classifier uses
+    them to break ties between look-alike titles. `rippable`, when given, are
+    the only refs a video selection may take (the ones MakeMKV can rip)."""
     whole = _whole_disc_tracks(job_id, scan, rip_preset)
     if whole is not None:
         return whole
     if scan.disc_type in (DiscType.DVD, DiscType.BLURAY):
-        return _select_video(scan, rip_preset, job_id, preferred)
+        return _select_video(scan, rip_preset, job_id, preferred, rippable)
     if scan.disc_type == DiscType.CD:
         return _select_audio(scan, rip_preset, job_id)
     raise TrackSelectionError(f"cannot select tracks for disc_type={scan.disc_type}")
 
 
 def select_tracks_for_review(
-    job_id: str, scan: ScanResult, rip_preset: RipPreset, *, preferred: frozenset[int] = frozenset()
+    job_id: str, scan: ScanResult, rip_preset: RipPreset, *, preferred: frozenset[str] = frozenset()
 ) -> list[Track]:
     """Persist EVERY scanned title as a Track for the timed review gate, marking
     preset-rejected titles `excluded=True` (the default keep/drop set) so the
@@ -224,11 +245,13 @@ def select_tracks_for_review(
         return whole
 
     kept_refs = {t.source_ref for t in select_tracks(job_id, scan, rip_preset, preferred=preferred)}
+    titles = scan_candidates(scan)
+    refs = {t.index: track_ref(scan, t) for t in titles}
     is_cd = scan.disc_type == DiscType.CD
-    verdicts = _classify(scan, preferred)
+    verdicts = _classify(scan, titles, refs, preferred)
     rows: list[Track] = []
-    for title in scan.titles:
-        track = _audio_track(job_id, title) if is_cd else _video_track(job_id, title, verdicts)
-        track.excluded = str(title.index) not in kept_refs
+    for title in titles:
+        track = _audio_track(job_id, title) if is_cd else _video_track(job_id, title, verdicts, refs)
+        track.excluded = refs[title.index] not in kept_refs
         rows.append(track)
     return rows
