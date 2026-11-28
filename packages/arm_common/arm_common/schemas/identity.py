@@ -20,6 +20,7 @@ ClaimStatus = Literal["ok", "miss", "skipped", "error"]
 TRACK_CLAIM_FIELDS: dict[str, str] = {
     "role": "role",
     "title": "title",
+    "edition": "edition",
     "season": "season",
     "episode": "episode_number",
     "episode_end": "episode_number_end",
@@ -43,6 +44,7 @@ class TrackClaim(BaseModel):
 
     role: TrackRole | None = None
     title: str | None = None
+    edition: str | None = None
     season: int | None = None
     episode: int | None = None
     episode_end: int | None = None

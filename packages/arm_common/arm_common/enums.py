@@ -131,7 +131,9 @@ TERMINAL_JOB_STATUSES: frozenset[JobStatus] = frozenset(
         JobStatus.FAILED,
     }
 )
-# Discs whose titles are video: the ones a job's version policy applies to.
+# Discs whose titles are video: the ones a job's version policy applies to. A miss of one
+# parks in review with every title listed, and an unidentified rip of one finishes plain
+# ripped; any other disc that misses keeps the plain miss path.
 VIDEO_DISC_TYPES: frozenset[DiscType] = frozenset({DiscType.DVD, DiscType.BLURAY})
 # Pre-rip = disc present, not yet committed to a rip (reusable on re-identify).
 PRE_RIP_JOB_STATUSES: frozenset[JobStatus] = frozenset(
@@ -294,6 +296,21 @@ class ContainerFormat(StrEnum):
     OGG = "ogg"
     ISO = "iso"
     NONE = "none"
+
+
+class MissMediaType(StrEnum):
+    """The media type a DVD or Blu-ray that misses identification starts with."""
+
+    MOVIE = "movie"
+    TV = "tv"
+
+
+class MissTitlesKept(StrEnum):
+    """Which titles an unidentified disc keeps: every title, or what the routed
+    session's rip preset would keep."""
+
+    ALL = "all"
+    PRESET = "preset"
 
 
 class PreviouslyRippedAction(StrEnum):

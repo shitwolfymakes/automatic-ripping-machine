@@ -1,4 +1,4 @@
-from arm_common import TrackStatus, DiscType, OutputMode, RipPreset, Track, TrackKind, TrackSelection
+from arm_common import MissTitlesKept, TrackStatus, DiscType, OutputMode, RipPreset, Track, TrackKind, TrackSelection
 from arm_common.disc_titles import scan_candidates, track_ref
 from arm_common.schemas import ScanResult, ScanTitle, TrackFilters
 from arm_common.title_classes import (
@@ -396,13 +396,47 @@ def select_tracks_for_review(
     kept_refs = preset_ticks(
         scan, rip_preset, preferred=preferred, tick_one_version=tick_one_version, prefer_stereo_3d=prefer_stereo_3d
     )
+    rows = _title_tracks(job_id, scan, preferred, prefer_stereo_3d)
+    for track in rows:
+        track.excluded = track.source_ref not in (kept_refs or frozenset())
+    return rows
+
+
+def _title_tracks(
+    job_id: str, scan: ScanResult, preferred: frozenset[str], prefer_stereo_3d: bool | None
+) -> list[Track]:
+    """One Track per scanned title: audio for a CD, video otherwise, each video title labelled with its class."""
     titles = scan_candidates(scan)
     refs = {t.index: track_ref(scan, t) for t in titles}
-    is_cd = scan.disc_type == DiscType.CD
+    if scan.disc_type == DiscType.CD:
+        return [_audio_track(job_id, title) for title in titles]
     verdicts = _classify(scan, titles, refs, preferred, prefer_stereo_3d)
-    rows: list[Track] = []
-    for title in titles:
-        track = _audio_track(job_id, title) if is_cd else _video_track(job_id, title, verdicts, refs)
-        track.excluded = refs[title.index] not in (kept_refs or frozenset())
-        rows.append(track)
-    return rows
+    return [_video_track(job_id, title, verdicts, refs) for title in titles]
+
+
+def select_tracks_on_miss(
+    job_id: str,
+    scan: ScanResult,
+    rip_preset: RipPreset,
+    titles_kept: MissTitlesKept,
+    *,
+    preferred: frozenset[str] = frozenset(),
+    tick_one_version: bool = True,
+    prefer_stereo_3d: bool | None = None,
+) -> list[Track]:
+    """Tracks for a disc that missed identification. `ALL` keeps every scanned
+    title; `PRESET` keeps what the preset would, as the review gate does. A
+    preset that takes the disc whole yields its single whole-disc track either way."""
+    if titles_kept == MissTitlesKept.PRESET:
+        return select_tracks_for_review(
+            job_id,
+            scan,
+            rip_preset,
+            preferred=preferred,
+            tick_one_version=tick_one_version,
+            prefer_stereo_3d=prefer_stereo_3d,
+        )
+    whole = _whole_disc_tracks(job_id, scan, rip_preset)
+    if whole is not None:
+        return whole
+    return _title_tracks(job_id, scan, preferred, prefer_stereo_3d)

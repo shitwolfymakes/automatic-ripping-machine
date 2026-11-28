@@ -406,6 +406,30 @@ CONFIG_FIELD_META: list[ConfigFieldMeta] = [
         type="bool",
         editable=True,
     ),
+    ConfigFieldMeta(
+        key="miss_media_type",
+        group="Defaults",
+        tier="operator",
+        label="Treat unidentified video discs as",
+        help="The media type a DVD or Blu-ray that misses identification starts with. "
+        "Flip it on the review screen before you start the rip.",
+        type="enum",
+        enum_values=["movie", "tv"],
+        enum_labels={"movie": "Movie", "tv": "TV"},
+        editable=True,
+    ),
+    ConfigFieldMeta(
+        key="miss_titles_kept",
+        group="Defaults",
+        tier="operator",
+        label="Titles kept on an unidentified disc",
+        help="All keeps every title for you to review. Preset keeps what the routed session's rip preset would "
+        "(for example only the main feature).",
+        type="enum",
+        enum_values=["all", "preset"],
+        enum_labels={"all": "All titles", "preset": "Same as the rip preset"},
+        editable=True,
+    ),
     # --- Notifications ---
     ConfigFieldMeta(
         key="notifications_enabled",

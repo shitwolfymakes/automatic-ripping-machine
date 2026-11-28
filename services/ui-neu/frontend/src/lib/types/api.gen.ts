@@ -759,6 +759,8 @@ export type ConfigUpdateRequest = {
      */
     tick_one_version?: boolean | null;
     on_previously_ripped?: PreviouslyRippedAction | null;
+    miss_media_type?: MissMediaType | null;
+    miss_titles_kept?: MissTitlesKept | null;
     /**
      * Notifications Enabled
      */
@@ -912,6 +914,8 @@ export type ConfigView = {
      */
     tick_one_version: boolean;
     on_previously_ripped: PreviouslyRippedAction;
+    miss_media_type: MissMediaType;
+    miss_titles_kept: MissTitlesKept;
     default_retention_policy: RetentionPolicy;
     /**
      * Notification Apprise Urls
@@ -2859,6 +2863,10 @@ export type JobFlags = {
      * Rerip Allowed
      */
     rerip_allowed?: boolean;
+    /**
+     * Blocked Miss
+     */
+    blocked_miss?: boolean;
     [key: string]: unknown;
 };
 
@@ -3813,6 +3821,21 @@ export type MetadataSearchResponse = {
      */
     detail?: string | null;
 };
+
+/**
+ * MissMediaType
+ *
+ * The media type a DVD or Blu-ray that misses identification starts with.
+ */
+export type MissMediaType = 'movie' | 'tv';
+
+/**
+ * MissTitlesKept
+ *
+ * Which titles an unidentified disc keeps: every title, or what the routed
+ * session's rip preset would keep.
+ */
+export type MissTitlesKept = 'all' | 'preset';
 
 /**
  * MkdirRequest
@@ -5986,6 +6009,10 @@ export type TrackClaim = {
      * Title
      */
     title?: string | null;
+    /**
+     * Edition
+     */
+    edition?: string | null;
     /**
      * Season
      */

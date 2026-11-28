@@ -627,7 +627,7 @@ describe('Settings page sections', () => {
 			expect(screen.getByText(/notifications are disabled/i)).toBeInTheDocument();
 		});
 
-		it('ignores a second toggle while the first is still saving', async () => {
+		it('saves a second toggle made while the first is still saving once it settles', async () => {
 			const pending = deferred<{ success: boolean }>();
 			vi.mocked(saveArmConfig).mockReturnValueOnce(pending.promise);
 			await openTab('Notifications');
@@ -635,10 +635,14 @@ describe('Settings page sections', () => {
 			await waitFor(() => expect(master()).toHaveAttribute('aria-checked', 'true'));
 			await fireEvent.click(master());
 			expect(saveArmConfig).toHaveBeenCalledTimes(1);
-			expect(master()).toHaveAttribute('aria-checked', 'true');
+			expect(master()).toHaveAttribute('aria-checked', 'false');
 			pending.resolve({ success: true });
 			await settle();
-			expect(master()).toHaveAttribute('aria-checked', 'true');
+			expect(vi.mocked(saveArmConfig).mock.calls.map((c) => c[0])).toEqual([
+				{ notifications_enabled: true },
+				{ notifications_enabled: false }
+			]);
+			expect(master()).toHaveAttribute('aria-checked', 'false');
 		});
 	});
 

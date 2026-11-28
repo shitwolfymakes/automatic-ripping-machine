@@ -374,6 +374,12 @@ describe('ReviewTracksTable title search', () => {
 		expect(onrefresh).toHaveBeenCalledTimes(1);
 	});
 
+	it('offers Set by hand in the open search panel', async () => {
+		renderTable({ tracks: two() });
+		await fireEvent.click(screen.getByText('Alpha').closest('td')!);
+		expect(screen.getByRole('button', { name: 'Set by hand' })).toBeInTheDocument();
+	});
+
 	it('refreshes when Clear Override is used and leaves the search open', async () => {
 		const onrefresh = vi.fn();
 		renderTable({ job: createJob({ id: 'job_9' }), tracks: two(), onrefresh });

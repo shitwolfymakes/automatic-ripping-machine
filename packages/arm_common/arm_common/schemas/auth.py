@@ -11,7 +11,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-from arm_common.enums import PreviouslyRippedAction, RetentionPolicy, UserRole
+from arm_common.enums import MissMediaType, MissTitlesKept, PreviouslyRippedAction, RetentionPolicy, UserRole
 from arm_common.schemas.jobs import DiscFingerprintView, JobView, PreviousRipView, TrackView
 from arm_common.schemas.ripper import ScanFailure
 
@@ -91,6 +91,8 @@ class ConfigView(BaseModel):
     manual_wait_seconds: int
     tick_one_version: bool
     on_previously_ripped: PreviouslyRippedAction
+    miss_media_type: MissMediaType
+    miss_titles_kept: MissTitlesKept
     default_retention_policy: RetentionPolicy
     notification_apprise_urls: list[str]
     notifications_enabled: bool
@@ -139,6 +141,8 @@ class ConfigUpdateRequest(BaseModel):
     manual_wait_seconds: int | None = None
     tick_one_version: bool | None = None
     on_previously_ripped: PreviouslyRippedAction | None = None
+    miss_media_type: MissMediaType | None = None
+    miss_titles_kept: MissTitlesKept | None = None
     notifications_enabled: bool | None = None
     movie_sources: list[str] | None = None
     music_sources: list[str] | None = None

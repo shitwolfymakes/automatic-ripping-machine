@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import asyncio
 import secrets
 from pathlib import PurePosixPath
 
 import pytest
 from fastapi.testclient import TestClient
 
+from arm_backend.identity.pipeline import resolve_job
 from arm_backend.path_template import TemplateValidationError, expand_template, validate_template
 from arm_backend.seeders import SESSIONS
 from arm_backend.title_map_service import job_stereo_3d_refs
@@ -110,7 +112,7 @@ def test_one_version_kept_has_no_edition_text() -> None:
     ]
     assert version_names(tracks, ("00800.mpls",)) == {}
     (path,) = _paths(tracks)
-    assert path == "Blade Runner (1982)/Blade Runner (1982) - Track 00 - plex-1080p-h-265.mkv"
+    assert path == "Blade Runner (1982)/Blade Runner (1982) - Track 01 - plex-1080p-h-265.mkv"
 
 
 def test_a_film_with_no_version_set_has_no_edition_text() -> None:
@@ -122,8 +124,8 @@ def test_3d_and_2d_kept_get_distinct_names() -> None:
     assert _names(tracks, ("00800.mpls",)) == {0: "3D", 1: "2D"}
     paths = _paths(tracks, stereo=("00800.mpls",))
     assert paths == [
-        "Blade Runner (1982)/Blade Runner (1982) {edition-3D} - Track 00 - plex-1080p-h-265.mkv",
-        "Blade Runner (1982)/Blade Runner (1982) {edition-2D} - Track 01 - plex-1080p-h-265.mkv",
+        "Blade Runner (1982)/Blade Runner (1982) {edition-3D} - Track 01 - plex-1080p-h-265.mkv",
+        "Blade Runner (1982)/Blade Runner (1982) {edition-2D} - Track 02 - plex-1080p-h-265.mkv",
     ]
 
 
@@ -136,8 +138,8 @@ def test_two_angles_kept_are_angle_1_and_angle_2() -> None:
     tracks = [_track(0, "00800.mpls"), _track(1, "00800.mpls:2", TitleClass.ANGLE, "00800.mpls")]
     assert _names(tracks) == {0: "Angle 1", 1: "Angle 2"}
     assert _paths(tracks, _EDITION_TEMPLATE) == [
-        "Blade Runner (1982) - Angle 1 - Track 00.mkv",
-        "Blade Runner (1982) - Angle 2 - Track 01.mkv",
+        "Blade Runner (1982) - Angle 1 - Track 01.mkv",
+        "Blade Runner (1982) - Angle 2 - Track 02.mkv",
     ]
 
 
@@ -153,7 +155,7 @@ def test_named_edition_wins_over_the_generated_name() -> None:
     ]
     assert _names(tracks) == {0: "Theatrical", 1: "Director's Cut"}
     assert _paths(tracks)[1] == (
-        "Blade Runner (1982)/Blade Runner (1982) {edition-Director's Cut} - Track 01 - plex-1080p-h-265.mkv"
+        "Blade Runner (1982)/Blade Runner (1982) {edition-Director's Cut} - Track 02 - plex-1080p-h-265.mkv"
     )
 
 
@@ -227,7 +229,7 @@ def test_preview_and_apply_agree(signing_key: bytes) -> None:
     preview = [i["output_path"] for i in r.json()["items"]]
     applied = [x.output_path for x in compute_outputs(job, tracks, session, None, job_stereo_3d_refs(job))]
     assert preview == applied
-    assert PurePosixPath(preview[1]).name == "Blade Runner {edition-Angle 2} - Track 01.mkv"
+    assert PurePosixPath(preview[1]).name == "Blade Runner {edition-Angle 2} - Track 02.mkv"
 
 
 def test_an_edited_edition_reaches_apply_and_preview(signing_key: bytes) -> None:
@@ -240,21 +242,24 @@ def test_an_edited_edition_reaches_apply_and_preview(signing_key: bytes) -> None
     session = _session()
     session.transcode_preset_id = None
     session.output_path_template = "{title}/{title} {plex_edition?} - {edition?} - Track {track}.mkv"
-    _apply_track_edit(job, tracks[1], TrackEditRequest(track_id=tracks[1].id, edition="Director's Cut"))
     db = FakeSession()
     _seed(db)
     db.rows["sessions"] = [session]
     db.rows["jobs"] = [job]
     db.rows["tracks"] = tracks
     db.rows["transcode_presets"] = []
+    # The edition is a manual identity proposal: the PATCH route resolves the job after recording it.
+    _apply_track_edit(job, tracks[1], TrackEditRequest(track_id=tracks[1].id, edition="Director's Cut"))
+    asyncio.run(resolve_job(db, job))
     app, token = _make_app(signing_key, db)
     with TestClient(app) as client:
         r = client.get(f"/api/jobs/{job.id}/naming-preview", headers=_auth(token))
     preview = [i["output_path"] for i in r.json()["items"]]
     applied = [x.output_path for x in compute_outputs(job, tracks, session, None)]
     assert preview == applied
-    assert applied[1] == "Blade Runner/Blade Runner {edition-Director's Cut} - Director's Cut - Track 01.mkv"
+    assert applied[1] == "Blade Runner/Blade Runner {edition-Director's Cut} - Director's Cut - Track 02.mkv"
     _apply_track_edit(job, tracks[1], TrackEditRequest(track_id=tracks[1].id, revert_fields=["edition"]))
+    asyncio.run(resolve_job(db, job))
     assert compute_outputs(job, tracks, session, None)[1].output_path.endswith(
-        "{edition-Angle 2} - Angle 2 - Track 01.mkv"
+        "{edition-Angle 2} - Angle 2 - Track 02.mkv"
     )

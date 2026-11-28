@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { renderComponent, screen, cleanup, fireEvent } from '$lib/testing/render';
-import { updateTrack } from '$lib/api/jobs';
+import { renderComponent, screen, cleanup, fireEvent, waitFor } from '$lib/testing/render';
+import { updateTrack, searchMetadata } from '$lib/api/jobs';
 import ReviewTracksTable from '../ReviewTracksTable.svelte';
 import type { TrackView } from '$lib/types/api.gen';
 import { createJob } from '../../../__fixtures__/job';
@@ -171,6 +171,27 @@ describe('ReviewTracksTable', () => {
 			expect(screen.getByText('~2 KB')).toBeInTheDocument();
 			expect(screen.queryByRole('checkbox')).toBeNull();
 		});
+	});
+
+	it('keeps a typed title and edition in the open editor when the tracks reload', async () => {
+		vi.mocked(searchMetadata).mockResolvedValue({
+			candidates: [{ title: 'Picked', year: 2024, kind: 'movie', poster_url: null, provider_id: 'tt1111' }]
+		});
+		const job = createJob({ media_type: 'movie' });
+		const tracks = [track({ id: 'trk_0', title: 'Feature', edition: 'Extended' })];
+		const { rerender } = renderComponent(ReviewTracksTable, {
+			props: { job, tracks, isVideo: true, isMusic: false }
+		});
+		await fireEvent.click(screen.getByTitle('Search title'));
+		await fireEvent.click(screen.getByText('Search'));
+		await waitFor(() => expect(screen.getByText('Picked')).toBeInTheDocument());
+		await fireEvent.click(screen.getByText('Picked'));
+		await fireEvent.input(screen.getByLabelText('Title'), { target: { value: 'Typed Title' } });
+		await fireEvent.input(screen.getByLabelText('Edition'), { target: { value: 'Typed Cut' } });
+		// The dashboard card reloads the job detail on each job event: new track objects.
+		await rerender({ job, tracks: tracks.map((t) => ({ ...t })), isVideo: true, isMusic: false });
+		expect(screen.getByLabelText('Title')).toHaveValue('Typed Title');
+		expect(screen.getByLabelText('Edition')).toHaveValue('Typed Cut');
 	});
 });
 

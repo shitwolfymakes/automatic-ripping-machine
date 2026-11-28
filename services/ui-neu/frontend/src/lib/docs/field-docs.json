@@ -113,6 +113,16 @@
       "page": "guide/configuring-arm",
       "section": "Rip / transcode behaviour"
     },
+    "config.miss_media_type": {
+      "type": "internal",
+      "page": "guide/configuring-arm",
+      "section": "Rip / transcode behaviour"
+    },
+    "config.miss_titles_kept": {
+      "type": "internal",
+      "page": "guide/configuring-arm",
+      "section": "Rip / transcode behaviour"
+    },
     "config.movie_auto_apply": {
       "type": "internal",
       "page": "guide/configuring-arm",

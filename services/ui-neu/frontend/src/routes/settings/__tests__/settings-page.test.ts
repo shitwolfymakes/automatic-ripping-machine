@@ -160,6 +160,16 @@ const mockSchema = {
 					type: 'bool',
 					editable: true,
 					enum_values: null
+				},
+				{
+					key: 'miss_media_type',
+					group: 'Defaults',
+					tier: 'operator',
+					label: 'Treat unidentified video discs as',
+					help: '',
+					type: 'enum',
+					editable: true,
+					enum_values: ['movie', 'tv']
 				}
 			]
 		},
@@ -206,6 +216,7 @@ const mockConfig = {
 	transcode_enabled: true,
 	transcode_capable: true,
 	auto_transcode_on_idle: false,
+	miss_media_type: 'movie',
 	max_parallel_transcodes: 2,
 	notifications_enabled: false
 };
@@ -881,6 +892,19 @@ describe('Settings Page', () => {
 				'aria-checked',
 				'true'
 			);
+		});
+	});
+
+	describe('Sessions tab Defaults select', () => {
+		it('saves an enum default as soon as it changes', async () => {
+			const { saveArmConfig } = await import('$lib/api/settings');
+			vi.mocked(saveArmConfig).mockClear();
+			setTranscoderEnabled(true);
+			await renderAndOpenTab('Sessions');
+			await fireEvent.click(await screen.findByRole('tab', { name: 'Defaults' }));
+			const select = await screen.findByRole('combobox', { name: /treat unidentified video discs as/i });
+			await fireEvent.change(select, { target: { value: 'tv' } });
+			await waitFor(() => expect(vi.mocked(saveArmConfig)).toHaveBeenCalledWith({ miss_media_type: 'tv' }));
 		});
 	});
 

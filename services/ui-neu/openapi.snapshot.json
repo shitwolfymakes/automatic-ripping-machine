@@ -9461,6 +9461,26 @@
               }
             ]
           },
+          "miss_media_type": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MissMediaType"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "miss_titles_kept": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MissTitlesKept"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "notifications_enabled": {
             "anyOf": [
               {
@@ -9724,6 +9744,12 @@
           "on_previously_ripped": {
             "$ref": "#/components/schemas/PreviouslyRippedAction"
           },
+          "miss_media_type": {
+            "$ref": "#/components/schemas/MissMediaType"
+          },
+          "miss_titles_kept": {
+            "$ref": "#/components/schemas/MissTitlesKept"
+          },
           "default_retention_policy": {
             "$ref": "#/components/schemas/RetentionPolicy"
           },
@@ -9875,6 +9901,8 @@
           "manual_wait_seconds",
           "tick_one_version",
           "on_previously_ripped",
+          "miss_media_type",
+          "miss_titles_kept",
           "default_retention_policy",
           "notification_apprise_urls",
           "notifications_enabled",
@@ -13398,6 +13426,11 @@
             "type": "boolean",
             "title": "Rerip Allowed",
             "default": false
+          },
+          "blocked_miss": {
+            "type": "boolean",
+            "title": "Blocked Miss",
+            "default": false
           }
         },
         "additionalProperties": true,
@@ -15209,6 +15242,24 @@
           "candidates"
         ],
         "title": "MetadataSearchResponse"
+      },
+      "MissMediaType": {
+        "type": "string",
+        "enum": [
+          "movie",
+          "tv"
+        ],
+        "title": "MissMediaType",
+        "description": "The media type a DVD or Blu-ray that misses identification starts with."
+      },
+      "MissTitlesKept": {
+        "type": "string",
+        "enum": [
+          "all",
+          "preset"
+        ],
+        "title": "MissTitlesKept",
+        "description": "Which titles an unidentified disc keeps: every title, or what the routed\nsession's rip preset would keep."
       },
       "MkdirRequest": {
         "properties": {
@@ -19086,6 +19137,17 @@
               }
             ],
             "title": "Title"
+          },
+          "edition": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Edition"
           },
           "season": {
             "anyOf": [

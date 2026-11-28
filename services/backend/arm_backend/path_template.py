@@ -30,6 +30,7 @@ _ALLOWED_TOKENS_BY_MEDIA: dict[MediaType, set[str]] = {
         "year",
         "edition",
         "plex_edition",
+        "track_label",
         "track",
         "duration_human",
         "transcode_slug",
@@ -61,6 +62,7 @@ _SYNTHETIC_CONTEXTS: dict[MediaType, dict[str, str]] = {
         "edition": "Director's Cut",
         "plex_edition": "{edition-Director's Cut}",
         "track": "01",
+        "track_label": "Track 01",
         "duration_human": "02h05m",
         "transcode_slug": "plex-1080p-h265",
         "ext": "mkv",
@@ -207,14 +209,16 @@ _TOKEN_DESCRIPTIONS: dict[str, str] = {
     "episode_title": "Episode title",
     "edition": (
         "Name of this version when the job keeps more than one version of the film "
-        "(Director's Cut, 3D, Angle 2, ...). Write {edition?} to drop it when there is only one"
+        "(Director's Cut, 3D, Angle 2, ...), or the edition typed on a track kept alone. "
+        "Write {edition?} to drop it when there is none"
     ),
     "plex_edition": (
         "The same name in Plex's edition form, {edition-Director's Cut}. "
         "Write {plex_edition?} to drop it when the job keeps one version"
     ),
     "disc": "Disc number within the set",
-    "track": "Track number, zero-padded",
+    "track": "Track number, zero-padded (video tracks count from 1)",
+    "track_label": "Track NN for a track with no title of its own, empty otherwise. Write ({track_label?}) to drop it",
     "track_title": "Per-track title (music)",
     "artist": "Album artist (music)",
     "album": "Album name (music)",
