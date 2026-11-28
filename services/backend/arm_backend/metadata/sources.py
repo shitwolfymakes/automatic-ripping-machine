@@ -47,7 +47,6 @@ class OnlineSource(Protocol):
 
     # Capabilities are optional methods; `capability()` finds them. Each takes
     # `cfg` first. Names and signatures:
-    #   search_title(cfg, kind, title, year) -> MetadataResult | None
     #   search_candidates(cfg, kind, title, limit=10, *, enrich=True) -> list[MetadataResult]
     #     `enrich=False` skips any per-row detail call the search box wants (TMDb's); automatic
     #     identify scores the bare list and asks for details only for the rows that need them.
@@ -98,10 +97,6 @@ class TmdbSource(_Adapter):
     def _client(self, cfg: Config) -> TMDBClient:
         return TMDBClient(self._key(cfg), self._http)
 
-    async def search_title(self, cfg: Config, kind: Kind, title: str, year: int | None) -> MetadataResult | None:
-        client = self._client(cfg)
-        return await (client.search_tv(title) if kind == "tv" else client.search_movie(title, year))
-
     async def search_candidates(
         self, cfg: Config, kind: Kind, title: str, limit: int = 10, *, enrich: bool = True, year: int | None = None
     ) -> list[MetadataResult]:
@@ -126,9 +121,6 @@ class OmdbSource(_Adapter):
     def _client(self, cfg: Config) -> OMDBClient:
         return OMDBClient(self._key(cfg), self._http)
 
-    async def search_title(self, cfg: Config, kind: Kind, title: str, year: int | None) -> MetadataResult | None:
-        return await self._client(cfg).lookup_by_title(title, year, kind=kind)
-
     async def search_candidates(
         self, cfg: Config, kind: Kind, title: str, limit: int = 10, *, enrich: bool = True
     ) -> list[MetadataResult]:
@@ -146,11 +138,6 @@ class TvmazeSource(_Adapter):
 
     id = "tvmaze"
     media_types = frozenset({"tv"})
-
-    async def search_title(self, cfg: Config | None, kind: Kind, title: str, year: int | None) -> MetadataResult | None:
-        if kind != "tv":
-            return None
-        return await TVMazeClient(self._http).search_show(title)
 
     async def search_candidates(
         self, cfg: Config | None, kind: Kind, title: str, limit: int = 10, *, enrich: bool = True
@@ -189,11 +176,6 @@ class TvdbSource(_Adapter):
             self._cached = TVDBClient(key, self._http)
             self._cached_key = key
         return self._cached
-
-    async def search_title(self, cfg: Config | None, kind: Kind, title: str, year: int | None) -> MetadataResult | None:
-        if kind != "tv":
-            return None
-        return await self._client(cfg).search_series(title)
 
     async def search_candidates(
         self, cfg: Config | None, kind: Kind, title: str, limit: int = 10, *, enrich: bool = True

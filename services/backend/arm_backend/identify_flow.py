@@ -4,7 +4,7 @@ import asyncio
 import logging
 from collections.abc import Awaitable
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, TypeVar
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import col, select
@@ -14,13 +14,11 @@ from arm_backend.job_failure import fail_job, scan_failure_text
 from arm_backend.disc_dedupe import find_previous_rips, find_reusable_job_for_disc
 from arm_backend.metadata import MetadataDispatcher
 from arm_backend.metadata.base import MetadataResult
-from arm_backend.metadata.dispatcher import DISPATCH_TIMEOUT_SECONDS
+from arm_backend.metadata.dispatcher import DISPATCH_TIMEOUT_SECONDS, Identification
+from arm_backend.metadata.match.explain import log_line
 from arm_backend.constants import CONFIG_SINGLETON_ID
-from arm_common.disc_shape import looks_episodic
-from arm_common.disc_titles import scan_candidates
 from arm_backend.identity.apply import apply_identity_result, suggest_identity
 from arm_backend.identity.episode_stage import is_tv_candidate
-from arm_backend.identity.hints import hint_is_tv, hint_title
 from arm_backend.identity.pipeline import resolve_job, run_disc_hints, source_name_of
 from arm_backend.identity.proposals import put_source
 from arm_backend.identity.sources.base import Source
@@ -54,6 +52,7 @@ from arm_common.schemas import (
     with_flags,
     IdentifyRequest,
     ScanResult,
+    IdentifyMatch,
 )
 
 logger = logging.getLogger("arm_backend.identify_flow")
@@ -61,6 +60,8 @@ logger = logging.getLogger("arm_backend.identify_flow")
 
 # A miss stores at most this many dispatcher attempts (metadata_json.identify_attempts).
 MAX_IDENTIFY_ATTEMPTS = 20
+
+_T = TypeVar("_T")
 
 
 class UnknownDriveError(Exception):
@@ -147,7 +148,10 @@ class IdentifyFlow:
         self.prior_status: JobStatus | None = None
         self.hints: tuple[Source, ...] = ()
         self.thediscdb_match: DiscMatch | None = None
+        self.iso_name: str | None = None
         self.result: MetadataResult | None = None
+        # Why the weighted search decided as it did (None for a CD or a whole-dispatch timeout).
+        self.match: IdentifyMatch | None = None
         self.timed_out = False
         self.attempts: list[dict[str, Any]] = []
 
@@ -293,13 +297,19 @@ class IdentifyFlow:
             else:
                 job.pending_session_id = self.req.pending_session_id
 
-    async def _collected(self, call: Awaitable[MetadataResult | None]) -> MetadataResult | None:
+    async def _collected(self, call: Awaitable[_T]) -> _T:
         try:
             return await call
         finally:
             self.attempts.extend(self.dispatcher.last_attempts)
 
-    async def _walk_sources(self, job: Job, cfg: Config, scan: ScanResult) -> MetadataResult | None:
+    def _exact(self, scan: ScanResult, hit: MetadataResult, how: str) -> Identification:
+        """A hit found by an exact route (TheDiscDB, fingerprint): it wins, with its text score stored (D68)."""
+        return self.dispatcher.explain_exact(
+            scan, hit, how=how, hint_ids=[h.id for h in self.hints], iso_name=self.iso_name
+        )
+
+    async def _walk_sources(self, cfg: Config, scan: ScanResult) -> Identification:
         release: MetadataResult | None = None
         if self.thediscdb_match is not None:
             imdb = external_imdb_id(self.thediscdb_match)
@@ -311,25 +321,22 @@ class IdentifyFlow:
                     # Held, not returned yet: the fingerprint database
                     # below needs no key either, so a keyless install
                     # would otherwise never reach the one source it can
-                    # use. The fuzzy title search IS skipped — it would
-                    # outrank this exact content-hash match.
+                    # use. The weighted title search IS skipped: it would
+                    # re-rank this exact content-hash match.
                     release = release_result(self.thediscdb_match, imdb)
                 else:
                     exact = await self._collected(self.dispatcher.identify_from_imdb(imdb, cfg, kind=kind))
                     if exact is not None:
-                        return exact
+                        return self._exact(scan, exact, "thediscdb")
         if release is not None:
-            return await self._collected(self.dispatcher.identify_from_fingerprint(scan, cfg)) or release
-        return await self._collected(
-            self.dispatcher.identify(
-                scan,
-                cfg,
-                title_hint=hint_title(job, self.hints),
-                title_hint_is_tv=hint_is_tv(job, self.hints),
-                # Several same-length episode titles and no feature: a TV
-                # disc, whatever the label says (arm_common.disc_shape).
-                prefer_tv=looks_episodic(scan_candidates(scan)),
+            fingerprint = await self._collected(self.dispatcher.identify_from_fingerprint(scan, cfg))
+            return (
+                self._exact(scan, fingerprint, "fingerprint")
+                if fingerprint
+                else self._exact(scan, release, "thediscdb")
             )
+        return await self._collected(
+            self.dispatcher.identify(scan, cfg, hint_ids=[h.id for h in self.hints], iso_name=self.iso_name)
         )
 
     async def _dispatch(self, job: Job, cfg: Config, scan: ScanResult) -> None:
@@ -341,11 +348,13 @@ class IdentifyFlow:
         self.attempts = []
 
         try:
-            self.result = await asyncio.wait_for(self._walk_sources(job, cfg, scan), timeout=DISPATCH_TIMEOUT_SECONDS)
+            identification = await asyncio.wait_for(self._walk_sources(cfg, scan), timeout=DISPATCH_TIMEOUT_SECONDS)
+            self.result, self.match = identification.result, identification.match
             self.timed_out = False
         except asyncio.TimeoutError:
             logger.info("identify dispatch_timeout job_id=%s", job.id)
             self.result = None
+            self.match = None
             self.timed_out = True
             self.attempts.append(
                 {
@@ -369,13 +378,19 @@ class IdentifyFlow:
         )
         return bdmt_name or release_title or scan.volume_label
 
-    def _record_miss_attempts(self, job: Job) -> None:
+    def _record_identify_sections(self, job: Job) -> None:
         # The miss reasons belong to a miss only; any hit (applied or held)
-        # leaves no list behind.
-        metadata = {k: v for k, v in (job.metadata_json or {}).items() if k != "identify_attempts"}
+        # leaves no list behind. The match breakdown is the opposite: it is
+        # kept after an apply, and a re-identify replaces it.
+        metadata = {
+            k: v for k, v in (job.metadata_json or {}).items() if k not in ("identify_attempts", "identify_match")
+        }
         if self.result is None:
             # The most recent ones; a whole-dispatch timeout entry is last.
             metadata["identify_attempts"] = self.attempts[-MAX_IDENTIFY_ATTEMPTS:]
+        if self.match is not None:
+            metadata["identify_match"] = self.match.model_dump(mode="json", exclude_none=True)
+            logger.info(log_line(job.id, self.match))
         job.metadata_json = metadata
 
     async def _save(self, job: Job, scan: ScanResult) -> None:
@@ -513,7 +528,7 @@ class IdentifyFlow:
     async def _identify_new_disc(self, job: Job, cfg: Config, scan: ScanResult) -> None:
         await self._dispatch(job, cfg, scan)
         miss_title = self._miss_title(scan)
-        self._record_miss_attempts(job)
+        self._record_identify_sections(job)
 
         result = self.result
         ambiguous_toc = self._is_ambiguous_toc(result)
@@ -565,13 +580,12 @@ class IdentifyFlow:
         await self._persist_fingerprints(job, scan)
 
         self.hints = enabled_hint_sources(cfg)
+        self.iso_name = source_name_of(drive)
         if not self.already_identified:
             # Offline disc hints (volume label, Blu-ray BDMT title, ISO file name): season / disc /
             # total proposals plus a cleaner search title for the dispatcher, in
             # the operator's configured source order.
-            run_disc_hints(
-                job, scan, now=datetime.now(timezone.utc), sources=self.hints, source_name=source_name_of(drive)
-            )
+            run_disc_hints(job, scan, now=datetime.now(timezone.utc), sources=self.hints, source_name=self.iso_name)
 
         self.thediscdb_match = None
         if not self.already_identified and cfg.thediscdb_enabled:

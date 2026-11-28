@@ -99,47 +99,39 @@ def test_series_to_result_year_parsing(entry_year, expected):
 
 
 @respx.mock
-async def test_search_series_logs_in_then_searches(http_client):
+async def test_search_candidates_logs_in_then_searches(http_client):
     login = respx.post(f"{_BASE}/login").mock(return_value=httpx.Response(200, json=_LOGIN))
     search = respx.get(f"{_BASE}/search").mock(return_value=httpx.Response(200, json={"data": [_ENTRY]}))
     client = TVDBClient("key", http_client)
-    result = await client.search_series("lost")
+    [result] = await client.search_candidates("lost")
     assert result.title == "Lost"
     assert login.call_count == 1
     assert search.calls.last.request.headers["Authorization"] == "Bearer tok-1"
     assert search.calls.last.request.url.params["type"] == "series"
     # A second call on the same client reuses the token.
-    await client.search_series("lost again")
+    await client.search_candidates("lost again")
     assert login.call_count == 1
 
 
 @respx.mock
-async def test_search_series_relogs_in_once_on_401(http_client):
+async def test_search_candidates_relogs_in_once_on_401(http_client):
     respx.post(f"{_BASE}/login").mock(
         side_effect=[httpx.Response(200, json=_LOGIN), httpx.Response(200, json={"data": {"token": "tok-2"}})]
     )
     search = respx.get(f"{_BASE}/search").mock(
         side_effect=[httpx.Response(401), httpx.Response(200, json={"data": [_ENTRY]})]
     )
-    result = await TVDBClient("key", http_client).search_series("lost")
+    [result] = await TVDBClient("key", http_client).search_candidates("lost")
     assert result.title == "Lost"
     assert search.calls[1].request.headers["Authorization"] == "Bearer tok-2"
 
 
 @respx.mock
-async def test_search_series_second_401_is_a_lookup_error(http_client):
+async def test_search_candidates_second_401_is_a_lookup_error(http_client):
     respx.post(f"{_BASE}/login").mock(return_value=httpx.Response(200, json=_LOGIN))
     respx.get(f"{_BASE}/search").mock(return_value=httpx.Response(401))
     with pytest.raises(LookupError, match="after re-login"):
-        await TVDBClient("key", http_client).search_series("lost")
-
-
-@respx.mock
-async def test_search_series_empty_data_is_a_miss(http_client):
-    respx.post(f"{_BASE}/login").mock(return_value=httpx.Response(200, json=_LOGIN))
-    respx.get(f"{_BASE}/search").mock(return_value=httpx.Response(200, json={"data": []}))
-    with pytest.raises(LookupError):
-        await TVDBClient("key", http_client).search_series("nothing")
+        await TVDBClient("key", http_client).search_candidates("lost")
 
 
 @respx.mock
@@ -166,10 +158,10 @@ async def test_lookup_by_imdb_id_uses_remoteid(http_client):
 async def test_login_failure_and_timeout(http_client):
     respx.post(f"{_BASE}/login").mock(return_value=httpx.Response(401))
     with pytest.raises(LookupError):
-        await TVDBClient("bad", http_client).search_series("lost")
+        await TVDBClient("bad", http_client).search_candidates("lost")
     respx.post(f"{_BASE}/login").mock(side_effect=httpx.ReadTimeout("slow"))
     with pytest.raises(LookupTimeout):
-        await TVDBClient("key", http_client).search_series("lost")
+        await TVDBClient("key", http_client).search_candidates("lost")
 
 
 @respx.mock
@@ -192,7 +184,7 @@ async def test_lookup_by_imdb_id_nameless_series_is_a_miss(http_client):
 async def test_malformed_login_body_is_a_lookup_error(http_client):
     respx.post(f"{_BASE}/login").mock(return_value=httpx.Response(200, json={"data": {}}))
     with pytest.raises(LookupError):
-        await TVDBClient("key", http_client).search_series("lost")
+        await TVDBClient("key", http_client).search_candidates("lost")
     with pytest.raises(LookupError):
         await TVDBClient("key", http_client).validate_key()
 
@@ -260,7 +252,7 @@ async def test_get_authed_timeout_is_a_lookup_timeout(http_client):
     login = respx.post(f"{_BASE}/login").mock(return_value=httpx.Response(200, json=_LOGIN))
     respx.get(f"{_BASE}/search").mock(side_effect=httpx.ReadTimeout("slow"))
     with pytest.raises(LookupTimeout) as exc:
-        await TVDBClient("k", http_client).search_series("lost")
+        await TVDBClient("k", http_client).search_candidates("lost")
     assert str(exc.value) == "tvdb timeout"
     assert login.call_count == 1
 
@@ -270,7 +262,7 @@ async def test_get_authed_transport_error_is_a_lookup_error(http_client):
     respx.post(f"{_BASE}/login").mock(return_value=httpx.Response(200, json=_LOGIN))
     respx.get(f"{_BASE}/search").mock(side_effect=httpx.ConnectError("refused"))
     with pytest.raises(LookupError) as exc:
-        await TVDBClient("k", http_client).search_series("lost")
+        await TVDBClient("k", http_client).search_candidates("lost")
     assert not isinstance(exc.value, LookupTimeout)
     assert str(exc.value).startswith("tvdb transport error: ")
 
@@ -289,7 +281,7 @@ async def test_get_authed_other_status_is_a_lookup_error(http_client):
     respx.post(f"{_BASE}/login").mock(return_value=httpx.Response(200, json=_LOGIN))
     respx.get(f"{_BASE}/search").mock(return_value=httpx.Response(500))
     with pytest.raises(LookupError) as exc:
-        await TVDBClient("k", http_client).search_series("lost")
+        await TVDBClient("k", http_client).search_candidates("lost")
     assert str(exc.value) == "tvdb status=500"
 
 
@@ -298,5 +290,5 @@ async def test_get_authed_non_json_200_is_malformed(http_client):
     respx.post(f"{_BASE}/login").mock(return_value=httpx.Response(200, json=_LOGIN))
     respx.get(f"{_BASE}/search").mock(return_value=httpx.Response(200, content=b"<html>nope</html>"))
     with pytest.raises(LookupError) as exc:
-        await TVDBClient("k", http_client).search_series("lost")
+        await TVDBClient("k", http_client).search_candidates("lost")
     assert str(exc.value) == "tvdb malformed response"

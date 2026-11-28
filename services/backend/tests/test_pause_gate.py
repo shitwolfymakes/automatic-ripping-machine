@@ -16,6 +16,7 @@ from arm_backend.db import get_session
 from arm_backend.identify_flow import pause_refuses_new_jobs
 from arm_backend.jwt_utils import issue_access_token
 from arm_backend.metadata.base import MetadataResult
+from arm_backend.metadata.dispatcher import Identification
 from arm_backend.routers import jobs as jobs_router
 from arm_backend.routers import ripper as ripper_router
 from arm_common import (
@@ -61,8 +62,11 @@ class _Dispatcher:
     def __init__(self, result: MetadataResult | None = None) -> None:
         self.result = result
 
-    async def identify(self, _scan: Any, _cfg: Any, **_kw: Any) -> MetadataResult | None:
-        return self.result
+    async def identify(self, _scan: Any, _cfg: Any, **_kw: Any) -> Identification:
+        return Identification(self.result)
+
+    def explain_exact(self, _scan: Any, hit: MetadataResult, **_kw: Any) -> Identification:
+        return Identification(hit)
 
 
 def _config(*, ripping_paused: bool = False, hold_for_review: bool = False) -> Config:

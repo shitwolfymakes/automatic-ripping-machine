@@ -41,7 +41,7 @@ async def test_tmdb_uses_overridden_base_url(monkeypatch, http_client) -> None:
     route = respx.get("http://tmdb.lan/3/search/movie").mock(
         return_value=httpx.Response(200, json={"results": [{"title": "Movie", "release_date": "2010-01-01"}]})
     )
-    await TMDBClient("k", http_client).search_movie("x")
+    await TMDBClient("k", http_client).search_movie_candidates("x", enrich=False)
     assert route.called
 
 
@@ -51,7 +51,7 @@ async def test_omdb_uses_overridden_base_url(monkeypatch, http_client) -> None:
     route = respx.get("http://omdb.lan/").mock(
         return_value=httpx.Response(200, json={"Response": "True", "Title": "Movie", "Year": "2010"})
     )
-    await OMDBClient("k", http_client).lookup_by_title("x")
+    await OMDBClient("k", http_client).search_candidates("x")
     assert route.called
 
 

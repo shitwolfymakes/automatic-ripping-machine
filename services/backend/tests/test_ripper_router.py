@@ -24,6 +24,7 @@ import pytest
 from arm_backend.config import settings as _settings
 from arm_backend.db import get_session
 from arm_backend.metadata.base import MetadataResult
+from arm_backend.metadata.dispatcher import Identification
 from arm_backend import identify_flow, job_failure, review_tracks, rip_preset_resolution
 from arm_backend.routers import ripper as ripper_router
 from arm_backend.identity.sources.thediscdb_snapshot import DiscMatch
@@ -102,17 +103,20 @@ class _Dispatcher:
         self.last_attempts: list[dict[str, Any]] = []
         self.calls: list[str] = []
 
-    async def identify(self, _scan: Any, _cfg: Any, **_kw: Any) -> MetadataResult | None:
+    async def identify(self, _scan: Any, _cfg: Any, **_kw: Any) -> Identification:
         self.calls.append("identify")
         self.received_kwargs = _kw
         self.last_attempts = list(self.attempts)
         if self.raise_timeout:
             raise asyncio.TimeoutError
-        return self.result
+        return Identification(self.result)
 
     async def identify_from_fingerprint(self, _scan: Any, _cfg: Any) -> MetadataResult | None:
         self.calls.append("identify_from_fingerprint")
         return self.fingerprint_result
+
+    def explain_exact(self, _scan: Any, hit: MetadataResult, **_kw: Any) -> Identification:
+        return Identification(hit)
 
 
 @pytest.fixture
@@ -1003,10 +1007,10 @@ def test_identify_real_dispatch_timeout_keeps_the_partial_attempts(monkeypatch: 
         def last_attempts(self, value: list[dict[str, Any]]) -> None:
             pass
 
-        async def identify(self, _scan: Any, _cfg: Any, **_kw: Any) -> MetadataResult | None:
+        async def identify(self, _scan: Any, _cfg: Any, **_kw: Any) -> Identification:
             attempts_var.set([_MISS])
             await asyncio.sleep(5)
-            return None
+            return Identification(None)
 
     monkeypatch.setattr(identify_flow, "DISPATCH_TIMEOUT_SECONDS", 0.05)
     db = FakeSession()
@@ -1038,11 +1042,11 @@ def test_identify_hit_removes_stale_attempts() -> None:
     hit = MetadataResult(title="Heat", year=1995, kind="movie", provider="tmdb")
 
     class _Stale(_Dispatcher):
-        async def identify(self, _scan: Any, _cfg: Any, **_kw: Any) -> MetadataResult | None:
+        async def identify(self, _scan: Any, _cfg: Any, **_kw: Any) -> Identification:
             for row in db.added:
                 if isinstance(row, Job):
                     row.metadata_json = {**(row.metadata_json or {}), "identify_attempts": [_MISS]}
-            return hit
+            return Identification(hit)
 
     out = _identify(_make_app(db, dispatcher=_Stale(hit, attempts=[])))
     assert "identify_attempts" not in out["metadata_json"]
@@ -1220,8 +1224,11 @@ class _ImdbExactDispatcher:
         self.kinds.append(kw.get("kind"))
         return self.result
 
-    async def identify(self, _scan: Any, _cfg: Any, **_kw: Any) -> MetadataResult | None:
+    async def identify(self, _scan: Any, _cfg: Any, **_kw: Any) -> Identification:
         pytest.fail("dispatcher.identify must not be called when the exact TheDiscDB identity succeeds")
+
+    def explain_exact(self, _scan: Any, hit: MetadataResult, **_kw: Any) -> Identification:
+        return Identification(hit)
 
 
 def _thediscdb_match() -> DiscMatch:
@@ -1452,8 +1459,11 @@ class _AllMissDispatcher:
     async def identify_from_imdb(self, _imdb_id: str, _cfg: Any, **_kw: Any) -> MetadataResult | None:
         return None
 
-    async def identify(self, _scan: Any, _cfg: Any, **_kw: Any) -> MetadataResult | None:
-        return None
+    async def identify(self, _scan: Any, _cfg: Any, **_kw: Any) -> Identification:
+        return Identification(None)
+
+    def explain_exact(self, _scan: Any, hit: MetadataResult, **_kw: Any) -> Identification:
+        return Identification(hit)
 
 
 def test_identify_thediscdb_match_survives_total_identify_miss() -> None:
@@ -2904,40 +2914,6 @@ def test_identify_on_an_optical_drive_skips_iso_name() -> None:
     assert db.rows["jobs"][0].metadata_json["identity_claims"]["sources"]["iso_name"]["status"] == "skipped"
 
 
-def test_identify_passes_hint_title_to_dispatcher() -> None:
-    """The BDMT-derived hint title reaches the dispatcher as title_hint."""
-    db = FakeSession()
-    db.rows["drives"] = [_drive()]
-    db.rows["config"] = [_config()]
-    dispatcher = _Dispatcher(MetadataResult(title="Arrival", year=2016, kind="movie", payload={}))
-    app = _make_app(db, dispatcher=dispatcher)
-    scan = _scan_dict("bluray")
-    scan["bd_meta"] = {"name": "Arrival"}
-    body = {"drive_id": "drv_x", "scan_result": scan}
-    with TestClient(app) as client:
-        r = client.post("/api/ripper/identify", json=body, headers=_SERVICE_AUTH)
-    assert r.status_code == 200
-    assert dispatcher.received_kwargs.get("title_hint") == "arrival"
-    assert dispatcher.received_kwargs.get("title_hint_is_tv") is False
-
-
-def test_identify_passes_title_hint_is_tv_true_for_season_label() -> None:
-    """A season-bearing label hint reaches the dispatcher as title_hint_is_tv=True."""
-    db = FakeSession()
-    db.rows["drives"] = [_drive()]
-    db.rows["config"] = [_config()]
-    dispatcher = _Dispatcher(MetadataResult(title="Lost", year=2004, kind="tv", payload={}))
-    app = _make_app(db, dispatcher=dispatcher)
-    scan = _scan_dict()
-    scan["volume_label"] = "LOST_S2D3"
-    body = {"drive_id": "drv_x", "scan_result": scan}
-    with TestClient(app) as client:
-        r = client.post("/api/ripper/identify", json=body, headers=_SERVICE_AUTH)
-    assert r.status_code == 200
-    assert dispatcher.received_kwargs.get("title_hint") == "lost"
-    assert dispatcher.received_kwargs.get("title_hint_is_tv") is True
-
-
 def test_identify_without_bd_meta_key_still_uses_label() -> None:
     """An old ripper's scan_result has no `bd_meta` key at
     all (not even null). identify must still run label hints and identify
@@ -3376,35 +3352,6 @@ def test_get_config_unknown_drive_falls_back_to_global() -> None:
     assert r.json()["auto_rip_on_insert"] is False
 
 
-def test_identify_asks_for_tv_first_when_the_disc_is_episodic() -> None:
-    """Kolchak: five ~51 minute titles and an extra, label without a season ->
-    identify must still search TV first (arm_common.disc_shape)."""
-    db = FakeSession()
-    db.rows["drives"] = [_drive()]
-    db.rows["config"] = [_config()]
-    dispatcher = _Dispatcher(MetadataResult(title="Kolchak: The Night Stalker", year=1974, kind="tv", payload={}))
-    scan = _scan_dict("bluray")
-    scan["volume_label"] = "Kolchak The Night Stalker Disc 1"
-    scan["titles"] = [{"index": i, "duration_seconds": d} for i, d in enumerate((3093, 3033, 3092, 3070, 3078, 542))]
-    with TestClient(_make_app(db, dispatcher=dispatcher)) as client:
-        r = client.post("/api/ripper/identify", json={"drive_id": "drv_x", "scan_result": scan}, headers=_SERVICE_AUTH)
-    assert r.status_code == 200, r.text
-    assert dispatcher.received_kwargs["prefer_tv"] is True
-
-
-def test_identify_keeps_movie_first_for_a_feature_disc() -> None:
-    db = FakeSession()
-    db.rows["drives"] = [_drive()]
-    db.rows["config"] = [_config()]
-    dispatcher = _Dispatcher(MetadataResult(title="Arrival", year=2016, kind="movie", payload={}))
-    scan = _scan_dict("bluray")
-    scan["titles"] = [{"index": 0, "duration_seconds": 6960}, {"index": 1, "duration_seconds": 900}]
-    with TestClient(_make_app(db, dispatcher=dispatcher)) as client:
-        r = client.post("/api/ripper/identify", json={"drive_id": "drv_x", "scan_result": scan}, headers=_SERVICE_AUTH)
-    assert r.status_code == 200, r.text
-    assert dispatcher.received_kwargs["prefer_tv"] is False
-
-
 # --- coverage gaps: in-flight re-scan, multi-job current-job, orphaned job ---
 
 
@@ -3672,8 +3619,8 @@ def test_identify_miss_title_prefers_release_then_label() -> None:
         async def identify_from_imdb(self, *a: Any, **kw: Any) -> MetadataResult | None:
             return None
 
-        async def identify(self, *a: Any, **kw: Any) -> MetadataResult | None:
-            return None
+        async def identify(self, *a: Any, **kw: Any) -> Identification:
+            return Identification(None)
 
     app = _make_app(db, dispatcher=_AllMiss())
     app.state.thediscdb = _FakeStore(_thediscdb_match())
@@ -3923,3 +3870,37 @@ def test_the_ripper_job_response_carries_the_rip_invocation(monkeypatch: pytest.
 def test_a_job_view_built_for_an_event_carries_the_rip_invocation(monkeypatch: pytest.MonkeyPatch) -> None:
     _per_title(monkeypatch, RipInvocation.PER_TITLE)
     assert JobView.model_validate(_job(status=JobStatus.RIPPING)).rip_invocation is RipInvocation.PER_TITLE
+
+
+def test_identify_passes_the_enabled_hint_sources_to_the_dispatcher() -> None:
+    db = FakeSession()
+    db.rows["drives"] = [_drive()]
+    db.rows["config"] = [_config(disc_hint_sources=["label", "iso_name"])]
+    dispatcher = _Dispatcher(None)
+    with TestClient(_make_app(db, dispatcher=dispatcher)) as client:
+        r = client.post(
+            "/api/ripper/identify",
+            json={"drive_id": "drv_x", "scan_result": _scan_dict("bluray")},
+            headers=_SERVICE_AUTH,
+        )
+    assert r.status_code == 200
+    # The setting is a set; the dispatcher gets it in the hint order, and bd_title (switched off) is absent.
+    assert dispatcher.received_kwargs["hint_ids"] == ["iso_name", "label"]
+    assert dispatcher.received_kwargs["iso_name"] is None
+
+
+def test_identify_passes_an_iso_rips_file_name_to_the_dispatcher() -> None:
+    db = FakeSession()
+    drive = _drive()
+    drive.kind = DriveKind.VIRTUAL
+    drive.source_path = "movies/Blade_Runner_2049_(2017)_[3D].iso"
+    db.rows["drives"] = [drive]
+    db.rows["config"] = [_config()]
+    dispatcher = _Dispatcher(None)
+    scan = _scan_dict("bluray")
+    scan["fingerprints"] = []
+    with TestClient(_make_app(db, dispatcher=dispatcher)) as client:
+        r = client.post("/api/ripper/identify", json={"drive_id": "drv_x", "scan_result": scan}, headers=_SERVICE_AUTH)
+    assert r.status_code == 200
+    assert dispatcher.received_kwargs["iso_name"] == "Blade_Runner_2049_(2017)_[3D]"
+    assert dispatcher.received_kwargs["hint_ids"] == ["bd_title", "iso_name", "label"]

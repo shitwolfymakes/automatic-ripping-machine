@@ -231,3 +231,16 @@ def test_build_is_deterministic() -> None:
 @pytest.mark.parametrize("year", [2026, 2027])
 def test_next_year_is_still_a_year(year: int) -> None:
     assert _years(_build(iso_name=f"Movie {year}")) == [(year, 0.5)]
+
+
+def test_a_disabled_hint_source_contributes_no_text() -> None:
+    scan = br3d_structure_scan().model_copy(update={"bd_meta": BdDiscMeta(name=BD_NAME, set_number=1, num_sets=2)})
+    both = evidence_from_scan(scan, iso_name=ISO_NAME, now=NOW)
+    assert [t.source for t in both.titles][:2] == ["bd_title", "iso_name"]
+    assert both.set_position == (1, 2)
+    only_iso = evidence_from_scan(scan, iso_name=ISO_NAME, now=NOW, enabled=("iso_name",))
+    assert [t.source for t in only_iso.titles] == ["iso_name"]
+    nothing = evidence_from_scan(scan, iso_name=ISO_NAME, now=NOW, enabled=())
+    assert nothing.titles == ()
+    # A disabled BDMT name takes its disc set numbers with it.
+    assert nothing.set_position == (None, None)
