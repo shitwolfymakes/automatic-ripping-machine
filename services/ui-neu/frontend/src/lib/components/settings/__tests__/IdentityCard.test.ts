@@ -144,11 +144,12 @@ describe('IdentityCard', () => {
 		const getValues = (component as unknown as { getValues: () => Record<string, unknown> }).getValues;
 		expect(screen.getByText('Advanced')).toBeInTheDocument();
 		await fireEvent.click(screen.getByRole('checkbox', { name: 'Ignore the volume label' }));
-		expect(getValues().disc_hint_sources).toEqual(['bd_title']);
+		expect(getValues().disc_hint_sources).toEqual(['bd_title', 'iso_name']);
 
 		await fireEvent.click(screen.getByRole('checkbox', { name: 'Ignore the volume label' }));
-		expect(getValues().disc_hint_sources).toEqual(['bd_title', 'label']);
+		expect(getValues().disc_hint_sources).toEqual(['bd_title', 'iso_name', 'label']);
 		expect(screen.getByRole('checkbox', { name: 'Ignore the disc title metadata' })).not.toBeChecked();
+		expect(screen.getByRole('checkbox', { name: 'Ignore the ISO file name' })).not.toBeChecked();
 		const advanced = document.querySelector('.identity-card-step[data-step="advanced"]') as HTMLElement;
 		expect(advanced).toHaveTextContent(
 			"For collections where the disc's own text is usually wrong. Fix a single disc from its job page instead."
@@ -163,6 +164,16 @@ describe('IdentityCard', () => {
 		);
 		expect(screen.getByRole('checkbox', { name: 'Ignore the volume label' })).toHaveAccessibleDescription(
 			"ARM won't use the volume label and identifies the disc from its title metadata, TheDiscDB and online lookup instead. A DVD with no title metadata then gets no automatic title search."
+		);
+	});
+
+	it('Advanced: ignoring the ISO file name drops only it from disc_hint_sources', async () => {
+		const { component } = render();
+		const getValues = (component as unknown as { getValues: () => Record<string, unknown> }).getValues;
+		await fireEvent.click(screen.getByRole('checkbox', { name: 'Ignore the ISO file name' }));
+		expect(getValues().disc_hint_sources).toEqual(['bd_title', 'label']);
+		expect(screen.getByRole('checkbox', { name: 'Ignore the ISO file name' })).toHaveAccessibleDescription(
+			"Only for ISO rips. ARM won't read the title, season, disc number or year from the file name and identifies the disc from its other text, TheDiscDB and online lookup instead."
 		);
 	});
 

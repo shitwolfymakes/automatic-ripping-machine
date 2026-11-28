@@ -110,8 +110,8 @@ export const IDENTITY_METAS: ConfigFieldMeta[] = [
 		label: 'Read season and disc number from',
 		help: 'Read from the disc in this order, before ARM identifies it.',
 		type: 'ranked',
-		enum_values: ['bd_title', 'label'],
-		enum_labels: { bd_title: 'Blu-ray disc title', label: 'Disc volume label' }
+		enum_values: ['bd_title', 'iso_name', 'label'],
+		enum_labels: { bd_title: 'Blu-ray disc title', iso_name: 'ISO file name', label: 'Disc volume label' }
 	}
 ];
 
@@ -129,5 +129,5 @@ export const IDENTITY_DEFAULTS: Record<string, unknown> = {
 	movie_auto_apply: true,
 	episode_auto_apply: true,
 	music_auto_apply: true,
-	disc_hint_sources: ['bd_title', 'label']
+	disc_hint_sources: ['bd_title', 'iso_name', 'label']
 };

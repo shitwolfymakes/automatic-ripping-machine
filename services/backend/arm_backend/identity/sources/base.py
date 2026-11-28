@@ -34,6 +34,8 @@ class JobContext:
     job: Job
     scan: ScanResult
     now: datetime
+    # An ISO rip's file name without its `.iso` extension; None for a physical disc.
+    source_name: str | None = None
 
 
 class Source(Protocol):

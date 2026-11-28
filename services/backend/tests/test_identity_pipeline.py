@@ -356,3 +356,20 @@ def test_run_disc_hints_handles_source_run_exception(monkeypatch) -> None:
     # Label source should have run successfully
     assert sources["label"].status == "ok"
     assert sources["label"].job.model_dump(exclude_unset=True) == {"season": 2, "disc_number": 3, "title": "lost"}
+
+
+def test_run_disc_hints_passes_source_name_to_iso_name() -> None:
+    job = Job(id="job_1", drive_id="d", disc_type=DiscType.BLURAY, status=JobStatus.CREATED, metadata_json={})
+    scan = ScanResult(disc_type=DiscType.BLURAY, volume_label="BR2049_D1")
+    run_disc_hints(job, scan, now=NOW, source_name="Blade_Runner_2049_(2017)_[3D]")
+    sources = claims_of(job).sources
+    assert sources["iso_name"].status == "ok"
+    assert sources["iso_name"].job.model_dump(exclude_unset=True) == {"title": "blade runner 2049", "year": 2017}
+    assert sources["label"].status == "ok"
+
+
+def test_run_disc_hints_skips_iso_name_without_a_source_name() -> None:
+    job = Job(id="job_1", drive_id="d", disc_type=DiscType.DVD, status=JobStatus.CREATED, metadata_json={})
+    run_disc_hints(job, ScanResult(disc_type=DiscType.DVD, volume_label="LOST_S2D3"), now=NOW)
+    entry = claims_of(job).sources["iso_name"]
+    assert (entry.status, entry.detail) == ("skipped", "not an ISO rip")

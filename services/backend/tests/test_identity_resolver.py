@@ -400,3 +400,23 @@ def test_unusable_episode_source_does_not_take_the_tier() -> None:
     res = resolve(_claims(**sources), tiers={**TIERS, "ep_c": 3})
     assert res.tracks["1"]["episode"] == Winner(3, "ep_c")
     assert res.tracks["2"]["episode"] == Winner(8, "thediscdb")
+
+
+def test_job_year_claim_is_a_hint_the_resolver_never_applies() -> None:
+    """A source's JobClaim.year is read by the identify evidence, never resolved:
+    it does not reach `Resolution.job`, and apply_resolution leaves job.year alone."""
+    claims = _claims(
+        iso_name=SourceClaims(job=JobClaim(year=2017, title="blade runner 2049", season=2)),
+        bd_title=SourceClaims(job=JobClaim(year=1999)),
+    )
+    res = resolve(claims, tiers={"iso_name": 4, "bd_title": 4})
+    assert set(res.job) == {"season"}
+    job = _job()
+    job.year = 2017
+    job.title = "Blade Runner 2049"
+    apply_resolution(job, [], res)
+    assert (job.year, job.title, job.season) == (2017, "Blade Runner 2049", 2)
+    other = _job()
+    other.year = 2001
+    apply_resolution(other, [], res)
+    assert other.year == 2001

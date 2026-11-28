@@ -60,8 +60,8 @@ class Config(SQLModel, table=True):
         sa_column=Column(ARRAY(String), nullable=False, server_default="{tmdb,tvmaze,tvdb}"),
     )
     disc_hint_sources: list[str] = Field(
-        default_factory=lambda: ["bd_title", "label"],
-        sa_column=Column(ARRAY(String), nullable=False, server_default="{bd_title,label}"),
+        default_factory=lambda: ["bd_title", "iso_name", "label"],
+        sa_column=Column(ARRAY(String), nullable=False, server_default="{bd_title,iso_name,label}"),
     )
     episode_match_tolerance_seconds: int = Field(
         default=300, sa_column=Column(Integer, nullable=False, server_default="300")

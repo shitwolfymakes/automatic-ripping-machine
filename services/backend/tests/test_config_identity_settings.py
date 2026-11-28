@@ -79,7 +79,7 @@ def test_config_view_includes_identity_settings(signing_key: bytes) -> None:
     assert r.status_code == 200, r.text
     body = r.json()
     assert body["episode_sources"] == ["tmdb", "tvmaze", "tvdb"]
-    assert body["disc_hint_sources"] == ["bd_title", "label"]
+    assert body["disc_hint_sources"] == ["bd_title", "iso_name", "label"]
     assert body["episode_match_tolerance_seconds"] == 300
     assert body["episode_auto_apply"] is True
 
@@ -96,7 +96,7 @@ def test_config_view_defaults_for_none_columns(signing_key: bytes) -> None:
     with TestClient(app) as client:
         body = client.get("/api/config", headers=_auth(token)).json()
     assert body["episode_sources"] == ["tmdb", "tvmaze", "tvdb"]
-    assert body["disc_hint_sources"] == ["bd_title", "label"]
+    assert body["disc_hint_sources"] == ["bd_title", "iso_name", "label"]
     assert body["episode_match_tolerance_seconds"] == 300
     assert body["episode_auto_apply"] is True
 

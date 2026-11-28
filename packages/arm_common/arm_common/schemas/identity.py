@@ -28,8 +28,9 @@ TRACK_CLAIM_FIELDS: dict[str, str] = {
     "selected": "excluded",
 }
 
-# claim field -> Job attribute. JobClaim.title is a search hint only and is
-# deliberately NOT applied (job.title belongs to identify / resolve).
+# claim field -> Job attribute. JobClaim.title and JobClaim.year are search
+# hints only and are deliberately NOT applied (job.title / job.year belong to
+# identify / resolve).
 JOB_CLAIM_FIELDS: dict[str, str] = {
     "season": "season",
     "disc_number": "disc_number",
@@ -58,6 +59,9 @@ class JobClaim(BaseModel):
     disc_number: int | None = None
     disc_total: int | None = None
     title: str | None = None
+    # A release year a disc hint read (a bracketed year in the BDMT name or the
+    # ISO file name). Hint only, like title: not in JOB_CLAIM_FIELDS.
+    year: int | None = None
 
 
 class SourceClaims(BaseModel):

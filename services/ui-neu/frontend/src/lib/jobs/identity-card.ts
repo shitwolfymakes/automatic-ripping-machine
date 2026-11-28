@@ -7,11 +7,11 @@ import type { ConfigFieldMeta } from '$lib/types/api.gen';
  *  trust boxes). */
 
 export type DiscKind = 'bluray' | 'dvd' | 'cd';
-export type DiscHint = 'bd_title' | 'label';
+export type DiscHint = 'bd_title' | 'iso_name' | 'label';
 
 export const DISC_KIND_LABELS: Record<DiscKind, string> = { bluray: 'Blu-ray', dvd: 'DVD', cd: 'CD' };
 const HINT_LABELS = { bd_title: 'Disc title metadata', label: 'Volume label' } as const;
-const HINT_DEFAULT_ORDER = ['bd_title', 'label'] as const;
+const HINT_DEFAULT_ORDER = ['bd_title', 'iso_name', 'label'] as const;
 
 /** The Preview's disc-kind control: the kinds it offers, in order. */
 export const DISC_KINDS: readonly DiscKind[] = ['bluray', 'dvd', 'cd'];
@@ -53,6 +53,11 @@ export const IGNORE_OPTIONS: { hint: DiscHint; label: string; help: string }[] =
 		hint: 'bd_title',
 		label: 'Ignore the disc title metadata',
 		help: "Blu-ray and UHD only. ARM won't use the title stored on the disc and identifies it from the volume label, TheDiscDB and online lookup instead."
+	},
+	{
+		hint: 'iso_name',
+		label: 'Ignore the ISO file name',
+		help: "Only for ISO rips. ARM won't read the title, season, disc number or year from the file name and identifies the disc from its other text, TheDiscDB and online lookup instead."
 	},
 	{
 		hint: 'label',
@@ -116,8 +121,8 @@ function discSentence(kind: DiscKind, values: Record<string, unknown>): string {
 		const parts = [...(hintIgnored(values, 'label') ? [] : [HINT_LABELS.label]), 'Disc ID (track layout)'];
 		return sentenceCase(joinAnd(parts.map(lowerFirst)));
 	}
-	const kindHints: readonly DiscHint[] = kind === 'bluray' ? HINT_DEFAULT_ORDER : ['label'];
-	const shown = hintList(values).filter((h): h is DiscHint => (kindHints as string[]).includes(h));
+	const kindHints: readonly (keyof typeof HINT_LABELS)[] = kind === 'bluray' ? ['bd_title', 'label'] : ['label'];
+	const shown = hintList(values).filter((h): h is keyof typeof HINT_LABELS => (kindHints as string[]).includes(h));
 	if (shown.length === 0) return 'Disc text ignored';
 	const hints = sentenceCase(joinAnd(shown.map((h) => lowerFirst(HINT_LABELS[h]))));
 	const dbs = [

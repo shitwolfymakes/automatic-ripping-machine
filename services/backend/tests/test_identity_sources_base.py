@@ -20,12 +20,17 @@ from arm_backend.identity.sources.registry import (
 def test_tiers_follow_capabilities() -> None:
     assert SOURCE_TIERS["manual"] == TIER_BY_CAPABILITY[Capability.MANUAL]
     assert SOURCE_TIERS["thediscdb"] == TIER_BY_CAPABILITY[Capability.DISC_MAP]
-    assert SOURCE_TIERS["bd_title"] == SOURCE_TIERS["label"] == TIER_BY_CAPABILITY[Capability.DISC_HINT]
+    assert (
+        SOURCE_TIERS["bd_title"]
+        == SOURCE_TIERS["iso_name"]
+        == SOURCE_TIERS["label"]
+        == TIER_BY_CAPABILITY[Capability.DISC_HINT]
+    )
     assert SOURCE_TIERS["preset"] == TIER_BY_CAPABILITY[Capability.PRESET]
 
 
 def test_default_hint_ranks_prefer_bd_title() -> None:
-    assert DEFAULT_RANKS["bd_title"] < DEFAULT_RANKS["label"]
+    assert DEFAULT_RANKS["bd_title"] < DEFAULT_RANKS["iso_name"] < DEFAULT_RANKS["label"]
 
 
 def test_episode_sources_are_tier_three_and_ranked() -> None:
@@ -40,7 +45,7 @@ def test_episode_sources_are_tier_three_and_ranked() -> None:
 def test_accessors_fall_back_on_none() -> None:
     for cfg in (None, _bare_config()):
         assert episode_sources_setting(cfg) == ("tmdb", "tvmaze", "tvdb")
-        assert hint_sources_setting(cfg) == ("bd_title", "label")
+        assert hint_sources_setting(cfg) == ("bd_title", "iso_name", "label")
         assert episode_tolerance(cfg) == 300
         assert episode_auto_apply(cfg) is True
         assert disabled_source_ids(cfg) == frozenset()
@@ -60,18 +65,18 @@ def test_accessors_follow_operator_order_and_drop_unknown_values() -> None:
     assert episode_sources_setting(cfg) == ("tvdb", "tmdb")
     assert enabled_episode_source_ids(cfg) == ("episodes_tvdb", "episodes_tmdb")
     assert [s.id for s in enabled_hint_sources(cfg)] == ["label"]
-    assert disabled_source_ids(cfg) == frozenset({"episodes_tvmaze", "bd_title"})
+    assert disabled_source_ids(cfg) == frozenset({"episodes_tvmaze", "bd_title", "iso_name"})
     assert source_ranks(cfg) == {"episodes_tvdb": 0, "episodes_tmdb": 1, "label": 0}
 
 
 def test_hint_order_is_fixed_whatever_the_stored_order() -> None:
     """The disc's own metadata beats its label (design v4): `disc_hint_sources`
     is a set; a saved order never reranks the hints."""
-    cfg = Config(disc_hint_sources=["label", "bd_title"])
-    assert hint_sources_setting(cfg) == ("bd_title", "label")
-    assert [s.id for s in enabled_hint_sources(cfg)] == ["bd_title", "label"]
+    cfg = Config(disc_hint_sources=["label", "iso_name", "bd_title"])
+    assert hint_sources_setting(cfg) == ("bd_title", "iso_name", "label")
+    assert [s.id for s in enabled_hint_sources(cfg)] == ["bd_title", "iso_name", "label"]
     ranks = source_ranks(cfg)
-    assert (ranks["bd_title"], ranks["label"]) == (0, 1)
+    assert (ranks["bd_title"], ranks["iso_name"], ranks["label"]) == (0, 1, 2)
     assert hint_sources_setting(Config(disc_hint_sources=["label"])) == ("label",)
     assert hint_sources_setting(Config(disc_hint_sources=["bogus", "label", "label"])) == ("label",)
 
@@ -81,7 +86,7 @@ def test_empty_lists_disable_everything() -> None:
     assert enabled_episode_source_ids(cfg) == ()
     assert enabled_hint_sources(cfg) == ()
     assert disabled_source_ids(cfg) == frozenset(
-        {"episodes_tmdb", "episodes_tvmaze", "episodes_tvdb", "bd_title", "label"}
+        {"episodes_tmdb", "episodes_tvmaze", "episodes_tvdb", "bd_title", "iso_name", "label"}
     )
 
 

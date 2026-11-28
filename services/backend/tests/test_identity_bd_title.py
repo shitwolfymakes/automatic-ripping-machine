@@ -62,3 +62,20 @@ def test_part_marker_only_keeps_disc_drops_title() -> None:
     film) keeps the disc claim but must not propose a search title."""
     claims = BD_TITLE.run(_ctx(BdDiscMeta(name="Harry Potter Deathly Hallows P2")))
     assert claims.job.model_dump(exclude_unset=True) == {"disc_number": 2}
+
+
+def test_parenthesised_year_is_a_year_claim() -> None:
+    claims = BD_TITLE.run(_ctx(BdDiscMeta(name="Blade Runner 2049 (2017)")))
+    assert claims.job.year == 2017
+    assert "year" in claims.job.model_fields_set
+
+
+def test_bare_year_in_the_name_is_not_a_year_claim() -> None:
+    for name in ("Alien 1979", "Wonder Woman 1984", "1917", "Blade Runner 2049"):
+        claims = BD_TITLE.run(_ctx(BdDiscMeta(name=name)))
+        assert "year" not in claims.job.model_fields_set, name
+
+
+def test_parenthesised_number_past_next_year_is_not_a_year() -> None:
+    claims = BD_TITLE.run(_ctx(BdDiscMeta(name="Blade Runner (2049)")))
+    assert "year" not in claims.job.model_fields_set

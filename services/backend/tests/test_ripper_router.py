@@ -2865,6 +2865,45 @@ def test_identify_disc_hint_sources_excludes_bd_title() -> None:
     assert sources["label"]["status"] == "ok"
 
 
+def test_identify_on_a_virtual_drive_records_the_iso_name_claim() -> None:
+    """An ISO rip's drive carries the file's library path; identify reads its
+    stem as the iso_name hint source. The year it proposes stays a hint:
+    job.year is not written from it."""
+    db = FakeSession()
+    drive = _drive()
+    drive.kind = DriveKind.VIRTUAL
+    drive.source_path = "movies/Blade_Runner_2049_(2017)_[3D].iso"
+    db.rows["drives"] = [drive]
+    db.rows["config"] = [_config()]
+    app = _make_app(db, dispatcher=_Dispatcher(result=None))
+    scan = _scan_dict("bluray")
+    scan["fingerprints"] = []
+    with TestClient(app) as client:
+        r = client.post("/api/ripper/identify", json={"drive_id": "drv_x", "scan_result": scan}, headers=_SERVICE_AUTH)
+    assert r.status_code == 200
+    job = db.rows["jobs"][0]
+    entry = job.metadata_json["identity_claims"]["sources"]["iso_name"]
+    assert entry["status"] == "ok"
+    assert entry["inputs"] == {"source_name": "Blade_Runner_2049_(2017)_[3D]"}
+    assert entry["job"] == {"title": "blade runner 2049", "year": 2017}
+    assert job.year is None
+
+
+def test_identify_on_an_optical_drive_skips_iso_name() -> None:
+    db = FakeSession()
+    db.rows["drives"] = [_drive()]
+    db.rows["config"] = [_config()]
+    app = _make_app(db, dispatcher=_Dispatcher(result=None))
+    with TestClient(app) as client:
+        r = client.post(
+            "/api/ripper/identify",
+            json={"drive_id": "drv_x", "scan_result": _scan_dict("bluray")},
+            headers=_SERVICE_AUTH,
+        )
+    assert r.status_code == 200
+    assert db.rows["jobs"][0].metadata_json["identity_claims"]["sources"]["iso_name"]["status"] == "skipped"
+
+
 def test_identify_passes_hint_title_to_dispatcher() -> None:
     """The BDMT-derived hint title reaches the dispatcher as title_hint."""
     db = FakeSession()

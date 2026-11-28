@@ -6,11 +6,12 @@ import logging
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from pathlib import PurePosixPath
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import col, select
 
-from arm_common import Config, Job, JobStatus, Track
+from arm_common import Config, Drive, DriveKind, Job, JobStatus, Track
 from arm_common.schemas import ScanResult
 from arm_common.schemas.identity import SourceClaims
 
@@ -71,9 +72,25 @@ def _error_claims(source: Source, ctx: JobContext, e: Exception) -> SourceClaims
     return SourceClaims(run_at=ctx.now, status="error", inputs=inputs, detail=f"{type(e).__name__}: {e}"[:200])
 
 
-def run_disc_hints(job: Job, scan: ScanResult, *, now: datetime, sources: Sequence[Source] = HINT_SOURCES) -> None:
+def source_name_of(drive: Drive) -> str | None:
+    """An ISO rip's file name without `.iso` (or its disc folder's name), read
+    from the virtual drive's library-relative `source_path`; None for any other drive."""
+    if drive.kind != DriveKind.VIRTUAL or not drive.source_path:
+        return None
+    name = PurePosixPath(drive.source_path).name
+    return name.removesuffix(".iso") or None
+
+
+def run_disc_hints(
+    job: Job,
+    scan: ScanResult,
+    *,
+    now: datetime,
+    sources: Sequence[Source] = HINT_SOURCES,
+    source_name: str | None = None,
+) -> None:
     """Record every disc-hint source's proposals (or why it was skipped)."""
-    ctx = JobContext(job=job, scan=scan, now=now)
+    ctx = JobContext(job=job, scan=scan, now=now, source_name=source_name)
     for source in sources:
         try:
             reason = source.applies_to(ctx)

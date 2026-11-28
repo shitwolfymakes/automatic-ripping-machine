@@ -8,6 +8,7 @@ from collections.abc import Mapping, Sequence
 
 from arm_backend.identity.sources.base import TIER_BY_CAPABILITY, Capability, Source
 from arm_backend.identity.sources.bd_title import BD_TITLE
+from arm_backend.identity.sources.iso_name import ISO_NAME
 from arm_backend.identity.sources.label_hints import LABEL
 from arm_common import Config
 
@@ -18,6 +19,7 @@ SOURCE_TIERS: dict[str, int] = {
     "episodes_tvmaze": TIER_BY_CAPABILITY[Capability.EPISODE_MATCH],
     "episodes_tvdb": TIER_BY_CAPABILITY[Capability.EPISODE_MATCH],
     "bd_title": TIER_BY_CAPABILITY[Capability.DISC_HINT],
+    "iso_name": TIER_BY_CAPABILITY[Capability.DISC_HINT],
     "label": TIER_BY_CAPABILITY[Capability.DISC_HINT],
     "preset": TIER_BY_CAPABILITY[Capability.PRESET],
 }
@@ -28,7 +30,8 @@ SOURCE_TIERS: dict[str, int] = {
 # the operator's config through `source_ranks()`, never by reading this map.
 DEFAULT_RANKS: dict[str, int] = {
     "bd_title": 0,
-    "label": 1,
+    "iso_name": 1,
+    "label": 2,
     "episodes_tmdb": 0,
     "episodes_tvmaze": 1,
     "episodes_tvdb": 2,
@@ -36,7 +39,7 @@ DEFAULT_RANKS: dict[str, int] = {
 
 # Disc-hint sources in their fixed rank order; the operator's setting only
 # switches each one on or off (`hint_sources_setting`).
-HINT_SOURCES: tuple[Source, ...] = (BD_TITLE, LABEL)
+HINT_SOURCES: tuple[Source, ...] = (BD_TITLE, ISO_NAME, LABEL)
 
 # Episode-match source id per operator-facing provider setting name.
 EPISODE_SOURCE_BY_SETTING: dict[str, str] = {
@@ -60,7 +63,7 @@ EPISODE_AUTO_APPLY = True
 COVERAGE_STOP = 0.8
 
 # Disc-hint sources by setting value (`disc_hint_sources`).
-HINT_SOURCE_BY_SETTING: dict[str, Source] = {BD_TITLE.id: BD_TITLE, LABEL.id: LABEL}
+HINT_SOURCE_BY_SETTING: dict[str, Source] = {s.id: s for s in HINT_SOURCES}
 _DEFAULT_HINT_SETTING: tuple[str, ...] = tuple(s.id for s in HINT_SOURCES)
 
 
