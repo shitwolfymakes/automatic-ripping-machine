@@ -45,7 +45,7 @@ from arm_backend.title_map_service import (
     title_numbers,
 )
 from arm_backend.track_selection import DiscBackupNeedsBluray, select_tracks
-from arm_backend.version_policy import prefers_stereo_3d, selection_policy
+from arm_backend.version_policy import parked_session, prefers_stereo_3d, selection_policy
 from arm_backend.ws import WSHub
 from arm_common import (
     Config,
@@ -420,7 +420,8 @@ async def _routed_rip_choice(session: AsyncSession, job: Job) -> tuple[str, int 
     except RipPresetUnavailable as exc:
         raise _rip_preset_or_http(exc) from exc
     min_length_seconds = min_length_override_from_session(sess)
-    return preset_id, min_length_seconds, await prefers_stereo_3d(session, sess)
+    # The transcode signal is the session that will process the job: a parked one wins over the routed one.
+    return preset_id, min_length_seconds, await prefers_stereo_3d(session, await parked_session(session, job) or sess)
 
 
 async def _job_tracks(session: AsyncSession, job_id: str) -> Sequence[Track]:

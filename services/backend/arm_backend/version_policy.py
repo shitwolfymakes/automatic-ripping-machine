@@ -21,7 +21,7 @@ from arm_backend.rip_preset_resolution import RipPresetUnavailable, load_routed_
 from arm_backend.track_selection import preset_ticks, title_classes
 from arm_backend.transcode_apply import is_passthrough_preset
 from arm_backend.version_naming import track_version_sets
-from arm_common import DiscType, Job, Session, TranscodePreset
+from arm_common import DiscType, Job, Session, SessionApplication, SessionApplicationStatus, TranscodePreset
 from arm_common.enums import PRE_RIP_JOB_STATUSES, VIDEO_DISC_TYPES
 from arm_common.models import Track
 from arm_common.schemas import ScanResult
@@ -51,6 +51,32 @@ async def prefers_stereo_3d(db: AsyncSession, sess: Session | None) -> bool:
     return is_passthrough_preset(preset)
 
 
+async def parked_session(db: AsyncSession, job: Job) -> Session | None:
+    """The session parked on the job before its rip: the application the rip-complete drain fans out (the
+    oldest when several are parked, the drain's order)."""
+    application = (
+        (
+            await db.execute(
+                select(SessionApplication)
+                .where(col(SessionApplication.job_id) == job.id)
+                .where(col(SessionApplication.status) == SessionApplicationStatus.WAITING_IDENTIFY)
+                .order_by(col(SessionApplication.created_at).asc())
+            )
+        )
+        .scalars()
+        .first()
+    )
+    if application is None:
+        return None
+    return (await db.execute(select(Session).where(col(Session.id) == application.session_id))).scalar_one_or_none()
+
+
+async def effective_session(db: AsyncSession, job: Job) -> Session | None:
+    """The session that will process the job, for the transcode signal: the parked one, else the job's
+    routed one, else none. Preview, ticks and rip-start all read it here."""
+    return await parked_session(db, job) or await load_routed_session(db, job)
+
+
 class SelectionPolicy(TypedDict):
     """The keyword arguments of `select_tracks` and `preset_ticks` that carry the policy."""
 
@@ -58,12 +84,12 @@ class SelectionPolicy(TypedDict):
     prefer_stereo_3d: bool | None
 
 
-async def selection_policy(db: AsyncSession, job: Job, sess: Session | None = None) -> SelectionPolicy:
+async def selection_policy(db: AsyncSession, job: Job) -> SelectionPolicy:
     """The job's policy for track selection. The 2D/3D rule needs the session only on a Blu-ray (only
-    there does the classifier pair a title with its twin); `sess` overrides the job's routed session."""
+    there does the classifier pair a title with its twin); it reads the job's `effective_session`."""
     prefer = None
     if job.disc_type == DiscType.BLURAY:
-        prefer = await prefers_stereo_3d(db, sess or await load_routed_session(db, job))
+        prefer = await prefers_stereo_3d(db, await effective_session(db, job))
     return {"tick_one_version": ticks_one_version(job), "prefer_stereo_3d": prefer}
 
 
@@ -86,12 +112,11 @@ async def recompute_ticks(
     scan: ScanResult,
     *,
     rippable: frozenset[str] | None,
-    sess: Session | None = None,
 ) -> set[str]:
     """Re-record the preset's ticks of a Blu-ray job's tracks under its policy, with the title map
     (`rippable`, None before it arrives) and the transcode signal as they are now, and refresh the tracks'
-    classifier columns (the 2D/3D pick can move them). `sess` is the session the transcode signal comes
-    from; else the job's routed session. Returns the ids of the tracks whose columns changed; the caller
+    classifier columns (the 2D/3D pick can move them). The transcode signal is the job's `effective_session`.
+    Returns the ids of the tracks whose columns changed; the caller
     resolves, which applies the claims."""
     if scan.disc_type != DiscType.BLURAY:
         return set()
@@ -99,7 +124,7 @@ async def recompute_ticks(
         preset = await resolve_rip_preset_for_job(db, job)
     except RipPresetUnavailable:
         return set()
-    policy = await selection_policy(db, job, sess)
+    policy = await selection_policy(db, job)
     preferred = preferred_titles(job)
     ticks = preset_ticks(scan, preset, preferred=preferred, rippable=rippable, **policy)
     if ticks is None:

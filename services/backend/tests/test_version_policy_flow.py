@@ -9,11 +9,21 @@ from typing import Any
 import pytest
 from fastapi.testclient import TestClient
 
-from arm_backend.auto_session import _refresh_version_ticks
+from arm_backend.auto_session import _refresh_version_ticks, apply_session_internal
 from arm_backend.identity.proposals import claims_of, record_manual_track
 from arm_backend.track_selection import select_tracks_for_review
 from arm_backend.version_policy import prefers_stereo_3d, selection_policy, version_set_refs
-from arm_common import DiscType, Job, JobStatus, MediaType, Session, TrackStatus, TranscodePreset
+from arm_common import (
+    DiscType,
+    Job,
+    JobStatus,
+    MediaType,
+    Session,
+    SessionApplication,
+    SessionApplicationStatus,
+    TrackStatus,
+    TranscodePreset,
+)
 from arm_common.enums import ContainerFormat, TranscodeTool
 from arm_common.models import Track
 from arm_common.schemas import ScanResult
@@ -273,14 +283,24 @@ async def test_selection_policy_reads_the_job_and_the_session_on_a_blu_ray_only(
     job = Job(
         id=JOB_ID, drive_id="drv_x", disc_type=DiscType.BLURAY, status=JobStatus.AWAITING_REVIEW, tick_one_version=False
     )
-    sess = _session(_preset(TranscodeTool.HANDBRAKE))
-    assert await selection_policy(db, job, sess) == {"tick_one_version": False, "prefer_stereo_3d": False}  # type: ignore[arg-type]
+    _park(db, job, _session(_preset(TranscodeTool.HANDBRAKE)))
+    assert await selection_policy(db, job) == {"tick_one_version": False, "prefer_stereo_3d": False}  # type: ignore[arg-type]
     job.disc_type = DiscType.DVD
     job.tick_one_version = None
-    assert await selection_policy(db, job, sess) == {"tick_one_version": True, "prefer_stereo_3d": None}  # type: ignore[arg-type]
+    assert await selection_policy(db, job) == {"tick_one_version": True, "prefer_stereo_3d": None}  # type: ignore[arg-type]
 
 
 # --- session apply ---
+
+
+def _park(db: FakeSession, job: Job, sess: Session) -> None:
+    """A session applied before the rip: a waiting_identify application, the one the rip-complete drain fans out."""
+    db.rows.setdefault("sessions", []).append(sess)
+    db.rows.setdefault("session_applications", []).append(
+        SessionApplication(
+            id="sap_x", session_id=sess.id, job_id=job.id, status=SessionApplicationStatus.WAITING_IDENTIFY
+        )
+    )
 
 
 def _twin_scan() -> ScanResult:
@@ -316,9 +336,9 @@ async def test_applying_a_session_before_the_rip_recomputes_the_2d_3d_pick_and_t
     by_ref = {t.source_ref: t for t in tracks}
     assert {r for r, t in by_ref.items() if not t.excluded} == {"00100.mpls"}
     hub = _Hub()
-    sess = _session(_preset(TranscodeTool.NONE))
+    _park(db, job, _session(_preset(TranscodeTool.NONE)))
     db.rows["transcode_presets"] = [_preset(TranscodeTool.NONE)]
-    await _refresh_version_ticks(db, hub, job, sess, tracks)  # type: ignore[arg-type]
+    await _refresh_version_ticks(db, hub, job, tracks)  # type: ignore[arg-type]
     assert {t.source_ref for t in tracks if not t.excluded} == {"00101.mpls"}
     assert by_ref["00100.mpls"].title_class == TitleClass.VIEW
     assert any(e["event_type"] == "track.updated" for e in hub.events)
@@ -329,7 +349,7 @@ async def test_applying_a_session_after_the_rip_leaves_the_ticks_alone() -> None
     db = FakeSession()
     job = _structure_job(_twin_scan(), status=JobStatus.RIPPED, db=db)
     before = {t.source_ref: t.excluded for t in db.rows["tracks"]}
-    await _refresh_version_ticks(db, None, job, _session(None), db.rows["tracks"])  # type: ignore[arg-type]
+    await _refresh_version_ticks(db, None, job, db.rows["tracks"])  # type: ignore[arg-type]
     assert {t.source_ref: t.excluded for t in db.rows["tracks"]} == before
 
 
@@ -427,5 +447,65 @@ async def test_applying_a_session_without_a_hub_still_recomputes() -> None:
     db = FakeSession()
     job = _structure_job(_twin_scan(), db=db)
     db.rows["transcode_presets"] = [_preset(TranscodeTool.NONE)]
-    await _refresh_version_ticks(db, None, job, _session(_preset(TranscodeTool.NONE)), db.rows["tracks"])  # type: ignore[arg-type]
+    _park(db, job, _session(_preset(TranscodeTool.NONE)))
+    await _refresh_version_ticks(db, None, job, db.rows["tracks"])  # type: ignore[arg-type]
+    assert {t.source_ref for t in db.rows["tracks"] if not t.excluded} == {"00101.mpls"}
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("tool, picked", [(TranscodeTool.HANDBRAKE, "00100.mpls"), (TranscodeTool.NONE, "00101.mpls")])
+async def test_a_parked_session_decides_the_2d_3d_pick(tool: TranscodeTool, picked: str) -> None:
+    db = FakeSession()
+    job = _structure_job(_twin_scan(), db=db)
+    job.tick_one_version = True
+    db.rows["transcode_presets"] = [_preset(tool)]
+    _park(db, job, _session(_preset(tool)))
+    await _refresh_version_ticks(db, None, job, db.rows["tracks"])  # type: ignore[arg-type]
+    assert {t.source_ref for t in db.rows["tracks"] if not t.excluded} == {picked}
+
+
+@pytest.mark.anyio
+async def test_no_session_keeps_the_3d_pick() -> None:
+    db = FakeSession()
+    job = _structure_job(_twin_scan(), db=db)
+    job.tick_one_version = True
+    db.rows["transcode_presets"] = []
+    assert (await selection_policy(db, job))["prefer_stereo_3d"] is True  # type: ignore[arg-type]
+
+
+@pytest.mark.anyio
+async def test_a_parked_session_wins_over_the_routed_one(monkeypatch: pytest.MonkeyPatch) -> None:
+    db = FakeSession()
+    job = Job(id=JOB_ID, drive_id="drv_x", disc_type=DiscType.BLURAY, status=JobStatus.AWAITING_REVIEW)
+    db.rows["transcode_presets"] = [_preset(TranscodeTool.HANDBRAKE), _preset(TranscodeTool.NONE)]
+    routed = _session(_preset(TranscodeTool.NONE))
+
+    async def load_routed(_db: Any, _job: Job) -> Session:
+        return routed
+
+    monkeypatch.setattr("arm_backend.version_policy.load_routed_session", load_routed)
+    assert (await selection_policy(db, job))["prefer_stereo_3d"] is True  # type: ignore[arg-type]
+    _park(db, job, _session(_preset(TranscodeTool.HANDBRAKE)))
+    assert (await selection_policy(db, job))["prefer_stereo_3d"] is False  # type: ignore[arg-type]
+
+
+@pytest.mark.anyio
+async def test_parking_a_passthrough_session_before_the_rip_moves_the_pick_to_3d(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    db = FakeSession()
+    job = _structure_job(_twin_scan(), db=db)
+    job.tick_one_version = True
+    sess = _session(_preset(TranscodeTool.NONE))
+    db.rows["sessions"] = [sess]
+    db.rows["transcode_presets"] = [_preset(TranscodeTool.NONE)]
+    outcome = await apply_session_internal(
+        db,
+        job=job,
+        session_id=sess.id,
+        created_by_user_id=None,
+        source="manual",  # type: ignore[arg-type]
+    )
+    assert outcome.application is not None
+    assert outcome.application.status == SessionApplicationStatus.WAITING_IDENTIFY
     assert {t.source_ref for t in db.rows["tracks"] if not t.excluded} == {"00101.mpls"}
