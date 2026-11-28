@@ -161,7 +161,7 @@ async def test_scan_disc_uses_iso_source_url_for_iso_path(monkeypatch, tmp_path:
         AsyncMock(return_value=disc_probe.DiscProbe(crc64=None)),
     )
 
-    await scan_makemkv.scan_disc(str(iso))
+    await scan_makemkv.scan_disc(str(iso), 120)
 
     assert calls, "create_subprocess_exec was never called"
     argv = calls[0]
@@ -179,7 +179,7 @@ async def test_scan_disc_keeps_dev_source_url_for_block_device(monkeypatch) -> N
         AsyncMock(return_value=disc_probe.DiscProbe(crc64=None)),
     )
 
-    await scan_makemkv.scan_disc("/dev/sr0")
+    await scan_makemkv.scan_disc("/dev/sr0", 120)
 
     argv = calls[0]
     assert "dev:/dev/sr0" in argv
@@ -194,7 +194,7 @@ async def test_scan_disc_probes_bluray_false_for_dvd(monkeypatch) -> None:
     probe_mock = AsyncMock(return_value=disc_probe.DiscProbe(crc64=None))
     monkeypatch.setattr(scan_makemkv, "probe_disc", probe_mock)
 
-    await scan_makemkv.scan_disc("/dev/sr0")
+    await scan_makemkv.scan_disc("/dev/sr0", 120)
 
     probe_mock.assert_awaited_once_with("/dev/sr0", bluray=False)
 
@@ -206,7 +206,7 @@ async def test_scan_disc_probes_bluray_true_for_bluray(monkeypatch) -> None:
     probe_mock = AsyncMock(return_value=disc_probe.DiscProbe(crc64=None))
     monkeypatch.setattr(scan_makemkv, "probe_disc", probe_mock)
 
-    await scan_makemkv.scan_disc("/dev/sr0")
+    await scan_makemkv.scan_disc("/dev/sr0", 120)
 
     probe_mock.assert_awaited_once_with("/dev/sr0", bluray=True)
 

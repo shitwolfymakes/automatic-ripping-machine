@@ -113,6 +113,11 @@
       "page": "guide/configuring-arm",
       "section": "Rip / transcode behaviour"
     },
+    "config.min_title_length_seconds": {
+      "type": "internal",
+      "page": "guide/configuring-arm",
+      "section": "Rip / transcode behaviour"
+    },
     "config.miss_media_type": {
       "type": "internal",
       "page": "guide/configuring-arm",

@@ -40,6 +40,7 @@ from arm_backend.identity.sources.registry import (
     search_provider_setting,
 )
 from arm_backend.key_checks import check_online_key, makemkv_key_status
+from arm_backend.min_title_length import min_title_length_seconds
 from arm_backend.constants import CONFIG_SINGLETON_ID
 from arm_common import Config, Job, JobStatus, User
 from arm_common.config_metadata import CONFIG_FIELD_META
@@ -101,6 +102,7 @@ def _to_view(cfg: Config) -> ConfigView:
         if cfg.max_parallel_transcodes is not None
         else settings.MAX_PARALLEL_TRANSCODES,
         max_parallel_iso_rips=int(cfg.max_parallel_iso_rips or 1),
+        min_title_length_seconds=min_title_length_seconds(cfg),
         # None-coerce covers rows/fixtures predating the column (NULL = enabled).
         # A deployment that cannot transcode reports disabled, as every
         # enforcement point already treats it.

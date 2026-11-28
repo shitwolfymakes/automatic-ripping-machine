@@ -8972,6 +8972,17 @@
             ],
             "title": "Max Parallel Iso Rips"
           },
+          "min_title_length_seconds": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Min Title Length Seconds"
+          },
           "transcode_enabled": {
             "anyOf": [
               {
@@ -9327,6 +9338,10 @@
             "type": "integer",
             "title": "Max Parallel Iso Rips"
           },
+          "min_title_length_seconds": {
+            "type": "integer",
+            "title": "Min Title Length Seconds"
+          },
           "transcode_enabled": {
             "type": "boolean",
             "title": "Transcode Enabled"
@@ -9526,6 +9541,7 @@
           "drive_detected_prune_days",
           "max_parallel_transcodes",
           "max_parallel_iso_rips",
+          "min_title_length_seconds",
           "transcode_enabled",
           "transcode_capable",
           "makemkv_sdf_enabled",
@@ -16110,6 +16126,17 @@
               }
             ],
             "title": "Min Length Seconds"
+          },
+          "min_title_length_seconds": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Min Title Length Seconds"
           }
         },
         "type": "object",
@@ -16156,6 +16183,11 @@
             "type": "integer",
             "title": "Manual Wait Seconds",
             "default": 60
+          },
+          "min_title_length_seconds": {
+            "type": "integer",
+            "title": "Min Title Length Seconds",
+            "default": 120
           }
         },
         "type": "object",
@@ -16244,6 +16276,17 @@
                 "type": "null"
               }
             ]
+          },
+          "min_title_length_seconds": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Min Title Length Seconds"
           },
           "raw": {
             "additionalProperties": true,

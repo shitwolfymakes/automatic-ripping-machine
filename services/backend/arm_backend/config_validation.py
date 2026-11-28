@@ -68,6 +68,20 @@ def _validate_manual_wait(fields: dict[str, Any]) -> None:
         )
 
 
+MAX_MIN_TITLE_LENGTH_SECONDS = 3600
+
+
+def _validate_min_title_length(fields: dict[str, Any]) -> None:
+    value = fields.get("min_title_length_seconds", 0)
+    # 0 is a real choice: list and rip every title MakeMKV finds. An hour is
+    # the ceiling; anything longer would drop most features.
+    if value is None or not 0 <= value <= MAX_MIN_TITLE_LENGTH_SECONDS:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"min_title_length_seconds must be 0 to {MAX_MIN_TITLE_LENGTH_SECONDS} seconds",
+        )
+
+
 def _validate_on_previously_ripped(fields: dict[str, Any]) -> None:
     if "on_previously_ripped" in fields and fields["on_previously_ripped"] is None:
         raise HTTPException(
@@ -139,6 +153,7 @@ def validate_config_update(fields: dict[str, Any], raw: dict[str, Any], cfg: Con
     _validate_enum_fields(fields, cfg)
     _validate_positive_ints(fields)
     _validate_manual_wait(fields)
+    _validate_min_title_length(fields)
     _validate_on_previously_ripped(fields)
     _validate_iso_rip_cap(fields)
     _validate_transcode_enabled_not_null(fields)

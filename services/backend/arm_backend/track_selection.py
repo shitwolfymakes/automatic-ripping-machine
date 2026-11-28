@@ -162,6 +162,20 @@ def select_tracks_for_review(job_id: str, scan: ScanResult, rip_preset: RipPrese
     return rows
 
 
+def select_rip_tracks(job_id: str, scan: ScanResult, rip_preset: RipPreset) -> list[Track]:
+    """The tracks rip-start stores for a disc no review has persisted yet.
+
+    A DVD or Blu-ray stores every scanned title, the preset's rejects marked
+    `excluded`: the ripper's one `makemkvcon mkv … all` writes a file for each
+    title over the minimum length and pairs those files with the tracks by
+    position, so it needs every title to credit each file correctly. A CD
+    stores only the selection, because abcde rips exactly the tracks it is given.
+    """
+    if scan.disc_type in (DiscType.DVD, DiscType.BLURAY):
+        return select_tracks_for_review(job_id, scan, rip_preset)
+    return select_tracks(job_id, scan, rip_preset)
+
+
 def _title_tracks(job_id: str, scan: ScanResult) -> list[Track]:
     """One Track per scanned title: audio for a CD, video otherwise."""
     make_track = _audio_track if scan.disc_type == DiscType.CD else _video_track
