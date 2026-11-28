@@ -41,6 +41,11 @@ export function sortRoots(roots: FileRoot[]): FileRoot[] {
 
 // The subpath of a named entry inside a directory: `parent/name`, or just
 // `name` at the top of the root
+/** The folder the up row leads to: the root's label at the top, else the parent folder's own name. */
+export function parentFolderLabel(parentSubpath: string, rootLabel: string): string {
+	return parentSubpath === '' ? rootLabel : (parentSubpath.split('/').pop() ?? parentSubpath);
+}
+
 export function childSubpath(parent: string, name: string): string {
 	return parent ? `${parent}/${name}` : name;
 }

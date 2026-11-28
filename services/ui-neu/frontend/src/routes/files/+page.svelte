@@ -15,7 +15,8 @@
 		orderForDelete,
 		bulkResultFeedback,
 		cleanupFeedback,
-		fixedPermissionsMessage
+		fixedPermissionsMessage,
+		parentFolderLabel
 	} from '$lib/files/files';
 	import { cleanupTranscoder } from '$lib/api/maintenance';
 	import BreadcrumbNav from '$lib/components/files/BreadcrumbNav.svelte';
@@ -44,6 +45,10 @@
 
 	// New folder
 	let creatingFolder = $state(false);
+	// The up row names where it leads; at the top of a root that is the root itself.
+	let currentRootLabel = $derived(
+		browser.roots.find((r) => r.key === browser.current.root)?.label ?? browser.current.root
+	);
 	let newFolderName = $state('');
 
 	// Orphan folders modal
@@ -322,7 +327,7 @@
 							>
 								<span class="w-10"></span>
 								<Glyph name="arrow-left-short" class="h-4 w-4" />
-								..
+								Up to {parentFolderLabel(parent, currentRootLabel)}
 							</button>
 						{/if}
 
@@ -456,6 +461,12 @@
 	}
 	.files-page-empty-panel-text {
 		color: var(--color-text-muted);
+	}
+	/* The global ring sits outside the element, and .files-page-listing clips
+	   overflow, so a full-width row's ring was cut off: draw it inside. */
+	.files-page-nav-row:focus-visible {
+		outline: 2px solid var(--color-primary);
+		outline-offset: -2px;
 	}
 	.files-page-empty {
 		padding: 2rem;
