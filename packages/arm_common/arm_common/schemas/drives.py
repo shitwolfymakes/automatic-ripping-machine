@@ -45,10 +45,7 @@ class DriveView(BaseModel):
     drive_mode: DriveMode | None
     uhd_capable: bool | None
     rip_end_on_completion_message: bool | None
-    prescan_cache_mb: int | None
     prescan_timeout: int | None
-    prescan_retries: int | None
-    disc_enum_timeout: int | None
     created_at: datetime | None
     updated_at: datetime | None
     # Lifecycle. `lifecycle` is the operator's decision; `present`
@@ -97,11 +94,8 @@ class DriveUpdateRequest(BaseModel):
     drive_mode: DriveMode | None = None
     uhd_capable: bool | None = None
     rip_end_on_completion_message: bool | None = None
-    prescan_cache_mb: int | None = None
     # The drive's MakeMKV scan timeout in seconds; null follows DEFAULT_SCAN_TIMEOUT_SECONDS.
     prescan_timeout: int | None = Field(default=None, ge=SCAN_TIMEOUT_MIN_SECONDS, le=SCAN_TIMEOUT_MAX_SECONDS)
-    prescan_retries: int | None = None
-    disc_enum_timeout: int | None = None
 
 
 class DriveDiagnosticItem(BaseModel):

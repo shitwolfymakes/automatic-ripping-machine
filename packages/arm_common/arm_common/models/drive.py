@@ -101,8 +101,10 @@ class Drive(SQLModel, table=True):
     uhd_capable: bool | None = Field(default=None)
     # NULL follows Config.rip_end_on_completion_message.
     rip_end_on_completion_message: bool | None = Field(default=None)
-    prescan_cache_mb: int | None = Field(default=None)
     prescan_timeout: int | None = Field(default=None)
+    # Never read by the ripper and no longer in the API (#325); the columns
+    # stay until a migration drops them.
+    prescan_cache_mb: int | None = Field(default=None)
     prescan_retries: int | None = Field(default=None)
     disc_enum_timeout: int | None = Field(default=None)
     default_session_id: str | None = Field(

@@ -30,10 +30,7 @@ function drive(over: Partial<DriveView> = {}): DriveView {
 		rip_speed: null,
 		drive_mode: null,
 		uhd_capable: null,
-		prescan_cache_mb: null,
 		prescan_timeout: null,
-		prescan_retries: null,
-		disc_enum_timeout: null,
 		created_at: null,
 		updated_at: null,
 		lifecycle: 'enrolled',
@@ -161,16 +158,8 @@ describe('prescanOverrideCount', () => {
 	it('is 0 when no field is set', () => {
 		expect(prescanOverrideCount(drive())).toBe(0);
 	});
-	it.each(['prescan_cache_mb', 'prescan_timeout', 'prescan_retries', 'disc_enum_timeout'] as const)(
-		'counts %s alone',
-		(field) => {
-			expect(prescanOverrideCount(drive({ [field]: 0 }))).toBe(1);
-		}
-	);
-	it('is 4 when all fields are set', () => {
-		expect(
-			prescanOverrideCount(drive({ prescan_cache_mb: 1, prescan_timeout: 2, prescan_retries: 3, disc_enum_timeout: 4 }))
-		).toBe(4);
+	it('counts the scan timeout, even when it is 0', () => {
+		expect(prescanOverrideCount(drive({ prescan_timeout: 0 }))).toBe(1);
 	});
 });
 

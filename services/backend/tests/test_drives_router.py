@@ -386,12 +386,11 @@ def test_list_returns_driveview_with_null_tuning(signing_key: bytes) -> None:
         "drive_mode",
         "uhd_capable",
         "rip_end_on_completion_message",
-        "prescan_cache_mb",
         "prescan_timeout",
-        "prescan_retries",
-        "disc_enum_timeout",
     ):
         assert row[f] is None
+    for gone in ("prescan_cache_mb", "prescan_retries", "disc_enum_timeout"):
+        assert gone not in row, gone
     assert row["current_job"] is None
     assert "rip_params_json" not in row
     assert "last_seen_at" in row  # raw-Drive field preserved in the view (UI renders it)
@@ -485,10 +484,7 @@ def test_patch_tuning_fields_persisted(signing_key: bytes) -> None:
         "rip_speed": 8,
         "drive_mode": "manual",
         "uhd_capable": True,
-        "prescan_cache_mb": 1024,
         "prescan_timeout": 30,
-        "prescan_retries": 3,
-        "disc_enum_timeout": 60,
     }
     with TestClient(app) as c:
         r = c.patch("/api/drives/drv_x", json=body, headers=_auth(token))
@@ -565,6 +561,17 @@ def test_patch_clears_a_scan_timeout_with_null(signing_key: bytes) -> None:
         r = c.patch("/api/drives/drv_x", json={"prescan_timeout": None}, headers=_auth(token))
     assert r.status_code == 200, r.text
     assert db.rows["drives"][0].prescan_timeout is None
+
+
+@pytest.mark.parametrize("field", ["prescan_cache_mb", "prescan_retries", "disc_enum_timeout"])
+def test_patch_refuses_the_removed_prescan_fields(signing_key: bytes, field: str) -> None:
+    """#325: nothing ever read these, so the API no longer takes them."""
+    db = FakeSession()
+    _seed(db)
+    app, token = _make_app(signing_key, db)
+    with TestClient(app) as c:
+        r = c.patch("/api/drives/drv_x", json={field: 5}, headers=_auth(token))
+    assert r.status_code == 422
 
 
 def test_patch_invalid_drive_mode_422(signing_key: bytes) -> None:

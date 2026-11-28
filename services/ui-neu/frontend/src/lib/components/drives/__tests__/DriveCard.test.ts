@@ -35,10 +35,7 @@ function createDrive(overrides: Partial<Drive> = {}): Drive {
 		drive_mode: null,
 		uhd_capable: false,
 		rip_end_on_completion_message: null,
-		prescan_cache_mb: null,
 		prescan_timeout: null,
-		prescan_retries: null,
-		disc_enum_timeout: null,
 		created_at: null,
 		updated_at: null,
 		lifecycle: 'enrolled',
@@ -142,8 +139,8 @@ describe('DriveCard', () => {
 
 	describe('prescan overrides badge', () => {
 		it('shows custom badge when prescan overrides are set', () => {
-			renderDrive({ prescan_cache_mb: 64, prescan_timeout: 600 });
-			expect(screen.getByText('2 custom')).toBeInTheDocument();
+			renderDrive({ prescan_timeout: 600 });
+			expect(screen.getByText('1 custom')).toBeInTheDocument();
 		});
 
 		it('hides custom badge when no prescan overrides', () => {
@@ -157,38 +154,32 @@ describe('DriveCard', () => {
 			renderDrive();
 			await fireEvent.click(screen.getByTitle('Drive settings'));
 			expect(screen.getByRole('heading', { name: /Main Drive settings/i })).toBeInTheDocument();
-			expect(screen.getByText('Pre-scan Cache')).toBeInTheDocument();
 			expect(screen.getByText('Pre-scan Timeout')).toBeInTheDocument();
-			expect(screen.getByText('Pre-scan Retries')).toBeInTheDocument();
-			expect(screen.getByText('Enum Timeout')).toBeInTheDocument();
+			expect(screen.queryByText('Pre-scan Cache')).not.toBeInTheDocument();
+			expect(screen.queryByText('Pre-scan Retries')).not.toBeInTheDocument();
+			expect(screen.queryByText('Enum Timeout')).not.toBeInTheDocument();
 		});
 
-		it('shows tooltips for prescan fields', async () => {
+		it('shows the tooltip for the scan timeout', async () => {
 			renderDrive();
 			await fireEvent.click(screen.getByTitle('Drive settings'));
-			expect(screen.getByText(/Community recommends 64-128/)).toBeInTheDocument();
 			expect(screen.getByText(/Community recommends 600/)).toBeInTheDocument();
-			expect(screen.getByText(/Community recommends 3-5/)).toBeInTheDocument();
-			expect(screen.getByText(/Community recommends 120/)).toBeInTheDocument();
 		});
 
-		it('populates prescan inputs from drive values', async () => {
-			renderDrive({ prescan_cache_mb: 128, prescan_retries: 5 });
+		it('populates the scan timeout input from the drive', async () => {
+			renderDrive({ prescan_timeout: 900 });
 			await fireEvent.click(screen.getByTitle('Drive settings'));
-			const cacheInput = screen.getByLabelText(/Pre-scan Cache/) as HTMLInputElement;
-			const retriesInput = screen.getByLabelText(/Pre-scan Retries/) as HTMLInputElement;
-			expect(cacheInput.value).toBe('128');
-			expect(retriesInput.value).toBe('5');
+			expect((screen.getByLabelText(/Pre-scan Timeout/) as HTMLInputElement).value).toBe('900');
 		});
 
-		it('saves prescan field on blur', async () => {
+		it('saves the scan timeout on blur', async () => {
 			const { updateDrive } = await import('$lib/api/drives');
 			renderDrive();
 			await fireEvent.click(screen.getByTitle('Drive settings'));
-			const cacheInput = screen.getByLabelText(/Pre-scan Cache/) as HTMLInputElement;
-			await fireEvent.input(cacheInput, { target: { value: '64' } });
-			await fireEvent.blur(cacheInput);
-			expect(updateDrive).toHaveBeenCalledWith('drv_1', { prescan_cache_mb: 64 });
+			const timeoutInput = screen.getByLabelText(/Pre-scan Timeout/) as HTMLInputElement;
+			await fireEvent.input(timeoutInput, { target: { value: '900' } });
+			await fireEvent.blur(timeoutInput);
+			expect(updateDrive).toHaveBeenCalledWith('drv_1', { prescan_timeout: 900 });
 		});
 
 		it('saves rip speed without throwing on the number-bound input', async () => {
