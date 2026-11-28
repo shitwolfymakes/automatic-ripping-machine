@@ -29,7 +29,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import col, select
 
 from arm_backend import job_events
-from arm_backend.config import settings
+from arm_backend.config import effective_transcode_capable, settings
 from arm_backend.identity.events import emit_identity_resolved
 from arm_backend.identity.pipeline import ResolveOutcome, resolve_job
 from arm_backend.path_template import TemplateValidationError
@@ -282,6 +282,16 @@ async def _existing_auto_outcome(db: AsyncSession, session_id: str, job: Job) ->
     return None
 
 
+def _park_until_transcoding_resumes(source: ApplySource, skipped_reason: SkippedReason) -> bool:
+    """Should a refused apply park until transcoding is switched back on?
+
+    Only the unattended apply, and only when the switch is off on a
+    deployment that can transcode: a ripper-only one never will, and a job
+    parked there would read as waiting forever.
+    """
+    return source == "auto" and skipped_reason == "transcode_disabled" and effective_transcode_capable(settings)
+
+
 async def _park_waiting_identify(
     db: AsyncSession, session_id: str, job: Job, created_by_user_id: str | None
 ) -> ApplySessionOutcome:
@@ -406,6 +416,11 @@ async def _apply_session_internal(
     # the auto idempotency block on purpose: a repeat auto apply of an
     # already-existing application returns that application unchanged.
     refusal = await encode_gate_refusal(db, transcode_preset)
+    if refusal is not None and _park_until_transcoding_resumes(source, refusal[0]):
+        # The unattended apply parks instead, so switching transcoding back
+        # on promotes it (`redrain_parked_applications`); a skip left the
+        # rip in /raw with nothing to pick it up.
+        return await _park_waiting_identify(db, session_id, job, created_by_user_id)
     if refusal is not None:
         skipped_reason, error_detail = refusal
         return ApplySessionOutcome(

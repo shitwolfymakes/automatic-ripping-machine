@@ -31,6 +31,7 @@
 	import { applyNote, identifyNote } from '$lib/jobs/action-notes';
 	import { fetchSessions } from '$lib/api/sessions';
 	import { buildMetadataFields } from '$lib/jobs/fields';
+	import { transcodeRuntimeEnabled } from '$lib/stores/config';
 	import LoadState from '$lib/components/shared/LoadState.svelte';
 	import SkeletonCard from '$lib/components/shared/SkeletonCard.svelte';
 	import JobRawMetadata from '$lib/components/jobs/JobRawMetadata.svelte';
@@ -78,7 +79,9 @@
 	}
 
 	let sessionNames = $state(new Map<string, string>());
-	let metadataFields = $derived(detail ? buildMetadataFields(detail.job, $dashboard.drives, sessionNames) : []);
+	let metadataFields = $derived(
+		detail ? buildMetadataFields(detail.job, $dashboard.drives, sessionNames, $transcodeRuntimeEnabled) : []
+	);
 
 	function handleTitleApply() {
 		panels.active = null;
