@@ -251,6 +251,33 @@ seed_makemkv_sdf() {  # <seed_dir> <makemkv_dir>
     touch -r "${seed}/.sdf_refreshed" "${dir}/.sdf_refreshed"
 }
 
+# The service's TLS key (TLS_KEY_PATH; the backend's) is a file bind mount the
+# installer wrote 0440 with the installing user's group. With PUID/PGID set to
+# another user, as the docs suggest for matching a media server, the dropped
+# arm user cannot read it and the service crash-loops. Root can, so hand arm a
+# private copy before the drop, as the db container does for postgres. A key
+# arm can already read is used as mounted. The copy is owned by PUID:PGID as
+# numbers, which are arm's uid and primary gid after the remap below whatever
+# the group is called (a PGID the image already has, e.g. 100 `users`, leaves
+# no group named `arm`). install's own error is left on stderr so a failed copy
+# says why. Defined above the SOURCE_ONLY seam so test-entrypoint-tls.sh can
+# exercise it unprivileged.
+TLS_KEY_COPY_DIR="${TLS_KEY_COPY_DIR:-/run/arm-tls}"
+private_tls_key() {
+    local key="${TLS_KEY_PATH:-}"
+    [[ -n "${key}" && -f "${key}" ]] || return 0
+    "${READ_TEST[@]}" "${key}" && return 0
+    local copy="${TLS_KEY_COPY_DIR}/tls.key"
+    if install -d -o "${PUID}" -g "${PGID}" -m 0700 "${TLS_KEY_COPY_DIR}" \
+        && install -o "${PUID}" -g "${PGID}" -m 0400 "${key}" "${copy}"; then
+        echo "TLS key ${key} is not readable by PUID:PGID=${PUID}:${PGID} (its group is the installer's); using a private copy" >&2
+        TLS_KEY_PATH="${copy}"
+        export TLS_KEY_PATH
+    else
+        echo "WARN: TLS key ${key} is not readable by PUID:PGID=${PUID}:${PGID} and could not be copied to ${TLS_KEY_COPY_DIR}" >&2
+    fi
+}
+
 # Test seam: lets services/_common/test-entrypoint-render.sh source the
 # functions above without executing the entrypoint (mirrors install.sh's
 # ARM_INSTALL_SOURCE_ONLY). The sourced-ness check makes a leaked env var
@@ -340,6 +367,8 @@ if [[ -x /usr/local/bin/update_key.sh ]] && command -v makemkvcon >/dev/null 2>&
     seed_makemkv_sdf /usr/local/share/arm/makemkv-seed /home/arm/.MakeMKV
     prepare_makemkv_dir /home/arm/.MakeMKV
 fi
+
+private_tls_key
 
 umask 002
 # gosu switches UID but preserves the inherited environment — including
