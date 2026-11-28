@@ -165,6 +165,15 @@ class IdentifyRequest(BaseModel):
     pending_session_id: str | None = None
 
 
+class TitlesReport(BaseModel):
+    """POST /api/ripper/jobs/{job_id}/titles body: what the background `makemkvcon info` run found on a disc
+    whose review card was posted from the playlist structure. `failure` is the reason MakeMKV could not read
+    the disc (then `titles` is empty); the job keeps its card and cannot start."""
+
+    titles: list[ScanTitle] = Field(default_factory=list)
+    failure: str | None = None
+
+
 class TrackUpdateRequest(BaseModel):
     """PATCH /api/ripper/tracks/{track_id} body.
 

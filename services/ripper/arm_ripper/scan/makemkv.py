@@ -4,7 +4,6 @@ from typing import NamedTuple
 
 from arm_common import DiscType
 from arm_common.schemas import DiscFingerprintInput, ScanResult, ScanTitle
-from arm_ripper.scan.bd_playlists import scan_playlists
 from arm_ripper.scan.disc_probe import DiscProbe, probe_disc
 from arm_ripper.scan.makemkv_info import parse_makemkvcon_info
 from arm_ripper.source import makemkv_source_url
@@ -122,6 +121,11 @@ async def _run_info(device_path: str) -> _InfoRun:
         proc.kill()
         await proc.wait()
         raise ScanError(f"makemkvcon timed out after {SCAN_TIMEOUT_SECONDS}s") from None
+    except asyncio.CancelledError:
+        # The run is abandoned (the job went away, or the title read was replaced): never leave it holding the drive.
+        proc.kill()
+        await proc.wait()
+        raise
 
     await proc.wait()
     return _InfoRun(stdout, stderr, expired, proc.returncode)
@@ -147,7 +151,7 @@ def _raise_for_failure(run: _InfoRun) -> None:
         raise ScanError(f"makemkvcon exited {run.returncode}: {msg}")
 
 
-def _fingerprints(probe: DiscProbe) -> list[DiscFingerprintInput]:
+def disc_fingerprints(probe: DiscProbe) -> list[DiscFingerprintInput]:
     """The disc fingerprints the probe found, in the order crc64, thediscdb, matrix256; empty values are skipped."""
     fingerprints: list[DiscFingerprintInput] = []
     if probe.crc64:
@@ -159,10 +163,16 @@ def _fingerprints(probe: DiscProbe) -> list[DiscFingerprintInput]:
     return fingerprints
 
 
+async def scan_titles(device_path: str) -> list[ScanTitle]:
+    """The titles `makemkvcon info` lists on the disc. Raises ScanError (MakemkvBinaryExpiredError for an expired
+    binary) when the run fails; used on its own for a disc whose structure was read separately."""
+    run = await _run_info(device_path)
+    _raise_for_failure(run)
+    _, titles, _ = parse_makemkvcon_info(run.stdout.decode(errors="replace").splitlines())
+    return titles
+
+
 async def scan_disc(device_path: str) -> ScanResult:
-    # Before makemkvcon: the playlist read is the early track list, and its
-    # logged elapsed_ms is the measurement of how early that list can arrive.
-    playlists = await scan_playlists(device_path)
     run = await _run_info(device_path)
 
     _raise_for_failure(run)
@@ -185,7 +195,6 @@ async def scan_disc(device_path: str) -> ScanResult:
         disc_type=disc_type,
         volume_label=volume_label,
         titles=titles,
-        fingerprints=_fingerprints(probe),
+        fingerprints=disc_fingerprints(probe),
         bd_meta=probe.bd_meta,
-        playlists=playlists,
     )

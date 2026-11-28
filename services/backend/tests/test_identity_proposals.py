@@ -301,7 +301,7 @@ def test_preferred_titles_are_thediscdb_main_movie_claims() -> None:
             tracks={"0": TrackClaim(role=TrackRole.MAIN), "1": TrackClaim(role=TrackRole.EXTRA), "11": TrackClaim()}
         ),
     )
-    assert preferred_titles(job) == frozenset({0})
+    assert preferred_titles(job) == frozenset({"0"})
 
 
 def test_preferred_titles_empty_without_thediscdb_claims() -> None:

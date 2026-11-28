@@ -31,7 +31,7 @@ from arm_common.enums import TrackKind, TrackStatus
 from arm_common.schemas import TrackView
 
 from arm_ripper.drive_status import probe_drive_media
-from arm_ripper.rip.dispatcher import _effective_disc_type, rip_all
+from arm_ripper.rip.dispatcher import _effective_disc_type, rip_all as _rip_all
 from arm_ripper.rip.makemkv_rip import RipDiscResult
 from arm_ripper.rip.optical_rip import (
     _eligible_source_indexes,
@@ -41,6 +41,17 @@ from arm_ripper.rip.optical_rip import (
     _no_output_error,
 )
 from arm_ripper.rip.result import RipResult
+
+
+def _identity_numbers(tracks: list[TrackView]) -> dict[str, int]:
+    """The backend's answer for a DVD or a fallback Blu-ray: each numeric ref is its own title number."""
+    return {t.source_ref: int(t.source_ref) for t in tracks if t.source_ref.isdigit()}
+
+
+async def rip_all(*, tracks: list[TrackView], **kwargs: Any) -> None:
+    """`rip_all` with the identity title numbers unless a test names its own."""
+    kwargs.setdefault("title_numbers", _identity_numbers(tracks))
+    await _rip_all(tracks=tracks, **kwargs)
 
 
 def _track(idx: int, source_ref: str | None = None, duration_seconds: int | None = 1800) -> TrackView:
@@ -429,7 +440,7 @@ async def test_rip_all_invalid_source_ref_fails_fast(monkeypatch, tmp_path):
         on_track_done=on_done,
     )
 
-    assert done == [("trk_5", False, "invalid source_ref: 'not-an-int'")]
+    assert done == [("trk_5", False, "MakeMKV has no title number for source_ref 'not-an-int'")]
 
 
 async def test_rip_all_synthesises_start_when_prgt_misses(monkeypatch, tmp_path):
@@ -883,6 +894,7 @@ async def test_rip_all_dump_track_uses_data_rip_even_on_a_bluray_scan(monkeypatc
         output_dir=tmp_path,
         on_track_start=on_start,
         on_track_done=on_done,
+        title_numbers={},
     )
     assert data_calls == ["/source/movie.iso"]
     assert done == [("trk_0", True)]
@@ -913,6 +925,7 @@ async def test_rip_all_dump_progress_carries_transfer_stats(monkeypatch, tmp_pat
         output_dir=tmp_path,
         on_track_start=_noop,
         on_track_done=_noop,
+        title_numbers={},
         on_track_progress=on_progress,
     )
     assert [round(f, 2) for f, _s in ticks] == [0.25, 1.0]
@@ -954,6 +967,7 @@ async def test_rip_all_disc_backup_track_uses_rip_backup(monkeypatch, tmp_path):
         output_dir=tmp_path,
         on_track_start=on_start,
         on_track_done=on_done,
+        title_numbers={},
         on_track_progress=on_progress,
     )
     assert backup_calls == ["/dev/sr0"]
@@ -1697,17 +1711,17 @@ async def test_rip_all_disc_backup_progress_is_dropped_without_a_progress_callba
 
 def test_index_tracks_maps_a_valid_source_ref_to_its_track() -> None:
     track = _track(1, source_ref="7")
-    assert _index_tracks([track], set()) == ({7: track}, [])
+    assert _index_tracks([track], set(), {"7": 7}) == ({7: track}, [])
 
 
 def test_index_tracks_skips_an_invalid_source_ref_in_skip_track_ids() -> None:
     bad = _track(1, source_ref="x")
-    assert _index_tracks([bad], {bad.id}) == ({}, [])
+    assert _index_tracks([bad], {bad.id}, {}) == ({}, [])
 
 
 def test_index_tracks_returns_invalid_source_refs_in_input_order() -> None:
     first, good, second = _track(1, source_ref="x"), _track(2), _track(3, source_ref="y")
-    assert _index_tracks([first, good, second], set()) == ({2: good}, [first, second])
+    assert _index_tracks([first, good, second], set(), {good.source_ref: 2}) == ({2: good}, [first, second])
 
 
 def test_eligible_source_indexes_leave_out_a_track_shorter_than_the_minimum() -> None:
@@ -1801,3 +1815,66 @@ def test_effective_disc_type_keeps_the_scan_type_for_mixed_kinds() -> None:
 
 def test_effective_disc_type_keeps_the_scan_type_without_tracks() -> None:
     assert _effective_disc_type(DiscType.DVD, []) == DiscType.DVD
+
+
+# --- title numbers: structure-keyed tracks are ripped by the number the backend gives their ref ---
+
+
+async def test_rip_all_pairs_structure_keyed_tracks_by_the_backends_title_numbers(monkeypatch, tmp_path):
+    """Tracks keyed `00334.mpls:1` and `00334.mpls:2` are MakeMKV titles 4 and 7: eligibility, `_tNN` pairing and the
+    reported results all follow those numbers."""
+    pick, other = _track(1, source_ref="00334.mpls:1"), _track(2, source_ref="00334.mpls:2")
+    captured: dict[str, Any] = {}
+    fake_result = RipDiscResult(
+        overall_error=None,
+        titles={
+            4: RipResult(ok=True, output_path=tmp_path / "t00.mkv", size_bytes=10),
+            7: RipResult(ok=True, output_path=tmp_path / "t01.mkv", size_bytes=20),
+        },
+    )
+    _stub_rip_disc(monkeypatch, fake_result, captured=captured, fire_per_title_start=False)
+    done: list[tuple[str, bool]] = []
+
+    async def noop(*_args: Any, **_kwargs: Any) -> None:
+        return None
+
+    async def on_done(track: TrackView, result: RipResult) -> None:
+        done.append((track.id, result.ok))
+
+    await rip_all(
+        disc_type=DiscType.BLURAY,
+        device_path="/dev/sr0",
+        tracks=[pick, other],
+        output_dir=tmp_path,
+        on_track_start=noop,
+        on_track_done=on_done,
+        min_length_seconds=600,
+        title_numbers={"00334.mpls:1": 4, "00334.mpls:2": 7},
+    )
+
+    assert captured["eligible_source_indexes"] == [4, 7]
+    assert sorted(done) == [("trk_1", True), ("trk_2", True)]
+
+
+async def test_rip_all_fails_a_track_the_backend_gave_no_title_number(monkeypatch, tmp_path):
+    """A playlist MakeMKV does not list has no number: it fails up front instead of reaching makemkvcon."""
+    _stub_rip_disc(monkeypatch, RipDiscResult(overall_error=None, titles={}))
+    done: list[tuple[str, bool, str | None]] = []
+
+    async def noop(*_args: Any, **_kwargs: Any) -> None:
+        return None
+
+    async def on_done(track: TrackView, result: RipResult) -> None:
+        done.append((track.id, result.ok, result.error))
+
+    await rip_all(
+        disc_type=DiscType.BLURAY,
+        device_path="/dev/sr0",
+        tracks=[_track(1, source_ref="00102.mpls")],
+        output_dir=tmp_path,
+        on_track_start=noop,
+        on_track_done=on_done,
+        title_numbers={},
+    )
+
+    assert done == [("trk_1", False, "MakeMKV has no title number for source_ref '00102.mpls'")]

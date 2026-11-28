@@ -20,6 +20,7 @@ from arm_backend.rip_preset_resolution import (
 )
 from arm_backend.constants import CONFIG_SINGLETON_ID
 from arm_common.disc_shape import looks_episodic
+from arm_common.disc_titles import scan_candidates
 from arm_backend.identity.apply import apply_identity_result, suggest_identity
 from arm_backend.identity.episode_stage import is_tv_candidate
 from arm_backend.identity.hints import hint_is_tv, hint_title
@@ -351,7 +352,7 @@ class IdentifyFlow:
                 title_hint_is_tv=hint_is_tv(job, self.hints),
                 # Several same-length episode titles and no feature: a TV
                 # disc, whatever the label says (arm_common.disc_shape).
-                prefer_tv=looks_episodic(scan.titles),
+                prefer_tv=looks_episodic(scan_candidates(scan)),
             )
         )
 

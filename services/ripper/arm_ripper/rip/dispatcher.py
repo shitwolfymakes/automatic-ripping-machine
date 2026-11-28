@@ -1,6 +1,6 @@
 import asyncio
 import time
-from collections.abc import Callable, Collection
+from collections.abc import Callable, Collection, Mapping
 from pathlib import Path
 
 from arm_common import DiscType
@@ -27,6 +27,7 @@ async def rip_all(
     output_dir: Path,
     on_track_start: OnTrackStart,
     on_track_done: OnTrackDone,
+    title_numbers: Mapping[str, int],
     on_track_progress: OnTrackProgress | None = None,
     min_length_seconds: int = DEFAULT_MIN_LENGTH_SECONDS,
     stop: asyncio.Event | None = None,
@@ -34,6 +35,8 @@ async def rip_all(
     drive_lost: Callable[[], bool] | None = None,
 ) -> None:
     """Rip every track in `tracks` and invoke the lifecycle callbacks.
+
+    `title_numbers` is the backend's `source_ref` -> MakeMKV title number answer (rip-start's).
 
     DVD / BD only: `stop` kills makemkvcon when set (the drive dropped off the
     bus), and `skip_track_ids` names tracks an earlier pass already settled.
@@ -71,6 +74,7 @@ async def rip_all(
             on_track_done=on_track_done,
             on_track_progress=on_track_progress,
             min_length_seconds=min_length_seconds,
+            title_numbers=title_numbers,
             stop=stop,
             skip_track_ids=skip_track_ids,
             drive_lost=drive_lost,

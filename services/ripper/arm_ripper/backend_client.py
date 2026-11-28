@@ -19,6 +19,7 @@ from arm_common.schemas import (
     RipStartResponse,
     ScanResult,
     SdfStatusReport,
+    TitlesReport,
     TrackUpdateRequest,
     TrackView,
 )
@@ -145,6 +146,12 @@ class BackendClient:
         r = await self._client.post(f"/api/ripper/jobs/{job_id}/rip-start")
         r.raise_for_status()
         return RipStartResponse.model_validate(r.json())
+
+    async def post_titles(self, job_id: str, report: TitlesReport) -> None:
+        """MakeMKV's titles (or why it could not read the disc) for a job whose card was posted from the playlist
+        structure."""
+        r = await self._client.post(f"/api/ripper/jobs/{job_id}/titles", json=report.model_dump(mode="json"))
+        r.raise_for_status()
 
     async def update_track(self, track_id: str, **fields: Any) -> TrackView:
         req = TrackUpdateRequest(**fields)

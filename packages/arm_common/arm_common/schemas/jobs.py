@@ -424,6 +424,10 @@ class RipStartResponse(BaseModel):
     # 600). Surfaced here so the ripper doesn't have to read Session
     # state itself.
     min_length_seconds: int | None = None
+    # `Track.source_ref` -> the title number MakeMKV rips it as (`mkv title N`, and the `_tNN` output pairing).
+    # Structure-keyed tracks (`00334.mpls:2`) get theirs from the job's title map; every other track's ref is
+    # its title number already.
+    title_numbers: dict[str, int] = Field(default_factory=dict)
 
 
 # The one definition of apply/fan-out skip reasons — the backend engine

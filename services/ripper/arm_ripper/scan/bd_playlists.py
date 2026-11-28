@@ -1,9 +1,8 @@
 """Blu-ray playlist structure: BDMV/PLAYLIST/*.mpls read without mounting.
 
 Reading the disc is `bd_extract`'s job (a killable 7-Zip subprocess into a
-temp dir); this module decodes the extracted bytes (`parse_mpls`, pure) and
-runs the async scan step (`scan_playlists`) that bounds, times and logs it.
-Soft-fail: any error or timeout yields an empty list.
+temp dir); this module decodes the extracted bytes (`parse_mpls`, pure)
+and `bd_structure` runs the async scan that bounds, times and logs it.
 
 What is decoded: the PlayItems with every angle's clip, the chapter marks, and
 the 3D dependent-view clips of type 8 (MVC) SubPaths, which a 3D disc keeps in
@@ -13,20 +12,15 @@ may keep in the main SubPath list.
 
 from __future__ import annotations
 
-import asyncio
 import logging
 import re
 import struct
-import tempfile
-import time
 from dataclasses import dataclass
 from pathlib import Path
 
 from arm_common.schemas import BdPlaylist
 
 from arm_ripper.scan.bd_extension_data import extension_block
-from arm_ripper.scan.bd_extract import OK, extract_files
-from arm_ripper.source import is_folder_source
 
 logger = logging.getLogger("arm_ripper.scan.bd_playlists")
 
@@ -211,33 +205,3 @@ def parse_playlists(files: dict[str, bytes]) -> list[BdPlaylist]:
     """Every parseable playlist, ordered by name."""
     parsed = (parse_mpls(data, name) for name, data in sorted(files.items()))
     return [playlist for playlist in parsed if playlist is not None]
-
-
-async def _extract_and_read(source_path: str) -> tuple[dict[str, bytes], str]:
-    """Run the extraction into a temp dir and read what it left. The files are a few KB each on local disk."""
-    with tempfile.TemporaryDirectory(prefix="arm-mpls-") as tmp:
-        reason = await extract_files(source_path, Path(tmp), PLAYLIST_TIMEOUT_SECONDS, [PLAYLIST_PATTERN])
-        return (read_mpls_files(Path(tmp)) if reason == OK else {}), reason
-
-
-async def _read_files(source_path: str) -> tuple[dict[str, bytes], str]:
-    """(files, reason). A disc folder is read directly (no drive behind it); anything else through 7-Zip."""
-    if is_folder_source(source_path):
-        return await asyncio.to_thread(read_mpls_files, Path(source_path) / "BDMV" / "PLAYLIST"), OK
-    return await _extract_and_read(source_path)
-
-
-async def scan_playlists(device_path: str) -> list[BdPlaylist]:
-    """The disc's playlists, bounded by PLAYLIST_TIMEOUT_SECONDS; logs the count, elapsed time and outcome."""
-    started = time.monotonic()
-    try:
-        files, reason = await _read_files(device_path)
-    except Exception as e:  # noqa: BLE001 — soft-fail: this read is optional
-        logger.debug("bd playlists read failed for %s: %s", device_path, e)
-        files, reason = {}, "error"
-    playlists = parse_playlists(files)
-    elapsed_ms = int((time.monotonic() - started) * 1000)
-    logger.info(
-        "bd_playlists device=%s count=%d elapsed_ms=%d reason=%s", device_path, len(playlists), elapsed_ms, reason
-    )
-    return playlists

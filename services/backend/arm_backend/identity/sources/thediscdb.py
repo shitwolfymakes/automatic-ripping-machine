@@ -14,6 +14,7 @@ from datetime import datetime
 from typing import Any, Literal
 
 from arm_common.enums import TrackRole
+from arm_common.disc_titles import scan_candidates, track_ref
 from arm_common.schemas import ScanResult, ScanTitle
 from arm_common.schemas.identity import JobClaim, SourceClaims, TrackClaim
 
@@ -73,19 +74,21 @@ def _valid_entries(match: DiscMatch) -> Iterator[tuple[dict[str, Any], dict[str,
         yield entry, item
 
 
-def _join_scan_title(entry: dict[str, Any], scan: ScanResult, by_source_file: dict[str, ScanTitle]) -> ScanTitle | None:
+def _join_scan_title(
+    entry: dict[str, Any], titles: list[ScanTitle], by_source_file: dict[str, list[ScanTitle]]
+) -> ScanTitle | None:
     """The scan title an entry describes: the one with its source file, else
     the one scan title without a source file within DURATION_WINDOW_SECONDS
-    of its duration; None when neither joins."""
-    source_file = str(entry.get("SourceFile") or "").lower()
-    scan_title = by_source_file.get(source_file)
-    if scan_title is not None:
-        return scan_title
+    of its duration; None when neither joins. A source file shared by several
+    titles (the angles of one playlist) is ambiguous and joins none."""
+    with_source = by_source_file.get(str(entry.get("SourceFile") or "").lower())
+    if with_source is not None:
+        return with_source[0] if len(with_source) == 1 else None
     want = parse_duration(str(entry.get("Duration") or ""))
     if want is None:
         return None
     candidates = [
-        t for t in scan.titles if t.source_file is None and abs(t.duration_seconds - want) <= DURATION_WINDOW_SECONDS
+        t for t in titles if t.source_file is None and abs(t.duration_seconds - want) <= DURATION_WINDOW_SECONDS
     ]
     return candidates[0] if len(candidates) == 1 else None
 
@@ -140,14 +143,18 @@ def _contributors(match: DiscMatch) -> list[str]:
 
 
 def build_claims(match: DiscMatch, scan: ScanResult, *, now: datetime) -> SourceClaims:
-    by_source_file = {t.source_file.lower(): t for t in scan.titles if t.source_file}
+    titles = scan_candidates(scan)
+    by_source_file: dict[str, list[ScanTitle]] = {}
+    for title in titles:
+        if title.source_file:
+            by_source_file.setdefault(title.source_file.lower(), []).append(title)
     tracks: dict[str, TrackClaim] = {}
     episode_seasons: set[int] = set()
     for entry, item in _valid_entries(match):
-        scan_title = _join_scan_title(entry, scan, by_source_file)
+        scan_title = _join_scan_title(entry, titles, by_source_file)
         if scan_title is None:
             continue
-        ref = str(scan_title.index)
+        ref = track_ref(scan, scan_title)
         if ref in tracks:
             continue  # first disc entry wins; don't flip-flop on dupes
         tracks[ref] = TrackClaim(**_track_fields(entry, item))

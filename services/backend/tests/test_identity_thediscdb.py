@@ -15,7 +15,7 @@ from arm_backend.identity.sources.thediscdb import (
 from arm_backend.identity.sources.thediscdb_snapshot import DiscMatch
 from arm_common import DiscType
 from arm_common.enums import TrackRole
-from arm_common.schemas import ScanResult, ScanTitle
+from arm_common.schemas import BdPlaylist, ScanResult, ScanTitle
 
 NOW = datetime(2026, 9, 28, tzinfo=timezone.utc)
 
@@ -473,3 +473,42 @@ def test_build_claims_ignores_the_season_of_non_episode_titles() -> None:
     ]
     claims = build_claims(_match(titles, kind="series"), _scan(titles), now=NOW)
     assert claims.job.season == 3
+
+
+# --- structure scans: claims are keyed by title ref, and an angle-ambiguous entry joins nothing ---
+
+
+def _bd_structure_scan(*playlists: tuple[str, int, int]) -> ScanResult:
+    """A structure scan with (name, seconds, extra angles) playlists."""
+    return ScanResult(
+        disc_type=DiscType.BLURAY,
+        playlists=[
+            BdPlaylist(
+                name=name,
+                clips=[n],
+                clip_seconds=[float(seconds)],
+                duration_seconds=seconds,
+                chapter_count=1,
+                angle_clips=[[100 + n]] * angles,
+            )
+            for n, (name, seconds, angles) in enumerate(playlists, start=1)
+        ],
+    )
+
+
+def test_build_claims_keys_a_structure_scan_by_title_ref() -> None:
+    match = _match([{"SourceFile": "00001.mpls", "Duration": "2:00:00", "Item": {"Type": "MainMovie"}}])
+    scan = _bd_structure_scan(("00001.mpls", 7200, 0))
+    assert set(build_claims(match, scan, now=NOW).tracks) == {"00001.mpls"}
+
+
+def test_build_claims_joins_an_entry_whose_playlist_has_two_angles_to_neither() -> None:
+    match = _match(
+        [
+            {"SourceFile": "00334.mpls", "Duration": "2:43:00", "Item": {"Type": "MainMovie"}},
+            {"SourceFile": "00102.mpls", "Duration": "0:04:47", "Item": {"Type": "Featurette"}},
+        ]
+    )
+    scan = _bd_structure_scan(("00334.mpls", 9800, 1), ("00102.mpls", 287, 0))
+    claims = build_claims(match, scan, now=NOW)
+    assert set(claims.tracks) == {"00102.mpls"}  # no `selected` claim lands on either angle

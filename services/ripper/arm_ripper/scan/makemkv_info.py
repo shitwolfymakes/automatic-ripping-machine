@@ -25,10 +25,14 @@ def _parse_duration(value: str) -> int | None:
 
 def _parse_segment_map(value: str) -> list[int] | None:
     """MakeMKV's segment map (`508,501,503`, or ranges like `1-3,7`) as clip
-    numbers in play order; None when any part isn't a number or a rising range."""
+    numbers in play order; None when any part isn't a number or a rising range.
+    A 3D title's parts are base/dependent pairs (`364/365,368/369`): the base clip counts."""
     clips: list[int] = []
     for part in value.split(","):
-        first, sep, last = part.strip().partition("-")
+        base, pair, dependent = part.strip().partition("/")
+        if pair and not dependent.isdigit():
+            return None
+        first, sep, last = base.partition("-")
         if not first.isdigit() or (sep and not last.isdigit()):
             return None
         if not sep:
@@ -40,6 +44,11 @@ def _parse_segment_map(value: str) -> list[int] | None:
     return clips
 
 
+def _has_dependent_views(segment_map: str) -> bool:
+    """Whether a segment map names dependent-view clips (base/dependent pairs): the title is 3D."""
+    return "/" in segment_map
+
+
 def _to_int(value: str) -> int | None:
     """The value as an int, or None when it isn't one."""
     try:
@@ -47,6 +56,8 @@ def _to_int(value: str) -> int | None:
     except ValueError:
         return None
 
+
+_SEGMENT_MAP_CODE = 26
 
 # TINFO attribute code -> (title field, parser). A field is set only when its parser returns a value.
 _TINFO_FIELDS: dict[int, tuple[str, Callable[[str], int | str | list[int] | None]]] = {
@@ -105,6 +116,7 @@ def _scan_title(idx: int, entry: dict[str, object]) -> ScanTitle | None:
     playlist_name_obj = entry.get("playlist_name")
     angle_obj = entry.get("angle")
     return ScanTitle(
+        stereo_3d=entry.get("stereo_3d") is True,
         index=idx,
         duration_seconds=duration_obj,
         chapter_count=chapter_obj if isinstance(chapter_obj, int) else None,
@@ -160,6 +172,8 @@ class _InfoParser:
             field_value = parse(value)
             if field_value is not None:
                 entry[name] = field_value
+                if code == _SEGMENT_MAP_CODE and _has_dependent_views(value):
+                    entry["stereo_3d"] = True
 
     def scan_titles(self) -> list[ScanTitle]:
         """The titles with a duration, in index order."""
@@ -184,7 +198,9 @@ def parse_makemkvcon_info(
     - TINFO:t,11,... — title size in bytes
     - TINFO:t,16,... — source playlist or stream (e.g. 00800.mpls; a title number on DVD)
     - TINFO:t,25,... — number of clips (segments)
-    - TINFO:t,26,... — clip numbers in play order (e.g. 508,501,503)
+    - TINFO:t,26,... — clip numbers in play order (e.g. 508,501,503); a 3D title's are base/dependent pairs
+                       (364/365,368/369): the base clips are kept and the title is stereo_3d
+    - TINFO:t,15,... — angle of a multi-angle playlist (1-based)
     - TINFO:t,49,... — playlist_name: the disc's own playlist name (e.g. FPL_MainFeature)
     TINFO 27 is the output file name and is not read.
 

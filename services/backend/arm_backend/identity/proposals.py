@@ -40,13 +40,13 @@ def claims_of(job: Job) -> IdentityClaims:
         return IdentityClaims()
 
 
-def preferred_titles(job: Job) -> frozenset[int]:
-    """Indices of the titles TheDiscDB calls the main movie in the job's stored
-    claims; empty before that source has run."""
+def preferred_titles(job: Job) -> frozenset[str]:
+    """Refs (`Track.source_ref`) of the titles TheDiscDB calls the main movie in
+    the job's stored claims; empty before that source has run."""
     source = claims_of(job).sources.get("thediscdb")
     if source is None:
         return frozenset()
-    return frozenset(int(ref) for ref, claim in source.tracks.items() if claim.role == TrackRole.MAIN)
+    return frozenset(ref for ref, claim in source.tracks.items() if claim.role == TrackRole.MAIN)
 
 
 def _store(job: Job, claims: IdentityClaims) -> None:
@@ -244,4 +244,29 @@ def record_preset(job: Job, tracks: Iterable[Track], *, now: datetime) -> None:
     preset.tracks = {**preset.tracks, **{t.source_ref: TrackClaim(selected=not t.excluded) for t in tracks}}
     preset.run_at = now
     claims.sources = {**claims.sources, PRESET: preset}
+    _store(job, claims)
+
+
+def _without_selected(source: SourceClaims, refs: set[str]) -> SourceClaims:
+    """`source` with the `selected` proposal removed from the claims it makes for `refs`."""
+    tracks = dict(source.tracks)
+    for ref in refs.intersection(tracks):
+        kept = tracks[ref].model_dump(exclude_unset=True)
+        kept.pop("selected", None)
+        tracks[ref] = TrackClaim(**kept)
+    source.tracks = tracks
+    return source
+
+
+def record_preset_drop(job: Job, refs: Iterable[str], *, now: datetime) -> None:
+    """Drop `refs` (titles MakeMKV cannot rip) through the preset's `excluded` proposal. No other source may keep
+    them ticked, so the `selected` proposals of every source but the operator's are withdrawn for these refs; the
+    caller reverts the operator's own ticks."""
+    dropped = set(refs)
+    claims = claims_of(job)
+    sources = {sid: src if sid == MANUAL else _without_selected(src, dropped) for sid, src in claims.sources.items()}
+    preset = sources.get(PRESET) or SourceClaims()
+    preset.tracks = {**preset.tracks, **{ref: TrackClaim(selected=False) for ref in dropped}}
+    preset.run_at = now
+    claims.sources = {**sources, PRESET: preset}
     _store(job, claims)

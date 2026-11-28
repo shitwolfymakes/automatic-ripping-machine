@@ -2,7 +2,7 @@
 
 import asyncio
 import logging
-from collections.abc import Callable, Collection
+from collections.abc import Callable, Collection, Mapping
 from pathlib import Path
 
 from arm_common.schemas import TrackView
@@ -23,18 +23,17 @@ logger = logging.getLogger("arm_ripper.rip.dispatcher")
 
 
 def _index_tracks(
-    tracks: list[TrackView], skip_track_ids: Collection[str]
+    tracks: list[TrackView], skip_track_ids: Collection[str], title_numbers: Mapping[str, int]
 ) -> tuple[dict[int, TrackView], list[TrackView]]:
-    """Map each track to its source title index; also return, in order, the tracks whose `source_ref` isn't an int
-    and that no earlier pass settled, which the caller fails."""
-    # Pre-compute source_ref → track lookup so the rip-side callbacks
-    # are O(1). Skip tracks already settled; collect malformed ones.
+    """Map each track to the MakeMKV title number the backend gave its `source_ref`; also return, in order, the
+    tracks with no title number that no earlier pass settled, which the caller fails."""
+    # Pre-compute title number → track lookup so the rip-side callbacks
+    # are O(1). Skip tracks already settled; collect unnumbered ones.
     track_by_index: dict[int, TrackView] = {}
     invalid: list[TrackView] = []
     for track in tracks:
-        try:
-            idx = int(track.source_ref)
-        except ValueError:
+        idx = title_numbers.get(track.source_ref)
+        if idx is None:
             if track.id not in skip_track_ids:
                 invalid.append(track)
             continue
@@ -371,6 +370,7 @@ async def rip_optical(
     on_track_done: OnTrackDone,
     on_track_progress: OnTrackProgress | None,
     min_length_seconds: int,
+    title_numbers: Mapping[str, int],
     stop: asyncio.Event | None = None,
     skip_track_ids: Collection[str] = (),
     drive_lost: Callable[[], bool] | None = None,
@@ -378,10 +378,11 @@ async def rip_optical(
     """Single-invocation DVD/BD rip with per-title attribution.
 
     The makemkvcon invocation rips every title ≥ minlength to
-    `output_dir`. We map title_index → TrackView via `source_ref` and
+    `output_dir`. We map MakeMKV title number → TrackView through
+    `title_numbers` (the backend's `source_ref` → number answer) and
     fan the lifecycle callbacks out as MakeMKV's stream announces each
-    title. Tracks whose `source_ref` doesn't parse as an int are
-    failed up front — same shape as the per-title implementation.
+    title. Tracks with no title number are failed up front — same
+    shape as the per-title implementation.
 
     Lifecycle correctness: the backend's track state machine requires
     `queued → in_progress → done|failed`. PRGT-driven `on_track_start`
@@ -393,15 +394,17 @@ async def rip_optical(
     attribution for any track that didn't — so PATCH `done` / `failed`
     always lands on a row in `in_progress`.
     """
-    track_by_index, invalid = _index_tracks(tracks, skip_track_ids)
-    # No need to fire on_track_start for an invalid-source_ref
+    track_by_index, invalid = _index_tracks(tracks, skip_track_ids, title_numbers)
+    # No need to fire on_track_start for an unnumbered
     # track — the backend rejects the track entirely via the
     # FAILED-from-QUEUED guard. Falling through to on_track_done
     # is consistent with how the per-title implementation handled
     # it, and the upstream patch_with_retry catches the 409 if
     # it ever shows up here.
     for track in invalid:
-        await on_track_done(track, RipResult(ok=False, error=f"invalid source_ref: {track.source_ref!r}"))
+        await on_track_done(
+            track, RipResult(ok=False, error=f"MakeMKV has no title number for source_ref {track.source_ref!r}")
+        )
 
     if not track_by_index:
         return

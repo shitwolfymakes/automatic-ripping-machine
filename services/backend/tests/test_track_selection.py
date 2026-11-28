@@ -295,7 +295,7 @@ def test_preferred_breaks_the_tie_when_no_title_has_a_comment():
     scan = _decoy_scan()
     for t in scan.titles:
         t.playlist_name = None
-    tracks = select_tracks(_JOB, scan, _preset(TrackSelection.MAIN_FEATURE), preferred=frozenset({11}))
+    tracks = select_tracks(_JOB, scan, _preset(TrackSelection.MAIN_FEATURE), preferred=frozenset({"11"}))
     assert [t.index for t in tracks] == [11]
 
 
@@ -303,7 +303,7 @@ def test_preferred_reaches_the_review_defaults():
     scan = _decoy_scan()
     for t in scan.titles:
         t.playlist_name = None
-    tracks = select_tracks_for_review(_JOB, scan, _preset(TrackSelection.MAIN_FEATURE), preferred=frozenset({11}))
+    tracks = select_tracks_for_review(_JOB, scan, _preset(TrackSelection.MAIN_FEATURE), preferred=frozenset({"11"}))
     assert {t.index for t in tracks if not t.excluded} == {11}
 
 

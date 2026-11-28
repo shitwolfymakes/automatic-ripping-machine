@@ -3,6 +3,7 @@
 import asyncio
 import logging
 
+from arm_common.disc_titles import is_structure_scan
 from arm_common.schemas import ScanResult
 from arm_ripper.drive_poll import DriveErrorKind, DriveState, classify_drive_error, read_drive_status
 from arm_ripper.scan import ScanError, scan as scan_disc
@@ -55,7 +56,8 @@ async def _scan_with_ready_retry(device_path: str) -> ScanResult:
     for attempt in range(1, SCAN_NOT_READY_MAX_ATTEMPTS + 1):
         result = await scan_disc(device_path)
         last = result
-        if result.titles:
+        # A structure scan carries no MakeMKV titles by design: its playlists are the readable disc.
+        if result.titles or is_structure_scan(result):
             return result
 
         # An ISO file has no drive to settle: the CDROM_DRIVE_STATUS ioctl

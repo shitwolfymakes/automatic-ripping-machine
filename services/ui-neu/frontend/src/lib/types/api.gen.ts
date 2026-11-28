@@ -4474,6 +4474,12 @@ export type RipStartResponse = {
      * Min Length Seconds
      */
     min_length_seconds?: number | null;
+    /**
+     * Title Numbers
+     */
+    title_numbers?: {
+        [key: string]: number;
+    };
 };
 
 /**
@@ -5453,6 +5459,24 @@ export type TemplatePreviewResponse = {
  * Blu-ray title.
  */
 export type TitleClass = 'primary' | 'edition' | 'duplicate' | 'decoy' | 'variant' | 'angle' | 'subset' | 'view';
+
+/**
+ * TitlesReport
+ *
+ * POST /api/ripper/jobs/{job_id}/titles body: what the background `makemkvcon info` run found on a disc
+ * whose review card was posted from the playlist structure. `failure` is the reason MakeMKV could not read
+ * the disc (then `titles` is empty); the job keeps its card and cannot start.
+ */
+export type TitlesReport = {
+    /**
+     * Titles
+     */
+    titles?: Array<ScanTitle>;
+    /**
+     * Failure
+     */
+    failure?: string | null;
+};
 
 /**
  * TrackClaim
@@ -6732,6 +6756,42 @@ export type RipStartApiRipperJobsJobIdRipStartPostResponses = {
 };
 
 export type RipStartApiRipperJobsJobIdRipStartPostResponse = RipStartApiRipperJobsJobIdRipStartPostResponses[keyof RipStartApiRipperJobsJobIdRipStartPostResponses];
+
+export type PostTitlesApiRipperJobsJobIdTitlesPostData = {
+    body: TitlesReport;
+    headers?: {
+        /**
+         * X-Arm-Hostname
+         */
+        'x-arm-hostname'?: string | null;
+    };
+    path: {
+        /**
+         * Job Id
+         */
+        job_id: string;
+    };
+    query?: never;
+    url: '/api/ripper/jobs/{job_id}/titles';
+};
+
+export type PostTitlesApiRipperJobsJobIdTitlesPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type PostTitlesApiRipperJobsJobIdTitlesPostError = PostTitlesApiRipperJobsJobIdTitlesPostErrors[keyof PostTitlesApiRipperJobsJobIdTitlesPostErrors];
+
+export type PostTitlesApiRipperJobsJobIdTitlesPostResponses = {
+    /**
+     * Successful Response
+     */
+    204: void;
+};
+
+export type PostTitlesApiRipperJobsJobIdTitlesPostResponse = PostTitlesApiRipperJobsJobIdTitlesPostResponses[keyof PostTitlesApiRipperJobsJobIdTitlesPostResponses];
 
 export type ResumeApiRipperJobsJobIdResumePostData = {
     body?: never;

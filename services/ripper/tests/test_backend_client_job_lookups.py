@@ -98,3 +98,35 @@ async def test_get_or_none_gets_exactly_the_given_path() -> None:
 
     await _client(handler)._get_or_none("/api/x/y", JobView)
     assert seen == {"method": "GET", "path": "/api/x/y"}
+
+
+async def test_post_titles_posts_the_report_to_the_jobs_titles_route() -> None:
+    from arm_common.schemas import ScanTitle, TitlesReport
+
+    seen = {}
+
+    def handler(req: httpx.Request) -> httpx.Response:
+        seen["method"], seen["path"], seen["body"] = req.method, req.url.path, req.content
+        return httpx.Response(204)
+
+    report = TitlesReport(titles=[ScanTitle(index=0, duration_seconds=7200, source_file="00001.mpls")])
+    await _client(handler).post_titles("job_1", report)
+    assert (seen["method"], seen["path"]) == ("POST", "/api/ripper/jobs/job_1/titles")
+    assert TitlesReport.model_validate_json(seen["body"]) == report
+
+
+async def test_post_titles_raises_on_a_rejection() -> None:
+    from arm_common.schemas import TitlesReport
+
+    with pytest.raises(httpx.HTTPStatusError):
+        await _client(lambda _req: httpx.Response(409)).post_titles("job_1", TitlesReport(failure="x"))
+
+
+async def test_the_retried_post_titles_goes_through_the_client() -> None:
+    from arm_common.schemas import TitlesReport
+    from arm_ripper.backend_retry import BackendRetry
+
+    seen = []
+    client = _client(lambda req: (seen.append(req.url.path), httpx.Response(204))[1])
+    await BackendRetry(client, "drv_test").post_titles("job_1", TitlesReport(failure="x"))
+    assert seen == ["/api/ripper/jobs/job_1/titles"]
