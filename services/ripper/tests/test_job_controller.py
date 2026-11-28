@@ -238,6 +238,26 @@ async def test_awaiting_polls_until_resolved_then_rips(stub_scan, stub_eject):
     assert client.rip_complete_calls == ["job_test"]
 
 
+async def test_a_searched_match_held_for_review_parks_until_start(stub_scan, stub_eject):
+    """The operator's search identifies a disc identify could not match, and the review gate holds it: the job
+    leaves awaiting_user_id for awaiting_review, and the rip waits for Start instead of beginning at the pick."""
+    client = FakeClient()
+    client.identify_responses.append(_job(JobStatus.AWAITING_USER_ID))
+    client.get_job_responses.extend(
+        [
+            _view(JobStatus.AWAITING_REVIEW, title="Resolved"),  # the pick: held for review
+            _view(JobStatus.AWAITING_REVIEW, title="Resolved"),  # still on the card
+            _view(JobStatus.RIPPING, title="Resolved"),  # Start
+        ]
+    )
+    controller = JobController(client, "drv_test")
+
+    await asyncio.wait_for(controller.handle_disc_inserted("/dev/sr0"), timeout=2.0)
+
+    assert not client.get_job_responses
+    assert client.rip_start_calls == ["job_test"]
+
+
 async def test_drive_vanishing_mid_scan_is_abandoned_cleanly(monkeypatch, caplog):
     """Power-off mid-scan raises OSError(ENXIO, …) from scan_disc. The pipeline
     must not propagate it — the poll loop's absence handling owns recovery —

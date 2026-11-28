@@ -24,7 +24,7 @@ import pytest
 from arm_backend.config import settings as _settings
 from arm_backend.db import get_session
 from arm_backend.metadata.base import MetadataResult
-from arm_backend import identify_flow, job_failure, rip_preset_resolution
+from arm_backend import identify_flow, job_failure, review_tracks, rip_preset_resolution
 from arm_backend.routers import ripper as ripper_router
 from arm_backend.identity.sources.thediscdb_snapshot import DiscMatch
 from arm_common import (
@@ -602,7 +602,7 @@ def test_identify_hold_with_pending_session_uses_routed_preset() -> None:
     """A manual trigger (explicit session_id) with
     hold_for_review on must persist review tracks chosen by the ROUTED
     session's rip preset, not the drive/disc-type default. Before the fix,
-    pending_session_id was assigned AFTER _persist_review_tracks ran, so
+    pending_session_id was assigned AFTER persist_review_tracks ran, so
     resolve_rip_preset_for_job always fell back to the disc-type default
     (ALL_TRACKS here) instead of the routed session's MAIN_FEATURE preset —
     the held and unattended track sets diverged.
@@ -661,10 +661,10 @@ def test_identify_hold_with_pending_session_uses_routed_preset() -> None:
     assert by_ref["2"].excluded is True  # MAIN_FEATURE drops it; ALL_TRACKS would keep it
 
 
-async def test_persist_review_tracks_is_idempotent() -> None:
+async def testpersist_review_tracks_is_idempotent() -> None:
     """Idempotency: a title whose Track row already exists (ripper
     re-POSTed identify on the same held disc) is NOT re-inserted."""
-    from arm_backend.identify_flow import _persist_review_tracks
+    from arm_backend.review_tracks import persist_review_tracks
     from arm_common import Job as _Job, Track as _Track, TrackKind as _TrackKind
     from arm_common.schemas import ScanResult as _ScanResult, ScanTitle as _ScanTitle
 
@@ -679,15 +679,15 @@ async def test_persist_review_tracks_is_idempotent() -> None:
         disc_type=DiscType.DVD,
         titles=[_ScanTitle(index=1, duration_seconds=4200), _ScanTitle(index=2, duration_seconds=3600)],
     )
-    await _persist_review_tracks(db, job, scan)
+    await persist_review_tracks(db, job, scan)
     added_refs = {t.source_ref for t in db.added if type(t).__name__ == "Track"}
     assert added_refs == {"2"}  # index 1 skipped (already exists), only 2 added
 
 
-async def test_persist_review_tracks_no_new_titles_records_no_preset_claim() -> None:
+async def testpersist_review_tracks_no_new_titles_records_no_preset_claim() -> None:
     """Every title already has a Track row (a full re-POST idempotency case):
     no rows are added, so no preset proposal is recorded either."""
-    from arm_backend.identify_flow import _persist_review_tracks
+    from arm_backend.review_tracks import persist_review_tracks
     from arm_common import Job as _Job, Track as _Track, TrackKind as _TrackKind
     from arm_common.schemas import ScanResult as _ScanResult, ScanTitle as _ScanTitle
 
@@ -698,7 +698,7 @@ async def test_persist_review_tracks_no_new_titles_records_no_preset_claim() -> 
     )
     db.rows["tracks"] = [_Track(id="trk_pre", job_id=job.id, kind=_TrackKind.VIDEO_TITLE, index=1, source_ref="1")]
     scan = _ScanResult(disc_type=DiscType.DVD, titles=[_ScanTitle(index=1, duration_seconds=4200)])
-    await _persist_review_tracks(db, job, scan)
+    await persist_review_tracks(db, job, scan)
     assert [t for t in db.added if type(t).__name__ == "Track"] == []
     assert "identity_claims" not in (job.metadata_json or {})
 
@@ -789,8 +789,8 @@ def test_identify_repost_on_held_disc_leaves_tracks_and_claims_alone(monkeypatch
     def _must_not_run(*_a: Any, **_k: Any) -> None:
         raise AssertionError("the reuse path must not touch tracks or claims")
 
-    monkeypatch.setattr(identify_flow, "_persist_review_tracks", _must_not_run)
-    monkeypatch.setattr(identify_flow, "record_preset", _must_not_run)
+    monkeypatch.setattr(identify_flow, "persist_review_tracks", _must_not_run)
+    monkeypatch.setattr(review_tracks, "record_preset", _must_not_run)
     monkeypatch.setattr(identify_flow, "resolve_job", _must_not_run)
     db = FakeSession()
     db.rows["drives"] = [_drive()]
@@ -3229,8 +3229,8 @@ def test_rip_start_bd_backup_of_a_dvd_is_422() -> None:
     assert job.failure_reason == "disc backup needs a Blu-ray, not disc_type=dvd"
 
 
-async def test_persist_review_tracks_skips_a_dvd_under_the_backup_session() -> None:
-    from arm_backend.identify_flow import _persist_review_tracks
+async def testpersist_review_tracks_skips_a_dvd_under_the_backup_session() -> None:
+    from arm_backend.review_tracks import persist_review_tracks
     from arm_common import Job as _Job
     from arm_common.schemas import ScanResult as _ScanResult, ScanTitle as _ScanTitle
 
@@ -3243,7 +3243,7 @@ async def test_persist_review_tracks_skips_a_dvd_under_the_backup_session() -> N
     )
     job.pending_session_id = "ses_builtin_bd_backup"
     scan = _ScanResult(disc_type=DiscType.DVD, titles=[_ScanTitle(index=1, duration_seconds=4200)])
-    await _persist_review_tracks(db, job, scan)
+    await persist_review_tracks(db, job, scan)
     assert [t for t in db.added if type(t).__name__ == "Track"] == []
 
 
@@ -3695,7 +3695,7 @@ def test_identify_movie_hit_with_auto_apply_off_is_held_as_a_suggestion() -> Non
     assert out["wait_start_time"] is None
     assert out["title"] == "MY_DISC"  # the miss title, not the hit
     assert out.get("year") is None and out.get("poster_url") is None
-    # The routing media type IS taken, so _persist_review_tracks below resolves
+    # The routing media type IS taken, so persist_review_tracks below resolves
     # the preset of the session this disc will rip into rather than the
     # never-identified default; accept never re-persists these rows.
     assert out["media_type"] == "movie"

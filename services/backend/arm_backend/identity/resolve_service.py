@@ -6,14 +6,18 @@ from datetime import UTC, datetime
 from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlmodel import col, select
 
+from arm_backend.constants import CONFIG_SINGLETON_ID
 from arm_backend.identity.ids import current_ids
 from arm_backend.identity.pipeline import resolve_job
 from arm_backend.identity.proposals import forget_episode_show_ids, record_manual_job
 from arm_backend.identity.stage_runner import EpisodeStageRunner
+from arm_backend.review_tracks import persist_review_tracks
 from arm_backend.session_drain import ResolveFanOutOutcome, after_rip, fan_out_waiting_identify_applications
+from arm_backend.title_map_service import stored_scan
 from arm_backend.ws import WSHub
-from arm_common import Job, JobStatus, MediaType
+from arm_common import Config, Job, JobStatus, MediaType
 from arm_common.enums import RESOLVABLE_PROMOTE_JOB_STATUSES
 from arm_common.schemas import JobView, ResolveFanOutOutcomeView, ResolveMatch, ResolveRequest, ResolveResponse
 from arm_common.schemas.job_metadata import ExternalIds, JobIdentity, JobMetadata, flag_is_set
@@ -31,7 +35,8 @@ def identity_snapshot(job: Job) -> tuple[int | None, int | None, MediaType | Non
 
 # Two reasons a user may resolve identity:
 #   1. Auto-identify failed and the job parked at AWAITING_USER_ID / RIPPED_AWAITING_IDENTIFY.
-#      Resolving promotes it to IDENTIFIED and fan-out kicks any WAITING_IDENTIFY apps.
+#      Resolving promotes it (the review gate holds an unripped one, see hold_or_release) and
+#      fan-out kicks any WAITING_IDENTIFY apps.
 #   2. Auto-identify "succeeded" but landed wrong metadata (MakeMKV volume-label fallback,
 #      stale TMDB entry, etc.) and the user wants to correct title/year/metadata after the
 #      fact — possibly post-rip. The status MUST NOT change in this case; fan-out is a no-op
@@ -148,6 +153,40 @@ def _merge_external_ids(md: JobMetadata, sent: ExternalIds) -> bool:
     _overlay_sent_ids(existing_ids, sent)
     md.identity.external_ids = existing_ids
     return show_changed
+
+
+def hold_or_release(job: Job, cfg: Config | None, now: datetime) -> None:
+    """Settle the status of an unripped disc whose identity has just landed, as identify settles a matched one: held
+    for review with the gate's countdown when the review gate is on (no countdown while ripping is paused; un-pause
+    stamps one), held with no countdown while ripping is paused, else released to rip."""
+    paused = cfg is not None and bool(cfg.ripping_paused)
+    if cfg is not None and cfg.hold_for_review:
+        job.status = JobStatus.AWAITING_REVIEW
+        job.wait_start_time = None if paused else now
+    elif paused:
+        job.status = JobStatus.AWAITING_REVIEW
+        job.wait_start_time = None
+    else:
+        job.status = JobStatus.IDENTIFIED
+
+
+async def _promote(session: AsyncSession, job: Job) -> bool:
+    """Move a job out of its identify hold: a ripped placeholder becomes RIPPED, an unripped disc is held or released
+    by `hold_or_release`. True when the disc is now held for review and needs its card's tracks."""
+    if job.status == JobStatus.RIPPED_AWAITING_IDENTIFY:
+        job.status = JobStatus.RIPPED
+        return False
+    cfg = (await session.execute(select(Config).where(col(Config.id) == CONFIG_SINGLETON_ID))).scalar_one_or_none()
+    hold_or_release(job, cfg, datetime.now(UTC))
+    return job.status == JobStatus.AWAITING_REVIEW
+
+
+async def _persist_card_tracks(session: AsyncSession, job: Job) -> None:
+    """The review card's tracks for a disc held after the operator identified it (identify persisted none on a
+    miss)."""
+    scan = stored_scan(job)
+    if scan is not None:
+        await persist_review_tracks(session, job, scan)
 
 
 def _merge_identity_metadata(job: Job, req: ResolveRequest) -> tuple[dict[str, Any], bool]:
@@ -302,16 +341,16 @@ async def resolve_identity(
         job.status == JobStatus.RIPPED_PARTIAL and flag_is_set(job.metadata_json, "unidentified")
     )
     _clear_spent_markers(new_metadata)
-    if job.status in RESOLVABLE_PROMOTE_JOB_STATUSES:
-        # A placeholder whose rip already finished becomes RIPPED, not
-        # IDENTIFIED — its rip is done.
-        job.status = JobStatus.RIPPED if was_ripped_placeholder else JobStatus.IDENTIFIED
+    held_for_review = job.status in RESOLVABLE_PROMOTE_JOB_STATUSES and await _promote(session, job)
     job.metadata_json = new_metadata
     if show_changed:
         # The stored episode entries were matched against the previous
         # show; forgetting their show id means no keep-path can hold them.
         forget_episode_show_ids(job)
     _record_manual_disc_fields(job, req)
+    if held_for_review:
+        # After the metadata assignment above: the preset claim lands in metadata_json.
+        await _persist_card_tracks(session, job)
     await resolve_job(session, job)
     session.add(job)
 
@@ -338,8 +377,9 @@ async def resolve_identity(
         fan_out_outcomes = await fan_out_waiting_identify_applications(session, job=job, hub=hub)
 
     logger.info(
-        "resolve job_id=%s -> identified title=%s fan_out=%d",
+        "resolve job_id=%s -> %s title=%s fan_out=%d",
         job.id,
+        job.status.value,
         job.title,
         len(fan_out_outcomes),
     )
