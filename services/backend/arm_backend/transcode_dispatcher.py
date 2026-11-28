@@ -20,17 +20,25 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 import time
 from collections.abc import Callable, Sequence
 from typing import TYPE_CHECKING, Any
 
+import docker.errors  # type: ignore[import-untyped]
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from sqlmodel import col, select
 
 from arm_backend.config import Settings
 from arm_backend.container_logging import log_config
 from arm_backend.docker_client import HealingDockerClient
-from arm_backend.docker_probe import TtlProbe, probe_backend_url, probe_docker
+from arm_backend.docker_probe import (
+    TtlProbe,
+    certs_dir_difference,
+    probe_backend_url,
+    probe_docker,
+    probe_transcode_ca,
+)
 from arm_backend.gpu_claim import (
     GpuAssignment,
     assignment_before_device_lookup,
@@ -88,6 +96,28 @@ logger = logging.getLogger("arm_backend.transcode_dispatcher")
 # gracefully before falling back to `docker stop`.
 _CANCEL_GRACE_SECONDS = 10
 _DOCKER_LABEL_KEY = "arm.task_id"
+
+# Log lines read from a container before it is discarded, and how many of its
+# error lines go into the task's last_error.
+_LOG_TAIL_LINES = 50
+_ERROR_TAIL_LINES = 2
+_ERROR_LINE = re.compile(r"error|fail|exception|refused|denied|traceback", re.IGNORECASE)
+
+
+def _is_name_conflict(exc: docker.errors.APIError) -> bool:
+    return exc.status_code == 409 and "already in use" in str(exc)
+
+
+def _error_tail(raw: bytes | str) -> str:
+    """The last distinct error-looking lines of a container log, joined; the
+    last plain lines when none look like errors."""
+    text = raw.decode("utf-8", "replace") if isinstance(raw, bytes) else str(raw)
+    lines = [ln.strip() for ln in text.splitlines() if ln.strip()]
+    errors = [ln for ln in lines if _ERROR_LINE.search(ln)] or lines
+    distinct = list(dict.fromkeys(errors))[-_ERROR_TAIL_LINES:]
+    return " | ".join(distinct)[:200]
+
+
 # Why a deployment cannot run encode work (or a GPU probe) at all: shared by
 # `probe()` and the GPU probe endpoints so both report the same reason.
 NO_DOCKER_CLIENT_DETAIL = "no docker client (ripper-only deployment or docker unavailable)"
@@ -162,8 +192,13 @@ class _SpawnPass:
         # when an encode task is actually ready to spawn.
         self.host_probe = None
 
-        self.encode_slots = await self._free_encode_slots()
-        for task_id in await self._queued_task_ids():
+        queued_ids = await self._queued_task_ids()
+        awaiting = self._dispatcher._awaiting_checkin
+        for gone in [tid for tid in awaiting if tid not in queued_ids]:
+            del awaiting[gone]  # claimed (or cancelled): it checked in
+        # A container still starting up holds its slot until it claims.
+        self.encode_slots = await self._free_encode_slots() - len(awaiting)
+        for task_id in queued_ids:
             await self._handle_queued(task_id)
         if self.held_encode:
             logger.debug(
@@ -307,9 +342,41 @@ class _SpawnPass:
             if is_passthrough_preset(preset):
                 await self._run_passthrough_isolated(task, task_id)
                 return
+            if await self._awaiting_checkin(task_id):
+                return
             if not await self._admit_encode():
                 return
             await self._claim_and_spawn(task, task_id, preset)
+
+    async def _awaiting_checkin(self, task_id: str) -> bool:
+        """True while a container spawned for this still-queued task has not
+        claimed it: respawning would collide with its container name. Past
+        `ARM_TRANSCODE_CHECKIN_TIMEOUT_SECONDS` the container is discarded
+        and an attempt counted; the next tick then spawns afresh."""
+        entry = self._dispatcher._awaiting_checkin.get(task_id)
+        if entry is None:
+            return False
+        name, spawned_at = entry
+        limit = self._dispatcher._settings.ARM_TRANSCODE_CHECKIN_TIMEOUT_SECONDS
+        if time.monotonic() - spawned_at >= limit:
+            await self._expire_checkin(task_id, name, limit)
+        return True
+
+    async def _expire_checkin(self, task_id: str, name: str, limit: int) -> None:
+        dispatcher = self._dispatcher
+        tail = await asyncio.to_thread(dispatcher._discard_container, name, task_id)
+        del dispatcher._awaiting_checkin[task_id]
+        reason = f"transcoder did not check in within {limit} s"
+        if tail:
+            reason += f": {tail}"
+        dispatcher.last_spawn_error = reason[:300]
+        logger.error("transcode container %s for task_id=%s removed: %s", name, task_id, reason)
+        try:
+            await release_gpu_for_task(self._db, task_id)
+            await dispatcher._count_failed_spawn(self._db, task_id, reason, spawned=True)
+        except Exception:
+            logger.exception("could not count the check-in timeout task_id=%s", task_id)
+            await self._db.rollback()
 
     def _note_held_for_staging(self, task: TranscodeTask, stage: TrackStage | None) -> None:
         """Count a task held for its stage; a task with no stage row at all is logged once."""
@@ -466,11 +533,19 @@ class TranscodeDispatcher:
         # Surfaced by /api/system/diagnostics so a crash-looping or
         # un-pullable transcoder is visible in the UI, not only in the log.
         self.last_spawn_error: str | None = None
+        # task id -> (container name, monotonic spawn time) for containers
+        # spawned for a task that is still queued, i.e. has not checked in.
+        self._awaiting_checkin: dict[str, tuple[str, float]] = {}
         # (detail, monotonic time) of the last "spawns held" log line.
         self._probe_hold_logged: tuple[str | None, float] | None = None
         # Task ids already logged as held for having no stage row at all.
         self._unstaged_logged: set[str] = set()
         self._probe = TtlProbe(lambda: probe_docker(self._docker_client, self._settings.ARM_TRANSCODE_IMAGE))
+        # Local transcoders mount ARM_HOST_CERTS_PATH/arm-ca.crt; it must be
+        # the CA this backend serves under (see `probe_transcode_ca`).
+        self._ca_probe = TtlProbe(lambda: probe_transcode_ca(self._docker_client, self._settings))
+        # Set by `probe`: rippers and local transcoders use different certs dirs.
+        self.certs_dir_warning: str | None = None
         # The URL a remote-spawned transcoder calls home on; only checked
         # when spawning remotely (see `probe`).
         self._backend_url_probe = TtlProbe(lambda: probe_backend_url(self._settings.ARM_TRANSCODE_BACKEND_URL))
@@ -526,7 +601,24 @@ class TranscodeDispatcher:
     def stop(self) -> None:
         self._stop.set()
 
+    async def startup_checks(self) -> None:
+        """Log, once at startup, what `probe` finds wrong with the transcode
+        host (a CA mismatch above all), so it is not first met as failed
+        spawns. Never raises."""
+        if self._docker_client is None:
+            return
+        try:
+            ok, detail = await asyncio.to_thread(self.probe)
+        except Exception:
+            logger.exception("transcode startup check failed")
+            return
+        if not ok:
+            logger.error("transcode startup check failed; encode spawns held: %s", detail)
+        if self.certs_dir_warning:
+            logger.warning("transcode startup check: %s", self.certs_dir_warning)
+
     async def run(self) -> None:
+        await self.startup_checks()
         logger.info(
             "transcode dispatcher starting: max_parallel=db-config (env seed %d) image=%s tick=%ds",
             self._settings.MAX_PARALLEL_TRANSCODES,
@@ -623,10 +715,14 @@ class TranscodeDispatcher:
             logger.warning("transcode spawns held: %s", detail)
             self._probe_hold_logged = (detail, now)
 
-    async def _count_failed_spawn(self, db: AsyncSession, task_id: str) -> None:
+    async def _count_failed_spawn(
+        self, db: AsyncSession, task_id: str, reason: str | None = None, *, spawned: bool = False
+    ) -> None:
         """A spawn that failed although the host probe passed is likely
-        task-specific (a bad mount, a preset the image rejects): count it
-        toward ARM_TRANSCODE_MAX_ATTEMPTS so it ends instead of looping."""
+        task-specific (a bad mount, a preset the image rejects, a transcoder
+        that never checked in): count it toward ARM_TRANSCODE_MAX_ATTEMPTS so
+        it ends instead of looping. `reason` defaults to the last spawn error;
+        `spawned` marks a container that did start (wording only)."""
         task = (
             await db.execute(
                 select(TranscodeTask).where(col(TranscodeTask.id) == task_id).execution_options(populate_existing=True)
@@ -634,11 +730,16 @@ class TranscodeDispatcher:
         ).scalar_one_or_none()
         if task is None or task.status != TranscodeTaskStatus.QUEUED:
             return
+        detail = reason or self.last_spawn_error
         task.attempts = (task.attempts or 0) + 1
+        task.last_error = detail
         if task.attempts >= self._settings.ARM_TRANSCODE_MAX_ATTEMPTS:
-            await self._fail_queued_task(
-                db, task, f"transcode container could not start (attempts={task.attempts}): {self.last_spawn_error}"
+            final = (
+                f"{detail} (attempts={task.attempts})"
+                if spawned
+                else f"transcode container could not start (attempts={task.attempts}): {detail}"
             )
+            await self._fail_queued_task(db, task, final, spawned=spawned)
             return
         await db.commit()
 
@@ -751,14 +852,16 @@ class TranscodeDispatcher:
         for family, issues in invalid.items():
             logger.info("skipping %s for task %s: %s", family, task.id, issue_messages(issues))
 
-    async def _fail_queued_task(self, db: AsyncSession, task: TranscodeTask, reason: str) -> None:
+    async def _fail_queued_task(
+        self, db: AsyncSession, task: TranscodeTask, reason: str, *, spawned: bool = False
+    ) -> None:
         """Terminal-fail a queued task that can never run as configured, emit
         `task.failed`, settle its session application, and commit."""
         from arm_backend.transcode_apply import emit_task_failed, settle_session_application
 
         task.status = TranscodeTaskStatus.FAILED
         task.last_error = reason
-        logger.error("transcode task failed before spawn task_id=%s: %s", task.id, reason)
+        logger.error("transcode task failed %s spawn task_id=%s: %s", "after" if spawned else "before", task.id, reason)
         await emit_task_failed(self._hub, db, task)
         application = (
             await db.execute(
@@ -800,6 +903,10 @@ class TranscodeDispatcher:
         ok, detail = self._probe()
         if not ok:
             return ok, detail
+        self.certs_dir_warning = certs_dir_difference(self._settings)
+        ca_ok, ca_detail = self._ca_probe()
+        if not ca_ok:
+            return ca_ok, ca_detail
         if self._settings.ARM_TRANSCODE_DOCKER_HOST and self._settings.ARM_TRANSCODE_BACKEND_URL:
             # A remote transcoder that cannot reach this URL (moved address,
             # a certificate without that SAN) spawns fine and then never
@@ -858,9 +965,8 @@ class TranscodeDispatcher:
             **extra_run_kwargs,
         )
         assert self._docker_client is not None
-        # A dead ssh transport is rebuilt and the run retried once by the
-        # client; a second failure propagates into spawn_pending's handling.
-        container = self._docker_client.containers.run(**run_kwargs)
+        container = self._run_container(run_kwargs, task.id)
+        self._awaiting_checkin[task.id] = (hostname, time.monotonic())
         logger.info(
             "transcode spawned task_id=%s container=%s image=%s gpu=%s",
             task.id,
@@ -869,6 +975,54 @@ class TranscodeDispatcher:
             assignment.gpu.device_path if assignment and assignment.gpu else "cpu",
         )
         return container
+
+    def _run_container(self, run_kwargs: dict[str, Any], task_id: str) -> Any:
+        """`containers.run`, never leaving a container of ours behind.
+
+        A dead ssh transport is rebuilt and the run retried once by the
+        client. A name conflict with a container labelled for THIS task (left
+        by a crashed backend) is removed and the run repeated once; a failure
+        after docker created the container (a start error) removes it, so a
+        retry never meets its own leftover."""
+        assert self._docker_client is not None
+        name = run_kwargs["name"]
+        try:
+            return self._docker_client.containers.run(**run_kwargs)
+        except Exception as exc:
+            conflict = isinstance(exc, docker.errors.APIError) and _is_name_conflict(exc)
+            removed = self._discard_container(name, task_id, only_ours=True) is not None
+            if not (conflict and removed):
+                raise
+        logger.warning("removed leftover container %s of task_id=%s; recreating", name, task_id)
+        return self._docker_client.containers.run(**run_kwargs)
+
+    def _discard_container(self, name: str, task_id: str, *, only_ours: bool = False) -> str | None:
+        """Stop and remove the container `name`, returning the last error
+        lines of its logs ("" if none). None means nothing was removed: it
+        does not exist, or (`only_ours`) it is labelled for another task.
+        Best-effort: never raises."""
+        assert self._docker_client is not None
+        try:
+            container = self._docker_client.containers.get(name)
+            if only_ours and (container.labels or {}).get(_DOCKER_LABEL_KEY) != task_id:
+                return None
+            tail = _error_tail(container.logs(tail=_LOG_TAIL_LINES))
+        except docker.errors.NotFound:
+            return None
+        except Exception as exc:  # noqa: BLE001 - best-effort cleanup
+            logger.warning("could not inspect container %s: %s", name, exc)
+            return None
+        try:
+            container.stop(timeout=2)
+        except Exception as exc:  # noqa: BLE001 - it may already have exited
+            logger.debug("stop of container %s: %s", name, exc)
+        try:
+            container.remove(force=True)
+        except docker.errors.NotFound:
+            pass  # auto_remove beat us to it
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("could not remove container %s: %s", name, exc)
+        return tail
 
     # --- cancel running -----------------------------------------------------
 

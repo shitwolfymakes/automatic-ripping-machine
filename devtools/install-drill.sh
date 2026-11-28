@@ -64,6 +64,11 @@ echo "==> checks"
 test -f "${WORK}/arm/certs/arm-ca.crt"
 test "$(stat -c '%a' "${WORK}/arm/.armctl/.env")" = "600"
 grep -q '^ARM_TRANSCODE_CAPABLE=false$' "${WORK}/arm/.armctl/.env"
+# The certs folder the containers mount the CA from is this install's, and its
+# CA signed the backend certificate (the check a wrong ARM_HOST_CERTS_PATH fails).
+grep -qx "ARM_HOST_CERTS_PATH=${WORK}/arm/certs" "${WORK}/arm/.armctl/.env"
+if grep -q '^ARM_RIPPER_CERTS_PATH=' "${WORK}/arm/.armctl/.env"; then exit 1; fi
+openssl verify -CAfile "${WORK}/arm/certs/arm-ca.crt" "${WORK}/arm/certs/arm-backend.crt" >/dev/null
 
 echo "==> a second up, to exercise the backup and the ripper cleanup"
 "${WORK}/arm/armctl" up --no-pull

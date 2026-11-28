@@ -399,6 +399,7 @@ class _StubDispatcher:
         self._probe = probe
         self.last_spawn_error = last_spawn_error
         self.backend_url_warning = backend_url_warning
+        self.certs_dir_warning: str | None = None
 
     def host_paths_set(self) -> bool:
         return self._host_paths

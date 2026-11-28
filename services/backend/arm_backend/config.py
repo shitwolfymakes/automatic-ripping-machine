@@ -100,6 +100,10 @@ class Settings(BaseSettings):
     # the task is hard-failed with `last_error="exceeded retry limit ..."`.
     ARM_TRANSCODE_STALE_THRESHOLD_SECONDS: int = 90
     ARM_TRANSCODE_MAX_ATTEMPTS: int = 3
+    # How long a spawned transcoder container may take to claim its task (image
+    # start, TLS handshake, first /claim). Past this the dispatcher captures
+    # the container's last error lines, removes it and counts an attempt.
+    ARM_TRANSCODE_CHECKIN_TIMEOUT_SECONDS: int = 60
 
     # Dispatcher tick interval — how often the spawn/sweep loop runs.
     ARM_TRANSCODE_DISPATCH_INTERVAL_SECONDS: int = 5
