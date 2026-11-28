@@ -233,6 +233,7 @@ def _stub_rip_disc(
         stop: Any | None = None,
         title: int | None = None,
         end_on_completion: bool = False,
+        keep_3d: bool = False,
     ) -> RipDiscResult:
         if captured is not None:
             captured["title"] = title

@@ -36,6 +36,8 @@ from arm_backend.rip_settings import resolve_end_on_completion
 from arm_backend.rip_snapshot import skip_unticked
 from arm_backend.title_map_service import (
     NotAStructureScan,
+    keep_3d_refs,
+    stereo_3d_refs,
     apply_titles_report,
     rippable_refs,
     start_blocker,
@@ -43,7 +45,7 @@ from arm_backend.title_map_service import (
     title_numbers,
 )
 from arm_backend.track_selection import DiscBackupNeedsBluray, select_tracks
-from arm_backend.version_policy import selection_policy
+from arm_backend.version_policy import prefers_stereo_3d, selection_policy
 from arm_backend.ws import WSHub
 from arm_common import (
     Config,
@@ -408,7 +410,7 @@ async def get_job(job_id: str, session: AsyncSession = Depends(get_session)) -> 
     return job
 
 
-async def _routed_rip_choice(session: AsyncSession, job: Job) -> tuple[str, int | None]:
+async def _routed_rip_choice(session: AsyncSession, job: Job) -> tuple[str, int | None, bool]:
     # Resolve the routed session ONCE for this request — the preset choice and
     # the min-length override both derive from the same `sess`, so there is one
     # Session SELECT and one warning on a missing routed row.
@@ -418,7 +420,7 @@ async def _routed_rip_choice(session: AsyncSession, job: Job) -> tuple[str, int 
     except RipPresetUnavailable as exc:
         raise _rip_preset_or_http(exc) from exc
     min_length_seconds = min_length_override_from_session(sess)
-    return preset_id, min_length_seconds
+    return preset_id, min_length_seconds, await prefers_stereo_3d(session, sess)
 
 
 async def _job_tracks(session: AsyncSession, job_id: str) -> Sequence[Track]:
@@ -438,16 +440,24 @@ async def _end_on_completion(session: AsyncSession, job: Job) -> bool:
 
 
 async def _rip_start_response(
-    session: AsyncSession, job: Job, preset_id: str, tracks: Sequence[Track], min_length_seconds: int | None
+    session: AsyncSession,
+    job: Job,
+    preset_id: str,
+    tracks: Sequence[Track],
+    min_length_seconds: int | None,
+    prefers_3d: bool,
 ) -> RipStartResponse:
+    scan = stored_scan(job)
+    stereo = frozenset() if scan is None else stereo_3d_refs(scan)
     return RipStartResponse(
         job_id=job.id,
         rip_preset_id=preset_id,
-        tracks=[TrackView.model_validate(t) for t in tracks],
+        tracks=[TrackView.model_validate(t).model_copy(update={"stereo_3d": t.source_ref in stereo}) for t in tracks],
         min_length_seconds=min_length_seconds,
         rip_invocation=settings.ARM_RIP_INVOCATION,
         end_on_completion_message=await _end_on_completion(session, job),
-        title_numbers=title_numbers(stored_scan(job), tracks),
+        title_numbers=title_numbers(scan, tracks),
+        keep_3d_refs=keep_3d_refs(scan, tracks, prefers_3d),
     )
 
 
@@ -575,7 +585,7 @@ async def rip_start(
     stage_runner: EpisodeStageRunner | None = Depends(get_stage_runner),
 ) -> RipStartResponse:
     _require_titles(job)
-    preset_id, min_length_seconds = await _routed_rip_choice(session, job)
+    preset_id, min_length_seconds, prefers_3d = await _routed_rip_choice(session, job)
 
     existing = await _job_tracks(session, job.id)
     if existing:
@@ -583,7 +593,7 @@ async def rip_start(
         await skip_unticked(session, job, settings.ARM_RIP_INVOCATION)
         await _ensure_ripping(session, job)
         await session.commit()
-        return await _rip_start_response(session, job, preset_id, existing, min_length_seconds)
+        return await _rip_start_response(session, job, preset_id, existing, min_length_seconds, prefers_3d)
 
     _require_startable(job)
     scan = _scan_of(job)
@@ -606,7 +616,7 @@ async def rip_start(
     if stage_runner is not None and is_tv_candidate(job, new_tracks):
         stage_runner.schedule(job.id)
 
-    return await _rip_start_response(session, job, preset_id, refreshed, min_length_seconds)
+    return await _rip_start_response(session, job, preset_id, refreshed, min_length_seconds, prefers_3d)
 
 
 @router.post("/jobs/{job_id}/titles", status_code=status.HTTP_204_NO_CONTENT)
@@ -648,7 +658,7 @@ async def resume(
     _require_titles(job)
 
     # One routed-session resolution for this request (see _routed_rip_choice).
-    preset_id, min_length_seconds = await _routed_rip_choice(session, job)
+    preset_id, min_length_seconds, prefers_3d = await _routed_rip_choice(session, job)
 
     await reset_job_for_recovery(session, job)
     await session.commit()
@@ -670,7 +680,7 @@ async def resume(
     )
     await session.commit()
 
-    return await _rip_start_response(session, job, preset_id, refreshed, min_length_seconds)
+    return await _rip_start_response(session, job, preset_id, refreshed, min_length_seconds, prefers_3d)
 
 
 @router.get(

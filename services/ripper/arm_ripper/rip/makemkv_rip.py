@@ -30,12 +30,14 @@ with them (typically: mark FAILED with "skipped: below minlength").
 """
 
 import asyncio
+import contextlib
 import logging
 import re
 from dataclasses import dataclass
 from pathlib import Path
 
 from arm_ripper.rip.makemkv_process import run_makemkvcon
+from arm_ripper.rip.makemkv_selection import keep_mvc_environment
 from arm_ripper.rip.makemkv_settle import RunWatch
 from arm_ripper.rip.makemkv_stream import (
     OnDiscProgress,
@@ -196,6 +198,7 @@ async def rip_disc(
     stop: asyncio.Event | None = None,
     title: int | None = None,
     end_on_completion: bool = False,
+    keep_3d: bool = False,
 ) -> RipDiscResult:
     """Rip every title with duration ≥ `minlength_seconds` from the disc
     in `device_path` to `output_dir`. Single makemkvcon invocation; the
@@ -224,6 +227,9 @@ async def rip_disc(
     `end_on_completion` ends makemkvcon once it has said the copy is complete and its output files are closed, instead
     of waiting for it to exit (see run_makemkvcon); the titles are attributed as for any other end.
 
+    `keep_3d` runs makemkvcon with a selection that includes MVC video, so a 3D title keeps its dependent view
+    (see makemkv_selection); otherwise MakeMKV's own default selection applies.
+
     Returns a `RipDiscResult` whose `titles` dict maps source title
     index to a RipResult. The dispatcher cross-references this with
     the user's track selection: titles in the dict with ok=True got
@@ -246,19 +252,22 @@ async def rip_disc(
         end_on_completion=end_on_completion and bool(eligible),
     )
     state = ParserState()
-    error = await run_makemkvcon(
-        cmd,
-        state,
-        callbacks=RipCallbacks(
-            on_title_start=on_title_start,
-            on_title_progress=on_title_progress,
-            on_disc_progress=on_disc_progress,
-            on_title_done=on_title_done,
-        ),
-        eligible_source_indexes=eligible_source_indexes,
-        stop=stop,
-        watch=watch,
+    callbacks = RipCallbacks(
+        on_title_start=on_title_start,
+        on_title_progress=on_title_progress,
+        on_disc_progress=on_disc_progress,
+        on_title_done=on_title_done,
     )
+    with keep_mvc_environment() if keep_3d else contextlib.nullcontext() as env:
+        error = await run_makemkvcon(
+            cmd,
+            state,
+            callbacks=callbacks,
+            eligible_source_indexes=eligible_source_indexes,
+            stop=stop,
+            watch=watch,
+            env=env,
+        )
     if error is not None:
         return RipDiscResult(overall_error=error, titles={})
 
