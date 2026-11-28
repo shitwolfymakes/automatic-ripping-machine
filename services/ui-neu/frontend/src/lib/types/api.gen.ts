@@ -2810,6 +2810,7 @@ export type JobDetailView = {
      */
     fingerprints?: Array<DiscFingerprintView>;
     previous_rip?: PreviousRipView | null;
+    titles_read?: TitlesReadView;
 };
 
 /**
@@ -5823,6 +5824,24 @@ export type TemplatePreviewResponse = {
 export type TitleClass = 'primary' | 'edition' | 'duplicate' | 'decoy' | 'variant' | 'angle' | 'subset' | 'view';
 
 /**
+ * TitlesReadView
+ *
+ * Where MakeMKV's title list stands for a job whose card is up: `pending` while it reads the disc,
+ * `failed` with its reason when it could not (Start stays off), else `ready`.
+ */
+export type TitlesReadView = {
+    /**
+     * State
+     */
+    state: 'ready' | 'pending' | 'failed';
+    failure?: ScanFailure | null;
+    /**
+     * Message
+     */
+    message?: string | null;
+};
+
+/**
  * TitlesReport
  *
  * POST /api/ripper/jobs/{job_id}/titles body: what the background `makemkvcon info` run found on a disc
@@ -6206,6 +6225,14 @@ export type TrackView = {
     identity_provenance?: {
         [key: string]: string;
     } | null;
+    /**
+     * Stereo 3D
+     */
+    stereo_3d?: boolean;
+    /**
+     * Unrippable
+     */
+    unrippable?: boolean;
     stage?: TrackStageView | null;
 };
 
@@ -6629,6 +6656,7 @@ export type JobDetailViewWritable = {
      */
     fingerprints?: Array<DiscFingerprintView>;
     previous_rip?: PreviousRipView | null;
+    titles_read?: TitlesReadView;
 };
 
 /**

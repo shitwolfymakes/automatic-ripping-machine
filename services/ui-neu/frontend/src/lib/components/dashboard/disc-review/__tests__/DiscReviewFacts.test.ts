@@ -16,6 +16,7 @@ import { readJobMetadata } from '$lib/jobs/metadata';
 import type { EpisodeStatus } from '$lib/episodes/status';
 import type { SourceRow } from '$lib/jobs/review-card';
 import { createJob, createTrack } from '../../../../__fixtures__/job';
+import { bladeRunnerTracks } from '../../../../__fixtures__/version-sets';
 import DiscReviewFacts from '../DiscReviewFacts.svelte';
 
 const SOURCE: SourceRow = { label: 'Drive', value: 'Drive A' };
@@ -32,6 +33,8 @@ interface FactsOptions {
 	appliedSession?: string | null;
 	onopenseason?: () => void;
 	onopenepisodes?: () => void;
+	canEditVersions?: boolean;
+	onsetversions?: (one: boolean) => void;
 }
 
 function renderFacts(job: JobView, options: FactsOptions = {}) {
@@ -395,5 +398,41 @@ describe('DiscReviewFacts', () => {
 			renderFacts(gate('mkv_all'), { tracks: [createTrack({ kind: 'audio_track' })], isReviewGate: true });
 			expect(screen.queryByTestId('rip-row')).toBeNull();
 		});
+	});
+});
+
+describe('DiscReviewFacts: Versions row', () => {
+	afterEach(cleanup);
+	const tracks = () => bladeRunnerTracks();
+
+	it('is absent when the disc holds no version of the film twice', () => {
+		renderFacts(createJob({ status: 'awaiting_review' }), { tracks: [] });
+		expect(screen.queryByTestId('versions-row')).toBeNull();
+	});
+
+	it('reads One per film by default, as text for a viewer', () => {
+		renderFacts(createJob({ status: 'awaiting_review' }), { tracks: tracks() });
+		expect(within(screen.getByTestId('versions-row')).getByText('One per film')).toBeInTheDocument();
+		expect(screen.queryByRole('combobox')).toBeNull();
+	});
+
+	it('reads Every version when the job ticks them all', () => {
+		renderFacts(createJob({ status: 'awaiting_review', tick_one_version: false }), { tracks: tracks() });
+		expect(within(screen.getByTestId('versions-row')).getByText('Every version')).toBeInTheDocument();
+	});
+
+	it('is a select for an admin, and a change reports the new policy', async () => {
+		const onsetversions = vi.fn();
+		renderFacts(createJob({ status: 'awaiting_review', tick_one_version: true }), {
+			tracks: tracks(),
+			canEditVersions: true,
+			onsetversions
+		});
+		const select = screen.getByRole('combobox', { name: 'Versions to rip' });
+		expect(select).toHaveValue('one');
+		await fireEvent.change(select, { target: { value: 'all' } });
+		expect(onsetversions).toHaveBeenCalledWith(false);
+		await fireEvent.change(select, { target: { value: 'one' } });
+		expect(onsetversions).toHaveBeenLastCalledWith(true);
 	});
 });

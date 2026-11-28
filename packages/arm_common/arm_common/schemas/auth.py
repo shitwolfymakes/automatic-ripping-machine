@@ -13,6 +13,7 @@ from pydantic import BaseModel, Field
 
 from arm_common.enums import PreviouslyRippedAction, RetentionPolicy, UserRole
 from arm_common.schemas.jobs import DiscFingerprintView, JobView, PreviousRipView, TrackView
+from arm_common.schemas.ripper import ScanFailure
 
 
 class LoginRequest(BaseModel):
@@ -32,6 +33,16 @@ class PasswordChangeRequest(BaseModel):
     new_password: str = Field(min_length=8)
 
 
+class TitlesReadView(BaseModel):
+    """Where MakeMKV's title list stands for a job whose card is up: `pending` while it reads the disc,
+    `failed` with its reason when it could not (Start stays off), else `ready`."""
+
+    state: Literal["ready", "pending", "failed"]
+    failure: ScanFailure | None = None
+    # The sentence that tells the operator why MakeMKV failed and what to try; set with `failure`.
+    message: str | None = None
+
+
 class JobDetailView(BaseModel):
     job: JobView
     tracks: list[TrackView]
@@ -39,6 +50,7 @@ class JobDetailView(BaseModel):
     # The earlier rip this held disc matched (metadata previously_ripped);
     # None when there is none or it has since been deleted.
     previous_rip: PreviousRipView | None = None
+    titles_read: TitlesReadView = Field(default_factory=lambda: TitlesReadView(state="ready"))
 
 
 class ConfigView(BaseModel):

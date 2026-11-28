@@ -8,6 +8,7 @@ import {
 	matchProviderLabel,
 	reviewSourceRow,
 	reviewStatusLabel,
+	startBlockedReason,
 	type StatusLabelFlags
 } from '../review-card';
 import { createDriveSummary, createIsoDrive } from '$lib/__fixtures__/drive';
@@ -42,6 +43,36 @@ describe('reviewStatusLabel', () => {
 	});
 	it('lets reviewGate win over postRip', () => {
 		expect(reviewStatusLabel({ ...none, reviewGate: true, postRip: true })).toBe('Ready: Review & Start');
+	});
+	it('says MakeMKV is reading the titles, ahead of Ready', () => {
+		expect(reviewStatusLabel({ ...none, reviewGate: true, titles: 'pending' })).toBe('Reading titles with MakeMKV...');
+	});
+	it('says MakeMKV could not read the disc, ahead of everything but a previous rip', () => {
+		expect(reviewStatusLabel({ ...none, suggestion: true, reviewGate: true, titles: 'failed' })).toBe(
+			'MakeMKV cannot read this disc'
+		);
+		expect(reviewStatusLabel({ ...none, previouslyRipped: true, titles: 'failed' })).toBe(
+			'Already ripped: Rip again or Discard'
+		);
+	});
+	it('lets a title suggestion win over the pending read', () => {
+		expect(reviewStatusLabel({ ...none, suggestion: true, titles: 'pending' })).toBe(
+			'Confirm the title: use it or search'
+		);
+	});
+	it('reads titles ready as no flag', () => {
+		expect(reviewStatusLabel({ ...none, reviewGate: true, titles: 'ready' })).toBe('Ready: Review & Start');
+	});
+});
+
+describe('startBlockedReason', () => {
+	it('is null when the titles are in, or the state is unknown', () => {
+		expect(startBlockedReason('ready')).toBeNull();
+		expect(startBlockedReason(undefined)).toBeNull();
+	});
+	it('says why Start waits', () => {
+		expect(startBlockedReason('pending')).toBe('Waiting for MakeMKV to read the disc');
+		expect(startBlockedReason('failed')).toBe('MakeMKV could not read this disc');
 	});
 });
 

@@ -4,6 +4,7 @@
 	import type { EpisodeStatus } from '$lib/episodes/status';
 	import { ripPlanLine, ripPlanSummary, ripPlanWarning } from '$lib/jobs/rip-plan';
 	import { isIdentifyMiss, missReason } from '$lib/jobs/review';
+	import { hasVersionSets } from '$lib/jobs/version-sets';
 	import {
 		discFactsLine,
 		episodeMatchingDetail,
@@ -39,6 +40,10 @@
 		onopenseason: () => void;
 		/** Called by the Episodes row's links. */
 		onopenepisodes: () => void;
+		/** An admin may change which versions of the film rip. */
+		canEditVersions?: boolean;
+		/** Called with the new policy: true for one version per film, false for every version. */
+		onsetversions?: (one: boolean) => void;
 	}
 
 	let {
@@ -54,7 +59,9 @@
 		isReviewGate,
 		appliedSession,
 		onopenseason,
-		onopenepisodes
+		onopenepisodes,
+		canEditVersions = false,
+		onsetversions
 	}: Props = $props();
 
 	let missLine = $derived(missReason(job));
@@ -65,6 +72,9 @@
 	let discLine = $derived(discFactsLine(job, jobMeta.titleCount));
 	let plan = $derived(isReviewGate ? ripPlanSummary(tracks, job) : null);
 	let planWarning = $derived(plan ? ripPlanWarning(plan) : null);
+	// A job with no policy of its own ticks one version, as the backend reads it.
+	let oneVersion = $derived(job.tick_one_version !== false);
+	let showVersions = $derived(isVideo && hasVersionSets(tracks));
 </script>
 
 <dl class="disc-review-widget-rows">
@@ -175,6 +185,26 @@
 			<span class="disc-review-widget-value disc-review-widget-source" title={sourceRow.value}>{sourceRow.value}</span>
 		</dd>
 	</div>
+	{#if showVersions}
+		<div class="disc-review-widget-row" data-testid="versions-row">
+			<dt>Versions</dt>
+			<dd>
+				{#if canEditVersions}
+					<select
+						class="field-control"
+						aria-label="Versions to rip"
+						value={oneVersion ? 'one' : 'all'}
+						onchange={(e) => onsetversions?.(e.currentTarget.value === 'one')}
+					>
+						<option value="one">One per film</option>
+						<option value="all">Every version</option>
+					</select>
+				{:else}
+					<span class="disc-review-widget-value">{oneVersion ? 'One per film' : 'Every version'}</span>
+				{/if}
+			</dd>
+		</div>
+	{/if}
 	{#if plan}
 		<div class="disc-review-widget-row" data-testid="rip-row">
 			<dt>Rip</dt>

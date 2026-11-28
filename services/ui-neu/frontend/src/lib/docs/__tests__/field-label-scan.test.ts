@@ -96,6 +96,11 @@ const LABEL_ELEMENTS: Allowance[] = [
 		file: '/src/lib/components/settings/ChoiceCard.svelte',
 		text: 'choice-card',
 		reason: 'one option card of a radio group whose heading carries the docs link'
+	},
+	{
+		file: '/src/lib/components/jobs/VersionSetChoice.svelte',
+		text: 'version-set-item',
+		reason: "one version of a film on the review card: ticks a track for one job, not a stored setting's field"
 	}
 ];
 

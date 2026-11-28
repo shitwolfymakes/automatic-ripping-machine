@@ -22,9 +22,9 @@ from arm_backend.identity.proposals import record_preset_drop, revert_manual_tra
 from arm_backend.version_policy import recompute_ticks
 from arm_backend.ws import WSHub
 from arm_common import Job
-from arm_common.disc_titles import MAKEMKV_FAILURE_KEY, is_structure_scan, scan_candidates
+from arm_common.disc_titles import MAKEMKV_FAILURE_KEY, is_structure_scan, scan_candidates, title_ref
 from arm_common.models import Track
-from arm_common.schemas import ScanFailure, ScanResult, ScanTitle, TitlesReport
+from arm_common.schemas import ScanFailure, ScanResult, ScanTitle, TitlesReadView, TitlesReport
 from arm_common.title_map import TitleMap, map_titles
 
 logger = logging.getLogger("arm_backend.title_map_service")
@@ -76,6 +76,22 @@ def start_blocker(job: Job) -> str | None:
         return None
     failure = makemkv_failure(job)
     return TITLES_PENDING if failure is None else f"makemkv_failed: {failure.reason.value}"
+
+
+def titles_read_view(job: Job) -> TitlesReadView:
+    """The card's view of MakeMKV's title read: ready, pending, or failed with the reason."""
+    scan = stored_scan(job)
+    if scan is None or not is_structure_scan(scan) or scan.titles:
+        return TitlesReadView(state="ready")
+    failure = makemkv_failure(job)
+    return TitlesReadView(state="pending") if failure is None else TitlesReadView(state="failed", failure=failure)
+
+
+def stereo_3d_refs(scan: ScanResult) -> frozenset[str]:
+    """The refs of a structure scan's titles that play a 3D view."""
+    if not is_structure_scan(scan):
+        return frozenset()
+    return frozenset(title_ref(t.source_file or "", t.angle) for t in scan_candidates(scan) if t.stereo_3d)
 
 
 def title_numbers(scan: ScanResult | None, tracks: Sequence[Track]) -> dict[str, int]:

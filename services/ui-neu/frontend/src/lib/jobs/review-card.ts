@@ -1,5 +1,5 @@
 // The review card's text, built from the job's state.
-import type { JobView } from '$lib/types/api.gen';
+import type { JobView, TitlesReadView } from '$lib/types/api.gen';
 import type { EpisodeStatus } from '$lib/episodes/status';
 import { videoTypeLabel } from '$lib/jobs/fields';
 import { providerLabel } from '$lib/settings/provider-labels';
@@ -18,15 +18,26 @@ export interface StatusLabelFlags {
 	reviewGate: boolean;
 	/** The rip is done and a session can be applied. */
 	postRip: boolean;
+	/** Where MakeMKV's title read stands; absent reads as ready. */
+	titles?: TitlesReadView['state'];
 }
 
 /** The status bar's label; the first matching state wins. */
 export function reviewStatusLabel(flags: StatusLabelFlags): string {
 	if (flags.previouslyRipped) return 'Already ripped: Rip again or Discard';
+	if (flags.titles === 'failed') return 'MakeMKV cannot read this disc';
 	if (flags.suggestion) return 'Confirm the title: use it or search';
+	if (flags.titles === 'pending') return 'Reading titles with MakeMKV...';
 	if (flags.reviewGate) return 'Ready: Review & Start';
 	if (flags.postRip) return 'Ripped: Apply Session';
 	return 'Awaiting Review';
+}
+
+/** Why Start is off while MakeMKV's title read is not done; null when the titles are in. */
+export function startBlockedReason(titles: TitlesReadView['state'] | undefined): string | null {
+	if (titles === 'pending') return 'Waiting for MakeMKV to read the disc';
+	if (titles === 'failed') return 'MakeMKV could not read this disc';
+	return null;
 }
 
 /**

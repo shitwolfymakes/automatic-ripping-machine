@@ -13249,6 +13249,9 @@
                 "type": "null"
               }
             ]
+          },
+          "titles_read": {
+            "$ref": "#/components/schemas/TitlesReadView"
           }
         },
         "type": "object",
@@ -18689,6 +18692,46 @@
         "title": "TitleClass",
         "description": "What the classifier (arm_common.title_classes) decides about one scanned\nBlu-ray title."
       },
+      "TitlesReadView": {
+        "properties": {
+          "state": {
+            "type": "string",
+            "enum": [
+              "ready",
+              "pending",
+              "failed"
+            ],
+            "title": "State"
+          },
+          "failure": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ScanFailure"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message"
+          }
+        },
+        "type": "object",
+        "required": [
+          "state"
+        ],
+        "title": "TitlesReadView",
+        "description": "Where MakeMKV's title list stands for a job whose card is up: `pending` while it reads the disc,\n`failed` with its reason when it could not (Start stays off), else `ready`."
+      },
       "TitlesReport": {
         "properties": {
           "titles": {
@@ -19577,6 +19620,16 @@
               }
             ],
             "title": "Identity Provenance"
+          },
+          "stereo_3d": {
+            "type": "boolean",
+            "title": "Stereo 3D",
+            "default": false
+          },
+          "unrippable": {
+            "type": "boolean",
+            "title": "Unrippable",
+            "default": false
           },
           "stage": {
             "anyOf": [

@@ -464,6 +464,10 @@ class TrackView(BaseModel):
     custom_filename: str | None = None
     # {attribute: source_id} for resolver-managed fields (display-only).
     identity_provenance: dict[str, str] | None = None
+    # Review-card facts of a Blu-ray structure scan, display-only, set by get_job_detail: the title plays
+    # a 3D (MVC) view, and MakeMKV's title list does not include it (it cannot be ripped).
+    stereo_3d: bool = False
+    unrippable: bool = False
     # The track's staging copy; None when it has no stage row (passthrough, pre-apply).
     # Display-only, set by get_job_detail.
     stage: TrackStageView | None = None

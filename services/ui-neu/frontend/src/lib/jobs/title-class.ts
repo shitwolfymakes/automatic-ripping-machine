@@ -1,5 +1,6 @@
 import type { TitleClass, TrackView } from '$lib/types/api.gen';
 import { formatTrackDuration } from '$lib/utils/format';
+import { parseTitleRef } from './version-sets';
 
 /** A disc with at least this many decoy rows collapses them into one disclosure row. */
 export const DECOY_GROUP_MIN = 3;
@@ -11,8 +12,33 @@ export interface TitleClassLabel {
 
 type LabelTrack = Pick<
 	TrackView,
-	'title_class' | 'title_class_ref' | 'source_file' | 'playlist_name' | 'duration_seconds' | 'expected_duration_seconds'
+	| 'title_class'
+	| 'title_class_ref'
+	| 'source_ref'
+	| 'source_file'
+	| 'playlist_name'
+	| 'duration_seconds'
+	| 'expected_duration_seconds'
+	| 'stereo_3d'
 >;
+
+/** The label of a title MakeMKV's list does not hold: it is on the disc but cannot be ripped. */
+export const UNRIPPABLE_LABEL = "MakeMKV can't rip this";
+
+/** A primary title at least this long is the main feature; a shorter one is an extra. */
+const MAIN_FEATURE_MIN_SECONDS = 45 * 60;
+
+// The classes a title of its own can have: its row says whether it is the feature or an extra.
+const OWN_CLASSES = new Set<TitleClass | null | undefined>([null, undefined, 'primary', 'edition']);
+
+/** "Main feature" or "Extra" for a title that stands on its own, by its length; null when unknown or classed. */
+export function featureLabel(
+	track: Pick<TrackView, 'title_class' | 'duration_seconds' | 'expected_duration_seconds'>
+): string | null {
+	const secs = track.duration_seconds ?? track.expected_duration_seconds;
+	if (!secs || !OWN_CLASSES.has(track.title_class)) return null;
+	return secs >= MAIN_FEATURE_MIN_SECONDS ? 'Main feature' : 'Extra';
+}
 
 /** Maps a `title_class_ref` (the kept title's source_ref) to the row number the table shows, or null. */
 export type RefIndex = (ref: string) => number | null;
@@ -64,16 +90,29 @@ export function titleClassLabel(track: LabelTrack, refIndex: RefIndex): TitleCla
 			return { text: `Decoy playlist of ${of}`, tone: 'muted' };
 		case 'variant':
 			return { text: `${of} with an extra intro`, tone: 'muted' };
+		case 'angle': {
+			const angle = parseTitleRef(track.source_ref)?.angle;
+			return { text: angle ? `Angle ${angle} of ${of}` : `Other angle of ${of}`, tone: 'muted' };
+		}
+		case 'subset':
+			return { text: `Shorter cut of ${of}`, tone: 'muted' };
+		case 'view':
+			return { text: `${track.stereo_3d ? '3D' : '2D'} version of ${of}`, tone: 'muted' };
 		default:
 			return null;
 	}
 }
 
-/** What the Source column names: the ripped file, else the playlist, else the stream file, else the ref. */
+/**
+ * What the Source column names: the ripped file, else the whole ref of an angle (`00334.mpls:2`, so two
+ * angles of one playlist differ), else the playlist, the stream file, the ref.
+ */
 export function sourceName(
 	track: Pick<TrackView, 'playlist_name' | 'source_file' | 'output_path' | 'source_ref'>
 ): string {
-	return track.output_path || track.playlist_name || track.source_file || track.source_ref;
+	if (track.output_path) return track.output_path;
+	if (parseTitleRef(track.source_ref)?.angle) return track.source_ref;
+	return track.playlist_name || track.source_file || track.source_ref;
 }
 
 /** The disclosure row's text: "298 decoy playlists of #0 (unticked)", or "(N ticked)" when some are on. */

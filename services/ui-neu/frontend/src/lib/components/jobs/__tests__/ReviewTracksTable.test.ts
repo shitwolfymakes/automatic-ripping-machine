@@ -4,6 +4,7 @@ import { updateTrack } from '$lib/api/jobs';
 import ReviewTracksTable from '../ReviewTracksTable.svelte';
 import type { TrackView } from '$lib/types/api.gen';
 import { createJob } from '../../../__fixtures__/job';
+import { bladeRunnerTracks } from '../../../__fixtures__/version-sets';
 
 vi.mock('$lib/stores/auth', async () => {
 	const { readable } = await import('svelte/store');
@@ -12,6 +13,7 @@ vi.mock('$lib/stores/auth', async () => {
 
 vi.mock('$lib/api/jobs', () => ({
 	updateTrack: vi.fn(() => Promise.resolve({})),
+	patchJob: vi.fn(() => Promise.resolve({})),
 	clearTrackTitle: vi.fn(),
 	searchMetadata: vi.fn(),
 	fetchMediaDetail: vi.fn()
@@ -169,5 +171,81 @@ describe('ReviewTracksTable', () => {
 			expect(screen.getByText('~2 KB')).toBeInTheDocument();
 			expect(screen.queryByRole('checkbox')).toBeNull();
 		});
+	});
+});
+
+describe('ReviewTracksTable, a disc with versions of the film', () => {
+	const movie = (tracks: TrackView[]) =>
+		renderComponent(ReviewTracksTable, {
+			props: {
+				job: createJob({ media_type: 'movie', status: 'awaiting_review' }),
+				tracks,
+				isVideo: true,
+				isTv: false,
+				isMusic: false
+			}
+		});
+
+	it('gives every movie row its own label, and the unrippable ones the MakeMKV label', () => {
+		movie(bladeRunnerTracks());
+		const rows = screen.getAllByRole('row');
+		const withText = (text: string) => rows.find((r) => r.textContent?.includes(text));
+		// 00095: a long primary MakeMKV does not list
+		const first = withText('00095.mpls')!;
+		expect(first).toHaveTextContent('Main feature');
+		expect(first).toHaveTextContent("MakeMKV can't rip this");
+		expect(first.querySelector('input[type="checkbox"]')).toBeDisabled();
+		// 00102: a short primary is an extra
+		expect(withText('00102.mpls')).toHaveTextContent('Extra');
+		expect(withText('00102.mpls')!.querySelector('input[type="checkbox"]')).not.toBeDisabled();
+		// the longer cut is an edition; its copy and decoy are labelled by their class
+		expect(withText('00103.mpls')).toHaveTextContent('Copy of #2');
+		expect(withText('00500.mpls')).toHaveTextContent('Decoy playlist of #3');
+		expect(withText('00400.mpls')).toHaveTextContent('Edition');
+	});
+
+	it('folds the versions of the film into one row that names the one kept', () => {
+		movie(bladeRunnerTracks());
+		expect(screen.getByRole('button', { name: /6 versions of the film: keeping #3 \(Angle 1, 3D\)/ })).toHaveAttribute(
+			'aria-expanded',
+			'false'
+		);
+		expect(screen.queryByText('00342.mpls')).toBeNull();
+	});
+
+	it('expands the set to the choice, where the two angles differ by their ref', async () => {
+		movie(bladeRunnerTracks());
+		await fireEvent.click(screen.getByRole('button', { name: /versions of the film/ }));
+		expect(screen.getByTestId('version-set-choice')).toBeInTheDocument();
+		expect(screen.getByRole('radio', { name: /Angle 1/ })).toBeChecked();
+		expect(screen.getByRole('radio', { name: /Angle 2/ })).not.toBeChecked();
+		expect(screen.getByText('00334.mpls:2')).toBeInTheDocument();
+		await fireEvent.click(screen.getByRole('button', { name: /versions of the film/ }));
+		expect(screen.queryByTestId('version-set-choice')).toBeNull();
+	});
+
+	it('shows the angle on an angle row whose pick is not listed', () => {
+		const tracks = bladeRunnerTracks().filter((t) => t.source_ref === '00334.mpls:2');
+		tracks[0].title_class = 'primary';
+		tracks[0].title_class_ref = null;
+		movie(tracks);
+		expect(screen.getByTestId('track-angle')).toHaveTextContent('Angle 2');
+		expect(screen.getByText('00334.mpls:2')).toBeInTheDocument();
+		expect(screen.getByTestId('track-3d')).toBeInTheDocument();
+	});
+
+	it('labels a TV disc by its episodes, not as a feature', () => {
+		renderComponent(ReviewTracksTable, {
+			props: {
+				job: createJob({ media_type: 'tv' }),
+				tracks: [
+					track({ id: 'a', index: 1, source_ref: '1', expected_duration_seconds: 9000, title_class: 'primary' })
+				],
+				isVideo: true,
+				isTv: true,
+				isMusic: false
+			}
+		});
+		expect(screen.queryByTestId('track-feature-label')).toBeNull();
 	});
 });

@@ -41,6 +41,7 @@ interface Options {
 	isMusic?: boolean;
 	isPostRip?: boolean;
 	canStart?: boolean;
+	startBlocked?: string | null;
 	episodeRow?: EpisodeStatus | null;
 	previouslyRipped?: boolean;
 	fromIso?: boolean;
@@ -71,6 +72,7 @@ function setup(options: Options = {}) {
 		isMusic: options.isMusic ?? false,
 		isPostRip: options.isPostRip ?? false,
 		canStart: options.canStart ?? false,
+		startBlocked: options.startBlocked ?? null,
 		episodeRow: options.episodeRow ?? null,
 		previouslyRipped: options.previouslyRipped ?? false,
 		fromIso: options.fromIso ?? false,
@@ -298,5 +300,14 @@ describe('DiscReviewActions: a non-admin', () => {
 		expect(maybeBtn('Delete')).toBeNull();
 		expect(maybeBtn('Start rip')).toBeNull();
 		expect(btn('Info')).toBeInTheDocument();
+	});
+});
+
+describe('DiscReviewActions: Start rip while MakeMKV has not read the titles', () => {
+	it('disables Start and says why in its title', () => {
+		setup({ canStart: true, startBlocked: 'Waiting for MakeMKV to read the disc' });
+		const button = btn('Start rip');
+		expect(button).toBeDisabled();
+		expect(button).toHaveAttribute('title', 'Waiting for MakeMKV to read the disc');
 	});
 });
