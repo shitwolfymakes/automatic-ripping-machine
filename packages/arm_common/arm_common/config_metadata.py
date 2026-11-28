@@ -505,7 +505,7 @@ CONFIG_FIELD_META: list[ConfigFieldMeta] = [
     # cadence is being dialled in on real hardware.
     ConfigFieldMeta(
         key="drive_scan_interval_seconds",
-        group="System",
+        group="Drives",
         tier="operator",
         label="Drive scan interval (seconds)",
         help="How often the backend re-enumerates optical drives from sysfs.",
@@ -514,7 +514,7 @@ CONFIG_FIELD_META: list[ConfigFieldMeta] = [
     ),
     ConfigFieldMeta(
         key="drive_detected_prune_days",
-        group="System",
+        group="Drives",
         tier="operator",
         label="Forget unseen drives after (days)",
         help="Detected-but-never-enrolled drives absent this long are dropped from the list.",

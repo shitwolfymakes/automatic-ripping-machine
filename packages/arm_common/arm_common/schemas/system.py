@@ -1,5 +1,6 @@
 from datetime import datetime
 from enum import StrEnum
+from typing import Literal
 
 from pydantic import BaseModel
 
@@ -99,3 +100,63 @@ class JobLogFileView(BaseModel):
     job_id: str
     size_bytes: int
     modified_at: datetime  # UTC, timezone-aware
+
+
+class EnvEffectiveView(BaseModel):
+    """The live value of a setting that its env var only seeds."""
+
+    value: str
+    setting_key: str | None
+    tab: str
+
+
+class EnvVarView(BaseModel):
+    key: str
+    # None for secrets: the report never carries a secret value.
+    value: str | None
+    secret: bool
+    is_set: bool
+    source: Literal["env", "default"]
+    effective: EnvEffectiveView | None = None
+
+
+class EnvGroupView(BaseModel):
+    name: str
+    vars: list[EnvVarView]
+
+
+class ContainerMountView(BaseModel):
+    host: str
+    container: str
+    mode: str
+
+
+class ContainerEnvView(BaseModel):
+    key: str
+    value: str | None
+    secret: bool
+
+
+class ContainerView(BaseModel):
+    kind: Literal["ripper", "transcode"]
+    label: str
+    state: str | None
+    image: str
+    network: str | None
+    docker_host: str | None
+    mounts: list[ContainerMountView]
+    devices: list[str]
+    env: list[ContainerEnvView]
+
+
+class EnvironmentSummary(BaseModel):
+    host_paths_set: bool | None
+    transcode_capable: bool
+    gpus: list[str]
+
+
+class SystemEnvironmentResponse(BaseModel):
+    version: str
+    summary: EnvironmentSummary
+    groups: list[EnvGroupView]
+    containers: list[ContainerView]

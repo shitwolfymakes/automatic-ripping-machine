@@ -74,6 +74,19 @@ def container_name(drive: Drive) -> str:
     return f"arm-ripper-{serial_slug}-{drive.id[-6:].lower()}"
 
 
+def ripper_volume_pairs(settings: Settings) -> list[tuple[str, str, str]]:
+    """(host, bind, mode) per mount. A list, not a dict: unset host paths are
+    all "" and would collapse as dict keys."""
+    certs_root = Path(certs_path(settings))
+    return [
+        (settings.ARM_HOST_RAW_PATH, "/raw", "rw"),
+        (settings.ARM_HOST_LOGS_PATH, "/logs", "rw"),
+        (str(certs_root / "arm-ca.crt"), "/etc/ssl/arm/arm-ca.crt", "ro"),
+        ("/dev/disk", _HOST_DISK_MOUNT, "ro"),
+        (MAKEMKV_VOLUME, _MAKEMKV_DIR, "rw"),
+    ]
+
+
 def container_spec(settings: Settings, drive: Drive) -> dict[str, Any]:
     """kwargs for `containers.run` — what the ripper needs and nothing more:
     no `devices:` bind (the entrypoint pre-creates nodes), no
@@ -95,14 +108,7 @@ def container_spec(settings: Settings, drive: Drive) -> dict[str, Any]:
         value = getattr(s, setting)
         if value:
             env[env_name] = value
-    certs_root = Path(certs_path(settings))
-    volumes = {
-        s.ARM_HOST_RAW_PATH: {"bind": "/raw", "mode": "rw"},
-        s.ARM_HOST_LOGS_PATH: {"bind": "/logs", "mode": "rw"},
-        str(certs_root / "arm-ca.crt"): {"bind": "/etc/ssl/arm/arm-ca.crt", "mode": "ro"},
-        "/dev/disk": {"bind": _HOST_DISK_MOUNT, "mode": "ro"},
-        MAKEMKV_VOLUME: {"bind": _MAKEMKV_DIR, "mode": "rw"},
-    }
+    volumes = {host: {"bind": bind, "mode": mode} for host, bind, mode in ripper_volume_pairs(settings)}
     spec: dict[str, Any] = {
         "image": s.ARM_RIPPER_IMAGE,
         "name": name,

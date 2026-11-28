@@ -679,6 +679,42 @@ describe('Settings Page', () => {
 			expect(screen.queryByText('Run Check')).not.toBeInTheDocument();
 		});
 
+		it('saves the Drives schema group and folds the saved value back into the page', async () => {
+			const { saveArmConfig } = await import('$lib/api/settings');
+			vi.mocked(saveArmConfig).mockClear();
+			vi.mocked(fetchSettings).mockResolvedValueOnce({
+				config: { ...mockConfig, drive_scan_interval_seconds: 30 },
+				schema: {
+					groups: [
+						...mockSchema.groups,
+						{
+							name: 'Drives',
+							fields: [
+								{
+									key: 'drive_scan_interval_seconds',
+									group: 'Drives',
+									tier: 'operator',
+									label: 'Drive scan interval (seconds)',
+									help: '',
+									type: 'int',
+									editable: true
+								}
+							]
+						}
+					]
+				},
+				infra: { RAW_ROOT: '/raw' },
+				arm_config: {},
+				transcoder_config: null
+			} as never);
+			await renderAndOpenTab('Drives');
+			const field = await screen.findByLabelText('Drive scan interval (seconds)');
+			await fireEvent.input(field, { target: { value: '45' } });
+			await fireEvent.click(screen.getByRole('button', { name: /^save/i }));
+			await waitFor(() => expect(vi.mocked(saveArmConfig)).toHaveBeenCalledWith({ drive_scan_interval_seconds: 45 }));
+			await waitFor(() => expect(screen.getByLabelText('Drive scan interval (seconds)')).toHaveValue(45));
+		});
+
 		it('renders enrolled cards, detected/ignored lists, and maintenance buttons', async () => {
 			vi.mocked(fetchDrives).mockResolvedValueOnce([
 				drive({ id: 'drv_enrolled', lifecycle: 'enrolled', display_name: 'Main Drive' }),

@@ -1,5 +1,5 @@
 <script lang="ts">
-	import type { DriveView as Drive } from '$lib/types/api.gen';
+	import type { DriveView as Drive, SettingsGroup } from '$lib/types/api.gen';
 	import type { SettingsData } from '$lib/api/settings';
 	import type { DriveSessionOptions } from '$lib/stores/drive-session-options.svelte';
 	import type { DriveDiagnostics } from '$lib/stores/drive-diagnostics.svelte';
@@ -8,6 +8,7 @@
 	import DriveMaintenance from '$lib/components/drives/DriveMaintenance.svelte';
 	import DriveLifecycleLists from '$lib/components/drives/DriveLifecycleLists.svelte';
 	import DriveDiagnosticsPanel from '$lib/components/settings/DriveDiagnosticsPanel.svelte';
+	import SchemaConfigForm from '$lib/components/settings/SchemaConfigForm.svelte';
 
 	interface Props {
 		drives: Drive[];
@@ -16,9 +17,12 @@
 		options: DriveSessionOptions;
 		settings: SettingsData;
 		diagnostics: DriveDiagnostics;
+		/** The Drives schema group (drive scanner tunables); absent until the schema loads. */
+		group?: SettingsGroup;
+		onsaved?: (payload: Record<string, unknown>) => void;
 	}
 
-	let { drives, error, onrefresh, options, settings, diagnostics }: Props = $props();
+	let { drives, error, onrefresh, options, settings, diagnostics, group, onsaved }: Props = $props();
 
 	let parts = $derived(partitionDrives(drives));
 </script>
@@ -57,6 +61,13 @@
 			<DriveLifecycleLists detected={parts.detected} ignored={parts.ignored} onchanged={() => onrefresh()} />
 		{/if}
 
+		{#if group}
+			<section class="panel stack" data-testid="drive-scanning">
+				<h3 class="settings-page-subsection-title">Scanning</h3>
+				<SchemaConfigForm bare {group} config={settings?.config ?? {}} {onsaved} />
+			</section>
+		{/if}
+
 		<!-- Diagnostics -->
 		<DriveDiagnosticsPanel {diagnostics} />
 	</section>
@@ -66,6 +77,12 @@
 	.settings-page-section-title {
 		font-size: 1.125rem;
 		line-height: 1.75rem;
+		font-weight: 600;
+		color: var(--color-text);
+	}
+
+	.settings-page-subsection-title {
+		font-size: 1rem;
 		font-weight: 600;
 		color: var(--color-text);
 	}

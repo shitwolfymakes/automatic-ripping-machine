@@ -7360,6 +7360,32 @@
         ]
       }
     },
+    "/api/system/environment": {
+      "get": {
+        "tags": [
+          "system"
+        ],
+        "summary": "Environment",
+        "operationId": "environment_api_system_environment_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SystemEnvironmentResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "UserJWT": []
+          }
+        ]
+      }
+    },
     "/api/system/thediscdb/refresh": {
       "post": {
         "tags": [
@@ -9936,6 +9962,36 @@
         "title": "ConfigView",
         "description": "`Config` row projected for the UI. `session_signing_key` is intentionally absent."
       },
+      "ContainerEnvView": {
+        "properties": {
+          "key": {
+            "type": "string",
+            "title": "Key"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value"
+          },
+          "secret": {
+            "type": "boolean",
+            "title": "Secret"
+          }
+        },
+        "type": "object",
+        "required": [
+          "key",
+          "value",
+          "secret"
+        ],
+        "title": "ContainerEnvView"
+      },
       "ContainerFormat": {
         "type": "string",
         "enum": [
@@ -9949,6 +10005,116 @@
           "none"
         ],
         "title": "ContainerFormat"
+      },
+      "ContainerMountView": {
+        "properties": {
+          "host": {
+            "type": "string",
+            "title": "Host"
+          },
+          "container": {
+            "type": "string",
+            "title": "Container"
+          },
+          "mode": {
+            "type": "string",
+            "title": "Mode"
+          }
+        },
+        "type": "object",
+        "required": [
+          "host",
+          "container",
+          "mode"
+        ],
+        "title": "ContainerMountView"
+      },
+      "ContainerView": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "ripper",
+              "transcode"
+            ],
+            "title": "Kind"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "state": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "State"
+          },
+          "image": {
+            "type": "string",
+            "title": "Image"
+          },
+          "network": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Network"
+          },
+          "docker_host": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Docker Host"
+          },
+          "mounts": {
+            "items": {
+              "$ref": "#/components/schemas/ContainerMountView"
+            },
+            "type": "array",
+            "title": "Mounts"
+          },
+          "devices": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Devices"
+          },
+          "env": {
+            "items": {
+              "$ref": "#/components/schemas/ContainerEnvView"
+            },
+            "type": "array",
+            "title": "Env"
+          }
+        },
+        "type": "object",
+        "required": [
+          "kind",
+          "label",
+          "state",
+          "image",
+          "network",
+          "docker_host",
+          "mounts",
+          "devices",
+          "env"
+        ],
+        "title": "ContainerView"
       },
       "DiagnosticDetail": {
         "properties": {
@@ -11356,6 +11522,145 @@
         ],
         "title": "EncoderAvailabilityView",
         "description": "One `arm_common.encoders.ENCODERS` catalog entry, with availability\ncomputed server-side from the live `gpus` inventory (GET /api/encoders).\n\n`group` buckets `preset`/`cpu`/`any` kinds by themselves and `gpu` kinds\nby vendor, so the transcode preset picker can render sections without\nre-deriving the grouping client-side. `available` is always true for\n`preset`/`cpu`/`any` (an `any_*` encoder falls back to CPU at dispatch\ntime); for a vendor-pinned `gpu` encoder it reflects whether any enabled\ndevice's probe currently verifies that vendor/codec. `reason` explains\nan unavailable `gpu` entry, or an `any_*` entry that would currently run\non the CPU for lack of a verified GPU; it is `None` otherwise."
+      },
+      "EnvEffectiveView": {
+        "properties": {
+          "value": {
+            "type": "string",
+            "title": "Value"
+          },
+          "setting_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Setting Key"
+          },
+          "tab": {
+            "type": "string",
+            "title": "Tab"
+          }
+        },
+        "type": "object",
+        "required": [
+          "value",
+          "setting_key",
+          "tab"
+        ],
+        "title": "EnvEffectiveView",
+        "description": "The live value of a setting that its env var only seeds."
+      },
+      "EnvGroupView": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "vars": {
+            "items": {
+              "$ref": "#/components/schemas/EnvVarView"
+            },
+            "type": "array",
+            "title": "Vars"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "vars"
+        ],
+        "title": "EnvGroupView"
+      },
+      "EnvVarView": {
+        "properties": {
+          "key": {
+            "type": "string",
+            "title": "Key"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value"
+          },
+          "secret": {
+            "type": "boolean",
+            "title": "Secret"
+          },
+          "is_set": {
+            "type": "boolean",
+            "title": "Is Set"
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "env",
+              "default"
+            ],
+            "title": "Source"
+          },
+          "effective": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EnvEffectiveView"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "key",
+          "value",
+          "secret",
+          "is_set",
+          "source"
+        ],
+        "title": "EnvVarView"
+      },
+      "EnvironmentSummary": {
+        "properties": {
+          "host_paths_set": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Host Paths Set"
+          },
+          "transcode_capable": {
+            "type": "boolean",
+            "title": "Transcode Capable"
+          },
+          "gpus": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Gpus"
+          }
+        },
+        "type": "object",
+        "required": [
+          "host_paths_set",
+          "transcode_capable",
+          "gpus"
+        ],
+        "title": "EnvironmentSummary"
       },
       "EpisodeListView": {
         "properties": {
@@ -18944,6 +19249,39 @@
           "paths"
         ],
         "title": "SystemDiagnosticsResponse"
+      },
+      "SystemEnvironmentResponse": {
+        "properties": {
+          "version": {
+            "type": "string",
+            "title": "Version"
+          },
+          "summary": {
+            "$ref": "#/components/schemas/EnvironmentSummary"
+          },
+          "groups": {
+            "items": {
+              "$ref": "#/components/schemas/EnvGroupView"
+            },
+            "type": "array",
+            "title": "Groups"
+          },
+          "containers": {
+            "items": {
+              "$ref": "#/components/schemas/ContainerView"
+            },
+            "type": "array",
+            "title": "Containers"
+          }
+        },
+        "type": "object",
+        "required": [
+          "version",
+          "summary",
+          "groups",
+          "containers"
+        ],
+        "title": "SystemEnvironmentResponse"
       },
       "SystemResourcesResponse": {
         "properties": {

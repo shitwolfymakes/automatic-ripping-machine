@@ -113,6 +113,13 @@ describe('SystemHealth grouped (setup walkthrough + Settings > System)', () => {
 		]
 	};
 
+	it('leads with a Run system check button, then the last-run time', () => {
+		renderComponent(SystemHealth, { props: { grouped: true } });
+		const button = screen.getByRole('button', { name: 'Run system check' });
+		const lastRun = screen.getByText('Not checked yet');
+		expect(button.compareDocumentPosition(lastRun) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+	});
+
 	it('autoruns and reports the result', async () => {
 		fetchSystemDiagnostics.mockResolvedValue(problem);
 		const onresult = vi.fn();

@@ -1057,7 +1057,32 @@ def test_diagnostics_transcoder_location_remote(signing_key: bytes, tmp_path, mo
     app, token = _make_app(signing_key, db, tmp=tmp_path)
     app.state.transcode_dispatcher = _StubDispatcher(host_paths=True)
     tc = _transcoder(_diag(app, token))
-    assert tc["location"] == "remote" and tc["remote_host"] == "arm@gpu-box.lan"
+    assert tc["location"] == "remote" and tc["remote_host"] == "***@gpu-box.lan"
+
+
+def test_diagnostics_transcoder_remote_host_never_shows_credentials(signing_key: bytes, tmp_path, monkeypatch) -> None:
+    from arm_backend.config import settings
+
+    monkeypatch.setattr(settings, "ARM_TRANSCODE_DOCKER_HOST", "ssh://user:pw@host")
+    db = FakeSession()
+    _seed(db)
+    app, token = _make_app(signing_key, db, tmp=tmp_path)
+    app.state.transcode_dispatcher = _StubDispatcher(host_paths=True)
+    tc = _transcoder(_diag(app, token))
+    assert tc["remote_host"] == "***@host"
+    assert "user" not in tc["remote_host"] and "pw" not in tc["remote_host"]
+
+
+def test_diagnostics_transcoder_remote_without_a_host_shows_none(signing_key: bytes, tmp_path, monkeypatch) -> None:
+    from arm_backend.config import settings
+
+    monkeypatch.setattr(settings, "ARM_TRANSCODE_DOCKER_HOST", "ssh://")
+    db = FakeSession()
+    _seed(db)
+    app, token = _make_app(signing_key, db, tmp=tmp_path)
+    app.state.transcode_dispatcher = _StubDispatcher(host_paths=True)
+    tc = _transcoder(_diag(app, token))
+    assert tc["location"] == "remote" and tc["remote_host"] is None
 
 
 def test_diagnostics_transcoder_location_none_when_ripper_only(signing_key: bytes, tmp_path, monkeypatch) -> None:
