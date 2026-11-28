@@ -1,8 +1,12 @@
 """Transcoder ↔ Backend REST endpoints.
 
-Five endpoints per `03-protocol.md § Transcode container ↔ Backend`:
+The endpoints per `03-protocol.md § Transcode container ↔ Backend`:
 - `POST /register` — bootstrap; transcoder receives the task, session, preset,
-  source track, and the `source_path` it should read from.
+  source track, the `source_path` it should read from, and a music
+  track's tags.
+- `GET /tasks/{task_id}/cover-art` — a music track's cover to embed: the
+  operator's poster override, else the automatic cover; 404 when neither
+  can be fetched as a JPEG or PNG.
 - `POST /tasks/{task_id}/claim` — atomic CAS to `in_progress`. First claim
   on a session_application also flips the application to RUNNING and emits
   `session.started`.
@@ -20,23 +24,27 @@ import logging
 from datetime import UTC, datetime
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Request, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import col, select
 
 from arm_backend.auth import require_service_token
 from arm_backend.db import get_session
 from arm_backend.gpu_claim import release_gpu_for_task
+from arm_backend.metadata.poster import cover_art_urls
 from arm_backend.handbrake_schema_runner import HandbrakeSchemaRunner
 from arm_backend.handbrake_schema_store import SchemaStore, get_schema_store
 from arm_backend.preset_views import preset_view
 from arm_backend.config import Settings, staging_root
 from arm_backend.routers._deps import get_hub, get_schema_runner
+from arm_backend.routers.images import ImageUnavailable, fetch_allowed_image
+from arm_backend.session_routing import routing_media_type
 from arm_backend.staging import release_if_settled, stage_for_track, unlink_staged_copy
-from arm_backend.transcode_apply import settle_session_application
+from arm_backend.transcode_apply import music_tags_for, settle_session_application
 from arm_backend.ws import WSHub
 from arm_common import (
     Gpu,
+    MediaType,
     Session,
     SessionApplication,
     SessionApplicationStatus,
@@ -46,7 +54,7 @@ from arm_common import (
     TranscodeTask,
     TranscodeTaskStatus,
 )
-from arm_common.models import Track
+from arm_common.models import Job, Track
 from arm_common.schemas import (
     ClaimTaskResponse,
     CompleteTaskRequest,
@@ -155,6 +163,7 @@ async def register(
     _refuse_image_without_settings_support(req, transcode_preset)
     _request_schema_refresh(req, store, runner)
     gpus = list((await db.execute(select(Gpu))).scalars().all())
+    job = (await db.execute(select(Job).where(col(Job.id) == track.job_id))).scalar_one()
     media_root = request_media_root()
     return RegisterTranscoderResponse(
         task=TranscodeTaskView.model_validate(task),
@@ -163,7 +172,32 @@ async def register(
         source_track=TrackView.model_validate(track),
         source_path=transcoder_source_path(stage, request_settings()),
         media_root=media_root,
+        music_tags=music_tags_for(job, track),
     )
+
+
+# The picture types FLAC and ID3 players all read; anything else is skipped.
+_EMBEDDABLE_COVER_TYPES = frozenset({"image/jpeg", "image/png"})
+
+
+@router.get("/tasks/{task_id}/cover-art")
+async def cover_art(task_id: str, db: AsyncSession = Depends(get_session)) -> Response:
+    task = await _load_task(db, task_id)
+    track = (await db.execute(select(Track).where(col(Track.id) == task.source_track_id))).scalar_one()
+    job = (await db.execute(select(Job).where(col(Job.id) == track.job_id))).scalar_one()
+    if routing_media_type(job) == MediaType.MUSIC:
+        # Override first, then the automatic cover: the first one that can be
+        # fetched as an embeddable image wins.
+        for url in cover_art_urls(job):
+            try:
+                content, media_type = await fetch_allowed_image(url)
+            except ImageUnavailable as e:
+                logger.info("cover art task_id=%s url=%s skipped: %s", task_id, url, e.detail)
+                continue
+            if media_type in _EMBEDDABLE_COVER_TYPES:
+                return Response(content=content, media_type=media_type)
+            logger.info("cover art task_id=%s url=%s skipped: type %s", task_id, url, media_type)
+    raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="no cover art")
 
 
 def request_settings() -> Settings:

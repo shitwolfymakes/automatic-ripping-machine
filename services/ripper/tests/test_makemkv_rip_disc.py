@@ -7,7 +7,7 @@ attribute per-title outcomes. Confirms:
 
   - PRGT "Saving title #N" transitions current_title and emits
     on_title_start once per title.
-  - PRGV ramps fire on_title_progress against the right title.
+  - PRGV's disc-wide `total/max` drives on_disc_progress for the save phase.
   - MSG:5003 captures per-title failure reason; the matching file is
     absent from the output dir, so the title comes back FAILED with
     that reason rather than "produced no .mkv".
@@ -250,9 +250,7 @@ async def test_rip_disc_falls_back_to_disc_progress_when_no_per_title_prgt(monke
     `total/max` channel, not get silently dropped.
 
     This is the regression that made the dashboard bar stay at 0 % for
-    the entire rip even though the file was being written: the streamer
-    gated `on_title_progress` on `current_title is not None` and had no
-    fallback for the disc-overall case."""
+    the entire rip even though the file was being written."""
     _stub_subprocess(
         monkeypatch,
         [
@@ -265,14 +263,10 @@ async def test_rip_disc_falls_back_to_disc_progress_when_no_per_title_prgt(monke
     )
     (tmp_path / "Disc_t00.mkv").write_bytes(b"x" * 64)
 
-    title_progress: list[tuple[int, float]] = []
     disc_progress: list[float] = []
 
     async def on_title_start(_idx: int) -> None:
         return None
-
-    async def on_title_progress(idx: int, frac: float) -> None:
-        title_progress.append((idx, frac))
 
     async def on_disc_progress(frac: float) -> None:
         disc_progress.append(frac)
@@ -283,13 +277,10 @@ async def test_rip_disc_falls_back_to_disc_progress_when_no_per_title_prgt(monke
         minlength_seconds=120,
         eligible_source_indexes=[0],
         on_title_start=on_title_start,
-        on_title_progress=on_title_progress,
         on_disc_progress=on_disc_progress,
     )
 
     assert result.overall_error is None
-    # No "Saving title N" PRGT → on_title_progress must never have fired.
-    assert title_progress == []
     # Disc-level callback got the `total/max` channel (not `current/max`).
     assert disc_progress == [0.05, 0.25, 0.95]
 
@@ -302,12 +293,9 @@ async def test_rip_disc_pre_save_phase_prgv_is_silently_dropped(monkeypatch, tmp
 
     If the streamer fired `on_disc_progress` for those, the rips
     store would publish a 70-80% bar to the dashboard, then snap to
-    0% when PRGC:5017,0 fires per-title progress — and the ETA
-    baseline (anchored at the first sample) would treat the snap as
-    a sustained negative pctDelta, holding ETA null until per-title
-    progress climbs back past the pre-rip peak (basically forever
-    on a long main feature). Gate fixes the regression: PRGV before
-    PRGT:5024 is silent."""
+    0% when the save phase starts, and the ETA baseline (anchored at
+    the first sample) would hold ETA null until the bar climbed back
+    past the pre-rip peak. PRGV before the save phase is silent."""
     _stub_subprocess(
         monkeypatch,
         [
@@ -318,19 +306,15 @@ async def test_rip_disc_pre_save_phase_prgv_is_silently_dropped(monkeypatch, tmp
             # Save phase begins.
             'PRGT:5024,0,"Saving all titles to MKV files"',
             'PRGC:5017,0,"Saving to MKV file"',
-            "PRGV:5000,1000,10000",  # per-op 0.5, attributed to title
+            "PRGV:5000,1000,10000",  # per-op 0.5, disc-overall 0.1
         ],
     )
     (tmp_path / "Disc_t00.mkv").write_bytes(b"x" * 64)
 
-    title_progress: list[tuple[int, float]] = []
     disc_progress: list[float] = []
 
     async def on_title_start(_idx: int) -> None:
         return None
-
-    async def on_title_progress(idx: int, frac: float) -> None:
-        title_progress.append((idx, frac))
 
     async def on_disc_progress(frac: float) -> None:
         disc_progress.append(frac)
@@ -341,22 +325,19 @@ async def test_rip_disc_pre_save_phase_prgv_is_silently_dropped(monkeypatch, tmp
         minlength_seconds=120,
         eligible_source_indexes=[0],
         on_title_start=on_title_start,
-        on_title_progress=on_title_progress,
         on_disc_progress=on_disc_progress,
     )
 
     assert result.overall_error is None
-    # Pre-rip PRGV → silent. Per-title PRGV after PRGC:5017,0 fires for source 0.
-    assert title_progress == [(0, 0.5)]
-    # Disc-level fallback never fired — pre-rip gated, save phase had PRGC:5017.
-    assert disc_progress == []
+    # Pre-rip PRGV → silent; the save phase reports the disc-overall total.
+    assert disc_progress == [0.1]
 
 
 @pytest.mark.asyncio
-async def test_rip_disc_per_title_progress_takes_precedence_over_disc(monkeypatch, tmp_path):
-    """When a per-title "Saving title #N" PRGT has identified the
-    in-flight title, PRGV drives `on_title_progress` (per-op channel)
-    and the disc-level callback stays silent."""
+async def test_rip_disc_reports_the_disc_wide_total_once_a_saving_title_milestone_names_a_title(monkeypatch, tmp_path):
+    """A "Saving title #N" PRGT names the in-flight title, which starts
+    the save phase even without PRGT:5024. PRGV then reports the
+    disc-overall `total/max`, not the per-title `current/max`."""
     _stub_subprocess(
         monkeypatch,
         [
@@ -367,14 +348,10 @@ async def test_rip_disc_per_title_progress_takes_precedence_over_disc(monkeypatc
     )
     (tmp_path / "Disc_t00.mkv").write_bytes(b"x" * 64)
 
-    title_progress: list[tuple[int, float]] = []
     disc_progress: list[float] = []
 
     async def on_title_start(_idx: int) -> None:
         return None
-
-    async def on_title_progress(idx: int, frac: float) -> None:
-        title_progress.append((idx, frac))
 
     async def on_disc_progress(frac: float) -> None:
         disc_progress.append(frac)
@@ -385,13 +362,11 @@ async def test_rip_disc_per_title_progress_takes_precedence_over_disc(monkeypatc
         minlength_seconds=120,
         eligible_source_indexes=[0],
         on_title_start=on_title_start,
-        on_title_progress=on_title_progress,
         on_disc_progress=on_disc_progress,
     )
 
     assert result.overall_error is None
-    assert title_progress == [(0, 0.5), (0, 1.0)]
-    assert disc_progress == []
+    assert disc_progress == [0.1, 0.5]
 
 
 @pytest.mark.asyncio
@@ -403,8 +378,8 @@ async def test_rip_disc_prgc_5017_fires_on_title_start_with_mapped_source_idx(mo
 
     With a sparse eligible list (e.g. {3, 7} after some sub-minlength
     titles dropped), PRGC:5017,0 must fire `on_title_start(3)` and
-    PRGC:5017,1 must fire `on_title_start(7)` — and PRGV between
-    them must attribute progress to the right source index."""
+    PRGC:5017,1 must fire `on_title_start(7)`. PRGV in between reports
+    the disc-overall total, which keeps climbing across titles."""
     _stub_subprocess(
         monkeypatch,
         [
@@ -420,14 +395,10 @@ async def test_rip_disc_prgc_5017_fires_on_title_start_with_mapped_source_idx(mo
     (tmp_path / "Disc_t01.mkv").write_bytes(b"y" * 64)
 
     starts: list[int] = []
-    title_progress: list[tuple[int, float]] = []
     disc_progress: list[float] = []
 
     async def on_title_start(idx: int) -> None:
         starts.append(idx)
-
-    async def on_title_progress(idx: int, frac: float) -> None:
-        title_progress.append((idx, frac))
 
     async def on_disc_progress(frac: float) -> None:
         disc_progress.append(frac)
@@ -438,17 +409,14 @@ async def test_rip_disc_prgc_5017_fires_on_title_start_with_mapped_source_idx(mo
         minlength_seconds=120,
         eligible_source_indexes=[3, 7],
         on_title_start=on_title_start,
-        on_title_progress=on_title_progress,
         on_disc_progress=on_disc_progress,
     )
 
     assert result.overall_error is None
     # output positions 0,1 mapped via eligible_source_indexes → 3,7
     assert starts == [3, 7]
-    # PRGV between PRGC:5017 events attributed to the active source idx
-    assert title_progress == [(3, 0.5), (7, 0.9)]
-    # disc-overall fallback never fires because PRGC:5017 set current_title
-    assert disc_progress == []
+    # PRGV reports the disc-overall total, not each title's own fraction
+    assert disc_progress == [0.1, 0.5]
 
 
 @pytest.mark.asyncio
@@ -852,7 +820,7 @@ async def test_streamer_suspended_at_exit_is_cancelled_and_later_lines_are_dropp
                 _DIAG_LINE,
                 'PRGT:5024,0,"Saving all titles to MKV files"',
                 'PRGC:5017,0,"Saving to MKV file"',
-                "PRGV:5000,1000,10000",  # on_title_progress suspends here
+                "PRGV:5000,1000,10000",  # on_disc_progress suspends here
                 'MSG:1002,32,1,"LIBMKV_TRACE: Late","LIBMKV_TRACE: %1","Late"',
                 'PRGC:5017,1,"Saving to MKV file"',
             )
@@ -863,7 +831,7 @@ async def test_streamer_suspended_at_exit_is_cancelled_and_later_lines_are_dropp
     entered = asyncio.Event()
     never = asyncio.Event()
 
-    async def on_title_progress(_idx: int, _frac: float) -> None:
+    async def on_disc_progress(_frac: float) -> None:
         entered.set()
         await never.wait()
 
@@ -871,7 +839,7 @@ async def test_streamer_suspended_at_exit_is_cancelled_and_later_lines_are_dropp
         makemkv_process.run_makemkvcon(
             ["makemkvcon"],
             state,
-            callbacks=makemkv_stream.RipCallbacks(on_title_progress=on_title_progress),
+            callbacks=makemkv_stream.RipCallbacks(on_disc_progress=on_disc_progress),
             eligible_source_indexes=[3, 7],
         ),
         timeout=2.0,

@@ -44,7 +44,7 @@ class _Recorder:
 
 async def _run(lines: list[bytes], state: ParserState | None = None, **kwargs: Any) -> ParserState:
     state = state or ParserState()
-    names = ("on_title_start", "on_title_progress", "on_disc_progress", "on_title_done")
+    names = ("on_title_start", "on_disc_progress", "on_title_done")
     callbacks = makemkv_stream.RipCallbacks(**{n: kwargs.pop(n) for n in names if n in kwargs})
     await makemkv_stream.stream_output(cast(Any, _Proc(lines)), state, callbacks, **kwargs)
     return state
@@ -67,25 +67,12 @@ async def test_blank_lines_skipped(caplog: pytest.LogCaptureFixture) -> None:
     state = await _run(
         [b"", b"   ", b"\t "],
         on_title_start=cb,
-        on_title_progress=cb,
         on_disc_progress=cb,
         on_title_done=cb,
     )
     assert state == ParserState()
     assert cb.calls == []
     assert caplog.records == []
-
-
-async def test_title_progress_callback_raising_is_logged_and_stream_continues(
-    caplog: pytest.LogCaptureFixture,
-) -> None:
-    caplog.set_level(logging.DEBUG, logger=LOGGER)
-    state = ParserState(current_title=4)
-    cb = _Recorder(RuntimeError("boom"))
-    await _run([PRGV, b'PRGT:5024,0,"Saving all titles"'], state, on_title_progress=cb)
-    assert cb.calls == [(4, 0.1)]
-    _assert_one(caplog, logging.DEBUG, "title progress callback raised: boom")
-    assert state.save_phase_started is True
 
 
 async def test_disc_progress_callback_raising_is_logged_and_stream_continues(
@@ -113,25 +100,18 @@ async def test_disc_progress_callback_raising_record_fields(caplog: pytest.LogCa
     _assert_one(caplog, logging.DEBUG, "disc progress callback raised: bad")
 
 
-async def test_current_title_without_title_callback_falls_through_to_disc_progress() -> None:
+async def test_disc_progress_reports_the_disc_wide_total_while_a_title_is_saving() -> None:
+    """PRGV's `total/max` (0.5 here) is reported, not the per-title `current/max` (0.1), which resets each title."""
     disc = _Recorder()
     state = ParserState(current_title=3, save_phase_started=True)
-    await _run([PRGV], state, on_title_progress=None, on_disc_progress=disc)
+    await _run([PRGV], state, on_disc_progress=disc)
     assert disc.calls == [(0.5,)]
 
 
-async def test_current_title_without_title_callback_still_gated_before_save_phase() -> None:
+async def test_a_title_announced_before_the_5024_milestone_counts_as_the_save_phase() -> None:
     disc = _Recorder()
     await _run([PRGV], ParserState(current_title=3), on_disc_progress=disc)
-    assert disc.calls == []
-
-
-async def test_title_progress_preferred_over_disc_progress_when_title_known() -> None:
-    title, disc = _Recorder(), _Recorder()
-    state = ParserState(current_title=3, save_phase_started=True)
-    await _run([PRGV], state, on_title_progress=title, on_disc_progress=disc)
-    assert title.calls == [(3, 0.1)]
-    assert disc.calls == []
+    assert disc.calls == [(0.5,)]
 
 
 async def test_disc_progress_gated_before_5024_and_ungated_when_disabled() -> None:
@@ -281,7 +261,7 @@ async def test_call_safely_propagates_base_exception() -> None:
 
 def test_rip_callbacks_default_to_none_and_are_frozen() -> None:
     cbs = makemkv_stream.RipCallbacks()
-    assert (cbs.on_title_start, cbs.on_title_progress, cbs.on_disc_progress, cbs.on_title_done) == (None,) * 4
+    assert (cbs.on_title_start, cbs.on_disc_progress, cbs.on_title_done) == (None,) * 3
     with pytest.raises(dataclasses.FrozenInstanceError):
         cbs.on_title_start = _Recorder()  # type: ignore[misc]
 

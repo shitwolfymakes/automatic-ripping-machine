@@ -31,6 +31,8 @@ from arm_backend.path_template import (
     referenced_tokens,
     required_tokens,
 )
+from arm_backend.identity.ids import current_ids
+from arm_backend.session_routing import routing_media_type
 from arm_backend.slugify import slugify
 from arm_backend.version_naming import plex_edition, version_names
 from arm_common import (
@@ -47,7 +49,7 @@ from arm_common import (
 from arm_common.encoders import EncoderSpec, get_encoder, gpu_could_serve, gpu_is_eligible
 from arm_common.enums import SessionApplicationStatus, TranscodeTaskStatus, TranscodeTool
 from arm_common.models import SessionApplication, TranscodeTask
-from arm_common.schemas import CollisionInfo
+from arm_common.schemas import CollisionInfo, MusicTags
 
 if TYPE_CHECKING:
     from arm_backend.ws.hub import WSHub
@@ -72,17 +74,65 @@ def _format_duration_human(seconds: int | None) -> str:
     return f"{hours:02d}h{minutes:02d}m"
 
 
-def _music_track_title(music_meta: dict[str, Any], metadata: dict[str, object], index: int) -> str:
-    """Return the best-effort music title for the 1-based track index, or ''."""
-    # Best-effort per-track music title from the music track list.
+def _music_meta(metadata: dict[str, object]) -> dict[str, Any]:
+    """The job's typed `music` section, or {} when absent or malformed."""
+    raw_music = metadata.get("music")
+    return raw_music if isinstance(raw_music, dict) else {}
+
+
+def _music_tracks(music_meta: dict[str, Any], metadata: dict[str, object]) -> list[Any]:
+    """The music track listing; the bare top-level `tracks` key is the fallback for older rows."""
     tracks_meta = music_meta.get("tracks") or metadata.get("tracks")
-    if isinstance(tracks_meta, list) and 0 <= index - 1 < len(tracks_meta):
+    return tracks_meta if isinstance(tracks_meta, list) else []
+
+
+def _music_track_entry(music_meta: dict[str, Any], metadata: dict[str, object], index: int) -> dict[str, Any]:
+    """The listing entry for the 1-based track index, or {} when there is none."""
+    tracks_meta = _music_tracks(music_meta, metadata)
+    if 0 <= index - 1 < len(tracks_meta):
         entry = tracks_meta[index - 1]
         if isinstance(entry, dict):
-            raw_title = entry.get("title")
-            if isinstance(raw_title, str):
-                return raw_title
-    return ""
+            return entry
+    return {}
+
+
+def _music_track_title(music_meta: dict[str, Any], metadata: dict[str, object], index: int) -> str:
+    """Return the best-effort music title for the 1-based track index, or ''."""
+    raw_title = _music_track_entry(music_meta, metadata, index).get("title")
+    return raw_title if isinstance(raw_title, str) else ""
+
+
+def _str_or_none(value: object) -> str | None:
+    return value if isinstance(value, str) and value else None
+
+
+def _int_or_none(value: object) -> int | None:
+    return value if isinstance(value, int) and not isinstance(value, bool) else None
+
+
+def music_tags_for(job: Job, track: Track) -> MusicTags | None:
+    """The tags `track`'s encoded file carries, or None for a job that is not music.
+
+    Read from the same stored identity the output filename uses, and resolved
+    the same way: the 1-based track index into the music track listing.
+    Unknown fields stay None so the transcoder leaves them out of the file.
+    """
+    if routing_media_type(job) != MediaType.MUSIC:
+        return None
+    metadata: dict[str, object] = job.metadata_json or {}
+    music_meta = _music_meta(metadata)
+    entry = _music_track_entry(music_meta, metadata, track.index)
+    track_total = len(_music_tracks(music_meta, metadata))
+    return MusicTags(
+        artist=_str_or_none(music_meta.get("artist") or metadata.get("artist")),
+        album=_str_or_none(music_meta.get("album") or metadata.get("album")),
+        title=_str_or_none(entry.get("title")),
+        year=job.year,
+        disc_number=job.disc_number if job.disc_number is not None else _int_or_none(entry.get("disc_number")),
+        track_number=track.index,
+        track_total=track_total or None,
+        musicbrainz_release_id=current_ids(job).musicbrainz_release,
+    )
 
 
 def _effective_identity(job: Job, track: Track) -> tuple[str, int | None, int | None]:
@@ -117,8 +167,7 @@ def _build_track_ctx(
 
     # Music naming reads the typed `music` section; the bare
     # top-level keys are the fallback for older rows.
-    raw_music = metadata.get("music")
-    music_meta: dict[str, Any] = raw_music if isinstance(raw_music, dict) else {}
+    music_meta = _music_meta(metadata)
 
     track_title = _music_track_title(music_meta, metadata, track.index)
 

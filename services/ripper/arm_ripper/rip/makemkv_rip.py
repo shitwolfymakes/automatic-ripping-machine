@@ -13,10 +13,8 @@ Per-title attribution is reconstructed from the robot stream:
     is the primary per-title milestone in `mkv all` mode (confirmed
     empirically against MakeMKV 1.18.3 — the older PRGT "Saving title
     #N" milestone never fires in this mode).
-  - PRGV gives [0..1] fractional progress; `current/max` is per-title
-    (drives `on_title_progress`), `total/max` is disc-overall (used as
-    a fallback `on_disc_progress` for the brief window before the first
-    PRGC:5017 arrives).
+  - PRGV gives [0..1] fractional progress; its disc-overall `total/max`
+    drives `on_disc_progress` for the whole save phase.
   - MSG:5003 lines tell us a title failed (with reason). We capture the
     title index from the args.
   - Post-exit, we walk `output_dir` for `title_tNN.mkv` files: a file
@@ -42,7 +40,6 @@ from arm_ripper.rip.makemkv_settle import RunWatch
 from arm_ripper.rip.makemkv_stream import (
     OnDiscProgress,
     OnTitleDone,
-    OnTitleProgress,
     OnTitleStart,
     ParserState,
     RipCallbacks,
@@ -192,7 +189,6 @@ async def rip_disc(
     minlength_seconds: int = 120,
     eligible_source_indexes: list[int] | None = None,
     on_title_start: OnTitleStart | None = None,
-    on_title_progress: OnTitleProgress | None = None,
     on_disc_progress: OnDiscProgress | None = None,
     on_title_done: OnTitleDone | None = None,
     stop: asyncio.Event | None = None,
@@ -254,7 +250,6 @@ async def rip_disc(
     state = ParserState()
     callbacks = RipCallbacks(
         on_title_start=on_title_start,
-        on_title_progress=on_title_progress,
         on_disc_progress=on_disc_progress,
         on_title_done=on_title_done,
     )

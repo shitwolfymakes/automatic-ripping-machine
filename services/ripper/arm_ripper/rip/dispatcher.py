@@ -1,5 +1,4 @@
 import asyncio
-import time
 from collections.abc import Callable, Collection, Mapping
 from pathlib import Path
 
@@ -7,13 +6,20 @@ from arm_common import DiscType
 from arm_common.enums import TrackKind
 from arm_common.schemas import TrackView
 
+from arm_ripper.rip.abcde_output import expected_wav_bytes
 from arm_ripper.rip.abcde_rip import rip_cd
 from arm_ripper.rip.data_rip import rip_data
 from arm_ripper.rip.makemkv_backup import rip_backup
 from arm_ripper.rip.optical_rip import rip_optical
 from arm_ripper.rip.options import RipOptions
 from arm_ripper.rip.result import RipResult
-from arm_ripper.rip.track_callbacks import OnTrackDone, OnTrackProgress, OnTrackStart, TransferStats
+from arm_ripper.rip.track_callbacks import (
+    OnTrackDone,
+    OnTrackProgress,
+    OnTrackStart,
+    active_index,
+    track_byte_progress,
+)
 
 # v3 default. 120s drops menu loops and vendor bumpers without cutting
 # the 2–5 minute extras users typically care about. Sessions can
@@ -61,8 +67,10 @@ async def rip_all(
       requested one of those, we report FAILED with a clear reason
       rather than silently ignoring it.
     - Any disc whose tracks are all DISC_BACKUP: one `makemkvcon backup --decrypt` (`rip_backup`) for the first track.
-    - CD: mark all tracks IN_PROGRESS, run abcde once for the whole disc,
-      then emit DONE/FAILED per track from the bulk result.
+    - CD: mark all tracks IN_PROGRESS and run abcde once for the whole
+      disc; each track goes DONE as abcde moves it into place, the WAV
+      bytes written are reported as the progress of the track being read, and
+      FAILED goes to every track abcde did not produce.
     - DATA: a single dd dump assigned to the first (only) track.
     """
     if tracks and all(t.kind == TrackKind.DISC_BACKUP for t in tracks):
@@ -88,7 +96,7 @@ async def rip_all(
         return
 
     if rip_as == DiscType.CD:
-        await _rip_audio_cd(device_path, tracks, output_dir, on_track_start, on_track_done)
+        await _rip_audio_cd(device_path, tracks, output_dir, on_track_start, on_track_done, on_track_progress)
         return
 
     if rip_as == DiscType.DATA:
@@ -133,23 +141,32 @@ async def _rip_audio_cd(
     output_dir: Path,
     on_track_start: OnTrackStart,
     on_track_done: OnTrackDone,
+    on_track_progress: OnTrackProgress | None,
 ) -> None:
-    """Rip an audio CD with one abcde run: start every track, then report each one as abcde finishes it."""
+    """Rip an audio CD with one abcde run: start every track, then report each one as abcde finishes it, with the WAV
+    bytes written so far as the progress of the track being read."""
     for track in tracks:
         await on_track_start(track)
     track_by_index = {t.index: t for t in tracks}
+    indexes = [t.index for t in tracks]
+    finished: set[int] = set()
 
     async def _cd_on_track_done(idx: int, result: RipResult) -> None:
         track = track_by_index.get(idx)
         if track is None:
             return
+        finished.add(idx)
         await on_track_done(track, result)
 
     results = await rip_cd(
         device_path=device_path,
         output_dir=output_dir,
-        track_indexes=[t.index for t in tracks],
+        track_indexes=indexes,
         on_track_done=_cd_on_track_done,
+        on_progress=track_byte_progress(lambda: track_by_index[active_index(indexes, finished)], on_track_progress)
+        if tracks
+        else None,
+        expected_bytes=expected_wav_bytes([t.expected_duration_seconds for t in tracks]),
     )
     # Defensive: rip_cd's contract is to fire on_track_done for every
     # track index it's given, so this loop is a no-op on the happy
@@ -177,20 +194,11 @@ async def _rip_data_dump(
         return
     first = tracks[0]
     await on_track_start(first)
-    started = time.monotonic()
-
-    async def _on_data_progress(done: int, total: int | None) -> None:
-        if on_track_progress is None:
-            return
-        elapsed = time.monotonic() - started
-        stats: TransferStats = {
-            "bytes_done": done,
-            "bytes_total": total,
-            "rate_bps": done / elapsed if elapsed > 0 else None,
-        }
-        await on_track_progress(first, min(done / total, 1.0) if total else 0.0, stats)
-
-    result = await rip_data(device_path=device_path, output_dir=output_dir, on_progress=_on_data_progress)
+    result = await rip_data(
+        device_path=device_path,
+        output_dir=output_dir,
+        on_progress=track_byte_progress(lambda: first, on_track_progress),
+    )
     await on_track_done(first, result)
 
 

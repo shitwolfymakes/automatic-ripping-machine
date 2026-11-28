@@ -82,7 +82,7 @@ class _Rig:
         title = kw["title"]
         self.events.append(f"rip-{title}")
         for fraction in (0.0, 0.5, 1.0):
-            await kw["on_title_progress"](title, fraction)
+            await kw["on_disc_progress"](fraction)
         if self.failures.get(title):
             return RipDiscResult(overall_error=self.failures[title].pop(0), titles={})
         out: Path = kw["output_dir"]

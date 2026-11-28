@@ -18,6 +18,7 @@ from arm_backend.config import staging_root
 from arm_backend.db import get_session
 from arm_backend.handbrake_schema_store import SchemaStore
 from arm_backend.routers import transcoder as transcoder_router
+from arm_backend.routers.images import ImageUnavailable
 from arm_backend.ws import WSHub
 from arm_common import (
     ContainerFormat,
@@ -195,6 +196,150 @@ def test_register_returns_bundle() -> None:
     assert "raw_input_path" not in body
     assert body["transcode_preset"]["preset_ref"] == "H.265 MKV 1080p30"
     assert body["session"]["id"] == "ses_x"
+    # A video job's track carries no music tags.
+    assert body["music_tags"] is None
+
+
+def test_register_returns_music_tags_for_a_cd_track() -> None:
+    db = FakeSession()
+    _seed(db)
+    job = db.rows["jobs"][0]
+    job.disc_type = DiscType.CD
+    job.media_type = MediaType.MUSIC
+    job.title = "OK Computer"
+    job.year = 1997
+    job.metadata_json = {
+        "identity": {"provider": "musicbrainz", "external_ids": {"musicbrainz_release": "mb-rel-1"}},
+        "music": {"artist": "Radiohead", "album": "OK Computer", "tracks": [{"title": "Airbag"}]},
+    }
+    db.rows["tracks"][0].kind = TrackKind.AUDIO_TRACK
+    app = _make_app(db)
+    with TestClient(app) as client:
+        r = client.post(
+            "/api/transcoder/register",
+            json={"task_id": "txt_1", "hostname": _HOSTNAME, "hw_caps": {"cpu_count": 4}},
+            headers=_SERVICE_AUTH,
+        )
+    assert r.status_code == 200, r.text
+    assert r.json()["music_tags"] == {
+        "artist": "Radiohead",
+        "album": "OK Computer",
+        "title": "Airbag",
+        "year": 1997,
+        "disc_number": None,
+        "track_number": 1,
+        "track_total": 1,
+        "musicbrainz_release_id": "mb-rel-1",
+    }
+
+
+_AUTO_COVER = "https://coverartarchive.org/release/rel-1/front-250"
+_AUTO_COVER_FULL = "https://coverartarchive.org/release/rel-1/front-500"
+_MANUAL_COVER = "https://posters.lan/mine.jpg"
+
+
+def _seed_cd(db: FakeSession, *, poster_url: str | None = _AUTO_COVER, manual: str | None = None) -> None:
+    _seed(db)
+    job = db.rows["jobs"][0]
+    job.disc_type = DiscType.CD
+    job.media_type = MediaType.MUSIC
+    job.poster_url = poster_url
+    job.poster_url_manual = manual
+
+
+def _stub_images(monkeypatch: pytest.MonkeyPatch, served: dict[str, tuple[bytes, str]]) -> list[str]:
+    """Serve `served` by URL through the image fetch the endpoint uses; every other URL is unavailable."""
+    requested: list[str] = []
+
+    async def fake_fetch(url: str) -> tuple[bytes, str]:
+        requested.append(url)
+        if url not in served:
+            raise ImageUnavailable("Image unavailable")
+        return served[url]
+
+    monkeypatch.setattr(transcoder_router, "fetch_allowed_image", fake_fetch)
+    return requested
+
+
+def _get_cover(db: FakeSession, task_id: str = "txt_1") -> Any:
+    with TestClient(_make_app(db)) as client:
+        return client.get(f"/api/transcoder/tasks/{task_id}/cover-art", headers=_SERVICE_AUTH)
+
+
+def test_cover_art_serves_the_operator_override_first(monkeypatch: pytest.MonkeyPatch) -> None:
+    db = FakeSession()
+    _seed_cd(db, manual=_MANUAL_COVER)
+    requested = _stub_images(
+        monkeypatch, {_MANUAL_COVER: (b"MINE", "image/jpeg"), _AUTO_COVER_FULL: (b"AUTO", "image/jpeg")}
+    )
+
+    r = _get_cover(db)
+
+    assert r.status_code == 200
+    assert r.content == b"MINE"
+    assert r.headers["content-type"] == "image/jpeg"
+    assert requested == [_MANUAL_COVER]
+
+
+def test_cover_art_falls_back_to_the_automatic_cover(monkeypatch: pytest.MonkeyPatch) -> None:
+    db = FakeSession()
+    _seed_cd(db, manual=_MANUAL_COVER)
+    requested = _stub_images(monkeypatch, {_AUTO_COVER_FULL: (b"AUTO", "image/png")})
+
+    r = _get_cover(db)
+
+    assert r.status_code == 200
+    assert r.content == b"AUTO"
+    assert r.headers["content-type"] == "image/png"
+    assert requested == [_MANUAL_COVER, _AUTO_COVER_FULL]
+
+
+def test_cover_art_skips_an_image_type_the_files_cannot_embed(monkeypatch: pytest.MonkeyPatch) -> None:
+    db = FakeSession()
+    _seed_cd(db, manual=_MANUAL_COVER)
+    _stub_images(monkeypatch, {_MANUAL_COVER: (b"WEBP", "image/webp"), _AUTO_COVER_FULL: (b"AUTO", "image/jpeg")})
+
+    r = _get_cover(db)
+
+    assert r.status_code == 200
+    assert r.content == b"AUTO"
+
+
+def test_cover_art_404_when_no_cover_can_be_fetched(monkeypatch: pytest.MonkeyPatch) -> None:
+    db = FakeSession()
+    _seed_cd(db, manual=_MANUAL_COVER)
+    _stub_images(monkeypatch, {})
+
+    r = _get_cover(db)
+
+    assert r.status_code == 404
+    assert r.json()["detail"] == "no cover art"
+
+
+def test_cover_art_404_when_the_job_has_no_cover(monkeypatch: pytest.MonkeyPatch) -> None:
+    db = FakeSession()
+    _seed_cd(db, poster_url=None)
+    requested = _stub_images(monkeypatch, {})
+
+    assert _get_cover(db).status_code == 404
+    assert requested == []
+
+
+def test_cover_art_404_for_a_video_job(monkeypatch: pytest.MonkeyPatch) -> None:
+    db = FakeSession()
+    _seed(db)
+    db.rows["jobs"][0].poster_url = "https://image.tmdb.org/t/p/w500/x.jpg"
+    requested = _stub_images(monkeypatch, {"https://image.tmdb.org/t/p/w500/x.jpg": (b"P", "image/jpeg")})
+
+    assert _get_cover(db).status_code == 404
+    assert requested == []
+
+
+def test_cover_art_404_unknown_task() -> None:
+    db = FakeSession()
+    _seed_cd(db)
+
+    assert _get_cover(db, task_id="txt_missing").status_code == 404
 
 
 _REGISTER_BODY = {"task_id": "txt_1", "hostname": _HOSTNAME, "hw_caps": {"cpu_count": 4}}
