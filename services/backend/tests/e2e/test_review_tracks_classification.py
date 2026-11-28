@@ -15,7 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from sqlmodel import SQLModel
 
 import arm_common.models  # noqa: F401  (populate SQLModel.metadata)
-from arm_backend import identify_flow
+from arm_backend import review_tracks
 from arm_backend.db import get_session
 from arm_backend.jwt_utils import issue_access_token
 from arm_backend.routers import jobs as jobs_router
@@ -58,7 +58,7 @@ async def test_review_tracks_carry_the_scan_fields_and_verdicts(
     async def _preset(_db: AsyncSession, _job: Job) -> RipPreset:
         return preset
 
-    monkeypatch.setattr(identify_flow, "resolve_rip_preset_for_job", _preset)
+    monkeypatch.setattr(review_tracks, "resolve_rip_preset_for_job", _preset)
     titles = [ScanTitle.model_validate(t) for t in json.loads(_DECOY_JSON.read_text())]
     scan = ScanResult(disc_type=DiscType.BLURAY, titles=titles)
 
@@ -79,7 +79,7 @@ async def test_review_tracks_carry_the_scan_fields_and_verdicts(
             )
             db.add_all([User(id="usr_admin", username="admin", password_hash="x", password_must_change=False), job])
             await db.flush()
-            await identify_flow._persist_review_tracks(db, job, scan)
+            await review_tracks.persist_review_tracks(db, job, scan)
             await db.commit()
 
         app = FastAPI()

@@ -32,7 +32,7 @@ class WaitSpec:
     statuses that mean "stop waiting, proceed to rip". Any other status means the
     job left the gate some other way (abandoned, failed, …) → give up. This lets
     one wait loop serve both the identify gate (park awaiting_user_id, succeed on
-    identified) and the review gate (park awaiting_review, succeed on
+    identified or awaiting_review) and the review gate (park awaiting_review, succeed on
     identified/ripping).
 
     `timed` enables the review-gate countdown: while parked, the loop computes a
@@ -46,10 +46,11 @@ class WaitSpec:
     timed: bool = False
 
 
-# Identify gate: disc couldn't auto-ID; wait for the operator to resolve identity.
+# Identify gate: disc couldn't auto-ID; wait for the operator to resolve identity. With the review gate on, the
+# resolve parks the job in awaiting_review, and the review gate below then holds it for Start.
 IDENTIFY_WAIT = WaitSpec(
     parked=JobStatus.AWAITING_USER_ID,
-    success=frozenset({JobStatus.IDENTIFIED}),
+    success=frozenset({JobStatus.IDENTIFIED, JobStatus.AWAITING_REVIEW}),
     label="awaiting_user_id",
 )
 # Review gate (timed): disc identified but held for review; wait for Start (which

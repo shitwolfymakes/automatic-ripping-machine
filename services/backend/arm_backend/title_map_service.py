@@ -117,6 +117,25 @@ def _drop_unrippable(job: Job, tracks: Sequence[Track], title_map: TitleMap) -> 
         revert_manual_track(job, ref, ["excluded"])
 
 
+async def map_onto_tracks(db: AsyncSession, job: Job, tracks: Sequence[Track], scan: ScanResult) -> set[str]:
+    """Bring `tracks` in line with the scan's title map: MakeMKV's sizes and names, the refs it cannot rip unticked
+    and the version ticks recomputed. The ids of the tracks that changed; none until MakeMKV's titles are in."""
+    title_map = title_map_of(scan)
+    if title_map is None:
+        return set()
+    refreshed = _refresh_from_makemkv(tracks, title_map, scan.titles)
+    _drop_unrippable(job, tracks, title_map)
+    refreshed |= await recompute_ticks(db, job, tracks, scan, rippable=frozenset(title_map.numbers))
+    logger.info(
+        "titles job_id=%s mapped=%d unexposed=%d makemkv_only=%d",
+        job.id,
+        len(title_map.numbers),
+        len(title_map.unexposed),
+        len(title_map.makemkv_only),
+    )
+    return refreshed
+
+
 async def apply_titles_report(db: AsyncSession, hub: WSHub, job: Job, report: TitlesReport) -> None:
     """Store MakeMKV's titles (or why it failed) on the job, map them, and tell the card.
 
@@ -126,7 +145,6 @@ async def apply_titles_report(db: AsyncSession, hub: WSHub, job: Job, report: Ti
     if scan is None or not is_structure_scan(scan):
         raise NotAStructureScan(job.id)
     metadata = {k: v for k, v in (job.metadata_json or {}).items() if k != MAKEMKV_FAILURE_KEY}
-    refreshed: set[str] = set()
     if report.failure is not None:
         metadata[MAKEMKV_FAILURE_KEY] = report.failure.model_dump(mode="json")
         logger.warning(
@@ -140,19 +158,8 @@ async def apply_titles_report(db: AsyncSession, hub: WSHub, job: Job, report: Ti
         metadata["scan_result"] = scan.model_dump(mode="json")
     job.metadata_json = metadata
     db.add(job)
-    title_map = title_map_of(scan)
-    if title_map is not None:
-        tracks = list((await db.execute(select(Track).where(col(Track.job_id) == job.id))).scalars().all())
-        refreshed = _refresh_from_makemkv(tracks, title_map, report.titles)
-        _drop_unrippable(job, tracks, title_map)
-        refreshed |= await recompute_ticks(db, job, tracks, scan, rippable=frozenset(title_map.numbers))
-        logger.info(
-            "titles job_id=%s mapped=%d unexposed=%d makemkv_only=%d",
-            job.id,
-            len(title_map.numbers),
-            len(title_map.unexposed),
-            len(title_map.makemkv_only),
-        )
+    tracks = list((await db.execute(select(Track).where(col(Track.job_id) == job.id))).scalars().all())
+    refreshed = await map_onto_tracks(db, job, tracks, scan)
     resolved = await resolve_job(db, job)
     await db.commit()
     outcome = ResolveOutcome(changed=resolved.changed, track_ids=resolved.track_ids | refreshed)

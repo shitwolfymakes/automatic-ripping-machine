@@ -1,7 +1,7 @@
 """Held disc -> apply session, driven through the real routers.
 
 Replaces a live-stack check: identify with `hold_for_review` on persists review
-Track rows (`_persist_review_tracks`) and parks the job in AWAITING_REVIEW; an
+Track rows (`persist_review_tracks`) and parks the job in AWAITING_REVIEW; an
 operator then applies a session from the review card. The application must
 park (`waiting_identify`, no TranscodeTask rows) until rip-complete, even
 though Track rows already exist. Both routers share one FakeSession.

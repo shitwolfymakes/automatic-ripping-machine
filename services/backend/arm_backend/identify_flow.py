@@ -15,10 +15,6 @@ from arm_backend.disc_dedupe import find_previous_rips, find_reusable_job_for_di
 from arm_backend.metadata import MetadataDispatcher
 from arm_backend.metadata.base import MetadataResult
 from arm_backend.metadata.dispatcher import DISPATCH_TIMEOUT_SECONDS
-from arm_backend.rip_preset_resolution import (
-    RipPresetUnavailable,
-    resolve_rip_preset_for_job,
-)
 from arm_backend.constants import CONFIG_SINGLETON_ID
 from arm_common.disc_shape import looks_episodic
 from arm_common.disc_titles import scan_candidates
@@ -26,7 +22,7 @@ from arm_backend.identity.apply import apply_identity_result, suggest_identity
 from arm_backend.identity.episode_stage import is_tv_candidate
 from arm_backend.identity.hints import hint_is_tv, hint_title
 from arm_backend.identity.pipeline import resolve_job, run_disc_hints, source_name_of
-from arm_backend.identity.proposals import preferred_titles, put_source, record_preset
+from arm_backend.identity.proposals import put_source
 from arm_backend.identity.sources.base import Source
 from arm_backend.identity.sources.registry import auto_apply_for, enabled_hint_sources
 from arm_backend.identity.sources.thediscdb import (
@@ -39,8 +35,7 @@ from arm_backend.identity.sources.thediscdb import (
 )
 from arm_backend.identity.sources.thediscdb_snapshot import DiscMatch, SnapshotStore
 from arm_backend.identity.stage_runner import EpisodeStageRunner
-from arm_backend.track_selection import DiscBackupNeedsBluray, select_tracks_for_review
-from arm_backend.version_policy import selection_policy
+from arm_backend.review_tracks import persist_review_tracks
 from arm_backend.ws import WSHub
 from arm_common import (
     Config,
@@ -62,40 +57,6 @@ from arm_common.schemas import (
 )
 
 logger = logging.getLogger("arm_backend.identify_flow")
-
-
-async def _persist_review_tracks(db: AsyncSession, job: Job, scan: ScanResult) -> None:
-    """Persist the scan's titles as Track rows for the timed review gate.
-
-    Uses the default rip preset for the disc type to compute keep/drop defaults
-    (`excluded`); the operator overrides per title in review. Idempotent on
-    `(job_id, source_ref)` so a ripper re-POST of identify on the same held disc
-    doesn't double-insert — Track rows have no unique constraint.
-    """
-    try:
-        preset = await resolve_rip_preset_for_job(db, job)
-    except RipPresetUnavailable as exc:
-        logger.warning("skipping review tracks for job_id=%s: %s", job.id, exc.detail)
-        return
-    existing_refs = {
-        t.source_ref for t in (await db.execute(select(Track).where(col(Track.job_id) == job.id))).scalars().all()
-    }
-    added: list[Track] = []
-    try:
-        review_tracks = select_tracks_for_review(
-            job.id, scan, preset, preferred=preferred_titles(job), **await selection_policy(db, job)
-        )
-    except DiscBackupNeedsBluray as exc:
-        logger.warning("skipping review tracks for job_id=%s: %s", job.id, exc)
-        return
-    for track in review_tracks:
-        if track.source_ref in existing_refs:
-            continue
-        db.add(track)
-        added.append(track)
-    if added:
-        record_preset(job, added, now=datetime.now(timezone.utc))
-    await db.flush()
 
 
 # A miss stores at most this many dispatcher attempts (metadata_json.identify_attempts).
@@ -308,7 +269,7 @@ class IdentifyFlow:
 
     async def _adopt_pending_session(self, job: Job) -> None:
         # pending_session_id must land BEFORE anything below that resolves
-        # the job's rip preset — _persist_review_tracks (hold_for_review branch)
+        # the job's rip preset — persist_review_tracks (hold_for_review branch)
         # resolves via resolve_rip_preset_for_job -> resolve_routed_session_id, which
         # reads this column. Assigning it after would mean a manual-trigger
         # rip with an explicit session and hold_for_review on would persist review
@@ -487,7 +448,7 @@ class IdentifyFlow:
         if cfg.hold_for_review:
             job.status = JobStatus.AWAITING_REVIEW
             job.wait_start_time = datetime.now(timezone.utc)
-            await _persist_review_tracks(self.session, job, scan)
+            await persist_review_tracks(self.session, job, scan)
         else:
             job.status = JobStatus.IDENTIFIED
 
@@ -512,7 +473,7 @@ class IdentifyFlow:
         # title/year/poster still reach nothing but the suggestion.
         # result.kind is a subset of MediaType's values by construction.
         job.media_type = MediaType(result.kind)
-        await _persist_review_tracks(self.session, job, scan)
+        await persist_review_tracks(self.session, job, scan)
         logger.info(
             "identify job_id=%s: %s hit %r held for confirmation (%s)",
             job.id,
@@ -540,7 +501,7 @@ class IdentifyFlow:
         # waits for Rip again or Discard. No countdown (wait_start_time
         # stays unset), so the ripper never auto-starts it.
         if job.status != JobStatus.AWAITING_REVIEW:
-            await _persist_review_tracks(self.session, job, scan)
+            await persist_review_tracks(self.session, job, scan)
         job.status = JobStatus.AWAITING_REVIEW
         job.wait_start_time = None
         job.metadata_json = {

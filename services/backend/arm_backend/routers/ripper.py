@@ -475,7 +475,7 @@ async def _ensure_ripping(session: AsyncSession, job: Job) -> None:
 def _require_startable(job: Job) -> None:
     # IDENTIFIED is the normal pre-rip state; AWAITING_REVIEW reaches here only
     # when the timed review gate auto-started (countdown elapsed) a held disc
-    # whose scan yielded NO persistable titles — _persist_review_tracks then
+    # whose scan yielded NO persistable titles — persist_review_tracks then
     # added nothing, so `existing` above was empty. Fall through and select
     # tracks now, exactly as for a never-parked disc; without this the disc
     # 409s and the ripper (4xx = non-retryable) abandons it permanently.

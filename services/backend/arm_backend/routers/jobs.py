@@ -19,7 +19,7 @@ from arm_backend.db import get_session
 from arm_backend.identify_flow import pause_refuses_new_jobs
 from arm_backend.identity.apply import apply_identity_result, suggestion_to_result
 from arm_backend.identity.manual_edits import apply_manual_edits
-from arm_backend.identity.resolve_service import identity_snapshot, resolve_identity
+from arm_backend.identity.resolve_service import hold_or_release, identity_snapshot, resolve_identity
 from arm_backend.identity.stage_runner import EpisodeStageRunner
 from arm_backend.job_abandon import abandon_job_transition
 from arm_backend.job_failure import scan_failure_text
@@ -805,13 +805,7 @@ async def accept_identity_suggestion(
         # releases it nor starts a countdown; Rip again / Discard leave it.
         pass
     elif job.status == JobStatus.AWAITING_REVIEW:
-        paused = cfg is not None and bool(cfg.ripping_paused)
-        if cfg is not None and cfg.hold_for_review:
-            job.wait_start_time = None if paused else now
-        elif paused:
-            job.wait_start_time = None
-        else:
-            job.status = JobStatus.IDENTIFIED
+        hold_or_release(job, cfg, now)
     req = ResolveRequest(
         title=result.title, year=result.year, media_type=MediaType(result.kind), external_ids=external_ids_of(result)
     )

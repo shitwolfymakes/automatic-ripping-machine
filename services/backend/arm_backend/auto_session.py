@@ -795,7 +795,7 @@ async def fan_out_tasks_for_application(
 
     # Park-for-later is keyed on RIP STATE, not on whether Track rows exist.
     # A pre-rip job can already carry Track rows: identify's hold_for_review
-    # path persists the scan's titles (`_persist_review_tracks`) so the review
+    # path persists the scan's titles (`persist_review_tracks`) so the review
     # card can list them, and rip-start reuses those rows. Fanning out against
     # them would queue transcode tasks for titles that have not been ripped.
     # So every pre-rip fan-out (manual apply, resolve fan-out, transcode
