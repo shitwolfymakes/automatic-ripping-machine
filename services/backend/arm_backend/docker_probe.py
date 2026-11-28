@@ -7,16 +7,23 @@ asyncio.to_thread from request handlers.
 
 from __future__ import annotations
 
+import base64
+import hashlib
 import os
+import re
 import socket
 import ssl
 import time
 from collections.abc import Callable
-from typing import Any
+from pathlib import Path
+from typing import TYPE_CHECKING, Any
 from urllib.parse import urlsplit
 
 import docker.errors  # type: ignore[import-untyped]
 import httpx
+
+if TYPE_CHECKING:
+    from arm_backend.config import Settings
 
 # How long a probe result is reused before re-pinging the docker host. An
 # unreachable ssh host stalls each uncached call for docker-py's client
@@ -109,3 +116,70 @@ def probe_backend_url(url: str) -> tuple[bool, str | None]:
     except (httpx.HTTPError, httpx.InvalidURL) as exc:
         return False, f"backend URL {url} ({address}) not reachable from the backend host: {exc}"
     return True, None
+
+
+_PEM_BLOCK = re.compile(r"-----BEGIN CERTIFICATE-----(.+?)-----END CERTIFICATE-----", re.DOTALL)
+
+
+def _ca_fingerprints(pem: str) -> set[str]:
+    """SHA-256 of every certificate in a PEM bundle, as hex."""
+    return {hashlib.sha256(base64.b64decode("".join(block.split()))).hexdigest() for block in _PEM_BLOCK.findall(pem)}
+
+
+def _short(fingerprints: set[str]) -> str:
+    return ",".join(sorted(f[:12] for f in fingerprints)) or "no certificate"
+
+
+def certs_dir_difference(settings: Settings) -> str | None:
+    """With local transcoding, rippers and transcoders mount the same local
+    certs dir, so `ARM_RIPPER_CERTS_PATH` (when set) must equal
+    `ARM_HOST_CERTS_PATH`. Returns the problem, or None."""
+    ripper, host = settings.ARM_RIPPER_CERTS_PATH, settings.ARM_HOST_CERTS_PATH
+    if settings.ARM_TRANSCODE_DOCKER_HOST or not ripper or not host:
+        return None
+    if os.path.normpath(ripper) == os.path.normpath(host):
+        return None
+    return (
+        f"ARM_RIPPER_CERTS_PATH ({ripper}) differs from ARM_HOST_CERTS_PATH ({host}) on a local-transcode "
+        "install; both must name this install's certs dir"
+    )
+
+
+def probe_transcode_ca(client: Any, settings: Settings, *, ca_file: str = ARM_CA_FILE) -> tuple[bool, str | None]:
+    """With local transcoding, is the CA that transcoders will mount
+    (`ARM_HOST_CERTS_PATH/arm-ca.crt`) the CA this backend itself trusts and
+    serves under? (ok, detail).
+
+    The backend sees only its own `/etc/ssl/arm`, not host paths, so a
+    throwaway container of the transcode image mounts exactly what the
+    transcode spec mounts and prints it; the certificate fingerprints are
+    compared with the backend's own CA file. Not checkable (remote
+    transcoding, no CA file here, missing image) answers ok; the image and
+    host probes report those. Never raises.
+    """
+    host_ca = str(Path(settings.ARM_HOST_CERTS_PATH) / "arm-ca.crt")
+    if settings.ARM_TRANSCODE_DOCKER_HOST or not settings.ARM_HOST_CERTS_PATH or not os.path.isfile(ca_file):
+        return True, None
+    try:
+        mine = _ca_fingerprints(Path(ca_file).read_text())
+        mount = docker.types.Mount("/ca/arm-ca.crt", host_ca, type="bind", read_only=True)
+        out = client.containers.run(
+            settings.ARM_TRANSCODE_IMAGE,
+            command=["/ca/arm-ca.crt"],
+            entrypoint=["cat"],
+            mounts=[mount],
+            remove=True,
+            network_mode="none",
+        )
+    except docker.errors.ImageNotFound:
+        return True, None
+    except (docker.errors.DockerException, OSError, ValueError) as exc:
+        return False, f"transcoders would mount {host_ca} (ARM_HOST_CERTS_PATH) but it could not be read: {exc}"
+    theirs = _ca_fingerprints(out.decode("utf-8", "replace") if isinstance(out, bytes) else str(out))
+    if mine and theirs & mine:
+        return True, None
+    return False, (
+        f"transcoders would mount {host_ca} (ARM_HOST_CERTS_PATH), a CA ({_short(theirs)}) other than the one "
+        f"this backend runs with ({_short(mine)}); they would fail TLS verification. "
+        "Point ARM_HOST_CERTS_PATH at this install's certs dir"
+    )

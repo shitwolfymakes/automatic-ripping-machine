@@ -193,6 +193,8 @@ async def _probed_transcoder_status(dispatcher: TranscodeDispatcher) -> tuple[st
         return "warning", detail, tc_details
     if dispatcher.last_spawn_error:
         return "warning", f"last spawn failed: {dispatcher.last_spawn_error}", tc_details
+    if dispatcher.certs_dir_warning:
+        return "warning", dispatcher.certs_dir_warning, tc_details
     if dispatcher.backend_url_warning:
         return (
             "warning",

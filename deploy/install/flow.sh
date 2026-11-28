@@ -239,7 +239,9 @@ cmd_install() {
     make_leaf arm-ui "${ui_sans[@]}"
 
     step "Configuration"
+    reconcile_certs_env
     write_env
+    verify_certs_env
     if [[ -n "${release_repo}" ]]; then
         env_set ARMCTL_RELEASE_REPO "${release_repo}"
     fi

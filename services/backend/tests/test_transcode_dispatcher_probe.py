@@ -808,3 +808,45 @@ async def test_an_error_counting_a_failed_spawn_does_not_abort_the_tick(caplog) 
     assert await d.spawn_pending(db) == 0
     assert "could not count the failed spawn task_id=txt_1" in caplog.text
     assert db.call_log.count("rollback") == 2  # the spawn failure, then the count failure
+
+
+def test_probe_holds_spawns_when_the_transcode_ca_is_not_the_backends() -> None:
+    d = _make_dispatcher()
+    d._ca_probe = lambda: (False, "transcoders would mount /x/arm-ca.crt, a CA other than this backend's")
+    ok, detail = d.probe()
+    assert ok is False and detail is not None and "arm-ca.crt" in detail
+
+
+def test_probe_notes_differing_certs_dirs_without_holding_spawns() -> None:
+    d = _disp(FakeSession(), ARM_HOST_CERTS_PATH="/a/certs", ARM_RIPPER_CERTS_PATH="/b/certs")
+    ok, _detail = d.probe()
+    assert ok is True
+    assert d.certs_dir_warning is not None and "/b/certs" in d.certs_dir_warning
+    d._settings.ARM_RIPPER_CERTS_PATH = "/a/certs"
+    d.probe()
+    assert d.certs_dir_warning is None
+
+
+async def test_startup_check_logs_the_mismatch(caplog) -> None:
+    d = _make_dispatcher()
+    d._ca_probe = lambda: (False, "CA mismatch detail")
+    with caplog.at_level("ERROR", logger="arm_backend.transcode_dispatcher"):
+        await d.startup_checks()
+    assert "CA mismatch detail" in caplog.text
+
+
+async def test_diagnostics_warns_about_differing_certs_dirs() -> None:
+    from arm_backend.system_diagnostics import _probed_transcoder_status
+
+    d = _disp(FakeSession(), ARM_HOST_CERTS_PATH="/a/certs", ARM_RIPPER_CERTS_PATH="/b/certs")
+    status, detail, _details = await _probed_transcoder_status(d)
+    assert status == "warning" and detail is not None and "ARM_RIPPER_CERTS_PATH" in detail
+
+
+async def test_diagnostics_reports_the_ca_mismatch_as_a_warning() -> None:
+    from arm_backend.system_diagnostics import _probed_transcoder_status
+
+    d = _make_dispatcher()
+    d._ca_probe = lambda: (False, "CA mismatch detail")
+    status, detail, _details = await _probed_transcoder_status(d)
+    assert status == "warning" and detail == "CA mismatch detail"

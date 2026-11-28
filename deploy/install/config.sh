@@ -280,21 +280,127 @@ write_env() {
         env_set ARM_TRANSCODE_PUID "${REMOTE_TRANSCODE_PUID}"
         env_set ARM_TRANSCODE_PGID "${REMOTE_TRANSCODE_PGID}"
         env_set ARM_TRANSCODE_SSH_DIR "${ARM_DIR}/ssh"
-        # Transcoders run on the remote daemon and mount certs from ITS path;
-        # rippers run on this host and need the local folder.
-        env_set ARM_HOST_CERTS_PATH "$(offload_certs_path "${REMOTE_DOCKER_HOST}")"
-        env_set ARM_RIPPER_CERTS_PATH "${ARM_DIR}/certs"
         env_set ARM_GPUS "${REMOTE_GPUS:-[]}"
         env_set ARM_RENDER_GID "${REMOTE_RENDER_GID:-}"
     else
         for key in ARM_TRANSCODE_DOCKER_HOST ARM_TRANSCODE_BACKEND_URL ARM_TRANSCODE_PUID \
-                   ARM_TRANSCODE_PGID ARM_TRANSCODE_SSH_DIR ARM_RIPPER_CERTS_PATH; do
+                   ARM_TRANSCODE_PGID ARM_TRANSCODE_SSH_DIR; do
             env_unset "${key}"
         done
-        env_set ARM_HOST_CERTS_PATH "${ARM_DIR}/certs"
         refresh_arm_gpus
         env_set ARM_RENDER_GID "$(detect_render_gid || true)"
     fi
+    write_certs_env
+}
+
+# The certs folders the containers mount the CA from. Transcoders mount
+# ARM_HOST_CERTS_PATH, rippers ARM_RIPPER_CERTS_PATH (else the same folder).
+# Both must hold this install's CA. With offload the transcoders run on the
+# remote daemon and mount certs from ITS path, so the two differ by design.
+# KEEP_CERTS_ENV=1 (see reconcile_certs_env) leaves the user's values alone.
+write_certs_env() {
+    [[ "${KEEP_CERTS_ENV:-0}" -eq 1 ]] && return 0
+    if [[ "${PROFILE}" == offload ]]; then
+        env_set ARM_HOST_CERTS_PATH "$(offload_certs_path "${REMOTE_DOCKER_HOST}")"
+        env_set ARM_RIPPER_CERTS_PATH "${ARM_DIR}/certs"
+    else
+        env_set ARM_HOST_CERTS_PATH "${ARM_DIR}/certs"
+        env_unset ARM_RIPPER_CERTS_PATH
+    fi
+}
+
+stdin_is_tty() { [[ -t 0 ]]; }
+
+# certs_env_stale: print each certs setting of an existing .env that names a
+# folder other than this install's (one "KEY=value" per line). The remote
+# ARM_HOST_CERTS_PATH of the offload profile is not this host's to judge.
+certs_env_stale() {
+    local want="${ARM_DIR}/certs" host ripper
+    host="$(env_file_value ARM_HOST_CERTS_PATH)"
+    ripper="$(env_file_value ARM_RIPPER_CERTS_PATH)"
+    if [[ "${PROFILE}" != offload && -n "${host}" && "$(realpath -m "${host}")" != "$(realpath -m "${want}")" ]]; then
+        printf 'ARM_HOST_CERTS_PATH=%s\n' "${host}"
+    fi
+    if [[ -n "${ripper}" && "$(realpath -m "${ripper}")" != "$(realpath -m "${want}")" ]]; then
+        printf 'ARM_RIPPER_CERTS_PATH=%s\n' "${ripper}"
+    fi
+}
+
+# On a re-run, an .env that names another folder for the certs (another
+# stack's, say) gives the transcoders a CA that did not sign this backend's
+# certificate: every transcoder then fails its TLS handshake. Offer to point
+# them at this install's folder. Unattended runs fix it, as every run did
+# before; a terminal can decline, which keeps the values and leaves the
+# check after write_env to warn.
+reconcile_certs_env() {
+    local stale line
+    KEEP_CERTS_ENV=0
+    [[ -f "${ENV_FILE}" ]] || return 0
+    stale="$(certs_env_stale)"
+    [[ -n "${stale}" ]] || return 0
+    warnline "the existing .env points at certificates that are not this install's (${ARM_CERTS_DIR}):"
+    while IFS= read -r line; do log "  ${line}"; done <<<"${stale}"
+    if [[ "${ARMCTL_ASSUME}" != yes ]] && stdin_is_tty \
+        && confirm "Keep these values instead of pointing them at ${ARM_CERTS_DIR}?"; then
+        KEEP_CERTS_ENV=1
+        SKIPPED+=("certificate paths in .env (kept: transcoders may fail TLS verification)")
+        return 0
+    fi
+    log "pointing them at ${ARM_CERTS_DIR}"
+}
+
+# certs_dir_problem <dir>: what is wrong with a certs folder, or nothing.
+certs_dir_problem() {
+    local dir="$1"
+    if [[ ! -d "${dir}" ]]; then
+        printf 'the certs folder %s does not exist' "${dir}"
+    elif [[ ! -f "${dir}/arm-ca.crt" ]]; then
+        printf 'the certs folder %s has no arm-ca.crt' "${dir}"
+    elif [[ ! -f "${dir}/arm-backend.crt" ]]; then
+        printf 'the certs folder %s has no arm-backend.crt' "${dir}"
+    elif ! openssl verify -CAfile "${dir}/arm-ca.crt" "${dir}/arm-backend.crt" >/dev/null 2>&1; then
+        printf 'the arm-ca.crt in %s did not sign the backend certificate beside it' "${dir}"
+    fi
+}
+
+# certs_env_problems: print what is wrong with the certs folders the .env now
+# names, one line each. The folders rippers and (without offload) transcoders
+# mount must hold the CA that signed the backend's certificate, and be the
+# same folder.
+certs_env_problems() {
+    local host ripper dir problem
+    host="$(env_file_value ARM_HOST_CERTS_PATH)"
+    ripper="$(env_file_value ARM_RIPPER_CERTS_PATH)"
+    if [[ "${PROFILE}" == offload ]]; then
+        host=""
+    elif [[ -n "${ripper}" && "$(realpath -m "${ripper}")" != "$(realpath -m "${host}")" ]]; then
+        printf 'ARM_RIPPER_CERTS_PATH (%s) and ARM_HOST_CERTS_PATH (%s) differ; with local transcoding they must be the same folder\n' \
+            "${ripper}" "${host}"
+    fi
+    for dir in "${host}" "${ripper}"; do
+        [[ -n "${dir}" ]] || continue
+        problem="$(certs_dir_problem "${dir}")"
+        [[ -z "${problem}" ]] || printf '%s\n' "${problem}"
+    done | sort -u
+    [[ "${PROFILE}" == offload && -z "${ripper}" ]] && printf 'ARM_RIPPER_CERTS_PATH is not set\n'
+    return 0
+}
+
+# Check the written .env: stop on a certs setting that would give transcoders
+# or rippers the wrong CA, unless the user chose to keep it (then warn).
+verify_certs_env() {
+    local problems line
+    problems="$(certs_env_problems)"
+    if [[ -z "${problems}" ]]; then
+        okline "certificate folders in .env hold this install's CA"
+        return 0
+    fi
+    if [[ "${KEEP_CERTS_ENV:-0}" -eq 1 ]]; then
+        while IFS= read -r line; do warnline "${line}"; done <<<"${problems}"
+        return 0
+    fi
+    while IFS= read -r line; do failline "${line}"; done <<<"${problems}"
+    err "the certificate settings in ${ENV_FILE} are wrong (above); fix them and run the installer again"
 }
 
 # The per-install compose overlay: where raw rips, finished media and (when set) staging live,

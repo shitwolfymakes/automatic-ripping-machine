@@ -640,9 +640,81 @@ has "path link: a failed ln keeps the full path" "CMD=${TMPROOT}/plink-lnfail/ar
 has "path link: a failed ln is recorded" "could not create" "$out"
 chmod -R u+w "${TMPROOT}/plink-lnfail" 2>/dev/null || true
 
+# --- certificate folders in .env ------------------------------------------------
+# certs_install <name>: an install folder with a real CA and backend certificate.
+certs_install() {
+    new_install "$1"
+    mkdir -p "${ARM_DIR}/certs"
+    ARM_CERTS_DIR="${ARM_DIR}/certs"
+    ensure_ca >/dev/null
+    make_leaf arm-backend >/dev/null
+}
+certs_install certs-ok
+good="${ARM_DIR}/certs"
+check "certs: a folder with the CA that signed the backend certificate has no problem" "" "$(certs_dir_problem "${good}")"
+has "certs: a missing folder is named" "does not exist" "$(certs_dir_problem "${TMPROOT}/nowhere")"
+mkdir -p "${TMPROOT}/empty-certs"
+has "certs: a folder without arm-ca.crt is named" "has no arm-ca.crt" "$(certs_dir_problem "${TMPROOT}/empty-certs")"
+certs_install certs-other
+other="${ARM_DIR}/certs"
+mkdir -p "${TMPROOT}/mixed"; cp "${good}/arm-backend.crt" "${TMPROOT}/mixed/"; cp "${other}/arm-ca.crt" "${TMPROOT}/mixed/"
+has "certs: a CA that did not sign the backend certificate is named" "did not sign" "$(certs_dir_problem "${TMPROOT}/mixed")"
+
+# certs_check <install> <profile> <host path> <ripper path>: certs_env_problems for an .env with those paths.
+certs_check() {
+    (
+        new_install "$1"; PROFILE="$2"
+        env_set ARM_HOST_CERTS_PATH "$3"
+        if [[ -n "${4:-}" ]]; then env_set ARM_RIPPER_CERTS_PATH "$4"; fi
+        certs_env_problems
+    )
+}
+check "certs: a local install on its own folder is clean" "" "$(certs_check certs-c1 full "${good}")"
+has "certs: another stack's CA on a local install is named" "did not sign" "$(certs_check certs-c2 full "${TMPROOT}/mixed")"
+has "certs: differing ripper and transcoder folders are flagged" "must be the same folder" "$(certs_check certs-c3 full "${good}" "${other}")"
+check "certs: offload leaves the remote transcoder folder to its own check" "" "$(certs_check certs-c4 offload /remote/certs "${good}")"
+has "certs: offload still needs the local ripper folder to hold the CA" "does not exist" "$(certs_check certs-c5 offload /remote/certs /nowhere)"
+
+# reconcile_certs_env <install> <profile> <host path> <assume> <tty 0|1> <keep? answer y|n>
+certs_reconcile() {
+    (
+        new_install "$1"; PROFILE="$2"; ARMCTL_ASSUME="$4"; SKIPPED=()
+        env_set ARM_HOST_CERTS_PATH "$3"
+        local tty="$5" keep="$6"
+        stdin_is_tty() { [[ "${tty}" -eq 1 ]]; }
+        confirm() { [[ "${keep}" == y ]]; }
+        reconcile_certs_env >/dev/null
+        echo "KEEP=${KEEP_CERTS_ENV} SKIPPED=${#SKIPPED[@]}"
+    )
+}
+check "certs: an .env on this install's folder asks nothing" "KEEP=0 SKIPPED=0" "$(new_install certs-r0 >/dev/null; certs_reconcile certs-r0 full "${TMPROOT}/certs-r0/arm/certs" ask 1 y)"
+check "certs: unattended, a wrong folder is fixed" "KEEP=0 SKIPPED=0" "$(certs_reconcile certs-r1 full /other/certs ask 0 n)"
+check "certs: --yes fixes a wrong folder without asking" "KEEP=0 SKIPPED=0" "$(certs_reconcile certs-r2 full /other/certs yes 1 y)"
+check "certs: a terminal can choose to keep the wrong folder" "KEEP=1 SKIPPED=1" "$(certs_reconcile certs-r3 full /other/certs ask 1 y)"
+check "certs: a terminal that declines keeping fixes the folder" "KEEP=0 SKIPPED=0" "$(certs_reconcile certs-r4 full /other/certs ask 1 n)"
+
+# A re-run on an .env from another stack: write_env points both settings at this install.
+certs_rewrite() {
+    ( new_install "$1"; env_set ARM_HOST_CERTS_PATH /other/certs; env_set ARM_RIPPER_CERTS_PATH /other/certs
+      PROFILE=full; KEEP_CERTS_ENV="${2:-0}"; write_certs_env; cat "${ENV_FILE}" )
+}
+has "certs: a re-run repoints the transcoder folder" "ARM_HOST_CERTS_PATH=${TMPROOT}/certs-w1/arm/certs" "$(certs_rewrite certs-w1)"
+lacks "certs: a re-run drops the ripper override on a local install" "ARM_RIPPER_CERTS_PATH" "$(certs_rewrite certs-w1)"
+has "certs: a kept .env is left alone" "ARM_HOST_CERTS_PATH=/other/certs" "$(certs_rewrite certs-w2 1)"
+
+# verify_certs_env stops the install on a bad folder, warns when the user kept it.
+verify_case() {
+    ( new_install "$1"; PROFILE=full; KEEP_CERTS_ENV="$3"; env_set ARM_HOST_CERTS_PATH "$2"
+      set +e; ( verify_certs_env ) 2>&1; echo "rc=$?" )
+}
+has "certs: verify passes on this install's folder" "rc=0" "$(verify_case certs-v1 "${good}" 0)"
+has "certs: verify stops on a CA that did not sign" "rc=1" "$(verify_case certs-v2 "${TMPROOT}/mixed" 0)"
+has "certs: verify names the problem" "did not sign" "$(verify_case certs-v2 "${TMPROOT}/mixed" 0)"
+has "certs: a kept folder only warns" "rc=0" "$(verify_case certs-v3 "${TMPROOT}/mixed" 1)"
+
 # --- install flow -------------------------------------------------------------
 echo v3.1.0 > "${REL}/VERSION"
-FLOW_STEPS=(ensure_docker refuse_second_stack acquire_lock ensure_layout choose_storage ensure_ca write_host_overlay ensure_nvidia_container_toolkit install_udev_rule link_armctl stack_up finish_up offload_completion_report)
+FLOW_STEPS=(ensure_docker refuse_second_stack acquire_lock ensure_layout choose_storage ensure_ca reconcile_certs_env verify_certs_env write_host_overlay ensure_nvidia_container_toolkit install_udev_rule link_armctl stack_up finish_up offload_completion_report)
 # flow <install name> [install args...]: run cmd_install with every stage
 # replaced by a recorder; print the order, then the parsed answers.
 flow() {
@@ -672,7 +744,7 @@ flow() {
     )
 }
 check "install: full box runs every stage in order" \
-    "banner v3.1.0;choose_profile full;ensure_docker;refuse_second_stack;acquire_lock;ensure_layout;choose_storage;ensure_ca;make_leaf arm-backend;make_leaf arm-db;make_leaf arm-ui localhost testhost;write_env;write_host_overlay;ensure_nvidia_container_toolkit;install_udev_rule;link_armctl;stack_up;finish_up;ASSUME=ask RAW= MEDIA= ISO= STAGING= PREFIX= TAG=v3.1.0;ARGV=install --profile full;rc=0;" \
+    "banner v3.1.0;choose_profile full;ensure_docker;refuse_second_stack;acquire_lock;ensure_layout;choose_storage;ensure_ca;make_leaf arm-backend;make_leaf arm-db;make_leaf arm-ui localhost testhost;reconcile_certs_env;write_env;verify_certs_env;write_host_overlay;ensure_nvidia_container_toolkit;install_udev_rule;link_armctl;stack_up;finish_up;ASSUME=ask RAW= MEDIA= ISO= STAGING= PREFIX= TAG=v3.1.0;ARGV=install --profile full;rc=0;" \
     "$(flow flow-full)"
 ui_sans_out="$(
     hostname() {
@@ -697,7 +769,7 @@ lacks "install: ripper-only has no offload walkthrough" "setup_remote_offload" "
 lacks "install: no second banner after the docker group restart" "banner" "$(ARMCTL_SG_REEXEC=1 flow flow-regroup)"
 out="$(flow flow-nostart --no-start)"
 lacks "install: --no-start does not start the stack" "stack_up" "$out"
-has "install: --no-start still configures" "write_env;write_host_overlay;" "$out"
+has "install: --no-start still configures" "write_env;verify_certs_env;write_host_overlay;" "$out"
 out="$(flow flow-flags --yes --raw-path /r --media-path=/m --iso-library-path /i --staging-path /s --image-prefix ghcr.io/fork)"
 has "install: flags are parsed in both --x v and --x=v forms" "ASSUME=yes RAW=/r MEDIA=/m ISO=/i STAGING=/s PREFIX=ghcr.io/fork TAG=v3.1.0;" "$out"
 out="$(flow flow-decline --no-host-changes)"
