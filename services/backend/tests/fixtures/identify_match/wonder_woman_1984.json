@@ -1,0 +1,65 @@
+{
+  "evidence": {
+    "bd_title": "Wonder Woman 1984",
+    "iso_name": null,
+    "label": "WONDER_WOMAN_1984",
+    "titles": [
+      {
+        "minutes": 151,
+        "clips": [
+          1
+        ]
+      }
+    ],
+    "structured": true
+  },
+  "candidates": [
+    {
+      "title": "Wonder Woman 1984",
+      "original_title": null,
+      "year": 2020,
+      "kind": "movie",
+      "runtime_minutes": 151,
+      "providers": [
+        "tmdb",
+        "omdb"
+      ],
+      "provider_rank": 0
+    },
+    {
+      "title": "Wonder Woman",
+      "original_title": null,
+      "year": 2017,
+      "kind": "movie",
+      "runtime_minutes": 141,
+      "providers": [
+        "tmdb",
+        "omdb"
+      ],
+      "provider_rank": 0
+    },
+    {
+      "title": "Wonder Woman",
+      "original_title": null,
+      "year": 2009,
+      "kind": "movie",
+      "runtime_minutes": 74,
+      "providers": [
+        "tmdb",
+        "omdb"
+      ],
+      "provider_rank": 0
+    }
+  ],
+  "expected": {
+    "decision": "accept",
+    "winner": "Wonder Woman 1984 (2020)",
+    "scores": {
+      "Wonder Woman 1984 (2020)": 78.0,
+      "Wonder Woman (2017)": 58.66,
+      "Wonder Woman (2009)": 30.35
+    }
+  },
+  "name": "wonder_woman_1984",
+  "now": "2026-11-27"
+}

@@ -1,0 +1,65 @@
+{
+  "evidence": {
+    "bd_title": "Indiana Jones and the Last Crusade",
+    "iso_name": null,
+    "label": "INDIANA_JONES_LAST_CRUSADE",
+    "titles": [
+      {
+        "minutes": 127,
+        "clips": [
+          1
+        ]
+      }
+    ],
+    "structured": true
+  },
+  "candidates": [
+    {
+      "title": "Indiana Jones and the Last Crusade",
+      "original_title": null,
+      "year": 1989,
+      "kind": "movie",
+      "runtime_minutes": 127,
+      "providers": [
+        "tmdb",
+        "omdb"
+      ],
+      "provider_rank": 0
+    },
+    {
+      "title": "Indiana Jones and the Temple of Doom",
+      "original_title": null,
+      "year": 1984,
+      "kind": "movie",
+      "runtime_minutes": null,
+      "providers": [
+        "tmdb",
+        "omdb"
+      ],
+      "provider_rank": 0
+    },
+    {
+      "title": "Indiana Jones and the Kingdom of the Crystal Skull",
+      "original_title": null,
+      "year": 2008,
+      "kind": "movie",
+      "runtime_minutes": null,
+      "providers": [
+        "tmdb",
+        "omdb"
+      ],
+      "provider_rank": 0
+    }
+  ],
+  "expected": {
+    "decision": "accept",
+    "winner": "Indiana Jones and the Last Crusade (1989)",
+    "scores": {
+      "Indiana Jones and the Last Crusade (1989)": 78.0,
+      "Indiana Jones and the Temple of Doom (1984)": 21.4,
+      "Indiana Jones and the Kingdom of the Crystal Skull (2008)": 20.9
+    }
+  },
+  "name": "last_crusade_uhd",
+  "now": "2026-11-27"
+}

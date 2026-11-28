@@ -1,0 +1,63 @@
+{
+  "evidence": {
+    "bd_title": null,
+    "iso_name": "Kolchak The Night Stalker - Disc 1 of 4.iso",
+    "label": "KOLCHAK_THE_NIGHT_STALKER_DISC_1",
+    "titles": [
+      {
+        "minutes": 50
+      },
+      {
+        "minutes": 51
+      },
+      {
+        "minutes": 52
+      },
+      {
+        "minutes": 51
+      },
+      {
+        "minutes": 50
+      }
+    ],
+    "structured": false
+  },
+  "candidates": [
+    {
+      "title": "Kolchak: The Night Stalker",
+      "original_title": null,
+      "year": 1974,
+      "kind": "tv",
+      "runtime_minutes": 60,
+      "providers": [
+        "tmdb",
+        "tvmaze",
+        "tvdb"
+      ],
+      "provider_rank": 0
+    },
+    {
+      "title": "Night Stalker",
+      "original_title": null,
+      "year": 2005,
+      "kind": "tv",
+      "runtime_minutes": 60,
+      "providers": [
+        "tmdb",
+        "tvmaze",
+        "tvdb"
+      ],
+      "provider_rank": 0
+    }
+  ],
+  "expected": {
+    "decision": "accept",
+    "winner": "Kolchak: The Night Stalker (1974)",
+    "scores": {
+      "Kolchak: The Night Stalker (1974)": 73.0,
+      "Night Stalker (2005)": 48.0
+    }
+  },
+  "name": "kolchak_season_disc",
+  "now": "2026-11-27"
+}

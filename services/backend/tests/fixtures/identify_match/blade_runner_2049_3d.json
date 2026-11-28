@@ -1,0 +1,76 @@
+{
+  "evidence": {
+    "bd_title": "Blade Runner 2049 - 3D Blu-ray™",
+    "iso_name": "Blade_Runner_2049_(2017)_[3D].iso",
+    "label": null,
+    "titles": [
+      {
+        "minutes": 163,
+        "clips": [
+          1
+        ]
+      }
+    ],
+    "structured": true
+  },
+  "candidates": [
+    {
+      "title": "Blade Runner 2049",
+      "original_title": null,
+      "year": 2017,
+      "kind": "movie",
+      "runtime_minutes": 164,
+      "providers": [
+        "tmdb",
+        "omdb"
+      ],
+      "provider_rank": 0
+    },
+    {
+      "title": "Blade Runner",
+      "original_title": null,
+      "year": 1982,
+      "kind": "movie",
+      "runtime_minutes": null,
+      "providers": [
+        "tmdb"
+      ],
+      "provider_rank": 0
+    },
+    {
+      "title": "Blade Runner Black Out 2022",
+      "original_title": null,
+      "year": 2017,
+      "kind": "movie",
+      "runtime_minutes": null,
+      "providers": [
+        "tmdb"
+      ],
+      "provider_rank": 0
+    },
+    {
+      "title": "Blade Runner 2099",
+      "original_title": null,
+      "year": 2026,
+      "kind": "tv",
+      "runtime_minutes": null,
+      "providers": [
+        "tmdb",
+        "tvmaze"
+      ],
+      "provider_rank": 0
+    }
+  ],
+  "expected": {
+    "decision": "accept",
+    "winner": "Blade Runner 2049 (2017)",
+    "scores": {
+      "Blade Runner 2049 (2017)": 91.5,
+      "Blade Runner (1982)": 5.5,
+      "Blade Runner Black Out 2022 (2017)": 24.7,
+      "Blade Runner 2099 (2026)": 4.0
+    }
+  },
+  "name": "blade_runner_2049_3d",
+  "now": "2026-11-27"
+}
